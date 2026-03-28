@@ -10,6 +10,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 import org.jsoup.Jsoup
 
 class EbayDeCrawler(
@@ -217,12 +218,14 @@ class EbayDeCrawler(
                 }?.text()
             val shipping = parseShipping(shippingText)
 
-            // Sold date: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026"
+            // Sold date: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026" / "Ended ..."
             val soldDateText = item.selectFirst("span.su-styled-text.positive")?.text()
                 ?: item.select("span").firstOrNull { it.text().let { t ->
-                    t.startsWith("Verkauft ", true) || t.startsWith("Sold ", true)
+                    t.startsWith("Verkauft", true) || t.startsWith("Sold", true) ||
+                    t.startsWith("Ended", true) || t.startsWith("Beendet", true)
                 } }?.text()
             val soldDate = parseSoldDate(soldDateText)
+            val isSold = soldDate != null || soldDateText != null
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -235,7 +238,7 @@ class EbayDeCrawler(
                 imageUrls = listOfNotNull(imageUrl),
                 location = location,
                 shipping = shipping,
-                sold = soldDate != null,
+                sold = isSold,
                 soldDate = soldDate,
                 scrapedAt = now,
             )
@@ -317,23 +320,39 @@ class EbayDeCrawler(
         "okt" to 10, "oct" to 10, "nov" to 11, "dez" to 12, "dec" to 12,
     )
 
+    private val DAY_OF_WEEK = setOf("mo", "di", "mi", "do", "fr", "sa", "so", "mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
     private fun parseSoldDate(text: String?): Instant? {
         if (text == null) return null
         return try {
-            // German: "Verkauft 25. Mär 2026" or "Verkauft  25. Mär. 2026"
-            // English: "Sold Mar 25, 2026" or "Sold  Mar 25, 2026"
+            // Formats seen:
+            //   Search results: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026"
+            //   Detail pages:   "Mi, 31. Dez, 02:15" / "Wed, Dec 31, 02:15"
+            //   Also: "Ended Dec 31, 2025" / "BEENDET"
             val cleaned = text
                 .removePrefix("Verkauft").removePrefix("Sold")
+                .removePrefix("Ended").removePrefix("BEENDET")
                 .replace(".", "").replace(",", "").trim()
             val parts = cleaned.split(Regex("\\s+")).filter { it.isNotBlank() }
-            if (parts.size < 3) return null
+                // Strip day-of-week prefix (Mo, Di, Mi, Do, Fr, Sa, So, Mon, Tue, etc.)
+                .dropWhile { it.take(3).lowercase() in DAY_OF_WEEK }
+                // Strip time suffix (02:15)
+                .filter { !it.contains(":") }
+
+            if (parts.size < 2) return null
+
+            val currentYear = Clock.System.now().let {
+                it.toLocalDateTime(TimeZone.UTC).year
+            }
 
             val (day, month, year) = if (parts[0].all { it.isDigit() }) {
-                // German format: day month year
-                Triple(parts[0].toInt(), MONTH_MAP[parts[1].take(3).lowercase()] ?: return null, parts[2].toInt())
+                // German: day month [year]
+                val y = parts.getOrNull(2)?.toIntOrNull() ?: currentYear
+                Triple(parts[0].toInt(), MONTH_MAP[parts[1].take(3).lowercase()] ?: return null, y)
             } else {
-                // English format: month day year
-                Triple(parts[1].toInt(), MONTH_MAP[parts[0].take(3).lowercase()] ?: return null, parts[2].toInt())
+                // English: month day [year]
+                val y = parts.getOrNull(2)?.toIntOrNull() ?: currentYear
+                Triple(parts[1].toInt(), MONTH_MAP[parts[0].take(3).lowercase()] ?: return null, y)
             }
             LocalDate(year, month, day).atStartOfDayIn(TimeZone.UTC)
         } catch (_: Exception) { null }

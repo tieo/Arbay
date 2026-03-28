@@ -1421,20 +1421,20 @@ private fun PriceHistoryChart(
                     drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
                 }
 
-                // Moving average trend line (straight segments, no overshoot)
+                // Smooth rolling median trend line (wide window, few steps)
                 if (sorted.size >= 3) {
-                    val steps = minOf(sorted.size, 20)
-                    val halfWindow = (timeRange * 0.15f).toLong() // ±15% window
+                    val steps = 8 // few steps = smoother line
+                    val halfWindow = (timeRange * 0.3f).toLong() // ±30% wide window
+                    fun median(t: Long): Long {
+                        val window = sorted.indices.filter { timestamps[it] in (t - halfWindow)..(t + halfWindow) }
+                        return if (window.isEmpty()) prices[sorted.size / 2]
+                        else window.map { prices[it] }.sorted().let { it[it.size / 2] }
+                    }
                     for (step in 1 until steps) {
                         val t1 = minT + timeRange * (step - 1) / (steps - 1)
                         val t2 = minT + timeRange * step / (steps - 1)
-                        fun median(t: Long): Long {
-                            val window = sorted.indices.filter { timestamps[it] in (t - halfWindow)..(t + halfWindow) }
-                            return if (window.isEmpty()) prices[sorted.size / 2]
-                            else window.map { prices[it] }.sorted().let { it[it.size / 2] }
-                        }
                         drawLine(
-                            primary.copy(alpha = 0.4f),
+                            primary.copy(alpha = 0.35f),
                             Offset(tx(t1), ty(median(t1))),
                             Offset(tx(t2), ty(median(t2))),
                             strokeWidth = 2.5f,
