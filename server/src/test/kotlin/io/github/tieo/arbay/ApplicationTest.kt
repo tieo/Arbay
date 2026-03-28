@@ -9,12 +9,39 @@ import kotlin.test.*
 class ApplicationTest {
 
     @Test
-    fun testRoot() = testApplication {
+    fun testProductsEndpoint() = testApplication {
         application {
             module()
         }
-        val response = client.get("/")
+        val response = client.get("/api/products")
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("Ktor: ${Greeting().greet()}", response.bodyAsText())
+    }
+
+    @Test
+    fun testListingsEndpoint() = testApplication {
+        application {
+            module()
+        }
+        val response = client.get("/api/listings")
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun testAlertsEndpoint() = testApplication {
+        application {
+            module()
+        }
+        val response = client.get("/api/alerts")
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun testCrawlerPlatforms() = testApplication {
+        application {
+            module()
+        }
+        val response = client.get("/api/crawler/platforms")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("EBAY_DE"))
     }
 }

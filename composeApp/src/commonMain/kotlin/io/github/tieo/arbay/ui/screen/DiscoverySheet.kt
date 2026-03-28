@@ -1,9 +1,10 @@
 package io.github.tieo.arbay.ui.screen
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,13 +28,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.catalog.ProductCatalog
 import io.github.tieo.arbay.catalog.ProductCategory
+import io.github.tieo.arbay.ui.AdaptiveSheet
 
-private sealed class Step {
+internal sealed class Step {
     data object Categories : Step()
     data class Brands(val category: ProductCategory) : Step()
     data class Products(val category: ProductCategory, val brand: String?) : Step()
@@ -46,6 +49,7 @@ fun DiscoverySheet(
     onDismiss: () -> Unit,
     onProductSelected: (KnownProduct) -> Unit,
     onCustomSearch: (String) -> Unit,
+    onLiveSearch: ((String) -> Unit)? = null,
 ) {
     var step by remember {
         mutableStateOf<Step>(
@@ -66,11 +70,7 @@ fun DiscoverySheet(
         ProductCatalog.search(searchText)
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    AdaptiveSheet(onDismiss = onDismiss) {
         // BackHandler INSIDE the sheet so it intercepts before the sheet's own dismiss
         val canGoBack = step !is Step.Categories || searchText.isNotBlank()
         BackHandler(enabled = canGoBack) {
@@ -126,10 +126,18 @@ fun DiscoverySheet(
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
-                placeholder = { Text("Search all templates...") },
+                placeholder = { Text("Search products & marketplaces...") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        if (searchText.isNotBlank() && onLiveSearch != null) {
+                            onLiveSearch(searchText)
+                        }
+                    },
+                ),
                 leadingIcon = {
                     Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
@@ -152,6 +160,20 @@ fun DiscoverySheet(
 
             // If searching, show flat results
             if (searchText.isNotBlank()) {
+                // Live search button — always visible when there's text
+                if (onLiveSearch != null) {
+                    Button(
+                        onClick = { onLiveSearch(searchText) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Search marketplaces for \"$searchText\"")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
                 if (searchResults.isEmpty()) {
                     Box(
                         Modifier.fillMaxWidth().weight(1f),
@@ -159,18 +181,18 @@ fun DiscoverySheet(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "No matches for \"$searchText\"",
+                                "No template matches for \"$searchText\"",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Spacer(Modifier.height(12.dp))
-                            FilledTonalButton(
-                                onClick = {
-                                    onCustomSearch(searchText)
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Text("Custom search for \"$searchText\"")
+                            if (onLiveSearch == null) {
+                                Spacer(Modifier.height(12.dp))
+                                FilledTonalButton(
+                                    onClick = { onCustomSearch(searchText) },
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Text("Custom search for \"$searchText\"")
+                                }
                             }
                         }
                     }
@@ -261,7 +283,7 @@ fun DiscoverySheet(
 }
 
 @Composable
-private fun CategoryGrid(
+internal fun CategoryGrid(
     onCategorySelected: (ProductCategory) -> Unit,
     onCustomSearch: () -> Unit,
     onSpecialTracking: () -> Unit,
@@ -376,7 +398,7 @@ private fun CategoryGrid(
 }
 
 @Composable
-private fun BrandList(
+internal fun BrandList(
     category: ProductCategory,
     onBack: () -> Unit,
     onBrandSelected: (String) -> Unit,
@@ -518,7 +540,7 @@ private fun BrandList(
 }
 
 @Composable
-private fun ProductList(
+internal fun ProductList(
     category: ProductCategory,
     brand: String?,
     onBack: () -> Unit,
@@ -598,7 +620,7 @@ private fun ProductList(
 }
 
 @Composable
-private fun ProductRow(
+internal fun ProductRow(
     product: KnownProduct,
     onClick: () -> Unit,
 ) {

@@ -1,9 +1,10 @@
 package io.github.tieo.arbay.ui.screen
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.api.ArbayClient
@@ -23,6 +27,8 @@ import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.model.TrackedProduct
+import io.github.tieo.arbay.ui.AdaptiveFormSheet
+import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.viewmodel.AlertViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
@@ -50,6 +56,8 @@ fun MainScreen(
     var listingsProduct by remember { mutableStateOf<TrackedProduct?>(null) }
     var previewProduct by remember { mutableStateOf<KnownProduct?>(null) }
     var showPreview by remember { mutableStateOf(false) }
+    var previewSearchQuery by remember { mutableStateOf("") }
+    var previewSearchName by remember { mutableStateOf("") }
     var cameFromDiscovery by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -72,13 +80,42 @@ fun MainScreen(
         showPreview = true
     }
 
+    val isDesktop = LocalDesktopMode.current
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
     Scaffold(
+        modifier = if (isDesktop) {
+            Modifier.focusRequester(focusRequester).focusable().onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed)) {
+                    when (event.key) {
+                        Key.K -> { showDiscovery = true; true }
+                        Key.Comma -> { showSettings = true; true }
+                        Key.N -> { showAlerts = true; true }
+                        else -> false
+                    }
+                } else if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                    when {
+                        showDiscovery -> { showDiscovery = false; true }
+                        showAddSheet -> { showAddSheet = false; true }
+                        showAlerts -> { showAlerts = false; true }
+                        showSettings -> { showSettings = false; true }
+                        showListings -> { showListings = false; true }
+                        showPreview -> { showPreview = false; true }
+                        else -> false
+                    }
+                } else false
+            }
+        } else Modifier,
         containerColor = MaterialTheme.colorScheme.surface,
     ) { padding ->
+        Box(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+                .then(if (isDesktop) Modifier.widthIn(max = 800.dp) else Modifier.fillMaxWidth()),
         ) {
             // Top bar
             Row(
@@ -94,27 +131,39 @@ fun MainScreen(
                     modifier = Modifier.weight(1f),
                 )
 
-                IconButton(onClick = { showAlerts = true }) {
-                    BadgedBox(
-                        badge = {
-                            if (unreadCount > 0) {
-                                Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                    Text("$unreadCount")
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text(if (isDesktop) "Alerts (Ctrl+N)" else "Alerts") } },
+                    state = rememberTooltipState(),
+                ) {
+                    IconButton(onClick = { showAlerts = true }) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadCount > 0) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text("$unreadCount")
+                                    }
                                 }
-                            }
-                        },
-                    ) {
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.Notifications, "Alerts",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text(if (isDesktop) "Settings (Ctrl+,)" else "Settings") } },
+                    state = rememberTooltipState(),
+                ) {
+                    IconButton(onClick = { showSettings = true }) {
                         Icon(
-                            Icons.Outlined.Notifications, "Alerts",
+                            Icons.Outlined.Settings, "Settings",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
-                IconButton(onClick = { showSettings = true }) {
-                    Icon(
-                        Icons.Outlined.Settings, "Settings",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -158,8 +207,10 @@ fun MainScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(4.dp))
+                        val isDesktop = LocalDesktopMode.current
                         Text(
-                            "Tap the search bar below to get started",
+                            if (isDesktop) "Click the search bar below or press Ctrl+K"
+                            else "Tap the search bar below to get started",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -208,9 +259,24 @@ fun MainScreen(
                         "Search or add a product...",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                     )
+                    if (isDesktop) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Text(
+                                "Ctrl+K",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                 }
             }
+        }
         }
     }
 
@@ -220,6 +286,15 @@ fun MainScreen(
             onDismiss = { showDiscovery = false },
             onProductSelected = { product -> openPreview(product) },
             onCustomSearch = { query -> openAddSheet(initialQuery = query) },
+            onLiveSearch = { query ->
+                cameFromDiscovery = true
+                showDiscovery = false
+                previewProduct = null
+                showPreview = true
+                listingsProduct = null
+                previewSearchQuery = query
+                previewSearchName = query
+            },
         )
     }
 
@@ -266,6 +341,7 @@ fun MainScreen(
             productName = listingsProduct!!.name,
             searchQuery = listingsProduct!!.searchQuery.text,
             listingViewModel = listingViewModel,
+            platforms = listingsProduct!!.searchQuery.platforms,
             onDismiss = {
                 showListings = false
                 listingsProduct = null
@@ -274,20 +350,27 @@ fun MainScreen(
     }
 
     // Listings preview (before tracking)
-    if (showPreview && previewProduct != null) {
+    if (showPreview) {
+        val name = previewProduct?.displayName ?: previewSearchName
+        val query = previewProduct?.searchQuery ?: previewSearchQuery
         ListingsSheet(
-            productName = previewProduct!!.displayName,
-            searchQuery = previewProduct!!.searchQuery,
+            productName = name,
+            searchQuery = query,
             listingViewModel = listingViewModel,
+            platforms = previewProduct?.effectivePlatforms,
             onDismiss = {
                 showPreview = false
                 previewProduct = null
+                previewSearchQuery = ""
+                previewSearchName = ""
                 cameFromDiscovery = false
             },
             onBack = if (cameFromDiscovery) {
                 {
                     showPreview = false
                     previewProduct = null
+                    previewSearchQuery = ""
+                    previewSearchName = ""
                     cameFromDiscovery = false
                     showDiscovery = true
                 }
@@ -296,7 +379,13 @@ fun MainScreen(
                 val product = previewProduct
                 showPreview = false
                 previewProduct = null
-                openAddSheet(prefill = product)
+                if (product != null) {
+                    openAddSheet(prefill = product)
+                } else {
+                    openAddSheet(initialQuery = previewSearchQuery)
+                }
+                previewSearchQuery = ""
+                previewSearchName = ""
             },
         )
     }
@@ -305,7 +394,7 @@ fun MainScreen(
 // ── Product Card ─────────────────────────────────────────────
 
 @Composable
-private fun ProductCard(
+internal fun ProductCard(
     product: TrackedProduct,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
@@ -458,8 +547,10 @@ private fun AddProductSheet(
     onBack: (() -> Unit)? = null,
     onConfirm: (name: String, query: String, platforms: List<PlatformId>, identifiers: ProductIdentifier) -> Unit,
 ) {
-    var name by remember { mutableStateOf(prefill?.displayName ?: initialQuery) }
     var query by remember { mutableStateOf(prefill?.searchQuery ?: initialQuery) }
+    var name by remember { mutableStateOf(prefill?.displayName ?: initialQuery) }
+    // Auto-fill name from query when user hasn't manually edited the name
+    var nameManuallyEdited by remember { mutableStateOf(prefill != null) }
     var gtinText by remember { mutableStateOf(prefill?.gtins?.joinToString(", ") ?: "") }
     var mpn by remember { mutableStateOf(prefill?.mpn ?: "") }
     var showIdentifiers by remember { mutableStateOf(prefill != null && (prefill.mpn != null || prefill.gtins.isNotEmpty())) }
@@ -469,11 +560,7 @@ private fun AddProductSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    AdaptiveFormSheet(onDismiss = onDismiss) {
         if (onBack != null) {
             BackHandler(onBack = onBack)
         }
@@ -492,23 +579,31 @@ private fun AddProductSheet(
             Spacer(Modifier.height(20.dp))
 
             OutlinedTextField(
-                value = name, onValueChange = { name = it },
-                label = { Text("Name") },
-                placeholder = { Text("e.g. Sony WH-1000XM4") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Label, null) },
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = query, onValueChange = { query = it },
+                value = query, onValueChange = {
+                    query = it
+                    if (!nameManuallyEdited) {
+                        // Auto-fill name: use the positive part of the query (strip -exclusions)
+                        name = it.split(" ")
+                            .filter { w -> w.isNotBlank() && !w.startsWith("-") }
+                            .joinToString(" ")
+                    }
+                },
                 label = { Text("Search query") },
                 placeholder = { Text("e.g. WH-1000XM4 -case -cover") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = name, onValueChange = { name = it; nameManuallyEdited = true },
+                label = { Text("Label") },
+                placeholder = { Text("e.g. Sony WH-1000XM4") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Label, null) },
             )
 
             Spacer(Modifier.height(12.dp))

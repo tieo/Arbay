@@ -27,4 +27,10 @@ data class Listing(
     val mpn: String? = null,
     val scrapedAt: Instant,
     val extras: JsonObject? = null,
-)
+) {
+    /** All-in price including shipping and platform fees */
+    val effectivePrice: Money get() = Money(
+        price.amount + (shipping?.cost?.amount ?: 0L),
+        price.currency,
+    )
+}

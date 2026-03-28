@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class PlatformId(val displayName: String, val baseUrl: String) {
     EBAY_DE("eBay DE", "https://www.ebay.de"),
+    EBAY_COM("eBay COM", "https://www.ebay.com"),
     KLEINANZEIGEN("Kleinanzeigen", "https://www.kleinanzeigen.de"),
     MOBILE_DE("mobile.de", "https://suchen.mobile.de"),
     AUTOSCOUT24("AutoScout24", "https://www.autoscout24.de"),

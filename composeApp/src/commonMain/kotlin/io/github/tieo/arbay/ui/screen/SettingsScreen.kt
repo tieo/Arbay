@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.defaultServerUrl
+import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,11 +25,7 @@ fun SettingsSheet(
     var status by remember { mutableStateOf<Status>(Status.Idle) }
     val scope = rememberCoroutineScope()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    AdaptiveFormSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

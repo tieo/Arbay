@@ -6,8 +6,12 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 
 class ArbayClient(
@@ -86,5 +90,35 @@ class ArbayClient(
 
     suspend fun markAllAlertsRead() {
         client.post("$baseUrl/api/alerts/read-all")
+    }
+
+    suspend fun crawlerSearch(query: String, platform: PlatformId? = null, limit: Int = 50, sold: Boolean = false): List<Listing> =
+        client.get("$baseUrl/api/crawler/search") {
+            parameter("q", query)
+            platform?.let { parameter("platform", it.name) }
+            parameter("limit", limit)
+            if (sold) parameter("sold", "true")
+        }.body()
+
+    private val streamJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null): Flow<CrawlerSearchEvent> = flow {
+        client.prepareGet("$baseUrl/api/crawler/search/stream") {
+            parameter("q", query)
+            platform?.let { parameter("platform", it.name) }
+            if (platforms != null && platform == null) {
+                parameter("platforms", platforms.joinToString(",") { it.name })
+            }
+        }.execute { response ->
+            val channel = response.bodyAsChannel()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                val trimmed = line.trim()
+                if (trimmed.isNotEmpty()) {
+                    val event = streamJson.decodeFromString<CrawlerSearchEvent>(trimmed)
+                    emit(event)
+                }
+            }
+        }
     }
 }

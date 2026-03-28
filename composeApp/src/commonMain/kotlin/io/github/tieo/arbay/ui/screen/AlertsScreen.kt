@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.model.Alert
 import io.github.tieo.arbay.model.AlertType
+import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.viewmodel.AlertViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,11 +32,7 @@ fun AlertsSheet(
     val alerts by alertViewModel.alerts.collectAsState()
     val unreadCount by alertViewModel.unreadCount.collectAsState()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    AdaptiveFormSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

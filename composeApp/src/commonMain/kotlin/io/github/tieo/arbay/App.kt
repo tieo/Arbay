@@ -1,8 +1,11 @@
 package io.github.tieo.arbay
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.screen.MainScreen
 import io.github.tieo.arbay.ui.theme.ArbayTheme
 import io.github.tieo.arbay.ui.viewmodel.AlertViewModel
@@ -17,11 +20,16 @@ fun App() {
         val alertViewModel = viewModel { AlertViewModel(client) }
         val listingViewModel = viewModel { ListingViewModel(client) }
 
-        MainScreen(
-            productViewModel = productViewModel,
-            alertViewModel = alertViewModel,
-            listingViewModel = listingViewModel,
-            client = client,
-        )
+        BoxWithConstraints {
+            val isDesktop = maxWidth > 700.dp
+            CompositionLocalProvider(LocalDesktopMode provides isDesktop) {
+                MainScreen(
+                    productViewModel = productViewModel,
+                    alertViewModel = alertViewModel,
+                    listingViewModel = listingViewModel,
+                    client = client,
+                )
+            }
+        }
     }
 }
