@@ -3,6 +3,7 @@ package io.github.tieo.arbay.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.loadBannedIds
 import io.github.tieo.arbay.loadBlockedTerms
 import io.github.tieo.arbay.model.*
@@ -177,7 +178,7 @@ class ListingViewModel(
                                 ) else it
                             }
                             _allListings.value = (_allListings.value + event.listings)
-                                .sortedBy { it.effectivePrice.amount }
+                                .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
                         }
 
                         CrawlerEventType.PLATFORM_ERROR -> {

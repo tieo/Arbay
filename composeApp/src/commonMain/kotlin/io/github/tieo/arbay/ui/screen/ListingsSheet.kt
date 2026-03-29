@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
@@ -87,8 +88,8 @@ fun ListingsSheet(
             .sortedByDescending { it.soldDate ?: it.scrapedAt }
     }
 
-    // Price range slider bounds (from ALL active, before filtering)
-    val allActivePrices = remember(allActiveListings) { allActiveListings.map { it.effectivePrice.amount }.sorted() }
+    // Price range slider bounds (from ALL active, before filtering) — use converted prices
+    val allActivePrices = remember(allActiveListings) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
     val priceMin = remember(allActivePrices) { if (allActivePrices.isEmpty()) 0f else (allActivePrices.first() / 100f) }
     val priceMax = remember(allActivePrices) { if (allActivePrices.isEmpty()) 1000f else (allActivePrices.last() / 100f).coerceAtLeast(priceMin + 1f) }
     var priceRange by remember(priceMin, priceMax) { mutableStateOf(priceMin..priceMax) }
@@ -106,7 +107,7 @@ fun ListingsSheet(
 
     val activeListings = remember(allActiveListings, priceRange) {
         if (!priceFiltered) allActiveListings
-        else allActiveListings.filter { inPriceRange(it.effectivePrice.amount) }
+        else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
     }
     val displayedActiveListings = remember(activeListings, conditionFilter) {
         activeListings.filter { listing ->
@@ -119,17 +120,20 @@ fun ListingsSheet(
     }
     val soldListings = remember(allSoldListings, priceRange, hideUnknownDates) {
         allSoldListings
-            .let { if (priceFiltered) it.filter { l -> inPriceRange(l.effectivePrice.amount) } else it }
+            .let { if (priceFiltered) it.filter { l -> inPriceRange(DisplayCurrency.convert(l.effectivePrice.amount, l.effectivePrice.currency.name)) } else it }
             .let { if (hideUnknownDates) it.filter { l -> l.soldDate != null } else it }
     }
 
-    // All stats computed from FILTERED data
-    val allPrices = remember(activeListings) { activeListings.map { it.effectivePrice.amount }.sorted() }
+    // All stats computed from FILTERED data — use converted prices for cross-currency comparison
+    fun Listing.convertedPrice(): Long = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
+    val allPrices = remember(activeListings) { activeListings.map { it.convertedPrice() }.sorted() }
+    val displayCur = Currency.valueOf(DisplayCurrency.current)
     val medianPrice = remember(allPrices) {
-        if (allPrices.isEmpty()) null
-        else Money(allPrices[allPrices.size / 2], activeListings.firstOrNull()?.effectivePrice?.currency ?: Currency.EUR)
+        if (allPrices.isEmpty()) null else Money(allPrices[allPrices.size / 2], displayCur)
     }
-    val minPrice = remember(activeListings) { activeListings.minByOrNull { it.effectivePrice.amount }?.effectivePrice }
+    val minPrice = remember(activeListings) {
+        activeListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
+    }
 
     val usedListings = remember(activeListings) {
         activeListings.filter { it.condition != null && it.condition != Condition.NEW }
@@ -137,21 +141,23 @@ fun ListingsSheet(
     val newListings = remember(activeListings) {
         activeListings.filter { it.condition == Condition.NEW }
     }
-    val minUsedPrice = remember(usedListings) { usedListings.minByOrNull { it.effectivePrice.amount }?.effectivePrice }
-    val medianUsedPrice = remember(usedListings) {
-        val prices = usedListings.map { it.effectivePrice.amount }.sorted()
-        if (prices.isEmpty()) null
-        else Money(prices[prices.size / 2], usedListings.first().effectivePrice.currency)
+    val minUsedPrice = remember(usedListings) {
+        usedListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    val minNewPrice = remember(newListings) { newListings.minByOrNull { it.effectivePrice.amount }?.effectivePrice }
+    val medianUsedPrice = remember(usedListings) {
+        val prices = usedListings.map { it.convertedPrice() }.sorted()
+        if (prices.isEmpty()) null else Money(prices[prices.size / 2], displayCur)
+    }
+    val minNewPrice = remember(newListings) {
+        newListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
+    }
     val medianNewPrice = remember(newListings) {
-        val prices = newListings.map { it.effectivePrice.amount }.sorted()
-        if (prices.isEmpty()) null
-        else Money(prices[prices.size / 2], newListings.first().effectivePrice.currency)
+        val prices = newListings.map { it.convertedPrice() }.sorted()
+        if (prices.isEmpty()) null else Money(prices[prices.size / 2], displayCur)
     }
     val medianSoldPrice = remember(soldListings) {
-        val sorted = soldListings.sortedBy { it.effectivePrice.amount }
-        if (sorted.isEmpty()) null else sorted[sorted.size / 2].effectivePrice
+        val sorted = soldListings.map { it.convertedPrice() }.sorted()
+        if (sorted.isEmpty()) null else Money(sorted[sorted.size / 2], displayCur)
     }
 
     val imageListings = remember(listings) {
@@ -167,14 +173,13 @@ fun ListingsSheet(
     val platformOffers = remember(activeListings) {
         activeListings.groupBy { it.platformId }
             .map { (platform, items) ->
+                val sortedByConverted = items.sortedBy { it.convertedPrice() }
                 PlatformOffer(
                     platform = platform,
                     count = items.size,
-                    minPrice = items.minByOrNull { it.effectivePrice.amount }?.effectivePrice,
-                    medianPrice = items.sortedBy { it.effectivePrice.amount }.let { sorted ->
-                        if (sorted.isEmpty()) null else sorted[sorted.size / 2].effectivePrice
-                    },
-                    bestListing = items.minByOrNull { it.effectivePrice.amount },
+                    minPrice = sortedByConverted.firstOrNull()?.let { Money(it.convertedPrice(), displayCur) },
+                    medianPrice = if (sortedByConverted.isEmpty()) null else Money(sortedByConverted[sortedByConverted.size / 2].convertedPrice(), displayCur),
+                    bestListing = sortedByConverted.firstOrNull(),
                 )
             }
             .sortedBy { it.minPrice?.amount ?: Long.MAX_VALUE }
