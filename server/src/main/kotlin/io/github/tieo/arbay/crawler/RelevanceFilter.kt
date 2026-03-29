@@ -261,10 +261,12 @@ object RelevanceFilter {
             .replace(Regex("(\\d)\\+"), "$1 plus")
             // Strip remaining "+" as space (e.g. "Pro+" → "Pro", "+sub+era" → "sub era")
             .replace("+", " ")
-            // Model variant suffixes directly attached to numbers (e.g. "S24FE" → "S24 FE", "4070Ti" → "4070 Ti")
-            // Separates so negative tokens like "-FE" or "-Ti" can word-match them
+            // Model variant suffixes directly attached to numbers (e.g. "S24FE" → "S24 FE", "6pro" → "6 pro")
+            // Separates so tokens can word-match them
             .replace(Regex("(\\d)(fe)\\b", RegexOption.IGNORE_CASE), "$1 $2")
             .replace(Regex("(\\d)(ti)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("(\\d)(pro)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("(\\d)(a)\\b", RegexOption.IGNORE_CASE), "$1 $2")
             // Strip "12/512GB" and "12 / 512 GB" style RAM/storage combos before slash expansion
             .replace(Regex("\\d+\\s*/\\s*\\d+\\s*(?:gb|tb|mb)", RegexOption.IGNORE_CASE), "")
             .replace("-", " ").replace("_", " ").replace("/", " ").replace("|", " ").replace("*", " ")
