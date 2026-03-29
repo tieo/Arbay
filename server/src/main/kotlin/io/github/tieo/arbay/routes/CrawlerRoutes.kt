@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
+import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.crawler.CrawlerStatusTracker
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
@@ -15,6 +16,7 @@ import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.ListingRepo
 import io.ktor.http.*
 import io.ktor.http.ContentType
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.TimeoutCancellationException
@@ -48,6 +50,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
         get("/status") {
             call.respond(CrawlerStatusTracker.getAll())
+        }
+
+        get("/config") {
+            call.respond(CrawlerConfig.current)
+        }
+        post("/config") {
+            val config = call.receive<CrawlerConfig>()
+            CrawlerConfig.update(config)
+            call.respond(config)
         }
 
         get("/status/{platform}") {
@@ -123,8 +134,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 GENERAL_PLATFORMS.filter { CrawlerRegistry.crawlerFor(it) != null }
             }
 
-            val searchQuery = SearchQuery(text = query)
-            val parsedQuery = RelevanceFilter.parseQuery(query)
+            // Blocked terms from client — append as negative keywords
+            val blockedTerms = call.queryParameters["blocked"]?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+            val queryWithBlocked = if (blockedTerms.isNotEmpty()) {
+                "$query ${blockedTerms.joinToString(" ") { "-$it" }}"
+            } else query
+            val searchQuery = SearchQuery(text = queryWithBlocked)
+            val parsedQuery = RelevanceFilter.parseQuery(queryWithBlocked)
 
             call.respondTextWriter(contentType = ContentType.Text.Plain) {
                 // Send SEARCH_STARTED
@@ -201,14 +217,16 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 )
                             } catch (e: TimeoutCancellationException) {
                                 CrawlerStatusTracker.recordError(platformId, "Timeout after 180s", ErrorType.TIMEOUT)
-                                val snapId = ErrorSnapshotStore.capture(
-                                    platform = platformId.name, query = query, error = e, errorType = ErrorType.TIMEOUT,
-                                )
+                                val snapId = try {
+                                    ErrorSnapshotStore.capture(
+                                        platform = platformId.name, query = query, error = RuntimeException("Timeout after 180s", e), errorType = ErrorType.TIMEOUT,
+                                    )
+                                } catch (_: Exception) { "?" }
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_ERROR,
                                     platform = platformId.name,
                                     platformName = platformId.displayName,
-                                    error = "Timeout [$snapId]",
+                                    error = "Timeout after 180s [$snapId]",
                                     errorType = "TIMEOUT",
                                 )
                             } catch (e: CrawlerBlockedException) {

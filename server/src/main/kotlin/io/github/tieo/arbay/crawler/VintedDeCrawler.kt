@@ -49,11 +49,10 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
             val imageUrl = item.selectFirst("[data-testid*=--image--img]")?.attr("src")
                 ?: item.selectFirst("img")?.attr("src")
 
-            // Vinted mandatory fees: buyer protection 5% (min €0.70) + service fee €0.70
-            // Shipping is separate and varies by item weight — not included here
+            // Vinted mandatory fees baked into price: buyer protection 5% (min €0.70) + service fee €0.70
             val buyerProtection = maxOf(price.amount * 5 / 100, 70L)
-            val serviceFee = 70L // fixed €0.70
-            val totalFees = Money(buyerProtection + serviceFee, price.currency)
+            val serviceFee = 70L
+            val priceWithFees = Money(price.amount + buyerProtection + serviceFee, price.currency)
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -61,10 +60,11 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
                 externalId = externalId,
                 url = url,
                 title = title,
-                price = price,
+                price = priceWithFees,
+                oldPrice = price, // show original price as reference
                 condition = condition,
                 imageUrls = listOfNotNull(imageUrl),
-                shipping = Shipping(cost = totalFees),
+                // Shipping varies by weight — not known from search results
                 scrapedAt = now,
             )
         }

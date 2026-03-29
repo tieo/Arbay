@@ -141,6 +141,63 @@ fun SettingsSheet(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+            Spacer(Modifier.height(16.dp))
+            Text("Crawler", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(12.dp))
+
+            var maxPages by remember { mutableStateOf("5") }
+            var sortByPrice by remember { mutableStateOf(true) }
+
+            // Load config on first render
+            LaunchedEffect(Unit) {
+                try {
+                    val config = client.getCrawlerConfig()
+                    maxPages = config.maxPages.toString()
+                    sortByPrice = config.sortByPrice
+                } catch (_: Exception) {}
+            }
+
+            OutlinedTextField(
+                value = maxPages,
+                onValueChange = { maxPages = it.filter { c -> c.isDigit() }.take(2) },
+                label = { Text("Max pages per platform") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                supportingText = { Text("More pages = more results but slower") },
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Sort by price", style = MaterialTheme.typography.bodyMedium)
+                Switch(checked = sortByPrice, onCheckedChange = { sortByPrice = it })
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        try {
+                            client.updateCrawlerConfig(maxPages.toIntOrNull() ?: 5, sortByPrice)
+                        } catch (_: Exception) {}
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text("Save crawler settings")
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
             Spacer(Modifier.height(12.dp))
 
             Row(

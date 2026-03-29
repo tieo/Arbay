@@ -12,6 +12,7 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 class ArbayClient(
@@ -92,6 +93,19 @@ class ArbayClient(
         client.post("$baseUrl/api/alerts/read-all")
     }
 
+    @Serializable
+    data class CrawlerConfigDto(val maxPages: Int = 5, val ebayItemsPerPage: Int = 120, val sortByPrice: Boolean = true)
+
+    suspend fun getCrawlerConfig(): CrawlerConfigDto =
+        client.get("$baseUrl/api/crawler/config").body()
+
+    suspend fun updateCrawlerConfig(maxPages: Int, sortByPrice: Boolean) {
+        client.post("$baseUrl/api/crawler/config") {
+            contentType(io.ktor.http.ContentType.Application.Json)
+            setBody(CrawlerConfigDto(maxPages = maxPages, sortByPrice = sortByPrice))
+        }
+    }
+
     suspend fun crawlerSearch(query: String, platform: PlatformId? = null, limit: Int = 50, sold: Boolean = false): List<Listing> =
         client.get("$baseUrl/api/crawler/search") {
             parameter("q", query)
@@ -102,12 +116,15 @@ class ArbayClient(
 
     private val streamJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null): Flow<CrawlerSearchEvent> = flow {
+    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null, blockedTerms: Set<String> = emptySet()): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/crawler/search/stream") {
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             if (platforms != null && platform == null) {
                 parameter("platforms", platforms.joinToString(",") { it.name })
+            }
+            if (blockedTerms.isNotEmpty()) {
+                parameter("blocked", blockedTerms.joinToString(","))
             }
         }.execute { response ->
             val channel = response.bodyAsChannel()

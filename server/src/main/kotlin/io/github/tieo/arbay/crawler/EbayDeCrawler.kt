@@ -48,8 +48,9 @@ class EbayDeCrawler(
         if (curlHtml != null) {
             val firstPage = parseSearchResults(curlHtml)
             allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
+            val maxPages = CrawlerConfig.current.maxPages
             if (firstPage.size >= 20) {
-                for (page in 2..3) {
+                for (page in 2..maxPages) {
                     val html = try {
                         val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
                         validateHtml(h, "eBay"); h
@@ -63,7 +64,7 @@ class EbayDeCrawler(
             if (query.soldOnly) {
                 try {
                     val soldQuery = query.copy(soldOnly = true)
-                    for (soldPage in 1..3) {
+                    for (soldPage in 1..maxPages) {
                         val html = try {
                             val h = CurlCffiClient.fetch(buildSearchUrl(soldQuery, soldPage))
                             validateHtml(h, "eBay"); h
@@ -115,8 +116,9 @@ class EbayDeCrawler(
     ): List<Listing> {
         val firstPage = parseSearchResults(firstHtml)
         allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
+        val maxPages = CrawlerConfig.current.maxPages
         if (firstPage.size >= 20) {
-            for (page in 2..3) {
+            for (page in 2..maxPages) {
                 val html = try {
                     val h = fetchHttp(client, buildSearchUrl(query, page), "eBay")
                     validateHtml(h, "eBay"); h
@@ -129,7 +131,7 @@ class EbayDeCrawler(
         if (query.soldOnly) {
             try {
                 val soldQuery = query.copy(soldOnly = true)
-                for (soldPage in 1..3) {
+                for (soldPage in 1..maxPages) {
                     val html = try {
                         val h = fetchHttp(client, buildSearchUrl(soldQuery, soldPage), "eBay")
                         validateHtml(h, "eBay"); h
@@ -147,7 +149,8 @@ class EbayDeCrawler(
     private fun buildSearchUrl(query: SearchQuery, page: Int = 1): String {
         val params = buildList {
             add("_nkw=${query.text.encodeUrl()}")
-            add("_ipg=120")
+            add("_ipg=${CrawlerConfig.current.ebayItemsPerPage}")
+            if (CrawlerConfig.current.sortByPrice) add("_sop=15") // sort by price+shipping lowest first
             if (page > 1) add("_pgn=$page")
             if (query.soldOnly) add("LH_Sold=1&LH_Complete=1")
             // For ebay.com, restrict to listings that ship to Germany

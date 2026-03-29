@@ -515,6 +515,20 @@ fun ListingsSheet(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                             )
                         }
+                        item("sold_load_more") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (soldLoadingState) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(onClick = { listingViewModel.searchSold() }) {
+                                        Text("Load more sold")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1421,24 +1435,41 @@ private fun PriceHistoryChart(
                     drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
                 }
 
-                // Smooth rolling median trend line (wide window, few steps)
+                // LOESS trend line (locally weighted scatterplot smoothing)
                 if (sorted.size >= 3) {
-                    val steps = 8 // few steps = smoother line
-                    val halfWindow = (timeRange * 0.3f).toLong() // ±30% wide window
-                    fun median(t: Long): Long {
-                        val window = sorted.indices.filter { timestamps[it] in (t - halfWindow)..(t + halfWindow) }
-                        return if (window.isEmpty()) prices[sorted.size / 2]
-                        else window.map { prices[it] }.sorted().let { it[it.size / 2] }
-                    }
-                    for (step in 1 until steps) {
-                        val t1 = minT + timeRange * (step - 1) / (steps - 1)
-                        val t2 = minT + timeRange * step / (steps - 1)
-                        drawLine(
-                            primary.copy(alpha = 0.35f),
-                            Offset(tx(t1), ty(median(t1))),
-                            Offset(tx(t2), ty(median(t2))),
-                            strokeWidth = 2.5f,
-                        )
+                    val xData = timestamps.map { it.toFloat() }
+                    val yData = prices.map { it.toFloat() }
+                    val n = xData.size
+                    val steps = 30
+                    val bandwidth = 0.35f
+                    val k = maxOf(2, (n * bandwidth).toInt())
+                    val xMin = xData.min(); val xMax = xData.max()
+                    val xStep = (xMax - xMin) / (steps - 1).coerceAtLeast(1)
+
+                    var prevPoint: Offset? = null
+                    for (i in 0 until steps) {
+                        val xEval = xMin + xStep * i
+                        val distances = FloatArray(n) { j -> kotlin.math.abs(xData[j] - xEval) }
+                        val maxDist = distances.copyOf().also { it.sort() }[k - 1].coerceAtLeast(1e-6f)
+                        var sw = 0f; var swx = 0f; var swx2 = 0f; var swy = 0f; var swxy = 0f
+                        for (j in 0 until n) {
+                            val u = distances[j] / maxDist
+                            if (u >= 1f) continue
+                            val t = 1f - u * u * u; val w = t * t * t
+                            val xj = xData[j]; val yj = yData[j]
+                            sw += w; swx += w * xj; swx2 += w * xj * xj; swy += w * yj; swxy += w * xj * yj
+                        }
+                        val det = sw * swx2 - swx * swx
+                        val yEval = if (kotlin.math.abs(det) < 1e-10f) {
+                            if (sw > 0f) swy / sw else yData[n / 2]
+                        } else {
+                            val a = (swx2 * swy - swx * swxy) / det
+                            val b = (sw * swxy - swx * swy) / det
+                            a + b * xEval
+                        }
+                        val pt = Offset(tx(xEval.toLong()), ty(yEval.toLong()))
+                        prevPoint?.let { drawLine(primary.copy(alpha = 0.4f), it, pt, strokeWidth = 2.5f) }
+                        prevPoint = pt
                     }
                 }
 

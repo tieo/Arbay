@@ -11,7 +11,7 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
     override suspend fun search(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val maxPages = 2
+        val maxPages = CrawlerConfig.current.maxPages
 
         for (page in 1..maxPages) {
             val pageParam = if (page > 1) "p/$page/" else ""

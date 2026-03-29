@@ -13,7 +13,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
     override suspend fun search(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val maxPages = 3
+        val maxPages = CrawlerConfig.current.maxPages
 
         for (page in 1..maxPages) {
             val pageSegment = if (page > 1) "seite:$page/" else ""

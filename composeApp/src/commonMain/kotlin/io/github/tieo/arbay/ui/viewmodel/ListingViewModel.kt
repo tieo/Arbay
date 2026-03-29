@@ -119,16 +119,13 @@ class ListingViewModel(
         viewModelScope.launch {
             _soldLoading.value = true
             try {
-                // First load persisted sold history
                 val history = try { client.getPriceHistory(query) } catch (_: Exception) { emptyList() }
-                // Then crawl eBay for fresh sold data
                 val ebayPlatforms = listOf(PlatformId.EBAY_DE, PlatformId.EBAY_COM)
                 val freshSold = ebayPlatforms.flatMap { platform ->
-                    try { client.crawlerSearch(query, platform, limit = 200, sold = true) } catch (_: Exception) { emptyList() }
+                    try { client.crawlerSearch(query, platform, limit = 500, sold = true) } catch (_: Exception) { emptyList() }
                 }
-                // Merge, deduplicate by id
                 val seen = mutableSetOf<String>()
-                _priceHistory.value = (freshSold + history)
+                _priceHistory.value = (freshSold + history + _priceHistory.value)
                     .filter { it.sold && seen.add(it.id) }
                     .sortedByDescending { it.soldDate ?: it.scrapedAt }
             } catch (_: Exception) {
@@ -155,7 +152,7 @@ class ListingViewModel(
 
             try {
                 withTimeoutOrNull(200_000L) {
-                client.crawlerSearchStream(query, platforms = platforms).collect { event ->
+                client.crawlerSearchStream(query, platforms = platforms, blockedTerms = _blockedTerms.value).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {
                             _totalPlatforms.value = event.totalPlatforms
