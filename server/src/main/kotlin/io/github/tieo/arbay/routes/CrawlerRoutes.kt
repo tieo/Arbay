@@ -208,7 +208,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             }
 
                             val event = try {
-                                val rawResults = withTimeout(180_000L) {
+                                val rawResults = withTimeout(300_000L) {
                                     kotlinx.coroutines.withContext(progressEmitter) { crawler.search(searchQuery) }
                                 }
                                 CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)

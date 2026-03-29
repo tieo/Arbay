@@ -106,10 +106,11 @@ class ListingViewModel(
         _selectedPlatform.value = platform
     }
 
-    fun refresh(platforms: List<PlatformId>? = null) {
+    fun refresh(platforms: List<PlatformId>? = null, withFilters: Boolean = true) {
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
+        if (!withFilters) _blockedTerms.value = emptySet()
         search(query, platforms, force = true)
     }
 
@@ -151,7 +152,7 @@ class ListingViewModel(
             _totalPlatforms.value = 0
 
             try {
-                withTimeoutOrNull(200_000L) {
+                withTimeoutOrNull(360_000L) {
                 client.crawlerSearchStream(query, platforms = platforms, blockedTerms = _blockedTerms.value).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {

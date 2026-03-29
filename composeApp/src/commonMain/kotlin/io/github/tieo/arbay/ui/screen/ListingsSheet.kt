@@ -254,7 +254,16 @@ fun ListingsSheet(
                             }
                         }
                         if (!loading) {
-                            IconButton(onClick = { listingViewModel.refresh(platforms) }) {
+                            if (blockedTerms.isNotEmpty()) {
+                                // Two buttons: refresh with filters, refresh without
+                                IconButton(onClick = { listingViewModel.refresh(platforms, withFilters = true) }) {
+                                    Icon(
+                                        Icons.Outlined.FilterAlt, "Re-crawl with filters",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { listingViewModel.refresh(platforms, withFilters = false) }) {
                                 Icon(
                                     Icons.Outlined.Refresh, "Re-crawl",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,

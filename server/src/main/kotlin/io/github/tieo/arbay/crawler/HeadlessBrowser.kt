@@ -15,8 +15,8 @@ enum class BrowserEngine { CHROMIUM, FIREFOX, WEBKIT }
 object HeadlessBrowser {
     private val log = LoggerFactory.getLogger(HeadlessBrowser::class.java)
 
-    // Only 1 concurrent Chromium session — multiple contexts crash the single Chrome process
-    private val semaphore = Semaphore(1)
+    // Allow 2 concurrent browser contexts — balance between speed and stability
+    private val semaphore = Semaphore(2)
 
     private val STEALTH_SCRIPT = """
         try { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); } catch(_) {}
