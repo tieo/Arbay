@@ -367,7 +367,9 @@ object HeadlessBrowser {
             msg.contains("TargetClosedError") ||
             msg.contains("has been closed") ||
             msg.contains("call_adopt") ||
-            msg.contains("Browser has been closed")
+            msg.contains("Browser has been closed") ||
+            msg.contains("ERR_ABORTED") ||
+            msg.contains("frame was detached")
     }
 
     fun shutdown() {

@@ -254,19 +254,22 @@ fun ListingsSheet(
                             }
                         }
                         if (!loading) {
-                            if (blockedTerms.isNotEmpty()) {
-                                // Two buttons: refresh with filters, refresh without
-                                IconButton(onClick = { listingViewModel.refresh(platforms, withFilters = true) }) {
-                                    Icon(
-                                        Icons.Outlined.FilterAlt, "Re-crawl with filters",
-                                        tint = MaterialTheme.colorScheme.primary,
+                            var useFilters by remember { mutableStateOf(blockedTerms.isNotEmpty()) }
+                            IconButton(
+                                onClick = { listingViewModel.refresh(platforms, withFilters = useFilters) },
+                                modifier = Modifier.pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onLongPress = { useFilters = !useFilters },
+                                        onTap = { listingViewModel.refresh(platforms, withFilters = useFilters) },
                                     )
-                                }
-                            }
-                            IconButton(onClick = { listingViewModel.refresh(platforms, withFilters = false) }) {
+                                },
+                            ) {
                                 Icon(
-                                    Icons.Outlined.Refresh, "Re-crawl",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    if (useFilters && blockedTerms.isNotEmpty()) Icons.Filled.FilterAlt
+                                    else Icons.Outlined.Refresh,
+                                    "Re-crawl",
+                                    tint = if (useFilters && blockedTerms.isNotEmpty()) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -484,9 +487,11 @@ fun ListingsSheet(
                                 } else {
                                     TextButton(
                                         onClick = { listingViewModel.searchSold() },
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                     ) {
-                                        Text("More", style = MaterialTheme.typography.labelSmall)
+                                        Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Load sold", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }

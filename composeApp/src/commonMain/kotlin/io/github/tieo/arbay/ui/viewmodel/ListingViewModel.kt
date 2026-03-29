@@ -153,7 +153,7 @@ class ListingViewModel(
 
             try {
                 withTimeoutOrNull(360_000L) {
-                client.crawlerSearchStream(query, platforms = platforms, blockedTerms = _blockedTerms.value).collect { event ->
+                client.crawlerSearchStream(query, platforms = platforms).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {
                             _totalPlatforms.value = event.totalPlatforms

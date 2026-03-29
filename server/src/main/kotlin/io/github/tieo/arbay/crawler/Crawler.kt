@@ -31,13 +31,23 @@ suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
         )
         log.warn("{}: blocked — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
         emptyList()
+    } catch (e: java.util.concurrent.CancellationException) {
+        // Coroutine cancelled (client disconnected) — not a real crawler error
+        log.debug("{}: cancelled for '{}'", platformId.displayName, query.text)
+        emptyList()
     } catch (e: Exception) {
         val errorType = classifyException(e)
+        // Skip snapshots for cancellation-like errors
+        val isCancellation = e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true
         CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
-        val snapId = ErrorSnapshotStore.capture(
-            platform = platformId.name, query = query.text, error = e, errorType = errorType,
-        )
-        log.error("{}: error — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
+        if (!isCancellation) {
+            val snapId = ErrorSnapshotStore.capture(
+                platform = platformId.name, query = query.text, error = e, errorType = errorType,
+            )
+            log.error("{}: error — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
+        } else {
+            log.debug("{}: cancelled — {}", platformId.displayName, e.message)
+        }
         emptyList()
     }
 }

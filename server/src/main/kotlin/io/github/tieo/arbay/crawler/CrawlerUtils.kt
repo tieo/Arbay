@@ -145,7 +145,8 @@ internal fun fetchWithBrowser(
     val result = try { doFetch() } catch (e: Exception) {
         val msg = e.message ?: ""
         if (msg.contains("Object doesn't exist") || msg.contains("TargetClosedError") ||
-            msg.contains("has been closed") || msg.contains("call_adopt")) {
+            msg.contains("has been closed") || msg.contains("call_adopt") ||
+            msg.contains("ERR_ABORTED") || msg.contains("frame was detached")) {
             // Browser already invalidated by fetch()'s catch — just retry with fresh instance
             val log = org.slf4j.LoggerFactory.getLogger("fetchWithBrowser")
             log.warn("Playwright stale for {}, retrying: {}", platformName, msg.take(60))

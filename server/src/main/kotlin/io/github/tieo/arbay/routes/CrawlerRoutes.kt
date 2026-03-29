@@ -143,13 +143,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 GENERAL_PLATFORMS.filter { CrawlerRegistry.crawlerFor(it) != null }
             }
 
-            // Blocked terms from client — append as negative keywords
-            val blockedTerms = call.queryParameters["blocked"]?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
-            val queryWithBlocked = if (blockedTerms.isNotEmpty()) {
-                "$query ${blockedTerms.joinToString(" ") { "-$it" }}"
-            } else query
-            val searchQuery = SearchQuery(text = queryWithBlocked)
-            val parsedQuery = RelevanceFilter.parseQuery(queryWithBlocked)
+            val searchQuery = SearchQuery(text = query)
+            val parsedQuery = RelevanceFilter.parseQuery(query)
 
             call.respondTextWriter(contentType = ContentType.Text.Plain) {
                 // Send SEARCH_STARTED
