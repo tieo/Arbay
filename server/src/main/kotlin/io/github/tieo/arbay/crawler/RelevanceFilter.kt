@@ -57,12 +57,13 @@ object RelevanceFilter {
             .replace(Regex("\\bals\\s+\\S+(?:\\s+\\S+)?"), " ")
             .replace(Regex("\\s+"), " ").trim()
         val titleCompact = titleNormForMatching.replace(" ", "")
-        // Strip context numbers that must NOT match numeric model tokens:
-        // 1. Storage/RAM: "512 GB", "16 TB" → so "512" doesn't match token "512" from a different model
-        // 2. OS versions: "Android 13", "iOS 17" → so "OnePlus 5 Android 13" doesn't match query "OnePlus 13"
-        // 3. Decimal screen sizes: "7 9 zoll" (from "7,9 Zoll") → so old iPads with 7.9" don't match "iPad mini 7"
+        // Strip context numbers that must NOT match numeric model tokens — BUT only
+        // strip storage values if the query doesn't contain storage-like tokens (e.g. "256")
+        val queryHasStorageToken = (parsed.positiveTokens + parsed.orGroups.flatten()).any { t ->
+            t.all { c -> c.isDigit() } && t.length >= 2 && t.toIntOrNull()?.let { it in listOf(8,16,32,64,128,256,512,1024,2048) } == true
+        }
         val titleNormStripped = titleNormForMatching
-            .replace(Regex("\\d+\\s*(?:gb|tb|mb)\\b"), " ")
+            .let { if (queryHasStorageToken) it else it.replace(Regex("\\d+\\s*(?:gb|tb|mb)\\b"), " ") }
             // Greedy: strip ALL digit groups after the OS name (handles "ios 12 7 5" from "iOS 12.7.5")
             .replace(Regex("\\bandroid\\s+(\\d+\\s*)+"), "android ")
             .replace(Regex("\\bios\\s+(\\d+\\s*)+"), "ios ")
@@ -88,14 +89,19 @@ object RelevanceFilter {
             }
         }
 
+        // Unit suffixes that can be glued to a number: "256gb", "512tb", "16mp"
+        val unitSuffixes = setOf("gb", "tb", "mb", "mp", "mhz", "ghz", "mah", "wh", "mm", "cm", "kg", "zoll", "inch")
+
         fun tokenMatches(token: String): Boolean {
-            // ≤2 chars: whole-word only (e.g. "x", "2", "wh")
+            // ≤2 chars: whole-word only, or number+unit (e.g. "6" matches "6" but not "16")
             if (token.length <= 2) return titleWords.any { it == token }
-            // 3-5 chars: skip raw substring matching to avoid false positives where a short token
-            // appears inside a longer single word (e.g. "watch" inside "smartwatch" for "Galaxy Watch"
-            // queries, or "ultra" matching "cultural"). Only use whole-word or compact matching.
+            // 3-5 chars: whole-word, or numeric token matching word that starts with it + unit suffix
+            // (e.g. "256" matches "256gb", "512" matches "512tb")
             if (token.length <= 5) {
                 if (titleWords.any { it == token }) return true
+                if (token.all { it.isDigit() }) {
+                    if (titleWords.any { word -> word.startsWith(token) && unitSuffixes.any { word == token + it } }) return true
+                }
                 // Compact matching with word-boundary guard (catches hyphen-split tokens).
                 // e.g. "xt5" (from query "X-T5") matches "fujifilm x t5" via compact "fujifilmxt5".
                 // e.g. "usbc" (from "USB-C") matches "usb c" via compact "usbc".
