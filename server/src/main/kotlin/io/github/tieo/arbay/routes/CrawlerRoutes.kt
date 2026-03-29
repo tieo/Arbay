@@ -5,6 +5,7 @@ import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.crawler.CrawlerStatusTracker
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
+import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.RelevanceFilter
@@ -50,6 +51,14 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
         get("/status") {
             call.respond(CrawlerStatusTracker.getAll())
+        }
+
+        get("/exchange-rates") {
+            // Refresh if stale (>6h)
+            if (System.currentTimeMillis() - ExchangeRates.lastUpdate > 6 * 3600 * 1000) {
+                ExchangeRates.refresh()
+            }
+            call.respond(ExchangeRates.rates)
         }
 
         get("/config") {

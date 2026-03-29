@@ -20,6 +20,13 @@ fun App() {
         val alertViewModel = viewModel { AlertViewModel(client) }
         val listingViewModel = viewModel { ListingViewModel(client) }
 
+        // Load exchange rates on startup
+        LaunchedEffect(Unit) {
+            try {
+                DisplayCurrency.rates = client.getExchangeRates()
+            } catch (_: Exception) {}
+        }
+
         BoxWithConstraints {
             val isDesktop = maxWidth > 700.dp
             CompositionLocalProvider(LocalDesktopMode provides isDesktop) {

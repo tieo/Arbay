@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.defaultServerUrl
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
@@ -142,13 +143,41 @@ fun SettingsSheet(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             Spacer(Modifier.height(16.dp))
+            Text("Display", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(12.dp))
+
+            val currencies = listOf("EUR", "USD", "GBP", "CHF")
+            var displayCurrency by remember { mutableStateOf(DisplayCurrency.current) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                currencies.forEach { cur ->
+                    FilterChip(
+                        selected = displayCurrency == cur,
+                        onClick = {
+                            displayCurrency = cur
+                            DisplayCurrency.current = cur
+                            scope.launch {
+                                try { client.getExchangeRates() } catch (_: Exception) {}
+                            }
+                        },
+                        label = { Text(cur) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            Spacer(Modifier.height(16.dp))
             Text("Crawler", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(12.dp))
 
             var maxPages by remember { mutableStateOf("5") }
             var sortByPrice by remember { mutableStateOf(true) }
 
-            // Load config on first render
             LaunchedEffect(Unit) {
                 try {
                     val config = client.getCrawlerConfig()

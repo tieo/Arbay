@@ -96,6 +96,9 @@ class ArbayClient(
     @Serializable
     data class CrawlerConfigDto(val maxPages: Int = 5, val ebayItemsPerPage: Int = 120, val sortByPrice: Boolean = true)
 
+    suspend fun getExchangeRates(): Map<String, Double> =
+        client.get("$baseUrl/api/crawler/exchange-rates").body()
+
     suspend fun getCrawlerConfig(): CrawlerConfigDto =
         client.get("$baseUrl/api/crawler/config").body()
 

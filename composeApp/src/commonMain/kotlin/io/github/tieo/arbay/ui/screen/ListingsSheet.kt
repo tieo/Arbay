@@ -94,6 +94,7 @@ fun ListingsSheet(
     var priceRange by remember(priceMin, priceMax) { mutableStateOf(priceMin..priceMax) }
     var conditionFilter by remember { mutableStateOf<String?>(null) }
     var showSold by remember { mutableStateOf(true) }
+    var hideUnknownDates by remember { mutableStateOf(false) }
 
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
     val priceFiltered = priceRange.start > priceMin || priceRange.endInclusive < priceMax
@@ -116,9 +117,10 @@ fun ListingsSheet(
             }
         }
     }
-    val soldListings = remember(allSoldListings, priceRange) {
-        if (!priceFiltered) allSoldListings
-        else allSoldListings.filter { inPriceRange(it.effectivePrice.amount) }
+    val soldListings = remember(allSoldListings, priceRange, hideUnknownDates) {
+        allSoldListings
+            .let { if (priceFiltered) it.filter { l -> inPriceRange(l.effectivePrice.amount) } else it }
+            .let { if (hideUnknownDates) it.filter { l -> l.soldDate != null } else it }
     }
 
     // All stats computed from FILTERED data
@@ -459,11 +461,26 @@ fun ListingsSheet(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column {
-                            Text(
-                                if (soldListings.isEmpty()) "Price history" else "Price history (${soldListings.size} sold)",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                            )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    "Sold (${soldListings.size})",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                )
+                                if (soldLoadingState) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                                } else {
+                                    TextButton(
+                                        onClick = { listingViewModel.searchSold() },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                    ) {
+                                        Text("More", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
                             if (medianSoldPrice != null) {
                                 Text(
                                     "Median ${medianSoldPrice.format()}",
@@ -472,13 +489,24 @@ fun ListingsSheet(
                                 )
                             }
                         }
-                        if (soldListings.isNotEmpty()) {
-                            TextButton(onClick = { showSold = !showSold }) {
-                                Text(if (showSold) "Hide" else "Show")
-                                Icon(
-                                    if (showSold) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    null, modifier = Modifier.size(18.dp),
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val unknownCount = allSoldListings.count { it.soldDate == null }
+                            if (unknownCount > 0) {
+                                FilterChip(
+                                    selected = hideUnknownDates,
+                                    onClick = { hideUnknownDates = !hideUnknownDates },
+                                    label = { Text("Hide unknown", style = MaterialTheme.typography.labelSmall) },
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(28.dp),
                                 )
+                            }
+                            if (soldListings.isNotEmpty()) {
+                                IconButton(onClick = { showSold = !showSold }, modifier = Modifier.size(28.dp)) {
+                                    Icon(
+                                        if (showSold) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        null, modifier = Modifier.size(18.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -514,20 +542,6 @@ fun ListingsSheet(
                                 onBan = { listingViewModel.ban(listing) },
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                             )
-                        }
-                        item("sold_load_more") {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (soldLoadingState) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                                } else {
-                                    TextButton(onClick = { listingViewModel.searchSold() }) {
-                                        Text("Load more sold")
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -1811,13 +1825,16 @@ private fun UnifiedPlatformChips(
 }
 
 internal fun Money.format(): String {
-    val symbol = when (currency) {
-        Currency.EUR -> "\u20AC"
-        Currency.USD -> "$"
-        Currency.CHF -> "CHF "
-        Currency.GBP -> "\u00A3"
+    val displayCur = io.github.tieo.arbay.DisplayCurrency.current
+    val convertedAmount = io.github.tieo.arbay.DisplayCurrency.convert(amount, currency.name)
+    val symbol = when (displayCur) {
+        "EUR" -> "\u20AC"
+        "USD" -> "$"
+        "CHF" -> "CHF "
+        "GBP" -> "\u00A3"
+        else -> "$displayCur "
     }
-    val whole = amount / 100
-    val cents = amount % 100
+    val whole = convertedAmount / 100
+    val cents = convertedAmount % 100
     return if (cents == 0L) "$symbol$whole" else "$symbol$whole.%02d".format(cents)
 }
