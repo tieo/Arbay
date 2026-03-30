@@ -172,7 +172,7 @@ fun MainScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "No products tracked yet",
+                            "No bookmarks yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -341,15 +341,17 @@ fun MainScreen(
                     showDiscovery = true
                 }
             } else null,
-            onTrack = {
-                val product = previewProduct
+            onBookmark = {
+                val bName = previewProduct?.displayName ?: previewSearchName.ifBlank { previewSearchQuery }
+                val bQuery = previewProduct?.searchQuery ?: previewSearchQuery
+                val bPlatforms = previewProduct?.effectivePlatforms ?: PlatformId.entries
+                productViewModel.createProduct(
+                    name = bName,
+                    searchText = bQuery,
+                    platforms = bPlatforms,
+                )
                 showPreview = false
                 previewProduct = null
-                if (product != null) {
-                    openAddSheet(prefill = product)
-                } else {
-                    openAddSheet(initialQuery = previewSearchQuery)
-                }
                 previewSearchQuery = ""
                 previewSearchName = ""
             },
@@ -526,7 +528,7 @@ private fun AddProductSheet(
                 .padding(bottom = 32.dp),
         ) {
             Text(
-                if (prefill != null) "Track ${prefill.displayName}" else "Track Product",
+                if (prefill != null) "Save ${prefill.displayName}" else "Save Search",
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -653,7 +655,7 @@ private fun AddProductSheet(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Track")
+                Text("Save")
             }
         }
     }

@@ -59,7 +59,7 @@ fun ListingsSheet(
     listingViewModel: ListingViewModel,
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
-    onTrack: (() -> Unit)? = null,
+    onBookmark: (() -> Unit)? = null,
     platforms: List<PlatformId>? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
@@ -201,7 +201,7 @@ fun ListingsSheet(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    bottom = if (onTrack != null) 60.dp else 16.dp,
+                    bottom = if (onBookmark != null) 60.dp else 16.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
@@ -566,9 +566,9 @@ fun ListingsSheet(
                 }
             }
 
-            if (onTrack != null) {
+            if (onBookmark != null) {
                 SmallFloatingActionButton(
-                    onClick = onTrack,
+                    onClick = onBookmark,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 16.dp, bottom = 16.dp),
