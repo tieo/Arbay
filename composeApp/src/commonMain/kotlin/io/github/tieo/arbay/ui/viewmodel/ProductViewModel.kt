@@ -61,18 +61,6 @@ class ProductViewModel(
         }
     }
 
-    fun toggleProduct(id: String) {
-        viewModelScope.launch {
-            try {
-                val product = _products.value.find { it.id == id } ?: return@launch
-                client.updateProduct(product.copy(active = !product.active))
-                loadProducts()
-            } catch (e: Exception) {
-                _error.value = e.message
-            }
-        }
-    }
-
     fun deleteProduct(id: String) {
         viewModelScope.launch {
             try {

@@ -27,15 +27,6 @@ class ApplicationTest {
     }
 
     @Test
-    fun testAlertsEndpoint() = testApplication {
-        application {
-            module()
-        }
-        val response = client.get("/api/alerts")
-        assertEquals(HttpStatusCode.OK, response.status)
-    }
-
-    @Test
     fun testCrawlerPlatforms() = testApplication {
         application {
             module()

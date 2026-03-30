@@ -29,7 +29,6 @@ import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.LocalDesktopMode
-import io.github.tieo.arbay.ui.viewmodel.AlertViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 
@@ -37,20 +36,16 @@ import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 @Composable
 fun MainScreen(
     productViewModel: ProductViewModel,
-    alertViewModel: AlertViewModel,
     listingViewModel: ListingViewModel,
     client: ArbayClient,
 ) {
     val products by productViewModel.products.collectAsState()
     val loading by productViewModel.loading.collectAsState()
     val error by productViewModel.error.collectAsState()
-    val unreadCount by alertViewModel.unreadCount.collectAsState()
-
     var showDiscovery by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var addSheetPrefill by remember { mutableStateOf<KnownProduct?>(null) }
     var addSheetInitialQuery by remember { mutableStateOf("") }
-    var showAlerts by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showListings by remember { mutableStateOf(false) }
     var listingsProduct by remember { mutableStateOf<TrackedProduct?>(null) }
@@ -62,7 +57,6 @@ fun MainScreen(
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()
-        alertViewModel.loadAlerts()
     }
 
     fun openAddSheet(prefill: KnownProduct? = null, initialQuery: String = "") {
@@ -91,14 +85,12 @@ fun MainScreen(
                     when (event.key) {
                         Key.K -> { showDiscovery = true; true }
                         Key.Comma -> { showSettings = true; true }
-                        Key.N -> { showAlerts = true; true }
                         else -> false
                     }
                 } else if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
                     when {
                         showDiscovery -> { showDiscovery = false; true }
                         showAddSheet -> { showAddSheet = false; true }
-                        showAlerts -> { showAlerts = false; true }
                         showSettings -> { showSettings = false; true }
                         showListings -> { showListings = false; true }
                         showPreview -> { showPreview = false; true }
@@ -131,28 +123,6 @@ fun MainScreen(
                     modifier = Modifier.weight(1f),
                 )
 
-                TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-                    tooltip = { PlainTooltip { Text(if (isDesktop) "Alerts (Ctrl+N)" else "Alerts") } },
-                    state = rememberTooltipState(),
-                ) {
-                    IconButton(onClick = { showAlerts = true }) {
-                        BadgedBox(
-                            badge = {
-                                if (unreadCount > 0) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                        Text("$unreadCount")
-                                    }
-                                }
-                            },
-                        ) {
-                            Icon(
-                                Icons.Outlined.Notifications, "Alerts",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
                 TooltipBox(
                     positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
                     tooltip = { PlainTooltip { Text(if (isDesktop) "Settings (Ctrl+,)" else "Settings") } },
@@ -225,7 +195,6 @@ fun MainScreen(
                     items(products, key = { it.id }) { product ->
                         ProductCard(
                             product = product,
-                            onToggle = { productViewModel.toggleProduct(product.id) },
                             onDelete = { productViewModel.deleteProduct(product.id) },
                             onViewListings = {
                                 listingsProduct = product
@@ -326,9 +295,6 @@ fun MainScreen(
     }
 
     // Alerts
-    if (showAlerts) {
-        AlertsSheet(alertViewModel = alertViewModel, onDismiss = { showAlerts = false })
-    }
 
     // Settings
     if (showSettings) {
@@ -396,7 +362,6 @@ fun MainScreen(
 @Composable
 internal fun ProductCard(
     product: TrackedProduct,
-    onToggle: () -> Unit,
     onDelete: () -> Unit,
     onViewListings: () -> Unit,
 ) {
@@ -407,8 +372,7 @@ internal fun ProductCard(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (product.active) MaterialTheme.colorScheme.surfaceContainerLow
-            else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -418,8 +382,7 @@ internal fun ProductCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (product.active) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outlineVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(10.dp),
                 ) {}
 
@@ -513,14 +476,6 @@ internal fun ProductCard(
                     }
 
                     Row {
-                        TextButton(onClick = onToggle) {
-                            Icon(
-                                if (product.active) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                null, modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (product.active) "Pause" else "Start", style = MaterialTheme.typography.labelMedium)
-                        }
                         TextButton(
                             onClick = onDelete,
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),

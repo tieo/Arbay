@@ -80,18 +80,6 @@ class ArbayClient(
             platform?.let { parameter("platform", it.name) }
         }.body()
 
-    suspend fun getAlerts(unreadOnly: Boolean = false, limit: Int = 50): List<Alert> =
-        client.get("$baseUrl/api/alerts") {
-            parameter("unread", unreadOnly)
-            parameter("limit", limit)
-        }.body()
-
-    suspend fun markAlertRead(id: String): Alert =
-        client.post("$baseUrl/api/alerts/$id/read").body()
-
-    suspend fun markAllAlertsRead() {
-        client.post("$baseUrl/api/alerts/read-all")
-    }
 
     @Serializable
     data class CrawlerConfigDto(val maxPages: Int = 5, val ebayItemsPerPage: Int = 120, val sortByPrice: Boolean = true)
