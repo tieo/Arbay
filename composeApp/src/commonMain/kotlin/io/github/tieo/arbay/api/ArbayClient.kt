@@ -105,17 +105,166 @@ class ArbayClient(
             if (sold) parameter("sold", "true")
         }.body()
 
+    // ── Free Items ────────────────────────────────────────────────────────────
+
+    suspend fun getFreeItemProfile(): FreeItemProfile? = try {
+        val response = client.get("$baseUrl/api/free-items/profile")
+        if (response.status == HttpStatusCode.NoContent) null else response.body()
+    } catch (_: Exception) { null }
+
+    suspend fun setFreeItemProfile(description: String, location: String? = null, radiusKm: Int = 30, trackingEnabled: Boolean = false) {
+        client.post("$baseUrl/api/free-items/profile") {
+            contentType(ContentType.Application.Json)
+            setBody(FreeItemProfile(description = description, location = location, radiusKm = radiusKm, trackingEnabled = trackingEnabled))
+        }
+    }
+
+    suspend fun submitFreeItemFeedback(
+        listingId: String, title: String, action: FeedbackAction,
+        url: String? = null, imageUrl: String? = null, locationText: String? = null,
+        description: String? = null, relevanceScore: Double? = null,
+        remainingIds: List<String> = emptyList(),
+    ): FeedbackResponse? = try {
+        client.post("$baseUrl/api/free-items/feedback") {
+            contentType(ContentType.Application.Json)
+            setBody(ListingFeedback(
+                listingId = listingId, title = title, action = action,
+                url = url, imageUrl = imageUrl, locationText = locationText,
+                description = description, relevanceScore = relevanceScore,
+                remainingIds = remainingIds,
+            ))
+        }.body<FeedbackResponse>()
+    } catch (_: Exception) { null }
+
+    suspend fun undoFreeItemFeedback(listingId: String) {
+        client.delete("$baseUrl/api/free-items/feedback/$listingId")
+    }
+
+    suspend fun getFreeItemInsights(): FreeItemInsights? = try {
+        client.get("$baseUrl/api/free-items/insights").body()
+    } catch (_: Exception) { null }
+
+    suspend fun getFreeItemHistory(action: FeedbackAction? = null): List<FeedbackHistoryItem> = try {
+        client.get("$baseUrl/api/free-items/history") {
+            action?.let { parameter("action", it.name) }
+        }.body()
+    } catch (_: Exception) { emptyList() }
+
+    suspend fun getFreeItemStats(): FreeItemStats? = try {
+        client.get("$baseUrl/api/free-items/stats").body()
+    } catch (_: Exception) { null }
+
+    suspend fun getNewMatches(): List<NewMatch> = try {
+        client.get("$baseUrl/api/free-items/tracking/matches").body()
+    } catch (_: Exception) { emptyList() }
+
+    // ── Notification Settings ─────────────────────────────────────────────
+
+    suspend fun getNotificationSettings(): NotificationSettings = try {
+        client.get("$baseUrl/api/free-items/notifications/settings").body()
+    } catch (_: Exception) { NotificationSettings() }
+
+    suspend fun updateNotificationSettings(settings: NotificationSettings) {
+        client.post("$baseUrl/api/free-items/notifications/settings") {
+            contentType(ContentType.Application.Json)
+            setBody(settings)
+        }
+    }
+
+    suspend fun pollNow(): PollResult = try {
+        client.get("$baseUrl/api/free-items/notifications/poll").body()
+    } catch (_: Exception) { PollResult() }
+
+    suspend fun getLastPollResult(): PollResult? = try {
+        val response = client.get("$baseUrl/api/free-items/notifications/last")
+        if (response.status == HttpStatusCode.NoContent) null else response.body()
+    } catch (_: Exception) { null }
+
+    // ── Model Arena ─────────────────────────────────────────────────────────
+
+    @Serializable
+    data class ModelInfo(
+        val id: String = "",
+        val name: String = "",
+        val trainable: String = "false",
+        val active: String = "false",
+        val totalPredictions: String = "0",
+        val accuracy: String = "0.000",
+        val precision: String = "0.000",
+        val recall: String = "0.000",
+        val separation: String = "0.000",
+        val falseNegatives: String = "0",
+    )
+
+    @Serializable
+    data class ArenaEntry(
+        val modelId: String,
+        val accuracy: Double = 0.0,
+        val precision: Double = 0.0,
+        val recall: Double = 0.0,
+        val separation: Double = 0.0,
+        val totalPredictions: Int = 0,
+        val falseNegatives: Int = 0,
+    )
+
+    suspend fun getModels(): List<ModelInfo> = try {
+        client.get("$baseUrl/api/models").body()
+    } catch (_: Exception) { emptyList() }
+
+    suspend fun getArenaLeaderboard(): List<ArenaEntry> = try {
+        client.get("$baseUrl/api/models/arena").body()
+    } catch (_: Exception) { emptyList() }
+
+    suspend fun setActiveModel(modelId: String) {
+        client.post("$baseUrl/api/models/active") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("modelId" to modelId))
+        }
+    }
+
+    suspend fun retrainModels(): Map<String, String> = try {
+        client.post("$baseUrl/api/models/retrain").body()
+    } catch (_: Exception) { emptyMap() }
+
+    suspend fun getRejectedItems(threshold: Double = 0.4, limit: Int = 50): List<RejectedItem> = try {
+        client.get("$baseUrl/api/free-items/rejected") {
+            parameter("threshold", threshold)
+            parameter("limit", limit)
+        }.body()
+    } catch (_: Exception) { emptyList() }
+
+    fun freeItemsStream(
+        query: String = "",
+        startPage: Int = 1,
+        batchSize: Int = 10,
+        radiusKm: Int? = null,
+    ): Flow<CrawlerSearchEvent> = flow {
+        client.prepareGet("$baseUrl/api/free-items/stream") {
+            if (query.isNotBlank()) parameter("q", query)
+            if (startPage > 1) parameter("startPage", startPage)
+            if (batchSize != 10) parameter("batchSize", batchSize)
+            radiusKm?.let { parameter("radiusKm", it) }
+        }.execute { response ->
+            val channel = response.bodyAsChannel()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                val trimmed = line.trim()
+                if (trimmed.isNotEmpty()) {
+                    val event = streamJson.decodeFromString<CrawlerSearchEvent>(trimmed)
+                    emit(event)
+                }
+            }
+        }
+    }
+
     private val streamJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null, blockedTerms: Set<String> = emptySet()): Flow<CrawlerSearchEvent> = flow {
+    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/crawler/search/stream") {
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             if (platforms != null && platform == null) {
                 parameter("platforms", platforms.joinToString(",") { it.name })
-            }
-            if (blockedTerms.isNotEmpty()) {
-                parameter("blocked", blockedTerms.joinToString(","))
             }
         }.execute { response ->
             val channel = response.bodyAsChannel()

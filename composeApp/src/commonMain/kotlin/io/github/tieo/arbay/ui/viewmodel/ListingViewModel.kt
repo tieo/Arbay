@@ -5,10 +5,8 @@ import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.loadBannedIds
-import io.github.tieo.arbay.loadBlockedTerms
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.saveBannedIds
-import io.github.tieo.arbay.saveBlockedTerms
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,24 +59,16 @@ class ListingViewModel(
     private val _bannedIds = MutableStateFlow<Set<String>>(loadBannedIds())
     val bannedIds: StateFlow<Set<String>> = _bannedIds
 
-    private val _blockedTerms = MutableStateFlow<Set<String>>(emptySet())
-    val blockedTerms: StateFlow<Set<String>> = _blockedTerms
-
     private val _priceHistory = MutableStateFlow<List<Listing>>(emptyList())
     val priceHistory: StateFlow<List<Listing>> = _priceHistory
 
     private val _soldLoading = MutableStateFlow(false)
     val soldLoading: StateFlow<Boolean> = _soldLoading
 
-    // Derived: listings filtered by selected platform, not banned, and not matching blocked terms
-    val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds, _blockedTerms) { all, platform, banned, blocked ->
+    // Derived: listings filtered by selected platform, not banned
+    val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds) { all, platform, banned ->
         val platformFiltered = if (platform == null) all else all.filter { it.platformId == platform }
-        val notBanned = platformFiltered.filter { it.id !in banned }
-        if (blocked.isEmpty()) notBanned
-        else notBanned.filter { listing ->
-            val titleLower = listing.title.lowercase()
-            blocked.none { term -> titleLower.contains(term.lowercase()) }
-        }
+        platformFiltered.filter { it.id !in banned }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun ban(listing: Listing) {
@@ -87,31 +77,16 @@ class ListingViewModel(
         saveBannedIds(updated)
     }
 
-    fun blockTerm(term: String) {
-        val q = _searchQuery.value
-        val updated = _blockedTerms.value + term.lowercase()
-        _blockedTerms.value = updated
-        saveBlockedTerms(q, updated)
-    }
-
-    fun unblockTerm(term: String) {
-        val q = _searchQuery.value
-        val updated = _blockedTerms.value - term.lowercase()
-        _blockedTerms.value = updated
-        saveBlockedTerms(q, updated)
-    }
-
     private var searchJob: Job? = null
 
     fun selectPlatform(platform: PlatformId?) {
         _selectedPlatform.value = platform
     }
 
-    fun refresh(platforms: List<PlatformId>? = null, withFilters: Boolean = true) {
+    fun refresh(platforms: List<PlatformId>? = null) {
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
-        if (!withFilters) _blockedTerms.value = emptySet()
         search(query, platforms, force = true)
     }
 
@@ -141,7 +116,6 @@ class ListingViewModel(
         if (query.isBlank()) return
         if (!force && query == _searchQuery.value && (_allListings.value.isNotEmpty() || _loading.value)) return
         _searchQuery.value = query
-        _blockedTerms.value = loadBlockedTerms(query)
         _priceHistory.value = emptyList()
         searchJob?.cancel()
         searchJob = viewModelScope.launch {

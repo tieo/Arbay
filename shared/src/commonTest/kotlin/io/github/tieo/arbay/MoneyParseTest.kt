@@ -118,4 +118,41 @@ class MoneyParseTest {
         assertNotNull(result)
         assertEquals(1000000, result.amount, "10.000 EUR = 10000 euros = 1000000 cents")
     }
+
+    // === Free item price text handling (Kleinanzeigen "zu verschenken") ===
+
+    @Test
+    fun `Zu verschenken price text returns null from Money parse`() {
+        // The crawler handles this specially (isFreeItem check) before calling Money.parse
+        assertNull(Money.parse("Zu verschenken"), "Money.parse can't parse 'Zu verschenken' — crawler handles this")
+    }
+
+    @Test
+    fun `Zu verschenken with leading text returns null`() {
+        assertNull(Money.parse("Zu verschenken (Selbstabholung)"))
+    }
+
+    @Test
+    fun `zero euro price parses correctly`() {
+        val result = Money.parse("0 €")
+        assertNotNull(result)
+        assertEquals(0L, result.amount)
+        assertEquals(Currency.EUR, result.currency)
+    }
+
+    @Test
+    fun `zero with comma parses correctly`() {
+        val result = Money.parse("0,00 €")
+        assertNotNull(result)
+        assertEquals(0L, result.amount)
+    }
+
+    @Test
+    fun `VB suffix does not break price parse`() {
+        // "VB" = Verhandlungsbasis (negotiable) — common Kleinanzeigen suffix
+        val result = Money.parse("150 € VB")
+        assertNotNull(result)
+        assertEquals(15000L, result.amount)
+        assertEquals(Currency.EUR, result.currency)
+    }
 }

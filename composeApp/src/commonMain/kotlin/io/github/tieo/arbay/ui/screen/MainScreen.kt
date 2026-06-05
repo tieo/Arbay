@@ -3,6 +3,7 @@ package io.github.tieo.arbay.ui.screen
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
@@ -22,13 +23,18 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
+import io.github.tieo.arbay.model.FreeItemInsights
+import io.github.tieo.arbay.model.FreeItemProfile
+import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.LocalDesktopMode
+import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 
@@ -37,16 +43,21 @@ import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 fun MainScreen(
     productViewModel: ProductViewModel,
     listingViewModel: ListingViewModel,
+    freeItemViewModel: FreeItemViewModel,
     client: ArbayClient,
 ) {
     val products by productViewModel.products.collectAsState()
     val loading by productViewModel.loading.collectAsState()
     val error by productViewModel.error.collectAsState()
+    val freeItemProfile by freeItemViewModel.profile.collectAsState()
+    val freeItemStats by freeItemViewModel.stats.collectAsState()
+    val freeItemInsights by freeItemViewModel.insights.collectAsState()
     var showDiscovery by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var addSheetPrefill by remember { mutableStateOf<KnownProduct?>(null) }
     var addSheetInitialQuery by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
+    var showFreeItems by remember { mutableStateOf(false) }
     var showListings by remember { mutableStateOf(false) }
     var listingsProduct by remember { mutableStateOf<TrackedProduct?>(null) }
     var previewProduct by remember { mutableStateOf<KnownProduct?>(null) }
@@ -92,6 +103,7 @@ fun MainScreen(
                         showDiscovery -> { showDiscovery = false; true }
                         showAddSheet -> { showAddSheet = false; true }
                         showSettings -> { showSettings = false; true }
+                        showFreeItems -> { showFreeItems = false; true }
                         showListings -> { showListings = false; true }
                         showPreview -> { showPreview = false; true }
                         else -> false
@@ -155,11 +167,13 @@ fun MainScreen(
             }
 
             // Product list — takes all available space
-            if (loading && products.isEmpty()) {
+            val hasFreeItemProfile = freeItemProfile != null
+            val hasContent = products.isNotEmpty() || hasFreeItemProfile
+            if (loading && products.isEmpty() && !hasFreeItemProfile) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else if (products.isEmpty()) {
+            } else if (!hasContent) {
                 Box(
                     Modifier.weight(1f).fillMaxWidth().padding(32.dp),
                     contentAlignment = Alignment.Center,
@@ -192,6 +206,16 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
+                    // Free Items card — always at the top when profile is set
+                    if (hasFreeItemProfile) {
+                        item(key = "__free_items__") {
+                            FreeItemsMainCard(
+                                profile = freeItemProfile!!,
+                                stats = freeItemStats,
+                                onClick = { showFreeItems = true },
+                            )
+                        }
+                    }
                     items(products, key = { it.id }) { product ->
                         ProductCard(
                             product = product,
@@ -264,6 +288,15 @@ fun MainScreen(
                 previewSearchQuery = query
                 previewSearchName = query
             },
+            onFreeItems = { showFreeItems = true },
+        )
+    }
+
+    // Free Items sheet
+    if (showFreeItems) {
+        FreeItemsSheet(
+            viewModel = freeItemViewModel,
+            onDismiss = { showFreeItems = false },
         )
     }
 
@@ -298,7 +331,14 @@ fun MainScreen(
 
     // Settings
     if (showSettings) {
-        SettingsSheet(client = client, onDismiss = { showSettings = false })
+        SettingsSheet(
+                client = client,
+                onDismiss = { showSettings = false },
+                onServerUrlChanged = {
+                    productViewModel.loadProducts()
+                    freeItemViewModel.loadProfile()
+                },
+            )
     }
 
     // Listings (for tracked products)
@@ -488,6 +528,108 @@ internal fun ProductCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── Free Items Card (Main Screen) ────────────────────────────
+
+@Composable
+internal fun FreeItemsMainCard(
+    profile: FreeItemProfile,
+    stats: FreeItemStats?,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // Accent bar
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(
+                        MaterialTheme.colorScheme.tertiary,
+                        RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp),
+                    ),
+            )
+
+            Column(modifier = Modifier.weight(1f).padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.CardGiftcard, null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.tertiary,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Free Items",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            profile.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    if (stats != null && stats.totalLoved > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFFE91E63).copy(alpha = 0.15f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Icon(Icons.Default.Favorite, null, modifier = Modifier.size(12.dp), tint = Color(0xFFE91E63))
+                                Text("${stats.totalLoved}", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE91E63))
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
+
+                    Icon(
+                        Icons.Default.ChevronRight, null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // Location + stats summary
+                if (profile.location != null || stats != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (profile.location != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.LocationOn, null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(2.dp))
+                                Text("${profile.location} · ${profile.radiusKm} km", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (stats != null && stats.totalSeen > 0) {
+                            Text("${stats.totalSeen} reviewed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
             }
         }
     }

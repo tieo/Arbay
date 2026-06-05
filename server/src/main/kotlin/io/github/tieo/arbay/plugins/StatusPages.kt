@@ -4,6 +4,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
+import kotlinx.serialization.SerializationException
 
 fun Application.configureStatusPages() {
     install(StatusPages) {
@@ -12,6 +13,9 @@ fun Application.configureStatusPages() {
         }
         exception<BadRequestException> { call, cause ->
             call.respondText(cause.message ?: "Bad request", status = HttpStatusCode.BadRequest)
+        }
+        exception<SerializationException> { call, cause ->
+            call.respondText(cause.message ?: "Invalid request body", status = HttpStatusCode.BadRequest)
         }
         exception<Throwable> { call, cause ->
             call.respondText(cause.message ?: "Internal error", status = HttpStatusCode.InternalServerError)

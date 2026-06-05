@@ -3,6 +3,7 @@ package io.github.tieo.arbay
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.http.ContentType
 import io.ktor.server.testing.*
 import kotlin.test.*
 
@@ -34,5 +35,55 @@ class ApplicationTest {
         val response = client.get("/api/crawler/platforms")
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.bodyAsText().contains("EBAY_DE"))
+    }
+
+    @Test
+    fun testFreeItemsProfileGet() = testApplication {
+        application { module() }
+        val response = client.get("/api/free-items/profile")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("description"), "Profile response should contain 'description' field")
+    }
+
+    @Test
+    fun testFreeItemsProfilePost() = testApplication {
+        application { module() }
+        val response = client.post("/api/free-items/profile") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"description":"test profile for unit test"}""")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("description"))
+    }
+
+    @Test
+    fun testFreeItemsFeedbackPost() = testApplication {
+        application { module() }
+        val response = client.post("/api/free-items/feedback") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"listingId":"test:999","title":"Test listing","action":"LOVE"}""")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("true"))
+    }
+
+    @Test
+    fun testFreeItemsInsightsGet() = testApplication {
+        application { module() }
+        val response = client.get("/api/free-items/insights")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("embeddingAvailable"), "Insights should contain embeddingAvailable")
+    }
+
+    @Test
+    fun testFreeItemsFeedbackInvalidAction() = testApplication {
+        application { module() }
+        val response = client.post("/api/free-items/feedback") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"listingId":"test:bad","title":"Test","action":"INVALID_ACTION"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 }

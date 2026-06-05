@@ -11,79 +11,79 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 
 val LocalDesktopMode = compositionLocalOf { false }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdaptiveSheet(
-
     onDismiss: () -> Unit,
     widthFraction: Float = 0.55f,
     maxWidth: Int = 640,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (LocalDesktopMode.current) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Surface(
-                modifier = Modifier
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Surface(
+            modifier = if (LocalDesktopMode.current) {
+                Modifier
                     .widthIn(max = maxWidth.dp)
                     .fillMaxWidth(widthFraction)
-                    .fillMaxHeight(0.85f),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 6.dp,
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    content = content,
-                )
-            }
-        }
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    .fillMaxHeight(0.85f)
+            } else {
+                Modifier.fillMaxSize()
+            },
+            shape = if (LocalDesktopMode.current) RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            tonalElevation = if (LocalDesktopMode.current) 6.dp else 0.dp,
         ) {
-            content()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.systemBars),
+                content = content,
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdaptiveFormSheet(
     onDismiss: () -> Unit,
     maxWidth: Int = 520,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (LocalDesktopMode.current) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Surface(
-                modifier = Modifier
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Surface(
+            modifier = if (LocalDesktopMode.current) {
+                Modifier
                     .widthIn(max = maxWidth.dp)
-                    .fillMaxWidth(0.45f),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                tonalElevation = 6.dp,
-            ) {
-                Column(content = content)
-            }
-        }
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    .fillMaxWidth(0.45f)
+            } else {
+                Modifier.fillMaxSize()
+            },
+            shape = if (LocalDesktopMode.current) RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            tonalElevation = if (LocalDesktopMode.current) 6.dp else 0.dp,
         ) {
-            content()
+            Column(
+                modifier = if (LocalDesktopMode.current) Modifier
+                else Modifier.windowInsetsPadding(WindowInsets.systemBars),
+                content = content,
+            )
         }
     }
 }

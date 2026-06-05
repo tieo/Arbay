@@ -20,8 +20,10 @@ ktor = "3.3.3"
 jsoup = "1.18.3"
 playwright = "1.51.0"
 logback = "1.5.24"
+onnxruntime = "1.23.2"
 coil = "3.2.0"
 material3 = "1.10.0-alpha05"
+androidx-work = "2.10.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -67,6 +69,8 @@ ktor-clientMock = { module = "io.ktor:ktor-client-mock-jvm", version.ref = "ktor
 ktor-serverTestHost = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
+onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime", version.ref = "onnxruntime" }
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -8,6 +8,7 @@ import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
+import io.github.tieo.arbay.crawler.PlatformStatus
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.classifyException
@@ -15,6 +16,7 @@ import io.github.tieo.arbay.crawler.trackedSearch
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.ListingRepo
+import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.http.ContentType
 import io.ktor.server.request.*
@@ -31,6 +33,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val json = Json { encodeDefaults = true }
+
+@Serializable
+private data class CrawlerTestResult(
+    val platform: String,
+    val query: String,
+    val resultCount: Int,
+    val status: PlatformStatus,
+    val results: List<Listing>,
+)
 
 /** Default platforms for general product searches (excludes car/real-estate sites) */
 private val GENERAL_PLATFORMS = listOf(
@@ -307,15 +318,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val results = crawler.trackedSearch(searchQuery)
 
             val status = CrawlerStatusTracker.getStatus(platform)
-            call.respond(
-                mapOf(
-                    "platform" to platformName,
-                    "query" to query,
-                    "resultCount" to results.size,
-                    "status" to status,
-                    "results" to results.take(5),
-                ),
-            )
+            call.respond(CrawlerTestResult(
+                platform = platformName,
+                query = query,
+                resultCount = results.size,
+                status = status,
+                results = results.take(5),
+            ))
         }
     }
 }

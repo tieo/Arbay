@@ -50,6 +50,7 @@ fun DiscoverySheet(
     onProductSelected: (KnownProduct) -> Unit,
     onCustomSearch: (String) -> Unit,
     onLiveSearch: ((String) -> Unit)? = null,
+    onFreeItems: (() -> Unit)? = null,
 ) {
     var step by remember {
         mutableStateOf<Step>(
@@ -122,6 +123,16 @@ fun DiscoverySheet(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp),
         ) {
+            // Close button row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, "Close")
+                }
+            }
+
             // Search bar (always visible, auto-focused)
             OutlinedTextField(
                 value = searchText,
@@ -235,7 +246,12 @@ fun DiscoverySheet(
                                 onCustomSearch("")
                             },
                             onSpecialTracking = {
-                                scope.launch { snackbarHostState.showSnackbar("Coming soon") }
+                                if (onFreeItems != null) {
+                                    onDismiss()
+                                    onFreeItems()
+                                } else {
+                                    scope.launch { snackbarHostState.showSnackbar("Coming soon") }
+                                }
                             },
                         )
                         is Step.Brands -> BrandList(
@@ -348,12 +364,12 @@ internal fun CategoryGrid(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Special tracking",
+                            "Free Items",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                         )
                         Text(
-                            "Markets, deals, AI",
+                            "Zu verschenken + AI",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
                         )

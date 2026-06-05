@@ -16,6 +16,8 @@ data class CrawlerSearchEvent(
     val fetchStage: String? = null,
     val totalPlatforms: Int = 0,
     val completedPlatforms: Int = 0,
+    val hasMore: Boolean = false,
+    val nextPage: Int = 0,
 )
 
 @Serializable

@@ -26,26 +26,9 @@ actual fun saveBannedIds(ids: Set<String>) {
     } catch (_: Exception) {}
 }
 
-private val blockedTermsDir = File(System.getProperty("user.home"), ".arbay/blocked_terms")
+actual fun showMatchNotification(title: String, body: String) {}
+actual fun schedulePolling(intervalMinutes: Int) {}
+actual fun cancelPolling() {}
 
-private fun blockedTermsFile(query: String): File {
-    val safe = query.lowercase().replace(Regex("[^a-z0-9]"), "_").take(80)
-    return File(blockedTermsDir, "$safe.txt")
-}
-
-actual fun loadBlockedTerms(query: String): Set<String> {
-    return try {
-        val f = blockedTermsFile(query)
-        if (!f.exists()) return emptySet()
-        f.readLines().filter { it.isNotBlank() }.toSet()
-    } catch (_: Exception) { emptySet() }
-}
-
-actual fun saveBlockedTerms(query: String, terms: Set<String>) {
-    try {
-        blockedTermsDir.mkdirs()
-        val f = blockedTermsFile(query)
-        if (terms.isEmpty()) f.delete()
-        else f.writeText(terms.joinToString("\n"))
-    } catch (_: Exception) {}
-}
+@androidx.compose.runtime.Composable
+actual fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit = { onCity(null) }

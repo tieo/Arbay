@@ -6,38 +6,161 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
+import org.slf4j.LoggerFactory
 
 class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.KLEINANZEIGEN
 
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        val allResults = mutableListOf<Listing>()
-        val seenIds = mutableSetOf<String>()
-        val maxPages = CrawlerConfig.current.maxPages
+    private val log = LoggerFactory.getLogger(KleinanzeigenCrawler::class.java)
 
-        for (page in 1..maxPages) {
-            val pageSegment = if (page > 1) "seite:$page/" else ""
-            val url = "https://www.kleinanzeigen.de/s-${pageSegment}${query.positiveText.encodeUrl()}/k0"
+    /**
+     * Resolves a city name to a Kleinanzeigen location ID and slug via their autocomplete API.
+     * Returns (locationId, citySlug) or null if lookup fails.
+     * Example: "Frankfurt (Oder)" → ("1234", "frankfurt-%28oder%29")
+     */
+    private suspend fun resolveLocation(location: String): Pair<String, String>? {
+        return try {
+            val url = "https://www.kleinanzeigen.de/s-ort-empfehlungen.json?query=${location.encodeUrl()}"
+            val response = client.get(url) {
+                headers {
+                    append("User-Agent", USER_AGENT)
+                    append("Accept", "application/json")
+                    append("Accept-Language", "de-DE,de;q=0.9")
+                    append("Referer", "https://www.kleinanzeigen.de/")
+                }
+            }
+            if (response.status.value != 200) return null
+            val body = response.bodyAsText()
+            val json = body.trim()
+            val regex = Regex(""""_(\d+)"\s*:""")
+            val locationId = regex.findAll(json)
+                .map { it.groupValues[1] }
+                .firstOrNull { it != "0" }
+                ?: return null
+            val citySlug = KleinanzeigenUrlBuilder.citySlug(location)
+            locationId to citySlug
+        } catch (e: Exception) {
+            log.debug("Location lookup failed for '{}': {}", location, e.message)
+            null
+        }
+    }
+
+    override suspend fun search(query: SearchQuery): List<Listing> {
+        if (query.freeOnly) return searchFreeItems(query)
+        return searchRegular(query)
+    }
+
+    /**
+     * Streaming free-item search — emits results per page via [onPageResults].
+     * Returns total result count and whether there are more pages.
+     */
+    suspend fun searchFreeItemsStreaming(
+        query: SearchQuery,
+        onPageResults: suspend (page: Int, results: List<Listing>, totalSoFar: Int) -> Unit,
+    ): Pair<Int, Boolean> {
+        val seenIds = mutableSetOf<String>()
+        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        var total = 0
+        var hasMore = false
+
+        val locationStr = query.location
+        val resolved = if (locationStr != null) resolveLocation(locationStr) else null
+        val locationId = resolved?.first
+        val citySlug = resolved?.second
+        val radiusKm = query.radiusKm
+
+        val endPage = query.startPage + maxPages - 1
+        for (page in query.startPage..endPage) {
+            val url = KleinanzeigenUrlBuilder.freeItems(
+                locationId = locationId,
+                citySlug = citySlug,
+                radiusKm = if (locationId != null) radiusKm else null,
+                page = page,
+            )
+
             val html = try {
                 fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article.aditem")
             } catch (e: CrawlerBlockedException) {
-                if (page == 1) throw e
+                if (page == query.startPage) throw e
                 break
             }
 
-            val pageResults = parseSearchResults(html)
-            if (pageResults.isEmpty()) break
+            val doc = Jsoup.parse(html)
+            val rawItemCount = doc.select("article.aditem").size
+            if (rawItemCount == 0) break
 
+            val pageResults = parseSearchResults(html, freeOnly = true)
+            val newResults = pageResults.filter { seenIds.add(it.externalId) }
+            total += newResults.size
+
+            log.info("Free items page {}: {} raw, {} free, {} new, total={}",
+                page, rawItemCount, pageResults.size, newResults.size, total)
+
+            if (newResults.isNotEmpty()) {
+                onPageResults(page, newResults, total)
+            }
+
+            if (pageResults.size < 3) break
+            hasMore = page < endPage
+        }
+
+        return total to hasMore
+    }
+
+    /**
+     * Free-item search using Kleinanzeigen's preis::0 filter for guaranteed free-only results.
+     * This filter works across all pages, so we can paginate normally.
+     */
+    private suspend fun searchFreeItems(query: SearchQuery): List<Listing> {
+        val allResults = mutableListOf<Listing>()
+        searchFreeItemsStreaming(query) { _, results, _ ->
+            allResults.addAll(results)
+        }
+        return allResults
+    }
+
+    private suspend fun searchRegular(query: SearchQuery): List<Listing> {
+        val allResults = mutableListOf<Listing>()
+        val seenIds = mutableSetOf<String>()
+        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+
+        val locationStr = query.location
+        val resolved = if (locationStr != null) resolveLocation(locationStr) else null
+        val locationId = resolved?.first
+
+        val endPage = query.startPage + maxPages - 1
+        for (page in query.startPage..endPage) {
+            val url = KleinanzeigenUrlBuilder.regularSearch(
+                query = query.positiveText,
+                page = page,
+                locationId = locationId,
+                radiusKm = if (locationId != null) query.radiusKm else null,
+                minPriceCents = query.minPrice?.amount,
+                maxPriceCents = query.maxPrice?.amount,
+            )
+
+            val html = try {
+                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article.aditem")
+            } catch (e: CrawlerBlockedException) {
+                if (page == query.startPage) throw e
+                break
+            }
+
+            val doc = Jsoup.parse(html)
+            val rawItemCount = doc.select("article.aditem").size
+            if (rawItemCount == 0) break
+
+            val pageResults = parseSearchResults(html, freeOnly = false)
             val newResults = pageResults.filter { seenIds.add(it.externalId) }
             allResults.addAll(newResults)
 
-            if (newResults.size < 10) break
+            if (rawItemCount < 10) break
         }
 
         return allResults
     }
 
-    private fun parseSearchResults(html: String): List<Listing> {
+    internal fun parseSearchResults(html: String, freeOnly: Boolean = false): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
@@ -56,10 +179,24 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                 ?: item.attr("data-href")
             val url = "https://www.kleinanzeigen.de$href"
 
+            // Skip "Vermisste Tiere" (category 283) — lost pet notices, not items to pick up
+            if (freeOnly) {
+                val catMatch = Regex("""/\d+-(\d+)-\d+$""").find(href)
+                val mainCat = catMatch?.groupValues?.get(1)
+                if (mainCat == "283") return@mapNotNull null
+            }
+
             val priceText = item.selectFirst("p.aditem-main--middle--price-shipping--price")?.text()
-                ?: return@mapNotNull null
-            val negotiable = priceText.contains("VB", ignoreCase = true)
-            val price = Money.parse(priceText) ?: return@mapNotNull null
+            if (priceText == null && !freeOnly) return@mapNotNull null
+            val negotiable = priceText?.contains("VB", ignoreCase = true) ?: false
+            val isFreeItem = priceText.isNullOrBlank() ||
+                priceText.contains("verschenken", ignoreCase = true) ||
+                priceText.contains("kostenlos", ignoreCase = true) ||
+                priceText.trim() == "0 €" || priceText.trim() == "0€" ||
+                priceText.trim() == "Zu verschenken"
+            // When searching free items, drop anything with a price tag
+            if (freeOnly && !isFreeItem) return@mapNotNull null
+            val price = if (isFreeItem) Money.cents(0) else Money.parse(priceText ?: "") ?: return@mapNotNull null
 
             val locationText = item.selectFirst("div.aditem-main--top--left")?.text()?.trim()
             val location = locationText?.let { Location.parse(it) }
@@ -72,7 +209,6 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
 
             val descriptionSnippet = item.selectFirst("p.aditem-main--middle--description")?.text()
 
-            // Kleinanzeigen: shipping/pickup info from the listing
             val shippingText = item.selectFirst("p.aditem-main--middle--price-shipping--shipping")?.text()
                 ?: item.selectFirst("[class*=shipping]")?.text()
             val shipping = when {

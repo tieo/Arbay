@@ -10,7 +10,12 @@ data class SearchQuery(
     val maxPrice: Money? = null,
     val condition: List<Condition>? = null,
     val soldOnly: Boolean = false,
+    val freeOnly: Boolean = false,
     val excludeKeywords: List<String> = emptyList(),
+    val location: String? = null,   // city name / zip for location-based search
+    val radiusKm: Int = 30,         // search radius in km
+    val maxPages: Int? = null,      // override crawler's default page limit (null = use CrawlerConfig)
+    val startPage: Int = 1,         // start from this page (for paginated batches)
 ) {
     /** Search text with negative keywords and OR logic resolved — for platforms that don't support exclusion/OR syntax.
      *  For OR queries, picks the group with the most tokens (most specific variant). */

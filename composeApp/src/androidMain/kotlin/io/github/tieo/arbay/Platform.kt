@@ -26,29 +26,17 @@ actual fun saveBannedIds(ids: Set<String>) {
     try { f.writeText(ids.joinToString("\n")) } catch (_: Exception) {}
 }
 
-private fun blockedTermsDir(): File? {
-    val dir = File(appDir() ?: return null, "blocked_terms")
-    dir.mkdirs()
-    return dir
+
+actual fun showMatchNotification(title: String, body: String) {
+    NotificationHelper.showNewMatchNotification(title, body)
 }
 
-private fun blockedTermsFile(query: String): File? {
-    val safe = query.lowercase().replace(Regex("[^a-z0-9]"), "_").take(80)
-    return File(blockedTermsDir() ?: return null, "$safe.txt")
+actual fun schedulePolling(intervalMinutes: Int) {
+    val context = MainActivity.instance ?: return
+    FreeItemPollWorker.schedule(context, intervalMinutes)
 }
 
-actual fun loadBlockedTerms(query: String): Set<String> {
-    val f = blockedTermsFile(query) ?: return emptySet()
-    return try {
-        if (!f.exists()) emptySet()
-        else f.readLines().filter { it.isNotBlank() }.toSet()
-    } catch (_: Exception) { emptySet() }
-}
-
-actual fun saveBlockedTerms(query: String, terms: Set<String>) {
-    val f = blockedTermsFile(query) ?: return
-    try {
-        if (terms.isEmpty()) f.delete()
-        else f.writeText(terms.joinToString("\n"))
-    } catch (_: Exception) {}
+actual fun cancelPolling() {
+    val context = MainActivity.instance ?: return
+    FreeItemPollWorker.cancel(context)
 }

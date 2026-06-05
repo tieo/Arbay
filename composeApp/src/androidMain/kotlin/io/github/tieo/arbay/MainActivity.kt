@@ -12,6 +12,13 @@ class MainActivity : ComponentActivity() {
         instance = this
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Register notification channels early so they appear in system settings
+        NotificationHelper.ensureChannels(this)
+
+        // Schedule background polling (WorkManager handles dedup)
+        FreeItemPollWorker.schedule(this)
+
         setContent { App() }
     }
 

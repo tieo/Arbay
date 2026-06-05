@@ -65,7 +65,6 @@ fun ListingsSheet(
     val listings by listingViewModel.listings.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
     val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
-    val blockedTerms by listingViewModel.blockedTerms.collectAsState()
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
     val totalPlatforms by listingViewModel.totalPlatforms.collectAsState()
     val completedPlatforms by listingViewModel.completedPlatforms.collectAsState()
@@ -74,17 +73,10 @@ fun ListingsSheet(
 
     val allActiveListings = remember(listings) { listings.filter { !it.sold } }
     // Merge live sold results with persisted history, deduplicate by id, most recent first
-    val allSoldListings = remember(listings, priceHistory, blockedTerms) {
+    val allSoldListings = remember(listings, priceHistory) {
         val seen = mutableSetOf<String>()
         (listings.filter { it.sold } + priceHistory)
             .filter { seen.add(it.id) }
-            .filter { listing ->
-                if (blockedTerms.isEmpty()) true
-                else {
-                    val titleLower = listing.title.lowercase()
-                    blockedTerms.none { term -> titleLower.contains(term.lowercase()) }
-                }
-            }
             .sortedByDescending { it.soldDate ?: it.scrapedAt }
     }
 
@@ -259,30 +251,24 @@ fun ListingsSheet(
                             }
                         }
                         if (!loading) {
-                            var useFilters by remember { mutableStateOf(blockedTerms.isNotEmpty()) }
                             IconButton(
-                                onClick = { listingViewModel.refresh(platforms, withFilters = useFilters) },
-                                modifier = Modifier.pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onLongPress = { useFilters = !useFilters },
-                                        onTap = { listingViewModel.refresh(platforms, withFilters = useFilters) },
-                                    )
-                                },
+                                onClick = { listingViewModel.refresh(platforms) },
                             ) {
                                 Icon(
-                                    if (useFilters && blockedTerms.isNotEmpty()) Icons.Filled.FilterAlt
-                                    else Icons.Outlined.Refresh,
+                                    Icons.Outlined.Refresh,
                                     "Re-crawl",
-                                    tint = if (useFilters && blockedTerms.isNotEmpty()) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, "Close")
                         }
                     }
                 }
 
                 // === Sticky filters (platform chips + blocked terms) ===
-                if (platformStatuses.isNotEmpty() || platformOffers.isNotEmpty() || blockedTerms.isNotEmpty()) {
+                if (platformStatuses.isNotEmpty() || platformOffers.isNotEmpty()) {
                     stickyHeader("filters") {
                         Surface(
                             color = MaterialTheme.colorScheme.surface,
@@ -298,31 +284,6 @@ fun ListingsSheet(
                                         onSelectPlatform = { listingViewModel.selectPlatform(it) },
                                         modifier = Modifier.padding(horizontal = 20.dp),
                                     )
-                                }
-                                if (blockedTerms.isNotEmpty()) {
-                                    Spacer(Modifier.height(4.dp))
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 20.dp).horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.FilterAlt,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        blockedTerms.sorted().forEach { term ->
-                                            InputChip(
-                                                selected = true,
-                                                onClick = { listingViewModel.unblockTerm(term) },
-                                                label = { Text(term, style = MaterialTheme.typography.labelSmall) },
-                                                trailingIcon = {
-                                                    Icon(Icons.Filled.Close, null, modifier = Modifier.size(14.dp))
-                                                },
-                                )
-                            }
-                        }
                                 }
                                 // Price range slider
                                 if (activeListings.size >= 2 && priceMax > priceMin) {
@@ -429,7 +390,6 @@ fun ListingsSheet(
                             onSearchSold = { listingViewModel.searchSold() },
                             soldLoading = soldLoadingState,
                             onBan = { listingViewModel.ban(it) },
-                            onBlockWord = { listingViewModel.blockTerm(it) },
                             searchQuery = searchQuery,
                             modifier = Modifier.padding(horizontal = 20.dp),
                         )
@@ -463,7 +423,6 @@ fun ListingsSheet(
                         ListingCard(
                             listing = listing,
                             onBan = { listingViewModel.ban(listing) },
-                            onBlockWord = { term -> listingViewModel.blockTerm(term) },
                             searchQuery = searchQuery,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 3.dp),
                         )
@@ -814,11 +773,9 @@ private fun PlatformOfferCard(
 internal fun ListingCard(
     listing: Listing,
     onBan: (() -> Unit)? = null,
-    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
-    var showBlockDialog by remember { mutableStateOf(false) }
 
     Card(
         onClick = { openBrowser(listing.url) },
@@ -950,159 +907,21 @@ internal fun ListingCard(
                 }
             }
 
-            if (onBan != null || onBlockWord != null) {
-                Column {
-                    if (onBan != null) {
-                        IconButton(
-                            onClick = onBan,
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.DeleteOutline, null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            )
-                        }
-                    }
-                    if (onBlockWord != null) {
-                        IconButton(
-                            onClick = { showBlockDialog = true },
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Block, null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            )
-                        }
-                    }
+            if (onBan != null) {
+                IconButton(
+                    onClick = onBan,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.DeleteOutline, null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
                 }
             }
         }
     }
 
-    if (showBlockDialog && onBlockWord != null) {
-        BlockTermDialog(
-            listingTitle = listing.title,
-            searchQuery = searchQuery,
-            onBlock = { term ->
-                onBlockWord(term)
-                showBlockDialog = false
-            },
-            onDismiss = { showBlockDialog = false },
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun BlockTermDialog(
-    listingTitle: String,
-    searchQuery: String,
-    onBlock: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val queryWords = remember(searchQuery) {
-        searchQuery.lowercase().split(Regex("[\\s\\-]+"))
-            .filter { it.length > 1 && !it.startsWith("-") && it != "or" }
-            .toSet()
-    }
-    val candidateWords = remember(listingTitle, queryWords) {
-        listingTitle.split(Regex("[\\s\\-/|,()\\[\\]]+"))
-            .map { it.trim().replace(Regex("[^\\p{L}\\p{N}]"), "") }
-            .filter { it.length >= 2 }
-            .map { it.lowercase() }
-            .distinct()
-            .filter { word -> queryWords.none { q -> word.contains(q) || q.contains(word) } }
-    }
-
-    var phraseMode by remember { mutableStateOf(false) }
-    val selectedWords = remember { mutableStateListOf<String>() }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Block a word", style = MaterialTheme.typography.titleMedium) },
-        text = {
-            Column {
-                if (phraseMode && selectedWords.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    ) {
-                        Text(
-                            selectedWords.joinToString(" "),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(10.dp),
-                        )
-                    }
-                }
-                Text(
-                    if (phraseMode) "Tap words to add to phrase:" else "Tap to block. Long press for phrase:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    candidateWords.forEach { word ->
-                        val isSelected = word in selectedWords
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                    else MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                                .pointerInput(word, phraseMode) {
-                                    detectTapGestures(
-                                        onLongPress = {
-                                            phraseMode = true
-                                            selectedWords.clear()
-                                            selectedWords.add(word)
-                                        },
-                                        onTap = {
-                                            if (phraseMode) {
-                                                if (isSelected) selectedWords.remove(word)
-                                                else if (word !in selectedWords) selectedWords.add(word)
-                                            } else {
-                                                onBlock(word)
-                                            }
-                                        },
-                                    )
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            Text(
-                                word,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (phraseMode && selectedWords.size >= 2) {
-                TextButton(onClick = {
-                    onBlock(selectedWords.joinToString(" "))
-                }) { Text("Block phrase") }
-            }
-        },
-        dismissButton = {
-            Row {
-                if (phraseMode) {
-                    TextButton(onClick = { phraseMode = false; selectedWords.clear() }) { Text("Back") }
-                }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
 }
 
 // === Price Distribution Histogram (active listings — New vs Used bars) ===
@@ -1117,7 +936,6 @@ private fun PriceDistributionChart(
     onSearchSold: () -> Unit = {},
     soldLoading: Boolean = false,
     onBan: ((Listing) -> Unit)? = null,
-    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
@@ -1235,7 +1053,6 @@ private fun PriceDistributionChart(
                     PriceHistoryChart(
                         soldListings = soldListings,
                         onBan = onBan,
-                        onBlockWord = onBlockWord,
                         searchQuery = searchQuery,
                     )
                 } else {
@@ -1366,7 +1183,6 @@ private fun PriceDistributionChart(
 private fun PriceHistoryChart(
     soldListings: List<Listing>,
     onBan: ((Listing) -> Unit)? = null,
-    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
@@ -1526,7 +1342,6 @@ private fun PriceHistoryChart(
                 ListingCard(
                     listing = listing,
                     onBan = onBan?.let { { it(listing) } },
-                    onBlockWord = onBlockWord,
                     searchQuery = searchQuery,
                 )
             }
@@ -1544,10 +1359,9 @@ private fun SoldHistoryRow(
 ) {
     val dateStr = remember(listing) {
         val instant = listing.soldDate ?: listing.scrapedAt
-        val ms = instant.toEpochMilliseconds()
-        val d = java.util.Date(ms)
-        @Suppress("SimpleDateFormat")
-        java.text.SimpleDateFormat("dd MMM yyyy").format(d)
+        val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+        val month = local.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
+        "${local.dayOfMonth} $month ${local.year}"
     }
     Card(
         onClick = { openBrowser(listing.url) },
@@ -1855,5 +1669,5 @@ internal fun Money.format(): String {
     }
     val whole = convertedAmount / 100
     val cents = convertedAmount % 100
-    return if (cents == 0L) "$symbol$whole" else "$symbol$whole.%02d".format(cents)
+    return if (cents == 0L) "$symbol$whole" else "$symbol$whole.${cents.toString().padStart(2, '0')}"
 }

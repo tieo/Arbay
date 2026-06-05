@@ -8,6 +8,7 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.screen.MainScreen
 import io.github.tieo.arbay.ui.theme.ArbayTheme
+import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 
@@ -17,6 +18,7 @@ fun App() {
         val client = remember { ArbayClient() }
         val productViewModel = viewModel { ProductViewModel(client) }
         val listingViewModel = viewModel { ListingViewModel(client) }
+        val freeItemViewModel = viewModel { FreeItemViewModel(client) }
 
         // Load exchange rates on startup
         LaunchedEffect(Unit) {
@@ -31,6 +33,7 @@ fun App() {
                 MainScreen(
                     productViewModel = productViewModel,
                     listingViewModel = listingViewModel,
+                    freeItemViewModel = freeItemViewModel,
                     client = client,
                 )
             }

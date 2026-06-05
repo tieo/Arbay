@@ -39,9 +39,10 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
-        // Marktplaats uses li.hz-Listing--list-item containers
-        val items = doc.select("li.hz-Listing--list-item")
-            .ifEmpty { doc.select("div.hz-Listing--list-item") }
+        // Marktplaats uses li containers with class hz-Listing--list-item (or hz-Listing--list-item-new).
+        // Class names can vary by query / A-B test, so use attribute-contains selector for robustness.
+        val items = doc.select("li[class*=hz-Listing--list-item]")
+            .ifEmpty { doc.select("div[class*=hz-Listing--list-item]") }
 
         return items.mapNotNull { item ->
             // Link: find the first <a> with an href to /v/ (actual listing page)
@@ -52,23 +53,26 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
                 ?: Regex("""/m(\d+)""").find(href)?.groupValues?.get(1)
                 ?: return@mapNotNull null
 
-            // Title: h3.hz-Listing-title or similar heading
+            // Title: Marktplaats uses CSS Modules so class names get hashed suffixes like
+            // "ListingTitle_hz-Listing-title-new__YIv8B". Use attribute substring match.
             val titleEl = item.selectFirst("h3.hz-Listing-title")
-                ?: item.selectFirst(".hz-Listing-title")
+                ?: item.selectFirst("[class*=hz-Listing-title]")
                 ?: return@mapNotNull null
-            val title = titleEl.text().trim()
+            // The title span is often nested inside the div — get the deepest span text.
+            val title = (titleEl.selectFirst("span") ?: titleEl).text().trim()
             if (title.isBlank()) return@mapNotNull null
 
-            // Price: span or p with hz-Listing-price class
-            val priceText = item.selectFirst("span.hz-Listing-price--desktop")?.text()
-                ?: item.selectFirst("p.hz-Listing-price")?.text()
-                ?: item.selectFirst("[class*=hz-Listing-price]")?.text()
+            // Price: also uses CSS Modules hashed names. The price element may be an h5.
+            val priceEl = item.selectFirst("[class*=hz-Listing-price--desktop]")
+                ?: item.selectFirst("[class*=hz-Listing-price]")
                 ?: return@mapNotNull null
+            // Unwrap nested h5/span if present
+            val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
             val price = Money.parse(priceText) ?: return@mapNotNull null
 
-            val descriptionText = item.selectFirst("div.hz-Listing-description")?.text()
+            val descriptionText = item.selectFirst("[class*=hz-Listing-description]")?.text()
 
-            val imageUrl = item.selectFirst(".hz-Listing-image-container img")?.let {
+            val imageUrl = item.selectFirst("[class*=hz-Listing-image-container] img, [class*=hz-Listing-image] img")?.let {
                 it.attr("src").ifBlank { it.attr("data-src") }
             }?.takeIf { it.startsWith("http") }
 

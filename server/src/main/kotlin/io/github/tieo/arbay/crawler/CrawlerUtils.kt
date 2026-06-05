@@ -228,6 +228,10 @@ internal fun detectBlockPage(html: String, platformName: String): CrawlerBlocked
             CrawlerBlockedException("$platformName: IP blocked", ErrorType.BLOCKED_403)
         lower.contains("ich bin kein roboter") && lower.contains("immobilienscout") ->
             CrawlerBlockedException("$platformName: robot check", ErrorType.CAPTCHA)
+        // Akamai Bot Manager challenge — JS-only page with "sec-if-cpt" / "sec-bc" markers.
+        // mobile.de, and other Akamai-protected sites return this when fingerprint fails.
+        lower.contains("sec-if-cpt-container") || lower.contains("sec-bc-tile") ->
+            CrawlerBlockedException("$platformName: Akamai challenge", ErrorType.CAPTCHA)
         lower.contains("__cf_chl") ||
             lower.contains("sicherheitsüberprüfung wird durchgeführt") ||
             lower.contains("sichere verbindung wird") ||

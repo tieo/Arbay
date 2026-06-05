@@ -225,6 +225,16 @@ object RelevanceFilter {
 
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
         val parsed = parseQuery(query.text)
+        val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
+        // Single-token queries ("laptop", "monitor"): the platform's own search already filtered
+        // results. A product called "Lenovo ThinkPad X1" IS a laptop even without the word —
+        // applying lexical filtering would drop 95%+ of results. Skip filtering entirely.
+        if (tokenCount <= 1) {
+            return listings.mapNotNull { listing ->
+                val s = score(listing, parsed)
+                if (s < 0) null else listing to s
+            }.sortedByDescending { it.second }.map { it.first }
+        }
         return listings.mapNotNull { listing ->
             val s = score(listing, parsed)
             if (s < 0) return@mapNotNull null

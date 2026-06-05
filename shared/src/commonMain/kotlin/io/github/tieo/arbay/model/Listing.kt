@@ -27,6 +27,9 @@ data class Listing(
     val mpn: String? = null,
     val scrapedAt: Instant,
     val extras: JsonObject? = null,
+    val relevanceScore: Double? = null,
+    val modelScores: Map<String, Double>? = null,
+    val isExploration: Boolean = false,
 ) {
     /** All-in price including shipping and platform fees */
     val effectivePrice: Money get() = Money(

@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.ktor.clientContentNegotiationJvm)
     implementation(libs.jsoup)
     implementation(libs.playwright)
+    implementation(libs.onnxruntime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)
     testImplementation(libs.ktor.serverTestHost)
