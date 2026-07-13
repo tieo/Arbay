@@ -16,7 +16,8 @@ data class StoredFeedback(
     val listingId: String,
     val title: String,
     val action: String,            // FeedbackAction.name
-    val embedding: List<Float>,    // 512-dim vector
+    val embedding: List<Float>,    // 512-dim text vector (distiluse)
+    val imageEmbedding: List<Float>? = null, // 512-dim CLIP image vector; null when no photo / model unavailable
     // Rich metadata — nullable for backward compatibility with old feedback files
     val url: String? = null,
     val imageUrl: String? = null,
@@ -43,13 +44,17 @@ object FreeItemFeedbackStore {
 
     fun add(listingId: String, title: String, action: FeedbackAction, listing: Listing? = null) {
         val embedding = EmbeddingModel.embed(title) ?: emptyList<Float>().toFloatArray()
+        val imageUrl = listing?.imageUrls?.firstOrNull { it.startsWith("http") }
+        // Embed the photo so the model learns from what the item looks like, not just its title.
+        val imageEmbedding = ClipImageModel.embedUrl(imageUrl)?.toList()
         val stored = StoredFeedback(
             listingId = listingId,
             title = title,
             action = action.name,
             embedding = embedding.toList(),
+            imageEmbedding = imageEmbedding,
             url = listing?.url,
-            imageUrl = listing?.imageUrls?.firstOrNull { it.startsWith("http") },
+            imageUrl = imageUrl,
             locationText = listing?.location?.let { loc ->
                 loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
             },
@@ -73,6 +78,17 @@ object FreeItemFeedbackStore {
     fun dislikedEmbeddings(): List<FloatArray> = synchronized(feedback) {
         feedback.filter { it.action == FeedbackAction.DISLIKE.name }
             .map { it.embedding.toFloatArray() }
+    }
+
+    /** CLIP image embeddings of loved/liked items that have a photo (for image affinity). */
+    fun lovedImageEmbeddings(): List<FloatArray> = synchronized(feedback) {
+        feedback.filter { it.action == FeedbackAction.LOVE.name || it.action == FeedbackAction.LIKE.name }
+            .mapNotNull { it.imageEmbedding?.toFloatArray() }
+    }
+
+    fun dislikedImageEmbeddings(): List<FloatArray> = synchronized(feedback) {
+        feedback.filter { it.action == FeedbackAction.DISLIKE.name }
+            .mapNotNull { it.imageEmbedding?.toFloatArray() }
     }
 
     /** All feedback entries (for history display). Most recent first. */

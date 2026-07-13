@@ -17,6 +17,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 fun main() {
+    // CLIP image preprocessing uses java.awt (BufferedImage/Graphics2D); headless avoids
+    // needing an X11 display/libs on the server.
+    System.setProperty("java.awt.headless", "true")
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }

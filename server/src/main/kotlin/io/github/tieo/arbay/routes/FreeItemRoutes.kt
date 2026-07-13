@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.routes
 
+import io.github.tieo.arbay.classifier.ClipImageModel
 import io.github.tieo.arbay.classifier.EmbeddingModel
 import io.github.tieo.arbay.classifier.FeedbackAction
 import io.github.tieo.arbay.classifier.FreeItemFeedbackStore
@@ -350,6 +351,13 @@ fun Route.freeItemRoutes() {
                 var rawTotal = 0
                 var streamHasMore = false
 
+                // Image affinity: nudge the text-model rank by how much a listing's photo
+                // resembles photos the user loved/disliked (CLIP space). No-op until there
+                // are reference photos, so cold-start ranking is unaffected.
+                val lovedImages = FreeItemFeedbackStore.lovedImageEmbeddings()
+                val dislikedImages = FreeItemFeedbackStore.dislikedImageEmbeddings()
+                val imageWeight = 0.25
+
                 fun scoreListings(listings: List<Listing>): List<Listing> =
                     listings.mapNotNull { listing ->
                         val text = buildString {
@@ -361,7 +369,13 @@ fun Route.freeItemRoutes() {
                         val allScores = ModelRegistry.scoreAll(embedding, text, scoringContext)
                         val activeScore = allScores[activeModelId] ?: 0.0
                         ModelArena.recordPredictions(listing.id, allScores)
-                        listing.copy(relevanceScore = activeScore, modelScores = allScores)
+                        val score = if (lovedImages.isEmpty() && dislikedImages.isEmpty()) {
+                            activeScore
+                        } else {
+                            val imgEmb = ClipImageModel.embedUrl(listing.imageUrls.firstOrNull { it.startsWith("http") })
+                            (activeScore + imageWeight * ClipImageModel.affinity(imgEmb, lovedImages, dislikedImages)).coerceIn(0.0, 1.0)
+                        }
+                        listing.copy(relevanceScore = score, modelScores = allScores)
                     }.sortedByDescending { it.relevanceScore }
 
                 try {

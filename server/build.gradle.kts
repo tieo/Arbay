@@ -35,3 +35,8 @@ dependencies {
     testImplementation(libs.ktor.clientMock)
     testImplementation(libs.kotlin.testJunit)
 }
+
+// Image preprocessing (CLIP) uses java.awt; run headless so it needs no X11 libs.
+tasks.withType<Test> {
+    systemProperty("java.awt.headless", "true")
+}
