@@ -22,6 +22,7 @@ import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
+import kotlin.math.roundToInt
 
 /** Car marketplaces, paired with the country whose stock they surface. Kept in the
  *  order a buyer scans: home market first, then the cross-border sourcing markets. */
@@ -36,18 +37,6 @@ private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
     PlatformId.DBA to "DK",
     PlatformId.BILBASEN to "DK",
     PlatformId.BYTBIL to "SE",
-)
-
-/** Fast-start picks, home market first: canonical make id + model id resolved against the
- *  taxonomy so a buyer can jump straight to filters. */
-private val POPULAR_MODELS: List<Triple<String, String, String>> = listOf(
-    Triple("VW Crafter", "volkswagen", "crafter"),
-    Triple("VW Transporter", "volkswagen", "transporter"),
-    Triple("VW Golf", "volkswagen", "golf"),
-    Triple("Mercedes Sprinter", "mercedes-benz", "sprinter"),
-    Triple("BMW 3er", "bmw", "3er"),
-    Triple("Audi A4", "audi", "a4"),
-    Triple("Tesla Model 3", "tesla", "model-3"),
 )
 
 /**
@@ -100,22 +89,6 @@ fun CarSearchSheet(
 
             // 1 — Vehicle
             SectionLabel("Vehicle")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                POPULAR_MODELS.forEach { (label, makeId, modelId) ->
-                    val active = make?.id == makeId && model?.id == modelId
-                    FilterChip(
-                        selected = active,
-                        onClick = {
-                            val mk = taxonomy.makes.firstOrNull { it.id == makeId }
-                            make = mk
-                            model = mk?.models?.firstOrNull { it.id == modelId }
-                        },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        leadingIcon = { if (active) Icon(Icons.Outlined.Check, null, modifier = Modifier.size(14.dp)) },
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
             PickerField(
                 label = "Make",
                 value = make?.name,
@@ -134,24 +107,22 @@ fun CarSearchSheet(
 
             // 2 — Age and mileage
             SectionLabel("Age & mileage")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumberField(yearFrom, { yearFrom = it.take(4) }, "Year from", "2021", Modifier.weight(1f))
-                NumberField(yearTo, { yearTo = it.take(4) }, "Year to", "2023", Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(10.dp))
-            NumberField(maxKm, { maxKm = it }, "Max mileage (km)", "200000", Modifier.fillMaxWidth())
+            SliderNumberField("Year from", yearFrom, { yearFrom = it.take(4) }, 1995f, 2026f, 1)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField("Year to", yearTo, { yearTo = it.take(4) }, 1995f, 2026f, 1)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField("Max mileage (km)", maxKm, { maxKm = it }, 0f, 300000f, 5000)
 
             Spacer(Modifier.height(18.dp))
 
             // 3 — Budget and power
             SectionLabel("Budget & power")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumberField(maxPrice, { maxPrice = it }, "Max price (EUR)", "20000", Modifier.weight(1f))
-                NumberField(
-                    minPowerKw, { minPowerKw = it }, "Min power (kW)", "110", Modifier.weight(1f),
-                    supporting = minPowerKw.toIntOrNull()?.let { "≈ ${(it * 1.35962).toInt()} hp" },
-                )
-            }
+            SliderNumberField("Max price (EUR)", maxPrice, { maxPrice = it }, 0f, 100000f, 1000)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField(
+                "Min power (kW)", minPowerKw, { minPowerKw = it }, 0f, 300f, 5,
+                supporting = minPowerKw.toIntOrNull()?.let { "≈ ${(it * 1.35962).toInt()} hp" },
+            )
 
             Spacer(Modifier.height(18.dp))
 
@@ -336,23 +307,47 @@ private fun SectionLabel(text: String) {
     )
 }
 
+/** A slider paired with an editable number box. The slider is a fast, coarse dragger; the
+ *  text box stays authoritative and unbounded — a typed value beyond the slider range is
+ *  kept, the slider just pins at its end. Empty means "no limit". */
 @Composable
-private fun NumberField(
-    value: String,
-    onValueChange: (String) -> Unit,
+private fun SliderNumberField(
     label: String,
-    placeholder: String,
+    value: String,
+    onValue: (String) -> Unit,
+    min: Float,
+    max: Float,
+    stepSize: Int,
     modifier: Modifier = Modifier,
     supporting: String? = null,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { onValueChange(it.filter { c -> c.isDigit() }) },
-        label = { Text(label) },
-        placeholder = { Text(placeholder) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        supportingText = supporting?.let { { Text(it) } },
-        modifier = modifier,
-    )
+    val current = value.filter { it.isDigit() }.toFloatOrNull()
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onValue(it.filter { c -> c.isDigit() }) },
+                placeholder = { Text("any") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(128.dp),
+            )
+        }
+        Slider(
+            value = (current ?: min).coerceIn(min, max),
+            // Continuous track (no tick dots — a 0..100000 range would render a noisy
+            // dotted line), but the emitted value snaps to stepSize.
+            onValueChange = { raw -> onValue(((raw / stepSize).roundToInt() * stepSize).toString()) },
+            valueRange = min..max,
+        )
+        supporting?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
