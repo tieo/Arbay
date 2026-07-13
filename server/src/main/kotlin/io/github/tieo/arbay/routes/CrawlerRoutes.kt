@@ -84,7 +84,7 @@ private val CAR_PLATFORMS = listOf(
     PlatformId.AUTOSCOUT24, PlatformId.MOBILE_DE, PlatformId.KLEINANZEIGEN,
     PlatformId.EBAY_DE, PlatformId.TRUCKSCOUT24,
     PlatformId.OTOMOTO, PlatformId.DBA, PlatformId.BILBASEN,
-    PlatformId.BYTBIL, PlatformId.SAUTO,
+    PlatformId.BYTBIL, PlatformId.SAUTO, PlatformId.MARKTPLAATS,
 )
 
 /** Identity a scrape is throttled against: the Authelia-forwarded user when present, else

@@ -13,9 +13,23 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
         val seenIds = mutableSetOf<String>()
         val maxPages = CrawlerConfig.current.maxPages
 
+        // Car queries are scoped to the auto-s (cars) category; everything else is a
+        // free-text marketplace search. Pagination is a /p/N/ suffix on the base URL
+        // (verified for both paths).
+        val car = CarQueryResolver.resolve(query.positiveText)
+        val text = if (car != null) {
+            listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
+        } else {
+            query.positiveText
+        }
+        val base = if (car != null) {
+            "https://www.marktplaats.nl/l/auto-s/q/${text.encodeUrl()}/"
+        } else {
+            "https://www.marktplaats.nl/q/${text.encodeUrl()}/"
+        }
+
         for (page in 1..maxPages) {
-            val pageParam = if (page > 1) "p/$page/" else ""
-            val url = "https://www.marktplaats.nl/q/${pageParam}${query.positiveText.encodeUrl()}/"
+            val url = if (page == 1) base else "${base}p/$page/"
             val html = try {
                 CurlCffiClient.fetch(url, primeUrl = if (page == 1) "https://www.marktplaats.nl" else null)
             } catch (e: CrawlerBlockedException) {
