@@ -2,24 +2,91 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
-class AutoScout24Crawler(private val client: HttpClient) : Crawler {
+class AutoScout24Crawler(
+    private val client: HttpClient,
+    private val countries: List<String> = EUROPE,
+) : Crawler {
     override val platformId = PlatformId.AUTOSCOUT24
 
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        val url = "https://www.autoscout24.de/lst?atype=C&cy=D&desc=0&sort=standard&ustate=N%2CU&query=${query.positiveText.encodeUrl()}"
-        val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
+    private val countryParam: String get() = countries.joinToString("%2C")
 
-        // Try __NEXT_DATA__ JSON first (most reliable), fall back to HTML parsing
+    override suspend fun search(query: SearchQuery): List<Listing> {
+        val carQuery = CarQueryResolver.resolve(query.positiveText)
+            ?: return searchByQueryParam(query)
+
+        val basePath = buildString {
+            append("https://www.autoscout24.de/lst/")
+            append(carQuery.makeSlug)
+            carQuery.modelSlug?.let { append("/").append(it) }
+        }
+
+        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        val seen = LinkedHashMap<String, Listing>()
+
+        for (offset in 0 until maxPages) {
+            val page = query.startPage + offset
+            val pageParam = if (page <= 1) "" else "&page=$page"
+            val url = "$basePath?atype=C&cy=$countryParam&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}$pageParam"
+            val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
+            val listings = parseFromNextData(html) ?: parseFromHtml(html)
+
+            if (listings.isEmpty()) break
+            val newIds = listings.count { it.externalId !in seen }
+            listings.forEach { seen.putIfAbsent(it.externalId, it) }
+            if (newIds == 0) break
+            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+        }
+
+        return seen.values.toList()
+    }
+
+    /**
+     * Fallback for queries that do not start with a known car make. The site ignores the
+     * `query` parameter and serves its default feed; RelevanceFilter downstream detects
+     * and discards such a result set, so a single page is enough.
+     */
+    private suspend fun searchByQueryParam(query: SearchQuery): List<Listing> {
+        val url = "https://www.autoscout24.de/lst?atype=C&cy=$countryParam&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}&query=${query.positiveText.encodeUrl()}"
+        val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
         return parseFromNextData(html) ?: parseFromHtml(html)
     }
 
-    private fun parseFromNextData(html: String): List<Listing>? {
+    /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
+     *  only matching cars and far less needs scraping. Parameter names verified live. */
+    private fun filterParams(query: SearchQuery): String = buildString {
+        query.firstRegFromYear?.let { append("&fregfrom=$it") }
+        query.firstRegToYear?.let { append("&fregto=$it") }
+        query.maxMileageKm?.let { append("&kmto=$it") }
+        query.maxPrice?.let { max ->
+            val eur = if (max.currency == Currency.EUR) max.amount / 100
+            else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
+            append("&priceto=$eur")
+        }
+        query.minPrice?.let { min ->
+            val eur = if (min.currency == Currency.EUR) min.amount / 100
+            else ExchangeRates.convert(min.amount, min.currency.name, "EUR") / 100
+            append("&pricefrom=$eur")
+        }
+        query.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
+        when (query.transmission) {
+            Transmission.AUTOMATIC -> append("&gear=A")
+            Transmission.MANUAL -> append("&gear=M")
+            null -> {}
+        }
+    }
+
+    companion object {
+        /** AutoScout24 country codes reachable from the .de front end, covering Germany
+         *  and the EU markets worth sourcing used vehicles from. Cross-border listings
+         *  carry their origin in location.country. */
+        val EUROPE = listOf("D", "A", "B", "E", "F", "I", "L", "NL")
+    }
+
+    internal fun parseFromNextData(html: String): List<Listing>? {
         val doc = Jsoup.parse(html)
         val nextDataScript = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
         val now = Clock.System.now()
@@ -107,7 +174,7 @@ class AutoScout24Crawler(private val client: HttpClient) : Crawler {
         }
     }
 
-    private fun parseFromHtml(html: String): List<Listing> {
+    internal fun parseFromHtml(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 

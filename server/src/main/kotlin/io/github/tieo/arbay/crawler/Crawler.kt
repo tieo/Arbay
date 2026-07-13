@@ -20,8 +20,19 @@ suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
             CrawlerStatusTracker.recordError(platformId, "Search returned 0 results", ErrorType.EMPTY_RESULTS)
             log.warn("{}: 0 results for '{}'", platformId.displayName, query.text)
         } else {
-            CrawlerStatusTracker.recordSuccess(platformId, results.size)
-            log.info("{}: {} results for '{}'", platformId.displayName, results.size, query.text)
+            val irrelevance = RelevanceFilter.irrelevanceReport(results, query)
+            if (irrelevance != null) {
+                CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                val snapId = ErrorSnapshotStore.capture(
+                    platform = platformId.name, query = query.text,
+                    error = CrawlerBlockedException(irrelevance, ErrorType.IRRELEVANT_RESULTS),
+                    errorType = ErrorType.IRRELEVANT_RESULTS,
+                )
+                log.warn("{}: {} [snapshot:{}]", platformId.displayName, irrelevance, snapId)
+            } else {
+                CrawlerStatusTracker.recordSuccess(platformId, results.size)
+                log.info("{}: {} results for '{}'", platformId.displayName, results.size, query.text)
+            }
         }
         results
     } catch (e: CrawlerBlockedException) {

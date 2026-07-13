@@ -148,6 +148,60 @@ class KleinanzeigenUrlBuilderTest {
         )
     }
 
+    // ── Car search URL (Autos category c216) ────────────────────────────────
+
+    @Test
+    fun `car search - page 1`() {
+        val url = KleinanzeigenUrlBuilder.carSearch(
+            query = "Volkswagen Crafter",
+            page = 1,
+        )
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/volkswagen-crafter/k0c216",
+            url,
+        )
+    }
+
+    @Test
+    fun `car search - page 3`() {
+        val url = KleinanzeigenUrlBuilder.carSearch(
+            query = "volkswagen crafter",
+            page = 3,
+        )
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/seite:3/volkswagen-crafter/k0c216",
+            url,
+        )
+    }
+
+    @Test
+    fun `car search with location and radius`() {
+        val url = KleinanzeigenUrlBuilder.carSearch(
+            query = "volkswagen crafter",
+            page = 1,
+            locationId = "1234",
+            radiusKm = 50,
+        )
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/volkswagen-crafter/k0c216l1234r50",
+            url,
+        )
+    }
+
+    @Test
+    fun `car search with price range`() {
+        val url = KleinanzeigenUrlBuilder.carSearch(
+            query = "volkswagen crafter",
+            page = 1,
+            minPriceCents = 500000L,
+            maxPriceCents = 1500000L,
+        )
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/preis:5000:15000/volkswagen-crafter/k0c216",
+            url,
+        )
+    }
+
     // ── City slug encoding ──────────────────────────────────────────────────
 
     @Test

@@ -7,7 +7,13 @@ import java.io.File
 
 @Serializable
 data class CrawlerConfig(
-    val maxPages: Int = 5,
+    // Target listings to collect per marketplace. This is the user-facing knob: it reads
+    // the same across sites regardless of their page size. Crawlers paginate until they
+    // reach it (or run dry).
+    val maxResultsPerPlatform: Int = 60,
+    // Hard upper bound on pages fetched per marketplace, so a site with a tiny page size
+    // can't spin the pager forever chasing the result target. Not surfaced in the app.
+    val maxPages: Int = 8,
     val ebayItemsPerPage: Int = 120,
     val sortByPrice: Boolean = true,
 ) {

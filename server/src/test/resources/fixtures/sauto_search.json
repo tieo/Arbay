@@ -1,0 +1,1827 @@
+{
+    "pagination": {
+        "limit": 20,
+        "offset": 0,
+        "total": 277
+    },
+    "results": [
+        {
+            "additional_model_name": "2.0TDI 103 kW L4H2 LED sv\u011btla",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-07-11T20:43:57",
+            "custom_id": null,
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T21:09:07",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "id": 210755306,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/nO2CysqjGrB9kIM5pUHLZP41/f7b2.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/nO2CysqjGrRICC2i8HLZP72/d6e5.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmBDp4mxE0HLZQBD/be03.jpeg"
+                }
+            ],
+            "images_total_count": 15,
+            "in_operation_date": "2017-05-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Hlavn\u00ed m\u011bsto Praha",
+                "district_id": 47,
+                "district_seo_name": "hlavni-mesto-praha",
+                "entity_id": 3468,
+                "entity_type": "municipality",
+                "housenumber": "",
+                "municipality": "Praha",
+                "municipality_id": 3468,
+                "municipality_seo_name": "praha",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Hlavn\u00ed m\u011bsto Praha",
+                "region_id": 10,
+                "region_seo_name": "hlavni-mesto-praha",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2017-03-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2.0TDI 103 kW L4H2 LED sv\u011btla",
+            "old_id": null,
+            "premise": null,
+            "price": 299000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T21:01:04",
+            "source": "web_source",
+            "tachometer": 327200,
+            "topped": false,
+            "user": {
+                "id": 137561962
+            }
+        },
+        {
+            "additional_model_name": "2.0 TDI 103kW L2H2 CZ Klima DP",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-24T08:52:08",
+            "custom_id": "VA262474",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:22:41",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": true,
+            "id": 210663179,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmEA35RpYMHKjymL/850d.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/nO2CysqjGrCDmo6f6ZHKjynI/a533.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/nO2CysqjGrCP7qOgNnHKjynz/6ca2.jpeg"
+                }
+            ],
+            "images_total_count": 26,
+            "in_operation_date": "2021-01-21",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2021-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2.0 TDI 103kW L2H2 CZ Klima DP",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 498999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:22:41",
+            "source": "import_source",
+            "tachometer": 175282,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW L2H2 CZ LED DPH",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-24T08:52:06",
+            "custom_id": "VA262470",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:22:41",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": true,
+            "id": 210663176,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/nO2CysqjGrB9kIMWG8HBKvpQ/f495.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/kQMlcCt5zmEA35RKK0HBKvqA/2a91.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/kQMlcCt5zmBDp4mKW7HBKvrA/0fa6.jpeg"
+                }
+            ],
+            "images_total_count": 4,
+            "in_operation_date": "2021-01-21",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2021-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW L2H2 CZ LED DPH",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 559999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:22:41",
+            "source": "import_source",
+            "tachometer": 145723,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 35 Aut DR CZ DPH Ta\u017en\u00e9",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-23T14:10:50",
+            "custom_id": "K250730",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:22:41",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": true,
+            "id": 210658943,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrDPliFPsMHAshpC/2c40.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrBgjUXPnMHAshpv/be1c.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrCDmo6PhdHAshsG/6177.jpeg"
+                }
+            ],
+            "images_total_count": 27,
+            "in_operation_date": "2026-01-05",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2026-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 35 Aut DR CZ DPH Ta\u017en\u00e9",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 1399999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:22:41",
+            "source": "import_source",
+            "tachometer": 143,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 35 Automat L5H2 Ta\u017en\u00e9",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-22T17:33:02",
+            "custom_id": "K250731",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:20:57",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": true,
+            "id": 210654119,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/kQMlcCt5zmwiaBJPXHANXjJ/2eeb.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/kQMlcCt5zmCni4DJgiHANXj6/2538.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrCP7qOO8FHANXlH/fe55.jpeg"
+                }
+            ],
+            "images_total_count": 26,
+            "in_operation_date": "2026-01-05",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2026-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 35 Automat L5H2 Ta\u017en\u00e9",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 1449999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:20:57",
+            "source": "import_source",
+            "tachometer": 138,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW CZ DPH Nav.",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-04T15:34:13",
+            "custom_id": "VA262198",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:19:01",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": true,
+            "id": 210551018,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/kQMlcCt5zmBDkXaF8QGzn0cK/12be.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/nO2CysqjGrDPliFF2jGzn0et/5163.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/kQMlcCt5zmD87zED4tGzn0hM/a5ef.jpeg"
+                }
+            ],
+            "images_total_count": 20,
+            "in_operation_date": "2019-12-03",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2019-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW CZ DPH Nav.",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 459999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:19:01",
+            "source": "import_source",
+            "tachometer": 196022,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW Klima 1.Maj DPH",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-04-09T17:30:29",
+            "custom_id": "VA261404",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:11:33",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": true,
+            "id": 210221006,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/nO2CysqjGrC2szhZ2vHDpxNB/f861.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/nO2CysqjGrCP7qOSGEHDpxNy/6bc8.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_C/nO2CysqjGrCe62NRfMHDpxOg/412d.jpeg"
+                }
+            ],
+            "images_total_count": 23,
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2021-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW Klima 1.Maj DPH",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 599999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:11:33",
+            "source": "import_source",
+            "tachometer": 68627,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW L2H2 Ta\u017en\u00e9 DPH",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2025-12-09T17:50:08",
+            "custom_id": "VA254059",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:06:31",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": true,
+            "id": 209608560,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_og_B/nDJ4VEZEqCs9CyJswFSZ68U/ea21.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_og_A/nDJ4VEZEqCaOxZHSMFKOEbf/bf1a.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_og_A/kOzkBkwYBTBLrRlEnuFKOEeA/cb0c.jpeg"
+                }
+            ],
+            "images_total_count": 20,
+            "in_operation_date": "2018-03-14",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2018-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW L2H2 Ta\u017en\u00e9 DPH",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 498999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:06:31",
+            "source": "import_source",
+            "tachometer": 89155,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 130kW DSG L2H2 DPH",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2025-12-09T15:42:54",
+            "custom_id": "VA254159",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T16:06:31",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": true,
+            "id": 209607621,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/kcHp2YdDtzYqGFuAGHzvkK/b6ea.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/nCTUX1iX5BWZuTGSLGHzvmz/3f39.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/kcHp2YdDtBwNESI65GHzvpY/f6e2.jpeg"
+                }
+            ],
+            "images_total_count": 22,
+            "in_operation_date": "2021-03-10",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Bene\u0161ov",
+                "district_id": 48,
+                "district_seo_name": "benesov",
+                "entity_id": 48,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2021-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 130kW DSG L2H2 DPH",
+            "old_id": null,
+            "premise": {
+                "external_id": 9341,
+                "id": 2008262,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLEA4WVCovFy5MsE/341c.png",
+                "name": "DAVO CAR"
+            },
+            "price": 524999,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T16:06:31",
+            "source": "import_source",
+            "tachometer": 154103,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2.0TDI 103kW L2H3",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-07-11T10:44:29",
+            "custom_id": "356260104",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T10:44:39",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 210753461,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmEA35Rt63HLJ3Sy/742b.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmUKhkta1HLJ3T3/a4a4.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmCni4DuhzHLJ3Us/b045.jpeg"
+                }
+            ],
+            "images_total_count": 21,
+            "in_operation_date": "2017-11-15",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Hlavn\u00ed m\u011bsto Praha",
+                "district_id": 47,
+                "district_seo_name": "hlavni-mesto-praha",
+                "entity_id": 47,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Hlavn\u00ed m\u011bsto Praha",
+                "region_id": 10,
+                "region_seo_name": "hlavni-mesto-praha",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2017-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2.0TDI 103kW L2H3",
+            "old_id": null,
+            "premise": {
+                "external_id": 9160,
+                "id": 12970509,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_oV_B/nO1SBfAluiBJE31ZDCNKO6g/65bb.png",
+                "name": "TUkas a.s. Mod\u0159any - \u0160koda Plus"
+            },
+            "price": 399000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T10:44:29",
+            "source": "import_source",
+            "tachometer": 182087,
+            "topped": false,
+            "user": null
+        },
+        {
+            "additional_model_name": "2.0TDI",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-05-04T16:41:17",
+            "custom_id": null,
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T09:42:00",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "id": 210363692,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qB_A/kcHp2YdDtBM3KVBBViGhhzyg/3873.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qB_A/nCTUX1iX5BWZuTBMKXGhhzzM/ada0.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qB_A/kcHp2YdDtCJexHEapGhhzzx/798b.jpeg"
+                }
+            ],
+            "images_total_count": 21,
+            "in_operation_date": "2019-09-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Ostrava-m\u011bsto",
+                "district_id": 65,
+                "district_seo_name": "ostrava-mesto",
+                "entity_id": 4730,
+                "entity_type": "municipality",
+                "housenumber": "",
+                "municipality": "Ostrava",
+                "municipality_id": 4730,
+                "municipality_seo_name": "ostrava",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Moravskoslezsk\u00fd kraj",
+                "region_id": 12,
+                "region_seo_name": "moravskoslezsky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2019-07-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2.0TDI",
+            "old_id": null,
+            "premise": null,
+            "price": 379900,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T09:42:00",
+            "source": "web_source",
+            "tachometer": 209500,
+            "topped": false,
+            "user": {
+                "id": 279494633
+            }
+        },
+        {
+            "additional_model_name": "2,0 TDI 103 kW L2H2 Z\u00e1ruka a\u017e",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-02-07T14:04:51",
+            "custom_id": "V260075",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T09:21:06",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 209863758,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_C/kcHp2YdDtCDcb5IBEGJkrxW/8648.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_C/kcHp2YdDtCDcb5ICGGJkryd/6e45.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_C/kcHp2YdDtDrxR2IiBGJkrzj/8830.jpeg"
+                }
+            ],
+            "images_total_count": 29,
+            "in_operation_date": "2020-02-28",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "T\u00e1bor",
+                "district_id": 7,
+                "district_seo_name": "tabor",
+                "entity_id": 7,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2020-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103 kW L2H2 Z\u00e1ruka a\u017e",
+            "old_id": null,
+            "premise": {
+                "external_id": 8565,
+                "id": 472007,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_E_H/P54CtH.png",
+                "name": "Andy-auta, s.r.o."
+            },
+            "price": 524000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T09:21:06",
+            "source": "import_source",
+            "tachometer": 149495,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 130kW L2H2 Nov\u00fd motor",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2024-10-02T19:56:11",
+            "custom_id": "V240688",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T09:21:05",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 207363423,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p7_A/nDJ4VEZEqxQDMSa1Fbx6FR/5630.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p7_A/nDJ4VEZEqCemGmPk4Fbx6GC/6ec0.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p7_A/kOzkBkwYBTDqlCCM1VFbx6HA/345e.jpeg"
+                }
+            ],
+            "images_total_count": 25,
+            "in_operation_date": "2018-05-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "T\u00e1bor",
+                "district_id": 7,
+                "district_seo_name": "tabor",
+                "entity_id": 7,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2018-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 130kW L2H2 Nov\u00fd motor",
+            "old_id": null,
+            "premise": {
+                "external_id": 8565,
+                "id": 472007,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_E_H/P54CtH.png",
+                "name": "Andy-auta, s.r.o."
+            },
+            "price": 408000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T09:21:05",
+            "source": "import_source",
+            "tachometer": 193548,
+            "topped": true,
+            "user": {
+                "id": 54634929
+            }
+        },
+        {
+            "additional_model_name": "2,0 TDI 130 kW DSG L2H2 Z\u00e1ruka",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-04-04T09:00:18",
+            "custom_id": "V260285",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T09:20:49",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": false,
+            "id": 210195740,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/nO2CysqjGrDPliFIk9G2lRV7/d247.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/nO2CysqjGrScbvHzNG2lRYB/9985.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_A/nO2CysqjGrDPliFImcG2lRZY/097f.jpeg"
+                }
+            ],
+            "images_total_count": 29,
+            "in_operation_date": "2022-03-08",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "T\u00e1bor",
+                "district_id": 7,
+                "district_seo_name": "tabor",
+                "entity_id": 7,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2022-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 130 kW DSG L2H2 Z\u00e1ruka",
+            "old_id": null,
+            "premise": {
+                "external_id": 8565,
+                "id": 472007,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_E_H/P54CtH.png",
+                "name": "Andy-auta, s.r.o."
+            },
+            "price": 598000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T09:20:49",
+            "source": "import_source",
+            "tachometer": 154297,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW L3H2 Z\u00e1ruka a\u017e 5",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-17T19:31:47",
+            "custom_id": "V260328",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T09:20:37",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 210628178,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/kQMlcCt5zmChFvGIIfG7VGic/1f5a.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/kQMlcCt5zmChFvGIIfG7VGjL/f8b6.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrC2szhSVgG7VGj3/5aaa.jpeg"
+                }
+            ],
+            "images_total_count": 26,
+            "in_operation_date": "2020-06-26",
+            "is_cebia_smart_code_url_verified": true,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "T\u00e1bor",
+                "district_id": 7,
+                "district_seo_name": "tabor",
+                "entity_id": 7,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2020-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW L3H2 Z\u00e1ruka a\u017e 5",
+            "old_id": null,
+            "premise": {
+                "external_id": 8565,
+                "id": 472007,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_E_H/P54CtH.png",
+                "name": "Andy-auta, s.r.o."
+            },
+            "price": 478000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T09:20:37",
+            "source": "import_source",
+            "tachometer": 177569,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "Crafter sk\u0159\u00ed\u0148 35 103kW 6G FWD",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-03-16T13:17:08",
+            "custom_id": "45497529-EBM",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T08:21:09",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 210073529,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/kcHp2YdDtCJexHETNGEzrIt/da52.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/nCTUX1iX5CoHumDjNGEzrJN/4020.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_p9_B/nCTUX1iX5bIUBDc5GEzrJq/2e96.jpeg"
+                }
+            ],
+            "images_total_count": 6,
+            "in_operation_date": "2025-09-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Jind\u0159ich\u016fv Hradec",
+                "district_id": 3,
+                "district_seo_name": "jindrichuv-hradec",
+                "entity_id": 3,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, Crafter sk\u0159\u00ed\u0148 35 103kW 6G FWD",
+            "old_id": null,
+            "premise": {
+                "external_id": 5342,
+                "id": 279644,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_H_D/kAZBbcZ.png",
+                "name": "AR SERVIS s.r.o."
+            },
+            "price": 1150000,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T08:21:09",
+            "source": "import_source",
+            "tachometer": 6500,
+            "topped": true,
+            "user": null
+        },
+        {
+            "additional_model_name": "sk\u0159\u00ed\u0148 35 103kW 6G FWD DR",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-06-17T15:08:44",
+            "custom_id": "45497571-EBM",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T08:20:50",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 210625898,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/kQMlcCt5zmEA35RIjwG8Nfu2/a61b.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrud5yM3LG8Nfzi/7335.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qC_B/nO2CysqjGrCP7qONanG8NfzC/0e5f.jpeg"
+                }
+            ],
+            "images_total_count": 14,
+            "in_operation_date": "2026-01-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "Jind\u0159ich\u016fv Hradec II",
+                "country_id": 112,
+                "district": "Jind\u0159ich\u016fv Hradec",
+                "district_id": 3,
+                "district_seo_name": "jindrichuv-hradec",
+                "entity_id": 13999,
+                "entity_type": "ward",
+                "housenumber": "",
+                "municipality": "Jind\u0159ich\u016fv Hradec",
+                "municipality_id": 681,
+                "municipality_seo_name": "jindrichuv-hradec",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Jiho\u010desk\u00fd kraj",
+                "region_id": 1,
+                "region_seo_name": "jihocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "Jind\u0159ich\u016fv Hradec II",
+                "ward_id": 13999,
+                "zip": "377 01"
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2026-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, sk\u0159\u00ed\u0148 35 103kW 6G FWD DR",
+            "old_id": null,
+            "premise": {
+                "external_id": 5342,
+                "id": 279644,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_H_D/kAZBbcZ.png",
+                "name": "AR SERVIS s.r.o."
+            },
+            "price": 1428813,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-11T08:20:50",
+            "source": "web_source",
+            "tachometer": 10,
+            "topped": true,
+            "user": {
+                "id": 119188378
+            }
+        },
+        {
+            "additional_model_name": "2,0 35TDI 103kW CZ DPH nov\u00e9 RO",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2025-01-15T16:14:59",
+            "custom_id": "078",
+            "deal_type": "sale",
+            "edit_date": "2026-07-11T17:20:50",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 207822103,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_oZ_A/kBkJRwehYDi8gRBeVDE2zFs/5cd9.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_m4_B/kO7h3dRn21DNnq4TTCEYz0I/f5cd.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_m4_B/naUHOyYNpCjaT7VfCEZAqk/f4f3.jpeg"
+                }
+            ],
+            "images_total_count": 50,
+            "in_operation_date": "2019-07-17",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Kol\u00edn",
+                "district_id": 51,
+                "district_seo_name": "kolin",
+                "entity_id": 51,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2019-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 35TDI 103kW CZ DPH nov\u00e9 RO",
+            "old_id": null,
+            "premise": {
+                "external_id": 51000,
+                "id": 13028752,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_QL_4/vuqFw.png",
+                "name": "Autoreal"
+            },
+            "price": 329990,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-10T16:50:33",
+            "source": "import_source",
+            "tachometer": 334129,
+            "topped": false,
+            "user": null
+        },
+        {
+            "additional_model_name": "2,0 TDI 103kW*Ta\u017en\u00e9",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-07-10T16:08:25",
+            "custom_id": "07341708-EBM",
+            "deal_type": "sale",
+            "edit_date": "2026-07-10T16:08:38",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Manu\u00e1ln\u00ed",
+                "seo_name": "manualni",
+                "value": 1
+            },
+            "home_delivery": false,
+            "id": 210751073,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmCCIyqBAyrHKrxOi/a686.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmBDp4mqcjHKrxPA/e9da.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmD87zEqqaHKrxPb/bcb2.jpeg"
+                }
+            ],
+            "images_total_count": 21,
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "",
+                "country_id": 112,
+                "district": "Kladno",
+                "district_id": 50,
+                "district_seo_name": "kladno",
+                "entity_id": 50,
+                "entity_type": "district",
+                "housenumber": "",
+                "municipality": "",
+                "municipality_id": 0,
+                "municipality_seo_name": "",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "St\u0159edo\u010desk\u00fd kraj",
+                "region_id": 11,
+                "region_seo_name": "stredocesky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "",
+                "ward_id": 0,
+                "zip": ""
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2024-01-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2,0 TDI 103kW*Ta\u017en\u00e9",
+            "old_id": null,
+            "premise": {
+                "external_id": 311,
+                "id": 434874,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_H_D/WirBPzz.png",
+                "name": "SMA\u017d\u00cdK s.r.o."
+            },
+            "price": 744900,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-10T16:08:25",
+            "source": "import_source",
+            "tachometer": 15573,
+            "topped": false,
+            "user": null
+        },
+        {
+            "additional_model_name": "2.0 TDI 130kW DSG L2H1, TA\u017dN\u00c9",
+            "category": {
+                "id": 839,
+                "name": "U\u017eitkov\u00e1",
+                "seo_name": "uzitkova"
+            },
+            "create_date": "2026-07-10T14:38:12",
+            "custom_id": null,
+            "deal_type": "sale",
+            "edit_date": "2026-07-10T15:00:18",
+            "fuel_cb": {
+                "name": "Nafta",
+                "seo_name": "nafta",
+                "value": 2
+            },
+            "gearbox_cb": {
+                "name": "Automatick\u00e1",
+                "seo_name": "automaticka",
+                "value": 3
+            },
+            "home_delivery": false,
+            "id": 210750377,
+            "images": [
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmUKhkpqGHKp7sb/d0c7.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmD87zEqe0HKp7wF/472c.jpeg"
+                },
+                {
+                    "url": "//d19-a.sdn.cz/d_19/c_img_qD_A/kQMlcCt5zmCCIyqBArLHKp7zS/7db8.jpeg"
+                }
+            ],
+            "images_total_count": 20,
+            "in_operation_date": "2019-10-01",
+            "is_cebia_smart_code_url_verified": false,
+            "locality": {
+                "address": "",
+                "address_id": 0,
+                "citypart": "Hranice VII-Slav\u00ed\u010d",
+                "country_id": 112,
+                "district": "P\u0159erov",
+                "district_id": 43,
+                "district_seo_name": "prerov",
+                "entity_id": 14858,
+                "entity_type": "ward",
+                "housenumber": "",
+                "municipality": "Hranice",
+                "municipality_id": 104,
+                "municipality_seo_name": "hranice",
+                "quarter": "",
+                "quarter_id": 0,
+                "region": "Olomouck\u00fd kraj",
+                "region_id": 8,
+                "region_seo_name": "olomoucky-kraj",
+                "source": "regionserver",
+                "street": "",
+                "street_id": 0,
+                "streetnumber": "",
+                "ward": "Hranice VII-Slav\u00ed\u010d",
+                "ward_id": 14858,
+                "zip": "753 61"
+            },
+            "manufacturer_cb": {
+                "name": "Volkswagen",
+                "seo_name": "volkswagen",
+                "value": 104
+            },
+            "manufacturing_date": "2019-10-01",
+            "model_cb": {
+                "name": "Crafter",
+                "seo_name": "crafter",
+                "value": 1321
+            },
+            "name": "Volkswagen Crafter, 2.0 TDI 130kW DSG L2H1, TA\u017dN\u00c9",
+            "old_id": null,
+            "premise": {
+                "external_id": 9787,
+                "id": 13219992,
+                "logo": "https://d48-a.sdn.cz/d_48/c_img_G_I/dJcFLt.jpeg",
+                "name": "NEXTAUTO"
+            },
+            "price": 449900,
+            "price_by_agreement": false,
+            "sorting_date": "2026-07-10T14:55:21",
+            "source": "web_source",
+            "tachometer": 152454,
+            "topped": false,
+            "user": {
+                "id": 69714464
+            }
+        }
+    ],
+    "status_code": 200,
+    "status_message": "OK",
+    "warnings": {}
+}

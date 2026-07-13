@@ -65,6 +65,12 @@ fun MainScreen(
     var previewSearchQuery by remember { mutableStateOf("") }
     var previewSearchName by remember { mutableStateOf("") }
     var cameFromDiscovery by remember { mutableStateOf(false) }
+    var showCarSearch by remember { mutableStateOf(false) }
+    var showCarResults by remember { mutableStateOf(false) }
+    var carQuery by remember { mutableStateOf("") }
+    var carName by remember { mutableStateOf("") }
+    var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
+    var carFilters by remember { mutableStateOf<io.github.tieo.arbay.model.CarFilters?>(null) }
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()
@@ -289,6 +295,11 @@ fun MainScreen(
                 previewSearchName = query
             },
             onFreeItems = { showFreeItems = true },
+            onCarSearch = {
+                cameFromDiscovery = true
+                showDiscovery = false
+                showCarSearch = true
+            },
         )
     }
 
@@ -297,6 +308,51 @@ fun MainScreen(
         FreeItemsSheet(
             viewModel = freeItemViewModel,
             onDismiss = { showFreeItems = false },
+        )
+    }
+
+    // Car search form
+    if (showCarSearch) {
+        CarSearchSheet(
+            onDismiss = {
+                showCarSearch = false
+                cameFromDiscovery = false
+            },
+            onBack = if (cameFromDiscovery) {
+                {
+                    showCarSearch = false
+                    cameFromDiscovery = false
+                    showDiscovery = true
+                }
+            } else null,
+            onSearch = { name, query, platforms, filters ->
+                carName = name
+                carQuery = query
+                carPlatforms = platforms
+                carFilters = filters
+                showCarSearch = false
+                showCarResults = true
+            },
+        )
+    }
+
+    // Car search results — reuses the listings view with the structured filters applied
+    if (showCarResults) {
+        ListingsSheet(
+            productName = carName,
+            searchQuery = carQuery,
+            listingViewModel = listingViewModel,
+            platforms = carPlatforms,
+            carFilters = carFilters,
+            onDismiss = { showCarResults = false },
+            onBack = {
+                showCarResults = false
+                showCarSearch = true
+            },
+            onBookmark = {
+                productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries)
+                showCarResults = false
+            },
         )
     }
 

@@ -90,6 +90,42 @@ object KleinanzeigenUrlBuilder {
     }
 
     /**
+     * Build a URL for a keyword search restricted to the Autos category (c216).
+     *
+     * The query becomes a path slug: lowercase with spaces replaced by hyphens,
+     * so "Volkswagen Crafter" yields `/s-autos/volkswagen-crafter/k0c216`.
+     */
+    fun carSearch(
+        query: String,
+        page: Int,
+        locationId: String? = null,
+        radiusKm: Int? = null,
+        minPriceCents: Long? = null,
+        maxPriceCents: Long? = null,
+    ): String {
+        val segments = buildList {
+            // Price filter
+            if (minPriceCents != null || maxPriceCents != null) {
+                val min = minPriceCents?.let { it / 100 } ?: ""
+                val max = maxPriceCents?.let { it / 100 } ?: ""
+                add("preis:$min:$max")
+            }
+            // Pagination
+            if (page > 1) add("seite:$page")
+            // Search query as a slug
+            add(query.lowercase().replace(" ", "-"))
+        }
+
+        val categorySuffix = if (locationId != null && radiusKm != null) {
+            "k0c216l${locationId}r${radiusKm}"
+        } else {
+            "k0c216"
+        }
+
+        return "$BASE/s-autos/${segments.joinToString("/")}/$categorySuffix"
+    }
+
+    /**
      * Encode a city name as a URL-safe slug for Kleinanzeigen path segments.
      * "Frankfurt (Oder)" → "frankfurt-%28oder%29"
      * "Bad Saulgau" → "bad-saulgau"

@@ -1,0 +1,80 @@
+name: Crawler live scan
+
+# Boots the built server image and runs a real search against every platform,
+# reporting which crawlers still return results. Runtime deps (curl_cffi, Xvfb,
+# Playwright browsers) live in the image, so this exercises the full fetch chain
+# the way production does. Individual platform blocks are expected and do not fail
+# the job; a totally dead server (no platform returns anything) does.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Image ref to scan
+        default: ghcr.io/tieo/arbay:latest
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start server
+        run: |
+          IMAGE="${{ github.event.inputs.image || 'ghcr.io/tieo/arbay:latest' }}"
+          docker run -d --name arbay -p 8090:8090 "$IMAGE"
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8090/api/crawler/platforms >/dev/null; then
+              echo "Server up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not start"; docker logs arbay; exit 1
+
+      - name: Scan every platform
+        run: |
+          set -euo pipefail
+          # Car platforms get a car query, everything else a product query.
+          car='AUTOSCOUT24 MOBILE_DE TRUCKSCOUT24 OTOMOTO DBA BILBASEN BYTBIL SAUTO'
+          platforms=$(curl -s http://localhost:8090/api/crawler/platforms | tr ',' '\n' \
+            | grep -o '"id":"[A-Z0-9_]*"' | cut -d'"' -f4)
+          echo "| Platform | Query | Results | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          any_ok=0
+          fails=""
+          for p in $platforms; do
+            case " $car " in *" $p "*) q="Volkswagen Crafter";; *) q="Sony WH-1000XM4";; esac
+            body=$(curl -s --max-time 320 "http://localhost:8090/api/crawler/test/$p?q=$(printf '%s' "$q" | sed 's/ /%20/g')" || echo '{}')
+            count=$(printf '%s' "$body" | grep -o '"resultCount":[0-9]*' | head -1 | cut -d: -f2)
+            count=${count:-0}
+            if [ "$count" -gt 0 ]; then
+              state="ok"; any_ok=1
+            else
+              state="EMPTY/blocked"; fails="$fails $p"
+            fi
+            echo "| $p | $q | $count | $state |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$fails" ]; then echo "Empty/blocked:$fails" >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$any_ok" -eq 0 ]; then
+            echo "No platform returned results — server or fetch chain is broken"
+            docker logs arbay; exit 1
+          fi
+
+      - name: Server logs
+        if: always()
+        run: docker logs arbay || true

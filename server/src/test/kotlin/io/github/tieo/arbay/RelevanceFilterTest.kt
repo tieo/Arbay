@@ -5,6 +5,8 @@ import io.github.tieo.arbay.model.*
 import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RelevanceFilterTest {
@@ -121,16 +123,61 @@ class RelevanceFilterTest {
         val results = search("MFC-L2750DW", listOf(
             listing("Brother MFC-L2750DW Multifunktionsdrucker"),
             listing("Toner kompatibel für Brother MFC-L2750DW"),
-            listing("Ohrpolster für Sony WH-1000XM5"),
             listing("Schutzhülle Case für MFC-L2750DW"),
             listing("Brother MFC-L2750DW Mainboard Formatter"),
         ))
-        // All listings containing the model should pass (no hardcoded kills)
+        // All listings containing the model should pass (no hardcoded kills). A
+        // single-token query relies on the platform's own search for relevance, so
+        // lexical score-filtering is intentionally skipped here.
         assertTrue(results.any { it.title.contains("Multifunktionsdrucker") })
         assertTrue(results.any { it.title.contains("Toner") })
         assertTrue(results.any { it.title.contains("Schutzhülle") })
         assertTrue(results.any { it.title.contains("Mainboard") })
-        // Ohrpolster listing doesn't contain query tokens → filtered by score
-        assertTrue(results.none { it.title.contains("Ohrpolster") })
+    }
+
+    // === Irrelevance report (platform ignored the query) ===
+
+    private val garbageListings = listOf(
+        listing("BMW 320d Touring Sportpaket"),
+        listing("Audi A4 Avant 2.0 TDI"),
+        listing("Opel Corsa 1.2 Edition"),
+        listing("Ford Focus Turnier Titanium"),
+        listing("Renault Clio TCe 90"),
+        listing("Skoda Octavia Combi Style"),
+        listing("Toyota Yaris Hybrid Comfort"),
+        listing("Fiat 500 Lounge Cabrio"),
+        listing("Peugeot 208 Allure Pack"),
+        listing("Hyundai i30 Kombi Trend"),
+    )
+
+    @Test
+    fun `irrelevanceReport flags result set without any query matches`() {
+        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Volkswagen Crafter"))
+        assertNotNull(report, "10 listings with zero query matches should be flagged")
+    }
+
+    @Test
+    fun `irrelevanceReport passes genuine result set`() {
+        val genuine = listOf(
+            listing("Volkswagen Crafter 35 Kasten Hochdach"),
+            listing("VW Crafter 2.0 TDI L3H3"),
+            listing("Volkswagen Crafter Pritsche Doka"),
+            listing("Volkswagen Crafter Kombi 9-Sitzer"),
+            listing("VW Crafter Grand California 600"),
+        )
+        val report = RelevanceFilter.irrelevanceReport(genuine, SearchQuery(text = "Volkswagen Crafter"))
+        assertNull(report, "Matching results should not be flagged")
+    }
+
+    @Test
+    fun `irrelevanceReport exempts single-token queries`() {
+        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Laptop"))
+        assertNull(report, "Single-token queries may match beyond the title and are exempt")
+    }
+
+    @Test
+    fun `irrelevanceReport skips small result sets`() {
+        val report = RelevanceFilter.irrelevanceReport(garbageListings.take(4), SearchQuery(text = "Volkswagen Crafter"))
+        assertNull(report, "Fewer than 5 results is too small a sample to flag")
     }
 }

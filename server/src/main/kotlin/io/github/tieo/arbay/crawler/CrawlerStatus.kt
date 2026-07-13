@@ -33,6 +33,7 @@ enum class ErrorType {
     PARSE_ERROR,
     NETWORK_ERROR,
     EMPTY_RESULTS,
+    IRRELEVANT_RESULTS,
     UNKNOWN,
 }
 

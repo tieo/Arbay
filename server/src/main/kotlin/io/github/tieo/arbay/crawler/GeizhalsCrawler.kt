@@ -10,12 +10,13 @@ class GeizhalsCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://geizhals.de/?fs=${query.positiveText.encodeUrl()}"
-        // HTTP 403 (Cloudflare challenge); use headless with networkIdle to let CF JS run + redirect
-        val html = fetchWithBrowser(
-            url, "Geizhals",
-            waitNetworkIdle = true,
+        // A current Chrome TLS fingerprint (rnet, step 2 of the chain) clears the Cloudflare
+        // TLS check that older curl profiles and the plain HTTP client fail; the browser tiers
+        // remain as a fallback.
+        val html = fetchWithFallback(
+            client, url, "Geizhals",
             primeUrl = "https://geizhals.de",
-            extraWaitMs = 1000,
+            waitNetworkIdle = true,
         )
         return parseSearchResults(html)
     }

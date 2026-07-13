@@ -40,6 +40,12 @@ class ApplicationTest {
     @Test
     fun testFreeItemsProfileGet() = testApplication {
         application { module() }
+        // Seed a profile so the GET is deterministic: the endpoint returns 204 when
+        // no profile has ever been saved, which otherwise makes this depend on test order.
+        client.post("/api/free-items/profile") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"description":"seed profile for get test"}""")
+        }
         val response = client.get("/api/free-items/profile")
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.bodyAsText()

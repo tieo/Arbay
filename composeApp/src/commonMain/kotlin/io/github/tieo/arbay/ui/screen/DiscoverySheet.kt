@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -51,6 +52,7 @@ fun DiscoverySheet(
     onCustomSearch: (String) -> Unit,
     onLiveSearch: ((String) -> Unit)? = null,
     onFreeItems: (() -> Unit)? = null,
+    onCarSearch: (() -> Unit)? = null,
 ) {
     var step by remember {
         mutableStateOf<Step>(
@@ -242,6 +244,12 @@ fun DiscoverySheet(
                                 else Step.Brands(cat)
                                 navigateToStep(target)
                             },
+                            onCarSearch = onCarSearch?.let {
+                                {
+                                    onDismiss()
+                                    it()
+                                }
+                            },
                             onCustomSearch = {
                                 onCustomSearch("")
                             },
@@ -303,6 +311,7 @@ internal fun CategoryGrid(
     onCategorySelected: (ProductCategory) -> Unit,
     onCustomSearch: () -> Unit,
     onSpecialTracking: () -> Unit,
+    onCarSearch: (() -> Unit)? = null,
 ) {
     Column {
         LazyVerticalGrid(
@@ -311,6 +320,13 @@ internal fun CategoryGrid(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f),
         ) {
+            // Car search hero — full width, first, the structured cross-border vehicle search
+            if (onCarSearch != null) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    CarSearchHeroTile(onClick = onCarSearch)
+                }
+            }
+
             // Custom search tile
             item {
                 Card(
@@ -377,8 +393,8 @@ internal fun CategoryGrid(
                 }
             }
 
-            // Category tiles
-            items(ProductCategory.entries.toList()) { category ->
+            // Category tiles — Cars handled by the hero tile above when car search is wired
+            items(ProductCategory.entries.filter { onCarSearch == null || it != ProductCategory.CARS }) { category ->
                 Card(
                     onClick = { onCategorySelected(category) },
                     shape = RoundedCornerShape(16.dp),
@@ -409,6 +425,48 @@ internal fun CategoryGrid(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Prominent, full-width entry to the structured car search. Sits at the top of the
+ *  category grid because a car buyer reasons in filters (year, km, price, power), not
+ *  in preset product tiles. */
+@Composable
+private fun CarSearchHeroTile(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.DirectionsCar, null,
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Car search",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    "Make, year, mileage, price, power, gearbox across EU markets",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight, null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
         }
     }
 }

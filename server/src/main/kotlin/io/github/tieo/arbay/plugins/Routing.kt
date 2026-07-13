@@ -6,6 +6,7 @@ import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.listingRoutes
 import io.github.tieo.arbay.routes.productRoutes
+import io.github.tieo.arbay.routes.taxonomyRoutes
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 
@@ -18,5 +19,6 @@ fun Application.configureRouting() {
         listingRoutes(listingRepo)
         crawlerRoutes(listingRepo)
         freeItemRoutes()
+        taxonomyRoutes()
     }
 }

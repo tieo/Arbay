@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.routes
 
+import io.github.tieo.arbay.crawler.CarQueryResolver
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
@@ -19,9 +20,11 @@ import io.github.tieo.arbay.repo.ListingRepo
 import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.http.ContentType
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.github.tieo.arbay.crawler.CrawlThrottle
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -50,6 +53,59 @@ private val GENERAL_PLATFORMS = listOf(
     PlatformId.BACKMARKET_DE, PlatformId.REBUY, PlatformId.REFURBED,
     PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.MARKTPLAATS,
 )
+
+/** Reads the optional car-search filters from the request and applies them to a
+ *  SearchQuery. Crawlers that support source-side filtering (AutoScout24, Otomoto,
+ *  Sauto, DBA, Bytbil, TruckScout24, Bilbasen) turn these into site URL parameters. */
+private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery): SearchQuery {
+    val p = queryParameters
+    val priceToEur = p["priceTo"]?.toLongOrNull()
+    val gear = p["gear"]?.uppercase()?.let {
+        when (it) {
+            "A", "AUTOMATIC" -> Transmission.AUTOMATIC
+            "M", "MANUAL" -> Transmission.MANUAL
+            else -> null
+        }
+    }
+    return base.copy(
+        firstRegFromYear = p["fregFrom"]?.toIntOrNull(),
+        firstRegToYear = p["fregTo"]?.toIntOrNull(),
+        maxMileageKm = p["kmTo"]?.toIntOrNull(),
+        minPowerKw = p["powerKw"]?.toIntOrNull(),
+        maxPrice = priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
+        transmission = gear,
+    )
+}
+
+/** Default platforms when the query resolves to a car make/model. Covers Germany
+ *  plus cross-border sourcing markets: AutoScout24 spans Western/Central Europe via
+ *  its country filter, the national sites reach markets it covers thinly. */
+private val CAR_PLATFORMS = listOf(
+    PlatformId.AUTOSCOUT24, PlatformId.MOBILE_DE, PlatformId.KLEINANZEIGEN,
+    PlatformId.EBAY_DE, PlatformId.TRUCKSCOUT24,
+    PlatformId.OTOMOTO, PlatformId.DBA, PlatformId.BILBASEN,
+    PlatformId.BYTBIL, PlatformId.SAUTO,
+)
+
+/** Identity a scrape is throttled against: the Authelia-forwarded user when present, else
+ *  the client IP. So one account is one bucket regardless of source address. */
+private fun RoutingCall.callerKey(): String {
+    request.headers["Remote-User"]?.takeIf { it.isNotBlank() }?.let { return "user:$it" }
+    val forwarded = request.headers["X-Forwarded-For"]?.split(",")?.firstOrNull()?.trim()
+    return "ip:" + (forwarded?.takeIf { it.isNotBlank() } ?: request.origin.remoteHost)
+}
+
+/** Admits one live scrape or responds 429 with Retry-After. Returns null when rejected
+ *  (the caller must stop), else a permit to release in a finally. */
+private suspend fun RoutingCall.acquireScrapeSlot(): CrawlThrottle.Result.Permit? =
+    when (val decision = CrawlThrottle.tryAcquire(callerKey())) {
+        is CrawlThrottle.Result.Permit -> decision
+        is CrawlThrottle.Result.Rejected -> {
+            response.headers.append(HttpHeaders.RetryAfter, decision.retryAfterSeconds.toString())
+            respond(HttpStatusCode.TooManyRequests, mapOf("error" to decision.reason))
+            null
+        }
+    }
 
 fun Route.crawlerRoutes(listingRepo: ListingRepo) {
     route("/api/crawler") {
@@ -120,19 +176,26 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     ?: throw BadRequestException("Unknown platform: $platformName")
                 listOf(platform)
             } else {
-                GENERAL_PLATFORMS.filter { CrawlerRegistry.crawlerFor(it) != null }
+                (if (CarQueryResolver.resolve(query) != null) CAR_PLATFORMS else GENERAL_PLATFORMS)
+                    .filter { CrawlerRegistry.crawlerFor(it) != null }
             }
 
             val soldOnly = call.queryParameters["sold"]?.toBooleanStrictOrNull() ?: false
-            val searchQuery = SearchQuery(text = query, soldOnly = soldOnly)
-            val rawResults = platforms.flatMap { platformId ->
-                val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@flatMap emptyList()
-                crawler.trackedSearch(searchQuery)
+            val searchQuery = call.applyCarFilters(SearchQuery(text = query, soldOnly = soldOnly))
+
+            val permit = call.acquireScrapeSlot() ?: return@get
+            val results = try {
+                val rawResults = platforms.flatMap { platformId ->
+                    val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@flatMap emptyList()
+                    crawler.trackedSearch(searchQuery)
+                }
+                val filtered = RelevanceFilter.filter(rawResults, searchQuery)
+                filtered.map { SoldDetector.classify(it) }
+                    .also { it.forEach { l -> listingRepo.upsert(l) } }
+                    .sortedBy { it.effectivePrice.amount }.take(limit)
+            } finally {
+                permit.release()
             }
-            val filtered = RelevanceFilter.filter(rawResults, searchQuery)
-            val results = filtered.map { SoldDetector.classify(it) }
-                .also { it.forEach { l -> listingRepo.upsert(l) } }
-                .sortedBy { it.effectivePrice.amount }.take(limit)
 
             call.respond(results)
         }
@@ -151,12 +214,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 platformNames.split(",").mapNotNull { runCatching { PlatformId.valueOf(it.trim()) }.getOrNull() }
             } else {
                 // Default: general product platforms (exclude car/house sites)
-                GENERAL_PLATFORMS.filter { CrawlerRegistry.crawlerFor(it) != null }
+                (if (CarQueryResolver.resolve(query) != null) CAR_PLATFORMS else GENERAL_PLATFORMS)
+                    .filter { CrawlerRegistry.crawlerFor(it) != null }
             }
 
-            val searchQuery = SearchQuery(text = query)
+            val searchQuery = call.applyCarFilters(SearchQuery(text = query))
             val parsedQuery = RelevanceFilter.parseQuery(query)
 
+            val permit = call.acquireScrapeSlot() ?: return@get
+            try {
             call.respondTextWriter(contentType = ContentType.Text.Plain) {
                 // Send SEARCH_STARTED
                 val startEvent = CrawlerSearchEvent(
@@ -217,7 +283,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val rawResults = withTimeout(300_000L) {
                                     kotlinx.coroutines.withContext(progressEmitter) { crawler.search(searchQuery) }
                                 }
-                                CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
+                                val irrelevance = RelevanceFilter.irrelevanceReport(rawResults, searchQuery)
+                                if (irrelevance != null) {
+                                    CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                                } else {
+                                    CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
+                                }
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
                                 val results = relevantResults.map { SoldDetector.classify(it) }
                                 results.forEach { listingRepo.upsert(it) }
@@ -303,6 +374,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 write(json.encodeToString(completeEvent) + "\n")
                 flush()
             }
+            } finally {
+                permit.release()
+            }
         }
 
         get("/test/{platform}") {
@@ -314,8 +388,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platformName")
 
-            val searchQuery = SearchQuery(text = query)
-            val results = crawler.trackedSearch(searchQuery)
+            val searchQuery = call.applyCarFilters(SearchQuery(text = query))
+            val permit = call.acquireScrapeSlot() ?: return@get
+            val results = try { crawler.trackedSearch(searchQuery) } finally { permit.release() }
 
             val status = CrawlerStatusTracker.getStatus(platform)
             call.respond(CrawlerTestResult(

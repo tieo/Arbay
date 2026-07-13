@@ -16,10 +16,23 @@ data class Money(
                 "$" in text || "USD" in text -> Currency.USD
                 "CHF" in text -> Currency.CHF
                 "£" in text || "GBP" in text -> Currency.GBP
+                "zł" in text || "PLN" in text -> Currency.PLN
+                "Kč" in text || "CZK" in text -> Currency.CZK
+                "DKK" in text -> Currency.DKK
+                "SEK" in text -> Currency.SEK
+                "NOK" in text -> Currency.NOK
                 else -> Currency.EUR
             }
+            return parse(text, currency)
+        }
 
-            val stripped = text.replace(Regex("[^\\d.,]"), "")
+        /** Parse the numeric amount from [text] and attach [currency] regardless of any
+         *  symbol in the text. Used by crawlers on sites with a single known currency
+         *  whose symbol ("kr") is ambiguous across markets. */
+        fun parse(text: String, currency: Currency): Money? {
+            // Trailing/leading separators are not part of the number: "469.995 kr." strips to
+            // "469.995." and "kr.-" style suffixes leave a dangling dot that breaks the parse.
+            val stripped = text.replace(Regex("[^\\d.,]"), "").trim('.', ',')
             if (stripped.isBlank()) return null
 
             val hasDot = '.' in stripped
@@ -75,5 +88,5 @@ data class Money(
 
 @Serializable
 enum class Currency {
-    EUR, USD, CHF, GBP
+    EUR, USD, CHF, GBP, PLN, DKK, SEK, CZK, NOK
 }

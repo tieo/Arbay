@@ -20,10 +20,13 @@ fun App() {
         val listingViewModel = viewModel { ListingViewModel(client) }
         val freeItemViewModel = viewModel { FreeItemViewModel(client) }
 
-        // Load exchange rates on startup
+        // Load exchange rates + refresh the car taxonomy on startup
         LaunchedEffect(Unit) {
             try {
                 DisplayCurrency.rates = client.getExchangeRates()
+            } catch (_: Exception) {}
+            try {
+                CarTaxonomyStore.update(client.getCarTaxonomy())
             } catch (_: Exception) {}
         }
 

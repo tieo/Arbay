@@ -13,25 +13,14 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
-        // HTTP 403 since bot-detection was added; go headless-first with homepage priming
-        return try {
-            val html = fetchWithBrowser(
-                url, "willhaben",
-                primeUrl = "https://www.willhaben.at",
-                extraWaitMs = 1500,
-            )
-            parseSearchResults(html)
-        } catch (e: CrawlerBlockedException) {
-            if (e.message?.contains("Object doesn't exist") == true || e.errorType == ErrorType.PARSE_ERROR) {
-                // Retry once — Willhaben sometimes serves stale error responses
-                val html = fetchWithBrowser(
-                    url, "willhaben",
-                    primeUrl = "https://www.willhaben.at",
-                    extraWaitMs = 2500,
-                )
-                parseSearchResults(html)
-            } else throw e
-        }
+        // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
+        // __NEXT_DATA__ page; the browser tiers remain as a fallback.
+        val html = fetchWithFallback(
+            client, url, "willhaben",
+            primeUrl = "https://www.willhaben.at",
+            extraWaitMs = 1500,
+        )
+        return parseSearchResults(html)
     }
 
     private fun parseSearchResults(html: String): List<Listing> {

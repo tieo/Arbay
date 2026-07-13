@@ -128,16 +128,31 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         val resolved = if (locationStr != null) resolveLocation(locationStr) else null
         val locationId = resolved?.first
 
+        // Car queries go to the Autos category (c216) with a make/model slug,
+        // which surfaces real car ads instead of accessories and parts.
+        val carQuery = CarQueryResolver.resolve(query.positiveText)
+
         val endPage = query.startPage + maxPages - 1
         for (page in query.startPage..endPage) {
-            val url = KleinanzeigenUrlBuilder.regularSearch(
-                query = query.positiveText,
-                page = page,
-                locationId = locationId,
-                radiusKm = if (locationId != null) query.radiusKm else null,
-                minPriceCents = query.minPrice?.amount,
-                maxPriceCents = query.maxPrice?.amount,
-            )
+            val url = if (carQuery != null) {
+                KleinanzeigenUrlBuilder.carSearch(
+                    query = listOfNotNull(carQuery.makeSlug, carQuery.modelSlug).joinToString(" "),
+                    page = page,
+                    locationId = locationId,
+                    radiusKm = if (locationId != null) query.radiusKm else null,
+                    minPriceCents = query.minPrice?.amount,
+                    maxPriceCents = query.maxPrice?.amount,
+                )
+            } else {
+                KleinanzeigenUrlBuilder.regularSearch(
+                    query = query.positiveText,
+                    page = page,
+                    locationId = locationId,
+                    radiusKm = if (locationId != null) query.radiusKm else null,
+                    minPriceCents = query.minPrice?.amount,
+                    maxPriceCents = query.maxPrice?.amount,
+                )
+            }
 
             val html = try {
                 fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article.aditem")
@@ -155,6 +170,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
             allResults.addAll(newResults)
 
             if (rawItemCount < 10) break
+            if (allResults.size >= CrawlerConfig.current.maxResultsPerPlatform) break
         }
 
         return allResults

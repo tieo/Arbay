@@ -18,7 +18,13 @@ object ExchangeRates {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = HttpClient()
 
-    @Volatile var rates: Map<String, Double> = mapOf("EUR" to 1.0, "USD" to 1.10, "GBP" to 0.86, "CHF" to 0.95)
+    private val SUPPORTED = setOf("EUR", "USD", "GBP", "CHF", "PLN", "DKK", "SEK", "CZK", "NOK")
+
+    // Fallback rates (units per 1 EUR) until the first refresh; approximate.
+    @Volatile var rates: Map<String, Double> = mapOf(
+        "EUR" to 1.0, "USD" to 1.08, "GBP" to 0.84, "CHF" to 0.94,
+        "PLN" to 4.30, "DKK" to 7.46, "SEK" to 11.30, "CZK" to 25.0, "NOK" to 11.70,
+    )
         private set
     @Volatile var lastUpdate: Long = 0
 
@@ -27,7 +33,7 @@ object ExchangeRates {
             val response: String = client.get("https://open.er-api.com/v6/latest/EUR").body()
             val parsed = json.parseToJsonElement(response).jsonObject
             val fetchedRates = parsed["rates"]?.jsonObject?.mapValues { it.value.jsonPrimitive.double } ?: return
-            rates = fetchedRates.filterKeys { it in setOf("EUR", "USD", "GBP", "CHF") } + ("EUR" to 1.0)
+            rates = fetchedRates.filterKeys { it in SUPPORTED } + ("EUR" to 1.0)
             lastUpdate = System.currentTimeMillis()
             log.info("Exchange rates updated: {}", rates)
         } catch (e: Exception) {

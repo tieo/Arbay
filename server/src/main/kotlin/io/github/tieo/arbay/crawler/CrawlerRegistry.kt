@@ -28,6 +28,12 @@ object CrawlerRegistry {
         PlatformId.MOBILE_DE to MobileDeCrawler(httpClient),
         PlatformId.WILLHABEN to WillhabenCrawler(httpClient),
         PlatformId.IMMOSCOUT24 to ImmoScout24Crawler(httpClient),
+        PlatformId.TRUCKSCOUT24 to TruckScout24Crawler(httpClient),
+        PlatformId.OTOMOTO to OtomotoCrawler(httpClient),
+        PlatformId.DBA to DbaCrawler(httpClient),
+        PlatformId.BILBASEN to BilbasenCrawler(httpClient),
+        PlatformId.BYTBIL to BytbilCrawler(httpClient),
+        PlatformId.SAUTO to SautoCrawler(httpClient),
     )
 
     fun crawlerFor(platformId: PlatformId): Crawler? = crawlers[platformId]

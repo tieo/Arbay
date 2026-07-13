@@ -19,4 +19,10 @@ enum class PlatformId(val displayName: String, val baseUrl: String) {
     WILLHABEN("willhaben", "https://www.willhaben.at"),
     MARKTPLAATS("Marktplaats", "https://www.marktplaats.nl"),
     IMMOSCOUT24("ImmobilienScout24", "https://www.immobilienscout24.de"),
+    TRUCKSCOUT24("TruckScout24", "https://www.truckscout24.de"),
+    OTOMOTO("OTOMoto", "https://www.otomoto.pl"),
+    DBA("DBA", "https://www.dba.dk"),
+    BILBASEN("Bilbasen", "https://www.bilbasen.dk"),
+    BYTBIL("Bytbil", "https://www.bytbil.com"),
+    SAUTO("Sauto", "https://www.sauto.cz"),
 }

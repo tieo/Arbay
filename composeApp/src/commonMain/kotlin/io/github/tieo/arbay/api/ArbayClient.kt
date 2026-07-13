@@ -1,9 +1,11 @@
 package io.github.tieo.arbay.api
 
+import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.defaultServerUrl
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -16,9 +18,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 class ArbayClient(
-    baseUrl: String = defaultServerUrl(),
+    baseUrl: String = appSecrets().serverUrl ?: defaultServerUrl(),
 ) {
-    var baseUrl: String = baseUrl
+    var baseUrl: String = baseUrl.trimEnd('/')
         private set
 
     private val client = HttpClient {
@@ -27,6 +29,11 @@ class ArbayClient(
                 ignoreUnknownKeys = true
                 encodeDefaults = true
             })
+        }
+        appSecrets().authHeader?.let { auth ->
+            install(DefaultRequest) {
+                header(HttpHeaders.Authorization, auth)
+            }
         }
     }
 
@@ -82,18 +89,26 @@ class ArbayClient(
 
 
     @Serializable
-    data class CrawlerConfigDto(val maxPages: Int = 5, val ebayItemsPerPage: Int = 120, val sortByPrice: Boolean = true)
+    data class CrawlerConfigDto(
+        val maxResultsPerPlatform: Int = 60,
+        val maxPages: Int = 8,
+        val ebayItemsPerPage: Int = 120,
+        val sortByPrice: Boolean = true,
+    )
 
     suspend fun getExchangeRates(): Map<String, Double> =
         client.get("$baseUrl/api/crawler/exchange-rates").body()
 
+    suspend fun getCarTaxonomy(): CarTaxonomy =
+        client.get("$baseUrl/api/car-taxonomy").body()
+
     suspend fun getCrawlerConfig(): CrawlerConfigDto =
         client.get("$baseUrl/api/crawler/config").body()
 
-    suspend fun updateCrawlerConfig(maxPages: Int, sortByPrice: Boolean) {
+    suspend fun updateCrawlerConfig(maxResultsPerPlatform: Int, sortByPrice: Boolean) {
         client.post("$baseUrl/api/crawler/config") {
             contentType(io.ktor.http.ContentType.Application.Json)
-            setBody(CrawlerConfigDto(maxPages = maxPages, sortByPrice = sortByPrice))
+            setBody(CrawlerConfigDto(maxResultsPerPlatform = maxResultsPerPlatform, sortByPrice = sortByPrice))
         }
     }
 
@@ -259,12 +274,25 @@ class ArbayClient(
 
     private val streamJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    fun crawlerSearchStream(query: String, platform: PlatformId? = null, platforms: List<PlatformId>? = null): Flow<CrawlerSearchEvent> = flow {
+    fun crawlerSearchStream(
+        query: String,
+        platform: PlatformId? = null,
+        platforms: List<PlatformId>? = null,
+        filters: CarFilters? = null,
+    ): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/crawler/search/stream") {
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             if (platforms != null && platform == null) {
                 parameter("platforms", platforms.joinToString(",") { it.name })
+            }
+            filters?.takeUnless { it.isEmpty }?.let { f ->
+                f.firstRegFromYear?.let { parameter("fregFrom", it) }
+                f.firstRegToYear?.let { parameter("fregTo", it) }
+                f.maxMileageKm?.let { parameter("kmTo", it) }
+                f.maxPriceEur?.let { parameter("priceTo", it) }
+                f.minPowerKw?.let { parameter("powerKw", it) }
+                f.transmission?.let { parameter("gear", it.name) }
             }
         }.execute { response ->
             val channel = response.bodyAsChannel()

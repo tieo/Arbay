@@ -78,6 +78,7 @@ class ListingViewModel(
     }
 
     private var searchJob: Job? = null
+    private var carFilters: CarFilters? = null
 
     fun selectPlatform(platform: PlatformId?) {
         _selectedPlatform.value = platform
@@ -87,7 +88,7 @@ class ListingViewModel(
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
-        search(query, platforms, force = true)
+        search(query, platforms, carFilters, force = true)
     }
 
     fun searchSold() {
@@ -112,10 +113,11 @@ class ListingViewModel(
         }
     }
 
-    fun search(query: String, platforms: List<PlatformId>? = null, force: Boolean = false) {
+    fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
         if (query.isBlank()) return
-        if (!force && query == _searchQuery.value && (_allListings.value.isNotEmpty() || _loading.value)) return
+        if (!force && query == _searchQuery.value && filters == carFilters && (_allListings.value.isNotEmpty() || _loading.value)) return
         _searchQuery.value = query
+        carFilters = filters
         _priceHistory.value = emptyList()
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
@@ -128,7 +130,7 @@ class ListingViewModel(
 
             try {
                 withTimeoutOrNull(360_000L) {
-                client.crawlerSearchStream(query, platforms = platforms).collect { event ->
+                client.crawlerSearchStream(query, platforms = platforms, filters = filters).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {
                             _totalPlatforms.value = event.totalPlatforms

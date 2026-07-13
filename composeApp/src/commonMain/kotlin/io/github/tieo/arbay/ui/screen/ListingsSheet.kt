@@ -61,6 +61,7 @@ fun ListingsSheet(
     onBack: (() -> Unit)? = null,
     onBookmark: (() -> Unit)? = null,
     platforms: List<PlatformId>? = null,
+    carFilters: CarFilters? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
@@ -177,8 +178,8 @@ fun ListingsSheet(
             .sortedBy { it.minPrice?.amount ?: Long.MAX_VALUE }
     }
 
-    LaunchedEffect(searchQuery) {
-        listingViewModel.search(searchQuery, platforms)
+    LaunchedEffect(searchQuery, carFilters) {
+        listingViewModel.search(searchQuery, platforms, carFilters)
     }
 
     AdaptiveSheet(onDismiss = onDismiss) {
@@ -1186,11 +1187,7 @@ private fun PriceHistoryChart(
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
-    // Use soldDate when available, fall back to scrapedAt for sold listings without a date
-    val sorted = remember(soldListings) {
-        soldListings.sortedBy { it.soldDate ?: it.scrapedAt }
-    }
-    if (sorted.isEmpty()) return
+    if (soldListings.isEmpty()) return
 
     val primary = MaterialTheme.colorScheme.primary
     val tertiary = MaterialTheme.colorScheme.tertiary
@@ -1198,27 +1195,41 @@ private fun PriceHistoryChart(
     val surfaceContainer = MaterialTheme.colorScheme.surfaceContainer
     val textMeasurer = rememberTextMeasurer()
 
-    // Use the most common currency for Y-axis labels
-    val displayCurrency = remember(sorted) {
-        sorted.groupingBy { it.effectivePrice.currency }.eachCount()
-            .maxByOrNull { it.value }?.key ?: Currency.EUR
-    }
+    // Every price is converted to the user's display currency, so cross-border results
+    // (EUR/PLN/DKK/SEK/CZK) sit on one comparable axis.
+    val displayCurrency = Currency.valueOf(DisplayCurrency.current)
     val currencySymbol = when (displayCurrency) {
         Currency.EUR -> "\u20AC"
         Currency.USD -> "$"
         Currency.CHF -> "CHF "
         Currency.GBP -> "\u00A3"
+        Currency.PLN -> "z\u0142"
+        Currency.CZK -> "K\u010D"
+        Currency.DKK, Currency.SEK, Currency.NOK -> "kr"
     }
+    fun Listing.priceIn() = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
 
-    val prices = sorted.map { it.effectivePrice.amount }
+    // A time axis is only honest for listings that carry a real sold date. When too few do,
+    // fall back to a price distribution (points ranked by price) rather than faking dates.
+    val dated = remember(soldListings) { soldListings.filter { it.soldDate != null }.sortedBy { it.soldDate } }
+    val timeMode = dated.size >= 3
+    val points = remember(soldListings, timeMode) {
+        if (timeMode) dated else soldListings.sortedBy { it.priceIn() }
+    }
+    val undatedCount = soldListings.size - dated.size
+
+    val prices = points.map { it.priceIn() }
     val minP = prices.min()
     val maxP = prices.max()
     val priceRange = (maxP - minP).coerceAtLeast(100L)
 
-    val timestamps = sorted.map { (it.soldDate ?: it.scrapedAt).epochSeconds }
+    val timestamps = points.map { (it.soldDate ?: it.scrapedAt).epochSeconds }
     val minT = timestamps.min()
     val maxT = timestamps.max()
     val timeRange = (maxT - minT).coerceAtLeast(1L)
+    fun xFrac(i: Int): Float =
+        if (timeMode) (timestamps[i] - minT).toFloat() / timeRange
+        else if (points.size == 1) 0.5f else i.toFloat() / (points.size - 1)
 
     var tappedIdx by remember { mutableStateOf<Int?>(null) }
 
@@ -1229,103 +1240,88 @@ private fun PriceHistoryChart(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                "Price history (${sorted.size} sold)",
+                if (timeMode) "Sold price over time (${points.size})"
+                else "Sold price distribution (${points.size})",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             )
+            if (undatedCount > 0) {
+                Text(
+                    if (timeMode) "$undatedCount more sold without a date"
+                    else "Dates unavailable — showing price spread",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onSurface.copy(alpha = 0.6f),
+                )
+            }
             Spacer(Modifier.height(6.dp))
 
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
-                    .pointerInput(sorted) {
+                    .pointerInput(points) {
                         detectTapGestures { offset ->
-                            val padL = 44f; val padR = 8f; val padT = 4f; val labelH = 18f
+                            val padL = 48f; val padR = 8f; val padT = 4f; val labelH = 18f
                             val chartW = size.width - padL - padR
                             val chartH = size.height - padT - labelH
-                            val tapped = sorted.indices.minByOrNull { i ->
-                                val tx = padL + ((timestamps[i] - minT).toFloat() / timeRange) * chartW
-                                val ty = padT + chartH - ((prices[i] - minP).toFloat() / priceRange) * chartH
-                                val dx = offset.x - tx; val dy = offset.y - ty
+                            val tapped = points.indices.minByOrNull { i ->
+                                val px = padL + xFrac(i) * chartW
+                                val py = padT + chartH - ((prices[i] - minP).toFloat() / priceRange) * chartH
+                                val dx = offset.x - px; val dy = offset.y - py
                                 dx * dx + dy * dy
                             }
                             tappedIdx = if (tappedIdx == tapped) null else tapped
                         }
                     },
             ) {
-                val padL = 44f; val padR = 8f; val padT = 4f; val labelH = 18f
+                val padL = 48f; val padR = 8f; val padT = 4f; val labelH = 18f
                 val chartW = size.width - padL - padR
                 val chartH = size.height - padT - labelH
 
-                fun tx(t: Long) = padL + ((t - minT).toFloat() / timeRange) * chartW
-                fun ty(p: Long) = padT + chartH - ((p - minP).toFloat() / priceRange) * chartH
+                fun px(i: Int) = padL + xFrac(i) * chartW
+                fun py(p: Long) = padT + chartH - ((p - minP).toFloat() / priceRange) * chartH
 
-                // Y-axis price labels (use actual currency)
+                // Y-axis price labels in the display currency
                 val yTicks = 4
                 for (i in 0..yTicks) {
                     val p = minP + priceRange * i / yTicks
-                    val y = ty(p)
+                    val y = py(p)
                     drawLine(onSurface.copy(alpha = 0.08f), Offset(padL, y), Offset(size.width - padR, y), strokeWidth = 0.5f)
                     val lbl = "$currencySymbol${p / 100}"
                     val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
                     drawText(tr, topLeft = Offset(0f, y - tr.size.height / 2f))
                 }
 
-                // X-axis time labels
-                val xTicks = 4
-                for (i in 0..xTicks) {
-                    val t = minT + timeRange * i / xTicks
-                    val x = tx(t)
-                    val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(t * 1000)
-                    val tz = TimeZone.currentSystemDefault()
-                    val date = instant.toLocalDateTime(tz)
-                    val lbl = "${date.dayOfMonth}.${date.monthNumber}"
-                    val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
-                    drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
-                }
-
-                // LOESS trend line (locally weighted scatterplot smoothing)
-                if (sorted.size >= 3) {
-                    val xData = timestamps.map { it.toFloat() }
-                    val yData = prices.map { it.toFloat() }
-                    val n = xData.size
-                    val steps = 30
-                    val bandwidth = 0.35f
-                    val k = maxOf(2, (n * bandwidth).toInt())
-                    val xMin = xData.min(); val xMax = xData.max()
-                    val xStep = (xMax - xMin) / (steps - 1).coerceAtLeast(1)
-
-                    var prevPoint: Offset? = null
-                    for (i in 0 until steps) {
-                        val xEval = xMin + xStep * i
-                        val distances = FloatArray(n) { j -> kotlin.math.abs(xData[j] - xEval) }
-                        val maxDist = distances.copyOf().also { it.sort() }[k - 1].coerceAtLeast(1e-6f)
-                        var sw = 0f; var swx = 0f; var swx2 = 0f; var swy = 0f; var swxy = 0f
-                        for (j in 0 until n) {
-                            val u = distances[j] / maxDist
-                            if (u >= 1f) continue
-                            val t = 1f - u * u * u; val w = t * t * t
-                            val xj = xData[j]; val yj = yData[j]
-                            sw += w; swx += w * xj; swx2 += w * xj * xj; swy += w * yj; swxy += w * xj * yj
-                        }
-                        val det = sw * swx2 - swx * swx
-                        val yEval = if (kotlin.math.abs(det) < 1e-10f) {
-                            if (sw > 0f) swy / sw else yData[n / 2]
-                        } else {
-                            val a = (swx2 * swy - swx * swxy) / det
-                            val b = (sw * swxy - swx * swy) / det
-                            a + b * xEval
-                        }
-                        val pt = Offset(tx(xEval.toLong()), ty(yEval.toLong()))
-                        prevPoint?.let { drawLine(primary.copy(alpha = 0.4f), it, pt, strokeWidth = 2.5f) }
-                        prevPoint = pt
+                // X-axis date labels only in time mode
+                if (timeMode) {
+                    val xTicks = 4
+                    for (i in 0..xTicks) {
+                        val t = minT + timeRange * i / xTicks
+                        val x = padL + ((t - minT).toFloat() / timeRange) * chartW
+                        val date = kotlinx.datetime.Instant.fromEpochSeconds(t).toLocalDateTime(TimeZone.currentSystemDefault())
+                        val lbl = "${date.dayOfMonth}.${date.monthNumber}"
+                        val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
+                        drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
                     }
                 }
 
-                // Dots at each data point
-                sorted.forEachIndexed { i, listing ->
-                    val x = tx(timestamps[i])
-                    val y = ty(prices[i])
+                // Trend: a moving average through the time-ordered points; robust for the
+                // small samples we get, and only meaningful when points are dated.
+                if (timeMode && points.size >= 3) {
+                    val window = maxOf(2, points.size / 6)
+                    var prev: Offset? = null
+                    for (i in points.indices) {
+                        val lo = maxOf(0, i - window); val hi = minOf(points.size - 1, i + window)
+                        val avg = (lo..hi).sumOf { prices[it] } / (hi - lo + 1)
+                        val pt = Offset(px(i), py(avg))
+                        prev?.let { drawLine(primary.copy(alpha = 0.35f), it, pt, strokeWidth = 2.5f) }
+                        prev = pt
+                    }
+                }
+
+                // Data points, coloured by condition
+                points.forEachIndexed { i, listing ->
+                    val x = px(i)
+                    val y = py(prices[i])
                     val isNew = listing.condition == Condition.NEW || listing.condition == null
                     val color = if (isNew) primary else tertiary
                     val isTapped = tappedIdx == i
@@ -1337,7 +1333,7 @@ private fun PriceHistoryChart(
 
             // Tapped dot — show full listing card
             tappedIdx?.let { i ->
-                val listing = sorted[i]
+                val listing = points[i]
                 Spacer(Modifier.height(4.dp))
                 ListingCard(
                     listing = listing,

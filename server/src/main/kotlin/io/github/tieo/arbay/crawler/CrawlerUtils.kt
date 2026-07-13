@@ -54,6 +54,10 @@ internal fun validateBrowserResult(result: FetchResult, platformName: String): S
  * 4. Firefox headless (different fingerprint, evades Chromium-specific detection)
  *
  * Each step is tried only if the previous step failed with a retryable error.
+ *
+ * With browserOnly the HTTP and CurlCffi steps are skipped and the chain starts at
+ * Chromium, for platforms whose bot protection (Akamai on mobile.de) blocks every
+ * non-browser engine and the first two steps only waste time.
  */
 internal suspend fun fetchWithFallback(
     client: HttpClient,
@@ -63,31 +67,45 @@ internal suspend fun fetchWithFallback(
     extraWaitMs: Long = 2000,
     primeUrl: String? = null,
     waitNetworkIdle: Boolean = false,
+    browserOnly: Boolean = false,
 ): String {
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
 
-    // === Step 1: Plain HTTP ===
-    emitter?.let { it.emit("HTTP") }
-    try {
-        val html = fetchHttp(client, url, platformName)
-        validateHtml(html, platformName)
-        return html
-    } catch (e: Exception) {
-        errors.add("HTTP: ${e.message?.take(60)}")
-        fetchLog.debug("[{}] HTTP failed: {}", platformName, e.message?.take(80))
-        if (!isRetryable(e)) throw e
-    }
+    if (!browserOnly) {
+        // === Step 1: Plain HTTP ===
+        emitter?.let { it.emit("HTTP") }
+        try {
+            val html = fetchHttp(client, url, platformName)
+            validateHtml(html, platformName)
+            return html
+        } catch (e: Exception) {
+            errors.add("HTTP: ${e.message?.take(60)}")
+            fetchLog.debug("[{}] HTTP failed: {}", platformName, e.message?.take(80))
+            if (!isRetryable(e)) throw e
+        }
 
-    // === Step 2: CurlCffi (Chrome TLS fingerprint) ===
-    emitter?.let { it.emit("CurlCffi") }
-    try {
-        val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)
-        validateHtml(html, platformName)
-        return html
-    } catch (e: Exception) {
-        errors.add("CurlCffi: ${e.message?.take(60)}")
-        fetchLog.debug("[{}] CurlCffi failed: {}", platformName, e.message?.take(80))
+        // === Step 2: rnet (current Chrome TLS + post-quantum key share) ===
+        emitter?.let { it.emit("Rnet") }
+        try {
+            val html = RnetClient.fetch(url, primeUrl = primeUrl)
+            validateHtml(html, platformName)
+            return html
+        } catch (e: Exception) {
+            errors.add("Rnet: ${e.message?.take(60)}")
+            fetchLog.debug("[{}] Rnet failed: {}", platformName, e.message?.take(80))
+        }
+
+        // === Step 3: CurlCffi (Chrome TLS fingerprint) ===
+        emitter?.let { it.emit("CurlCffi") }
+        try {
+            val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)
+            validateHtml(html, platformName)
+            return html
+        } catch (e: Exception) {
+            errors.add("CurlCffi: ${e.message?.take(60)}")
+            fetchLog.debug("[{}] CurlCffi failed: {}", platformName, e.message?.take(80))
+        }
     }
 
     // === Step 3: Chromium non-headless via Xvfb ===

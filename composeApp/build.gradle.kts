@@ -1,6 +1,16 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+// Server URL + non-interactive auth header live in a gitignored secret.properties
+// (see secret.properties.example). Baked into BuildConfig so the app needs no manual
+// sign-in; an absent file falls back to the localhost/LAN default and no auth.
+val arbaySecrets = Properties().apply {
+    val f = rootProject.file("secret.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun arbaySecret(key: String): String = arbaySecrets.getProperty(key).orEmpty()
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -94,6 +104,11 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "ARBAY_SERVER_URL", "\"${arbaySecret("ARBAY_SERVER_URL")}\"")
+        buildConfigField("String", "ARBAY_AUTH", "\"${arbaySecret("ARBAY_AUTH")}\"")
+    }
+    buildFeatures {
+        buildConfig = true
     }
     packaging {
         resources {

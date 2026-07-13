@@ -243,6 +243,24 @@ object RelevanceFilter {
         }.sortedByDescending { it.second }.map { it.first }
     }
 
+    /**
+     * Detects a result set the platform returned without applying the query: many listings,
+     * almost none containing any query token. Happens when a site silently ignores an
+     * unsupported search parameter and serves its default feed (e.g. AutoScout24 `?query=`).
+     * Returns a human-readable report, or null when the results look genuine.
+     * Single-token queries are exempt: platform-side search may match beyond the title
+     * (a ThinkPad X1 is a "laptop" without the word in its title).
+     */
+    fun irrelevanceReport(listings: List<Listing>, query: SearchQuery): String? {
+        val parsed = parseQuery(query.text)
+        val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
+        if (tokenCount < 2 || listings.size < 5) return null
+        val matching = listings.count { score(it, parsed) > 0.0 }
+        if (matching.toDouble() / listings.size >= 0.2) return null
+        val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
+        return "${listings.size} results, only $matching contain query tokens — search likely ignored (sample: $sample)"
+    }
+
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.
     // "Samsung Galaxy S25 FE ultra sauber" must NOT match "Samsung Galaxy S25 Ultra" query.
     // "ii"/"iii" = Roman numeral version markers (e.g. "Z6 III", "Mark II") — prevents "Nikon Z6 II"

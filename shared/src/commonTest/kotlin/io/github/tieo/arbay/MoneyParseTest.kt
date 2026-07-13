@@ -155,4 +155,27 @@ class MoneyParseTest {
         assertEquals(15000L, result.amount)
         assertEquals(Currency.EUR, result.currency)
     }
+
+    // === Nordic kroner with trailing period ("kr.") ===
+
+    @Test
+    fun `DKK price with trailing period from kr suffix`() {
+        // "469.995 kr." strips to "469.995." — the dangling dot must not break the parse
+        val result = Money.parse("469.995 kr.", Currency.DKK)
+        assertNotNull(result)
+        assertEquals(46999500L, result.amount)
+        assertEquals(Currency.DKK, result.currency)
+    }
+
+    @Test
+    fun `SEK price with kr suffix forced currency`() =
+        assertEquals(4900000L, Money.parse("49 000 kr", Currency.SEK)?.amount)
+
+    @Test
+    fun `PLN price detected from zloty symbol`() =
+        assertParse("45 000 zł", 4500000, Currency.PLN)
+
+    @Test
+    fun `CZK price detected from koruna symbol`() =
+        assertParse("599 000 Kč", 59900000, Currency.CZK)
 }

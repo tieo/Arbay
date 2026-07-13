@@ -30,11 +30,15 @@ class FreeItemFeedbackStoreTest {
     }
 
     @Test
-    fun `embedding vectors are 384-dimensional`() {
-        FreeItemFeedbackStore.add("dim-test-${System.currentTimeMillis()}", "Test item for dimension check", FeedbackAction.LOVE)
+    fun `embedding vectors have a stable non-trivial dimension`() {
+        FreeItemFeedbackStore.add("dim-test-a-${System.currentTimeMillis()}", "Test item for dimension check", FeedbackAction.LOVE)
+        FreeItemFeedbackStore.add("dim-test-b-${System.currentTimeMillis()}", "Another distinct item", FeedbackAction.LOVE)
         val embeddings = FreeItemFeedbackStore.lovedEmbeddings()
         assertTrue(embeddings.isNotEmpty())
-        assertEquals(384, embeddings.last().size, "Stored embeddings should be 384-dimensional")
+        // distiluse-base-multilingual-cased-v1 mean-pools its 768-dim hidden states.
+        val dim = embeddings.last().size
+        assertTrue(dim > 100, "Embedding dimension should be non-trivial, was $dim")
+        assertTrue(embeddings.all { it.size == dim }, "All embeddings must share one dimension")
     }
 
     @Test

@@ -1,0 +1,180 @@
+package io.github.tieo.arbay.crawler
+
+import io.github.tieo.arbay.model.*
+import io.ktor.client.*
+import kotlinx.datetime.Clock
+import kotlinx.serialization.json.*
+
+/**
+ * Crawler for sauto.cz (Seznam), the largest Czech used-vehicle marketplace. Listings come
+ * straight from the site's own JSON API (/api/v1/items/search) — the same endpoint its React
+ * frontend calls — so no HTML scraping is needed and no bot protection stands in the way.
+ */
+class SautoCrawler(private val client: HttpClient) : Crawler {
+    override val platformId = PlatformId.SAUTO
+
+    override suspend fun search(query: SearchQuery): List<Listing> {
+        val car = CarQueryResolver.resolve(query.positiveText)
+        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        val seen = LinkedHashMap<String, Listing>()
+        val categoryId = resolveCategory(car)
+
+        for (offset in 0 until maxPages) {
+            val page = query.startPage + offset
+            val skip = (page - 1) * PAGE_SIZE
+            val url = buildUrl(car, categoryId, skip, query)
+            val json = fetchWithFallback(client, url, "Sauto")
+            val listings = parse(json)
+
+            if (listings.isEmpty()) break
+            val newIds = listings.count { it.externalId !in seen }
+            listings.forEach { seen.putIfAbsent(it.externalId, it) }
+            if (newIds == 0) break
+            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+        }
+
+        return seen.values.toList()
+    }
+
+    /**
+     * Probes each vehicle category for a single page and returns the first whose results
+     * actually carry the requested model. The API silently drops the model filter (and
+     * returns the whole make instead) whenever the model doesn't exist in the probed
+     * category — e.g. "Crafter" isn't a passenger car (838), it lives under light
+     * commercial (839). Make-only queries skip probing and use the passenger category,
+     * the largest and most common one.
+     */
+    private suspend fun resolveCategory(car: CarQueryResolver.CarQuery?): Int {
+        val modelSlug = car?.modelSlug ?: return CATEGORIES.first()
+        for (categoryId in CATEGORIES) {
+            val json = try {
+                fetchWithFallback(client, buildUrl(car, categoryId, 0), "Sauto")
+            } catch (_: Exception) {
+                continue
+            }
+            val matches = parse(json).any { it.title.contains(modelSlug, ignoreCase = true) }
+            if (matches) return categoryId
+        }
+        return CATEGORIES.first()
+    }
+
+    private fun buildUrl(car: CarQueryResolver.CarQuery?, categoryId: Int, offset: Int, query: SearchQuery? = null): String {
+        val modelParam = if (car != null) {
+            val slug = if (car.modelSlug != null) "${car.makeSlug}:${car.modelSlug}" else car.makeSlug
+            "&manufacturer_model_seo=${slug.encodeUrl()}"
+        } else {
+            ""
+        }
+        return "https://www.sauto.cz/api/v1/items/search?limit=$PAGE_SIZE&offset=$offset$modelParam" +
+            "&category_id=$categoryId&operating_lease=false${query?.let { filterParams(it) } ?: ""}"
+    }
+
+    /**
+     * Appends supported sauto.cz filter parameters. Parameter names verified live against the
+     * /api/v1/items/search endpoint (any unrecognised name appears in response.warnings.unsupported_filters).
+     *
+     * Mapping:
+     *   firstRegFromYear  -> vehicle_age_from  (integer year, filters by in_operation_date)
+     *   firstRegToYear    -> vehicle_age_to    (integer year)
+     *   maxMileageKm      -> tachometer_to     (km, integer)
+     *   minPowerKw        -> engine_power_from (kW, integer)
+     *   maxPrice (EUR)    -> price_to          (CZK whole units, converted via ExchangeRates)
+     *   minPrice (EUR)    -> price_from        (CZK whole units, converted via ExchangeRates)
+     *   AUTOMATIC         -> gearbox_seo=automaticka
+     *   MANUAL            -> gearbox_seo=manualni
+     */
+    private fun filterParams(query: SearchQuery): String = buildString {
+        query.firstRegFromYear?.let { append("&vehicle_age_from=$it") }
+        query.firstRegToYear?.let { append("&vehicle_age_to=$it") }
+        query.maxMileageKm?.let { append("&tachometer_to=$it") }
+        query.minPowerKw?.let { append("&engine_power_from=$it") }
+        query.maxPrice?.let { max ->
+            val czk = if (max.currency == Currency.CZK) max.amount / 100
+            else ExchangeRates.convert(max.amount, max.currency.name, "CZK") / 100
+            append("&price_to=$czk")
+        }
+        query.minPrice?.let { min ->
+            val czk = if (min.currency == Currency.CZK) min.amount / 100
+            else ExchangeRates.convert(min.amount, min.currency.name, "CZK") / 100
+            append("&price_from=$czk")
+        }
+        when (query.transmission) {
+            Transmission.AUTOMATIC -> append("&gearbox_seo=automaticka")
+            Transmission.MANUAL -> append("&gearbox_seo=manualni")
+            null -> {}
+        }
+    }
+
+    internal fun parse(json: String): List<Listing> {
+        val now = Clock.System.now()
+        val root = try {
+            Json.parseToJsonElement(json).jsonObject
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        val results = root["results"]?.jsonArray ?: return emptyList()
+
+        return results.mapNotNull { element ->
+            val obj = element.jsonObject
+            val externalId = obj["id"]?.jsonPrimitive?.longOrNull?.toString() ?: return@mapNotNull null
+            val title = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+
+            if (obj["price_by_agreement"]?.jsonPrimitive?.booleanOrNull == true) return@mapNotNull null
+            val rawPrice = obj["price"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
+            if (rawPrice <= 0) return@mapNotNull null
+            // The API returns whole CZK, Money stores minor units (haléře), so scale by 100.
+            val price = Money(rawPrice * 100, Currency.CZK)
+
+            val categorySeo = obj["category"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+            val manufacturerSeo = obj["manufacturer_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+            val modelSeo = obj["model_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+            val url = if (categorySeo != null && manufacturerSeo != null && modelSeo != null) {
+                "https://www.sauto.cz/$categorySeo/detail/$manufacturerSeo/$modelSeo/$externalId"
+            } else {
+                "https://www.sauto.cz/detail/$externalId"
+            }
+
+            val imageUrl = obj["images"]?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+                ?.let { if (it.startsWith("//")) "https:$it" else it }
+
+            val locality = obj["locality"]?.jsonObject
+            val city = locality?.get("municipality")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: locality?.get("district")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            val location = Location(city = city, country = "CZ")
+
+            val year = obj["manufacturing_date"]?.jsonPrimitive?.contentOrNull?.take(4)
+            val km = obj["tachometer"]?.jsonPrimitive?.longOrNull
+            val description = buildString {
+                year?.let { append("EZ: $it") }
+                km?.let {
+                    if (isNotEmpty()) append(" | ")
+                    append("$it km")
+                }
+            }.takeIf { it.isNotBlank() }
+
+            Listing(
+                id = "${platformId.name}:$externalId",
+                platformId = platformId,
+                externalId = externalId,
+                url = url,
+                title = title,
+                price = price,
+                imageUrls = listOfNotNull(imageUrl),
+                location = location,
+                description = description,
+                scrapedAt = now,
+            )
+        }.distinctBy { it.externalId }
+    }
+
+    companion object {
+        private const val PAGE_SIZE = 20
+
+        // Vehicle category ids from /api/v1/categories/search: 838 = Osobní (passenger cars,
+        // the largest category and default for most makes), 839 = Užitková (vans/light
+        // commercial, e.g. VW Crafter), 840 = Nákladní (trucks).
+        private val CATEGORIES = listOf(838, 839, 840)
+    }
+}
