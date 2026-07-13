@@ -1,7 +1,9 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.classifier.EmbeddingModel
 import io.github.tieo.arbay.classifier.FeedbackAction
 import io.github.tieo.arbay.classifier.FreeItemFeedbackStore
+import org.junit.Assume.assumeTrue
 import kotlin.test.*
 
 /**
@@ -31,6 +33,7 @@ class FreeItemFeedbackStoreTest {
 
     @Test
     fun `embedding vectors have a stable non-trivial dimension`() {
+        assumeTrue("embedding model unavailable", EmbeddingModel.isAvailable)
         FreeItemFeedbackStore.add("dim-test-a-${System.currentTimeMillis()}", "Test item for dimension check", FeedbackAction.LOVE)
         FreeItemFeedbackStore.add("dim-test-b-${System.currentTimeMillis()}", "Another distinct item", FeedbackAction.LOVE)
         val embeddings = FreeItemFeedbackStore.lovedEmbeddings()
