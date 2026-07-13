@@ -25,6 +25,16 @@ class EbayDeCrawler(
         val seenIds = mutableSetOf<String>()
         val firstUrl = buildSearchUrl(query, 1)
 
+        // Step 0: official eBay Browse API (free, reliable) when credentials are configured.
+        // Falls through to scraping if unconfigured or the call fails/returns nothing.
+        if (EbayBrowseApi.isConfigured) {
+            emitter?.emit("BrowseAPI")
+            val apiResults = try {
+                EbayBrowseApi.search(client, query, platformId, domain, CrawlerConfig.current.maxResultsPerPlatform)
+            } catch (_: Exception) { null }
+            if (!apiResults.isNullOrEmpty()) return apiResults
+        }
+
         // Step 1: Plain HTTP
         emitter?.emit("HTTP")
         val httpHtml = try {
