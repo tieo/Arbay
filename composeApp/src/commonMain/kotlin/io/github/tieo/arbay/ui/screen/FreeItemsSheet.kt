@@ -173,9 +173,9 @@ fun FreeItemsSheet(
                         onRadiusChange = { radiusDraft = it },
                         onCancel = if (profile?.location.isNullOrBlank() == false) ({ editingProfile = false }) else null,
                         onSave = {
-                            if (profileDraft.isNotBlank() && locationDraft.isNotBlank()) {
+                            if (locationDraft.isNotBlank()) {
                                 viewModel.saveProfile(
-                                    description = profileDraft,
+                                    description = profileDraft.trim(),
                                     location = locationDraft.trim(),
                                     radiusKm = radiusDraft.roundToInt(),
                                 )
@@ -1481,12 +1481,12 @@ private fun ProfileEditor(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                if (isFirstTime) "What would you pick up for free?" else "Update your interests",
+                if (isFirstTime) "Set your area and start swiping" else "Update your interests",
                 style = MaterialTheme.typography.titleSmall,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Describe what excites you — results are ranked by relevance.",
+                "Just set a location to start — swipe through free items and the model learns what you want. A description is optional and only nudges the early ranking.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1494,6 +1494,7 @@ private fun ProfileEditor(
             OutlinedTextField(
                 value = descriptionDraft,
                 onValueChange = onDescriptionChange,
+                label = { Text("What excites you (optional)", style = MaterialTheme.typography.labelSmall) },
                 placeholder = { Text("e.g. electronics, furniture, cycling gear, tools", style = MaterialTheme.typography.bodySmall) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
                 shape = RoundedCornerShape(12.dp),
@@ -1554,12 +1555,12 @@ private fun ProfileEditor(
                 }
                 Button(
                     onClick = onSave,
-                    enabled = descriptionDraft.isNotBlank() && locationDraft.isNotBlank(),
+                    enabled = locationDraft.isNotBlank(),
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (isFirstTime) "Start searching" else "Update & search")
+                    Text(if (isFirstTime) "Start browsing" else "Update & search")
                 }
             }
         }

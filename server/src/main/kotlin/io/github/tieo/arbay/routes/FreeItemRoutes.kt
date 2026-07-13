@@ -40,8 +40,11 @@ fun Route.freeItemRoutes() {
 
         post("/profile") {
             val profile = call.receive<FreeItemProfile>()
-            if (profile.description.isBlank()) {
-                throw BadRequestException("Profile description must not be empty.")
+            // Only location is required — free items are local pickup. Description is
+            // optional: with it blank the model learns purely from swipe feedback
+            // (cold-start browse-to-train), scoring everything neutral until then.
+            if (profile.location.isNullOrBlank()) {
+                throw BadRequestException("Profile location is required.")
             }
             FreeItemProfileStore.set(profile)
             // Start/stop background monitor based on tracking flag

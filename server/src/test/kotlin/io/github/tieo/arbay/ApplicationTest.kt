@@ -44,7 +44,7 @@ class ApplicationTest {
         // no profile has ever been saved, which otherwise makes this depend on test order.
         client.post("/api/free-items/profile") {
             contentType(ContentType.Application.Json)
-            setBody("""{"description":"seed profile for get test"}""")
+            setBody("""{"description":"seed profile for get test","location":"Bremen"}""")
         }
         val response = client.get("/api/free-items/profile")
         assertEquals(HttpStatusCode.OK, response.status)
@@ -57,10 +57,27 @@ class ApplicationTest {
         application { module() }
         val response = client.post("/api/free-items/profile") {
             contentType(ContentType.Application.Json)
-            setBody("""{"description":"test profile for unit test"}""")
+            setBody("""{"description":"test profile for unit test","location":"Bremen"}""")
         }
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(response.bodyAsText().contains("description"))
+    }
+
+    @Test
+    fun testFreeItemsProfileColdStartNoDescription() = testApplication {
+        application { module() }
+        // Cold-start browse-to-train: only location is required, description may be blank.
+        val ok = client.post("/api/free-items/profile") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"description":"","location":"Bremen"}""")
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        // Missing location is still rejected.
+        val bad = client.post("/api/free-items/profile") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"description":"tools"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
     }
 
     @Test
