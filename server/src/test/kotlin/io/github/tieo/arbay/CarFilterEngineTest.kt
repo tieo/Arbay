@@ -34,6 +34,13 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun dropsPartWithOnlyBareYearSignal() {
+        // eBay "Frontstoßstange ... MAN TGE 2023" — a year parsed from the title is not a car signal.
+        val bumper = listing("b", PlatformId.EBAY_DE, 27_400, VehicleInfo(firstRegYear = 2023))
+        assertTrue(CarFilterEngine.apply(listOf(bumper), CarFilters()).isEmpty())
+    }
+
+    @Test
     fun keepsRealCarWithSignalOnGeneralPlatform() {
         val car = listing("c1", PlatformId.KLEINANZEIGEN, 1_800_000, vehicle = VehicleInfo(firstRegYear = 2022, mileageKm = 90_000))
         val kept = CarFilterEngine.apply(listOf(car), CarFilters())

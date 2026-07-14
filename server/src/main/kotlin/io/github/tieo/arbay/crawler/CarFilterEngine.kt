@@ -46,8 +46,10 @@ object CarFilterEngine {
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         val v = listing.vehicle
+        // A bare year is too weak — parts titles ("... MAN TGE 2023") carry one. Require an
+        // odometer, power or displacement figure, which parts listings don't have.
         val hasSignal = v != null &&
-            (v.firstRegYear != null || v.mileageKm != null || v.powerKw != null || v.displacementCc != null)
+            (v.mileageKm != null || v.powerKw != null || v.displacementCc != null)
         if (hasSignal) return false
         val eurCents = if (listing.price.currency == Currency.EUR) listing.price.amount
         else ExchangeRates.convert(listing.price.amount, listing.price.currency.name, "EUR")

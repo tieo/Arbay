@@ -225,6 +225,13 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
 
             val descriptionSnippet = item.selectFirst("p.aditem-main--middle--description")?.text()
 
+            // Car cards carry attribute chips ("228.076 km", "EZ 11/2012", sometimes fuel) in
+            // .simpletag spans. Fold them into the description so the vehicle enricher (car
+            // queries only) reads real mileage/year instead of guessing from the title.
+            val tags = item.select("span.simpletag").eachText().map { it.trim() }.filter { it.isNotBlank() }
+            val descriptionWithTags = (listOfNotNull(descriptionSnippet) + tags)
+                .joinToString(" · ").takeIf { it.isNotBlank() }
+
             val shippingText = item.selectFirst("p.aditem-main--middle--price-shipping--shipping")?.text()
                 ?: item.selectFirst("[class*=shipping]")?.text()
             val shipping = when {
@@ -247,7 +254,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                 negotiable = negotiable,
                 imageUrls = listOfNotNull(imageUrl),
                 location = location,
-                description = descriptionSnippet,
+                description = descriptionWithTags,
                 scrapedAt = now,
             )
         }
