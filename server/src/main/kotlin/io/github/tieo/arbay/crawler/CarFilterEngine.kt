@@ -5,6 +5,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
+import io.github.tieo.arbay.model.VehicleField
 
 /**
  * Enforces car filters against the parsed VehicleInfo, so a constraint a marketplace can't
@@ -31,12 +32,31 @@ object CarFilterEngine {
 
         if (isLikelyNonVehicle(listing)) return false
 
+        // Find-in-description: every whitespace-separated term must appear in the title or
+        // description. This is a literal match on text we hold, so excluding is safe.
+        filters.descriptionContains?.takeIf { it.isNotBlank() }?.let { needle ->
+            val haystack = "${listing.title} ${listing.description ?: ""}".lowercase()
+            if (!needle.lowercase().split(Regex("\\s+")).all { it.isBlank() || haystack.contains(it) })
+                return false
+        }
+
         if (v != null) {
-            filters.firstRegFromYear?.let { min -> v.firstRegYear?.let { if (it < min) return false } }
-            filters.firstRegToYear?.let { max -> v.firstRegYear?.let { if (it > max) return false } }
-            filters.maxMileageKm?.let { max -> v.mileageKm?.let { if (it > max) return false } }
-            filters.minPowerKw?.let { min -> v.powerKw?.let { if (it < min) return false } }
-            filters.transmission?.let { want -> v.gearbox?.let { if (it != want) return false } }
+            // Exclude ONLY on verified fields (from the site's structured data). A text-inferred
+            // value that's wrong must never drop a listing that actually fits — false exclusion
+            // loses a real deal, which is worse than a soft-pass we can badge as unverified.
+            if (v.isVerified(VehicleField.FIRST_REG_YEAR)) v.firstRegYear?.let {
+                filters.firstRegFromYear?.let { min -> if (it < min) return false }
+                filters.firstRegToYear?.let { max -> if (it > max) return false }
+            }
+            if (v.isVerified(VehicleField.MILEAGE)) v.mileageKm?.let {
+                filters.maxMileageKm?.let { max -> if (it > max) return false }
+            }
+            if (v.isVerified(VehicleField.POWER)) v.powerKw?.let {
+                filters.minPowerKw?.let { min -> if (it < min) return false }
+            }
+            if (v.isVerified(VehicleField.GEARBOX)) v.gearbox?.let {
+                filters.transmission?.let { want -> if (it != want) return false }
+            }
         }
         return true
     }

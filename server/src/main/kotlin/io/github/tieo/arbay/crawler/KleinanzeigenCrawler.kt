@@ -180,6 +180,11 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
+        // Cards only carry a truncated snippet; the full description sits in per-listing
+        // ld+json (keyed by title). Harvesting it powers find-in-description and gives the
+        // vehicle enricher the whole spec text, at no extra request.
+        val fullDescriptions = parseJsonLdDescriptions(doc)
+
         val items = doc.select("article.aditem")
 
         return items.mapNotNull { item ->
@@ -223,12 +228,14 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                 srcset.takeIf { s -> s.isNotBlank() } ?: src.takeIf { s -> s.startsWith("http") }
             }
 
-            val descriptionSnippet = item.selectFirst("p.aditem-main--middle--description")?.text()
+            val snippet = item.selectFirst("p.aditem-main--middle--description")?.text()
+            val descriptionSnippet = fullDescriptions[title] ?: snippet
 
-            // Car cards carry attribute chips ("228.076 km", "EZ 11/2012", sometimes fuel) in
-            // .simpletag spans. Fold them into the description so the vehicle enricher (car
-            // queries only) reads real mileage/year instead of guessing from the title.
+            // Car cards carry attribute chips ("228.076 km", "EZ 11/2012") in .simpletag spans.
+            // Mileage and first registration from the chips are structured, so mark them
+            // verified — they may exclude. Fold them into the description too for the enricher.
             val tags = item.select("span.simpletag").eachText().map { it.trim() }.filter { it.isNotBlank() }
+            val chipVehicle = parseChips(tags)
             val descriptionWithTags = (listOfNotNull(descriptionSnippet) + tags)
                 .joinToString(" · ").takeIf { it.isNotBlank() }
 
@@ -256,7 +263,49 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                 location = location,
                 description = descriptionWithTags,
                 scrapedAt = now,
+                vehicle = chipVehicle,
             )
         }
+    }
+
+    /** Verified mileage/first-registration from the card's attribute chips. */
+    private fun parseChips(tags: List<String>): VehicleInfo? {
+        var mileageKm: Int? = null
+        var year: Int? = null
+        var month: Int? = null
+        for (t in tags) {
+            Regex("""([0-9][0-9.]{2,})\s*km""").find(t)?.let {
+                mileageKm = it.groupValues[1].replace(".", "").toIntOrNull()?.takeIf { km -> km in 1..2_000_000 }
+            }
+            Regex("""EZ\s*(?:(\d{1,2})/)?(\d{4})""").find(t)?.let {
+                month = it.groupValues[1].toIntOrNull()
+                year = it.groupValues[2].toIntOrNull()?.takeIf { y -> y in 1980..2035 }
+            }
+        }
+        if (mileageKm == null && year == null) return null
+        return VehicleTextParser.verifiedByPresence(
+            VehicleInfo(firstRegYear = year, firstRegMonth = month, mileageKm = mileageKm),
+        )
+    }
+
+    /** Full descriptions from the page's ld+json image blocks, keyed by listing title. */
+    private fun parseJsonLdDescriptions(doc: org.jsoup.nodes.Document): Map<String, String> {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val map = HashMap<String, String>()
+        for (script in doc.select("script[type=application/ld+json]")) {
+            val el = runCatching { json.parseToJsonElement(script.data()) }.getOrNull() ?: continue
+            val objects = when (el) {
+                is kotlinx.serialization.json.JsonArray -> el
+                is kotlinx.serialization.json.JsonObject -> listOf(el)
+                else -> emptyList()
+            }
+            for (o in objects) {
+                val obj = o as? kotlinx.serialization.json.JsonObject ?: continue
+                val title = (obj["title"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
+                val desc = (obj["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
+                if (title.isNotBlank() && desc.isNotBlank()) map.putIfAbsent(title.trim(), desc.trim())
+            }
+        }
+        return map
     }
 }

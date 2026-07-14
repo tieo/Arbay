@@ -161,7 +161,8 @@ class AutoScout24Crawler(
                     mileageKm = mileageText?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
                 )
                 val vehicle = VehicleTextParser.merge(
-                    structured, VehicleTextParser.parse("$title ${description ?: ""}"),
+                    VehicleTextParser.verifiedByPresence(structured),
+                    VehicleTextParser.parse("$title ${description ?: ""}"),
                 )
 
                 Listing(

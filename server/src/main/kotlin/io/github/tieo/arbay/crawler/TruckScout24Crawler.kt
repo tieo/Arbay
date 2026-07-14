@@ -110,7 +110,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
             val cardText = card.text()
             val reg = Regex("""Erstzulassung:\s*(\d{1,2}/\d{4})""").find(cardText)?.groupValues?.get(1)
             val vehicle = VehicleTextParser.merge(
-                VehicleInfo(
+                VehicleTextParser.verifiedByPresence(VehicleInfo(
                     firstRegYear = reg?.substringAfter("/")?.toIntOrNull(),
                     firstRegMonth = reg?.substringBefore("/")?.toIntOrNull(),
                     mileageKm = Regex("""([\d.]+)\s*km,\s*Leistung""").find(cardText)
@@ -123,7 +123,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
                         Regex("""Getriebetyp:\s*(automat)""", RegexOption.IGNORE_CASE).containsMatchIn(cardText) -> Transmission.AUTOMATIC
                         else -> null
                     },
-                ),
+                )),
                 VehicleTextParser.parse(cardText),
             )
 

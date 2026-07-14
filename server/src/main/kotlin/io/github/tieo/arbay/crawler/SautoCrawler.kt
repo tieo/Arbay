@@ -156,7 +156,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
                 }
             }.takeIf { it.isNotBlank() }
 
-            val vehicle = VehicleInfo(
+            val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
                 firstRegYear = year?.toIntOrNull(),
                 firstRegMonth = regDate?.takeIf { it.length >= 7 }?.substring(5, 7)?.toIntOrNull(),
                 mileageKm = km?.toInt()?.takeIf { it in 1..2_000_000 },
@@ -166,7 +166,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
                     "manualni" -> Transmission.MANUAL
                     else -> null
                 },
-            )
+            ))
 
             Listing(
                 id = "${platformId.name}:$externalId",

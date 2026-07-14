@@ -55,30 +55,60 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun enforcesMileageWhenDataPresent() {
+    fun enforcesMileageWhenVerified() {
         val filters = CarFilters(maxMileageKm = 200_000)
-        val over = listing("o", PlatformId.KLEINANZEIGEN, 1_500_000, VehicleInfo(firstRegYear = 2018, mileageKm = 260_000))
-        val under = listing("u", PlatformId.KLEINANZEIGEN, 1_500_000, VehicleInfo(firstRegYear = 2018, mileageKm = 150_000))
+        val over = listing("o", PlatformId.KLEINANZEIGEN, 1_500_000, verified(firstRegYear = 2018, mileageKm = 260_000))
+        val under = listing("u", PlatformId.KLEINANZEIGEN, 1_500_000, verified(firstRegYear = 2018, mileageKm = 150_000))
         val kept = CarFilterEngine.apply(listOf(over, under), filters)
         assertEquals(listOf("KLEINANZEIGEN:u"), kept.map { it.id })
     }
 
     @Test
-    fun enforcesPowerAndYearAndGearbox() {
+    fun enforcesPowerAndYearAndGearboxWhenVerified() {
         val filters = CarFilters(firstRegFromYear = 2021, firstRegToYear = 2023, minPowerKw = 110, transmission = Transmission.AUTOMATIC)
-        val good = listing("g", PlatformId.MOBILE_DE, 1_800_000, VehicleInfo(firstRegYear = 2022, powerKw = 130, gearbox = Transmission.AUTOMATIC))
-        val tooOld = listing("old", PlatformId.MOBILE_DE, 1_800_000, VehicleInfo(firstRegYear = 2019, powerKw = 130, gearbox = Transmission.AUTOMATIC))
-        val tooWeak = listing("weak", PlatformId.MOBILE_DE, 1_800_000, VehicleInfo(firstRegYear = 2022, powerKw = 90, gearbox = Transmission.AUTOMATIC))
-        val manual = listing("man", PlatformId.MOBILE_DE, 1_800_000, VehicleInfo(firstRegYear = 2022, powerKw = 130, gearbox = Transmission.MANUAL))
+        val good = listing("g", PlatformId.MOBILE_DE, 1_800_000, verified(firstRegYear = 2022, powerKw = 130, gearbox = Transmission.AUTOMATIC))
+        val tooOld = listing("old", PlatformId.MOBILE_DE, 1_800_000, verified(firstRegYear = 2019, powerKw = 130, gearbox = Transmission.AUTOMATIC))
+        val tooWeak = listing("weak", PlatformId.MOBILE_DE, 1_800_000, verified(firstRegYear = 2022, powerKw = 90, gearbox = Transmission.AUTOMATIC))
+        val manual = listing("man", PlatformId.MOBILE_DE, 1_800_000, verified(firstRegYear = 2022, powerKw = 130, gearbox = Transmission.MANUAL))
         val kept = CarFilterEngine.apply(listOf(good, tooOld, tooWeak, manual), filters)
         assertEquals(listOf("MOBILE_DE:g"), kept.map { it.id })
     }
 
     @Test
+    fun neverExcludesOnInferredValue() {
+        // A text-inferred (unverified) power that fails the filter must NOT drop the listing —
+        // a misread number would silently discard a car that actually fits.
+        val filters = CarFilters(minPowerKw = 110)
+        val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000,
+            VehicleInfo(mileageKm = 100_000, powerKw = 90)) // powerKw present but NOT verified
+        assertEquals(1, CarFilterEngine.apply(listOf(inferred), filters).size)
+    }
+
+    @Test
     fun softPassesWhenValueUnknown() {
-        // Mileage filter set, but this listing has no mileage parsed — keep it (unknown != excluded).
         val filters = CarFilters(maxMileageKm = 200_000)
-        val car = listing("s", PlatformId.MOBILE_DE, 1_800_000, VehicleInfo(firstRegYear = 2022, powerKw = 130))
+        val car = listing("s", PlatformId.MOBILE_DE, 1_800_000, verified(firstRegYear = 2022, powerKw = 130))
         assertEquals(1, CarFilterEngine.apply(listOf(car), filters).size)
     }
+
+    @Test
+    fun findInDescriptionExcludesLiterally() {
+        val filters = CarFilters(descriptionContains = "camper")
+        val camper = Listing(id = "K:c", platformId = PlatformId.KLEINANZEIGEN, externalId = "c",
+            url = "u", title = "VW Crafter", price = Money(1_800_000, Currency.EUR),
+            description = "liebevoll zum Camper ausgebaut", scrapedAt = Clock.System.now(),
+            vehicle = verified(mileageKm = 100_000))
+        val plain = Listing(id = "K:p", platformId = PlatformId.KLEINANZEIGEN, externalId = "p",
+            url = "u", title = "VW Crafter Kasten", price = Money(1_800_000, Currency.EUR),
+            description = "Handwerkerfahrzeug", scrapedAt = Clock.System.now(),
+            vehicle = verified(mileageKm = 100_000))
+        assertEquals(listOf("K:c"), CarFilterEngine.apply(listOf(camper, plain), filters).map { it.id })
+    }
+
+    private fun verified(
+        firstRegYear: Int? = null, mileageKm: Int? = null,
+        powerKw: Int? = null, gearbox: Transmission? = null,
+    ) = io.github.tieo.arbay.crawler.VehicleTextParser.verifiedByPresence(
+        VehicleInfo(firstRegYear = firstRegYear, mileageKm = mileageKm, powerKw = powerKw, gearbox = gearbox),
+    )
 }

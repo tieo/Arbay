@@ -71,13 +71,13 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
             // The card text carries EZ/km/kW precisely; fuel, gearbox and body come from the
             // rest of the same text via the shared parser.
             val vehicle = VehicleTextParser.merge(
-                VehicleInfo(
+                VehicleTextParser.verifiedByPresence(VehicleInfo(
                     firstRegYear = reg?.substringAfter("/")?.toIntOrNull(),
                     firstRegMonth = reg?.substringBefore("/")?.toIntOrNull(),
                     mileageKm = kmInfo.find(info)?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()
                         ?.takeIf { it in 1..2_000_000 },
                     powerKw = kwInfo.find(info)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 20..1000 },
-                ),
+                )),
                 VehicleTextParser.parse(info),
             )
 

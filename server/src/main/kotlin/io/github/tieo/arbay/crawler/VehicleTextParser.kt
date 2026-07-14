@@ -4,6 +4,7 @@ import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Transmission
+import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.VehicleInfo
 
 /**
@@ -38,7 +39,29 @@ object VehicleTextParser {
         return if (info == VehicleInfo()) null else info
     }
 
-    /** Merge parsed text values under authoritative structured ones (structured wins). */
+    /** Marks a purely-structured record's present fields as verified — for crawlers that
+     *  build VehicleInfo straight from the site's JSON/labeled attributes. */
+    fun verifiedByPresence(v: VehicleInfo): VehicleInfo {
+        val fields = buildSet {
+            if (v.firstRegYear != null) add(VehicleField.FIRST_REG_YEAR)
+            if (v.mileageKm != null) add(VehicleField.MILEAGE)
+            if (v.powerKw != null) add(VehicleField.POWER)
+            if (v.displacementCc != null) add(VehicleField.DISPLACEMENT)
+            if (v.fuel != null) add(VehicleField.FUEL)
+            if (v.bodyType != null) add(VehicleField.BODY_TYPE)
+            if (v.gearbox != null) add(VehicleField.GEARBOX)
+            if (v.drivetrain != null) add(VehicleField.DRIVETRAIN)
+            if (v.doors != null) add(VehicleField.DOORS)
+            if (v.seats != null) add(VehicleField.SEATS)
+            if (v.condition != null) add(VehicleField.CONDITION)
+            if (v.color != null) add(VehicleField.COLOR)
+            if (v.emissionClassEuro != null) add(VehicleField.EMISSION)
+        }
+        return v.copy(verified = fields)
+    }
+
+    /** Merge parsed text values under authoritative structured ones (structured wins for
+     *  both value and verification). Text-only fields stay inferred, never verified. */
     fun merge(structured: VehicleInfo?, fromText: VehicleInfo?): VehicleInfo? {
         if (structured == null) return fromText
         if (fromText == null) return structured
@@ -58,6 +81,8 @@ object VehicleTextParser {
             previousOwners = structured.previousOwners ?: fromText.previousOwners,
             color = structured.color ?: fromText.color,
             emissionClassEuro = structured.emissionClassEuro ?: fromText.emissionClassEuro,
+            // Only the structured side's fields are verified; text fills gaps as inferred.
+            verified = structured.verified,
         )
     }
 

@@ -2,6 +2,13 @@ package io.github.tieo.arbay.model
 
 import kotlinx.serialization.Serializable
 
+/** Every filterable vehicle attribute, used to record which fields are verified. */
+@Serializable
+enum class VehicleField {
+    FIRST_REG_YEAR, MILEAGE, POWER, DISPLACEMENT, FUEL, BODY_TYPE, GEARBOX,
+    DRIVETRAIN, DOORS, SEATS, CONDITION, COLOR, EMISSION,
+}
+
 /**
  * Normalized vehicle attributes parsed from a listing, independent of the source site's
  * language or encoding. This is the substrate for post-filtering and faceting: filters a
@@ -10,6 +17,12 @@ import kotlinx.serialization.Serializable
  *
  * Every field is nullable — a site may not expose it, and a null means "unknown", never
  * "excluded". A filter treats unknown as a soft pass unless the user opts to hide unknowns.
+ *
+ * [verified] records which fields came from the site's own structured data (a JSON field, a
+ * labeled attribute, a spec chip) rather than a regex guess over the title/description. Only
+ * verified fields may exclude a listing — a text-inferred value must never drop a real match,
+ * because a misread number would silently discard a car that actually fits. Inferred values
+ * are display-only and mark the listing as "unverified" for that field.
  */
 @Serializable
 data class VehicleInfo(
@@ -28,7 +41,10 @@ data class VehicleInfo(
     val previousOwners: Int? = null,
     val color: String? = null,
     val emissionClassEuro: Int? = null,
-)
+    val verified: Set<VehicleField> = emptySet(),
+) {
+    fun isVerified(field: VehicleField): Boolean = field in verified
+}
 
 @Serializable
 enum class Fuel {

@@ -15,10 +15,14 @@ data class CarFilters(
     val maxPriceEur: Int? = null,
     val minPowerKw: Int? = null,
     val transmission: Transmission? = null,
+    // Free text that must appear in the listing's title or description. A literal match on
+    // text we already have, so it works on every platform and can safely exclude.
+    val descriptionContains: String? = null,
 ) {
     val isEmpty: Boolean get() =
         firstRegFromYear == null && firstRegToYear == null && maxMileageKm == null &&
-            maxPriceEur == null && minPowerKw == null && transmission == null
+            maxPriceEur == null && minPowerKw == null && transmission == null &&
+            descriptionContains.isNullOrBlank()
 }
 
 /** Car filters carried inside a saved search, so opening a bookmark reruns it with the
@@ -31,6 +35,7 @@ fun SearchQuery.toCarFilters(): CarFilters? {
         maxPriceEur = maxPrice?.let { (it.amount / 100).toInt() },
         minPowerKw = minPowerKw,
         transmission = transmission,
+        descriptionContains = descriptionContains,
     )
     return if (filters.isEmpty) null else filters
 }
@@ -55,6 +60,7 @@ data class SearchQuery(
     val maxMileageKm: Int? = null,      // mileage ceiling
     val minPowerKw: Int? = null,        // minimum engine power in kW
     val transmission: Transmission? = null,
+    val descriptionContains: String? = null,  // free text required in title/description
 ) {
     /** Search text with negative keywords and OR logic resolved — for platforms that don't support exclusion/OR syntax.
      *  For OR queries, picks the group with the most tokens (most specific variant). */

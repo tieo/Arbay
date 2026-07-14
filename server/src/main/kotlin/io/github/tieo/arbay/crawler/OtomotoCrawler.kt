@@ -194,7 +194,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             }
         }.takeIf { it.isNotBlank() }
 
-        val vehicle = VehicleInfo(
+        val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
             firstRegYear = paramValues["year"]?.toIntOrNull(),
             mileageKm = paramValues["mileage"]?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
             // engine_power is metric HP (KM): 1 kW = 1.35962 KM, so kW = KM / 1.35962.
@@ -207,7 +207,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
                 else -> null
             },
             bodyType = BodyType.parse(paramValues["body_type"]),
-        )
+        ))
 
         return Listing(
             id = "${platformId.name}:$externalId",

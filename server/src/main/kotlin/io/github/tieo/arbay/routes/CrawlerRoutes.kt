@@ -80,6 +80,7 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
         minPowerKw = p["powerKw"]?.toIntOrNull(),
         maxPrice = priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
         transmission = gear,
+        descriptionContains = p["inDescription"]?.takeIf { it.isNotBlank() },
     )
 }
 

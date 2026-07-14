@@ -172,7 +172,7 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                     }
                 }.takeIf { it.isNotBlank() }
 
-                val vehicle = VehicleInfo(
+                val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
                     firstRegYear = year,
                     mileageKm = mileage?.toInt()?.takeIf { it in 1..2_000_000 },
                     fuel = Fuel.parse(
@@ -183,7 +183,7 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                         "manual", "manuel", "manuelt" -> Transmission.MANUAL
                         else -> null
                     },
-                )
+                ))
 
                 Listing(
                     id = "${platformId.name}:$externalId",

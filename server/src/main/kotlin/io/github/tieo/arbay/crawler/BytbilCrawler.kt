@@ -136,7 +136,9 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
 
             // Year is the structured first info part; fuel/gearbox/power come from the card text.
             val vehicle = VehicleTextParser.merge(
-                VehicleInfo(firstRegYear = year?.toIntOrNull()?.takeIf { it in 1980..2035 }),
+                VehicleTextParser.verifiedByPresence(
+                    VehicleInfo(firstRegYear = year?.toIntOrNull()?.takeIf { it in 1980..2035 }),
+                ),
                 VehicleTextParser.parse(card.text()),
             )
 
