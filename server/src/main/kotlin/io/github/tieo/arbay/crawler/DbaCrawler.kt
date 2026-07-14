@@ -172,6 +172,19 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                     }
                 }.takeIf { it.isNotBlank() }
 
+                val vehicle = VehicleInfo(
+                    firstRegYear = year,
+                    mileageKm = mileage?.toInt()?.takeIf { it in 1..2_000_000 },
+                    fuel = Fuel.parse(
+                        (doc["fuel_type"] ?: doc["fuel"] ?: doc["propellant"])?.jsonPrimitive?.contentOrNull,
+                    ),
+                    gearbox = when ((doc["transmission"] ?: doc["gear"])?.jsonPrimitive?.contentOrNull?.lowercase()) {
+                        "automatic", "automatisk", "automatgear" -> Transmission.AUTOMATIC
+                        "manual", "manuel", "manuelt" -> Transmission.MANUAL
+                        else -> null
+                    },
+                )
+
                 Listing(
                     id = "${platformId.name}:$externalId",
                     platformId = platformId,
@@ -183,6 +196,7 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                     location = Location(city = city, country = "DK"),
                     description = description,
                     scrapedAt = now,
+                    vehicle = vehicle,
                 )
             }
         } catch (_: Exception) {

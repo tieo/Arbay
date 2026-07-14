@@ -30,6 +30,7 @@ data class Listing(
     val relevanceScore: Double? = null,
     val modelScores: Map<String, Double>? = null,
     val isExploration: Boolean = false,
+    val vehicle: VehicleInfo? = null,
 ) {
     /** All-in price including shipping and platform fees */
     val effectivePrice: Money get() = Money(

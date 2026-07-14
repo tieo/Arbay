@@ -12,6 +12,7 @@ import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
 import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.RequestMonitor
+import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.classifyException
@@ -192,11 +193,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try {
+                val isCarQuery = CarQueryResolver.resolve(query) != null
                 val perPlatform = platforms.map { platformId ->
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
                     QueryResultCache.get(platformId, searchQuery)?.let { return@map it }
                     val raw = crawler.trackedSearch(searchQuery)
-                    val classified = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
+                    val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
+                    val classified = if (isCarQuery) filtered.map { VehicleTextParser.enrich(it) } else filtered
                     classified.forEach { listingRepo.upsert(it) }
                     QueryResultCache.put(platformId, searchQuery, classified)
                     classified
@@ -229,6 +232,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val searchQuery = call.applyCarFilters(SearchQuery(text = query))
             val parsedQuery = RelevanceFilter.parseQuery(query)
+            val isCarQuery = CarQueryResolver.resolve(query) != null
 
             val permit = call.acquireScrapeSlot() ?: return@get
             try {
@@ -315,7 +319,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
                                 }
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
-                                val results = relevantResults.map { SoldDetector.classify(it) }
+                                val classified = relevantResults.map { SoldDetector.classify(it) }
+                                val results = if (isCarQuery) classified.map { VehicleTextParser.enrich(it) } else classified
                                 results.forEach { listingRepo.upsert(it) }
                                 QueryResultCache.put(platformId, searchQuery, results)
 

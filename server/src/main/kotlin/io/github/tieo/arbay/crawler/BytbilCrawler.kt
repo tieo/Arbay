@@ -134,6 +134,12 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
             val imageUrl = imageStyle?.let { Regex("""url\(([^)]+)\)""").find(it)?.groupValues?.get(1) }
                 ?.takeIf { it.startsWith("http") }
 
+            // Year is the structured first info part; fuel/gearbox/power come from the card text.
+            val vehicle = VehicleTextParser.merge(
+                VehicleInfo(firstRegYear = year?.toIntOrNull()?.takeIf { it in 1980..2035 }),
+                VehicleTextParser.parse(card.text()),
+            )
+
             Listing(
                 id = "${platformId.name}:$externalId",
                 platformId = platformId,
@@ -145,6 +151,7 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
                 location = place?.let { Location(city = it, country = "SE") },
                 description = description,
                 scrapedAt = now,
+                vehicle = vehicle,
             )
         }.distinctBy { it.externalId }
     }

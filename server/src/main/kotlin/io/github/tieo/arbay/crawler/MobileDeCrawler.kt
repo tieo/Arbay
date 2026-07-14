@@ -61,11 +61,25 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
                 ?: return@mapNotNull null
 
             val info = item.text()
+            val reg = regInfo.find(info)?.groupValues?.get(1)  // "MM/YYYY"
             val description = buildString {
-                regInfo.find(info)?.let { append("EZ: ${it.groupValues[1]}") }
+                reg?.let { append("EZ: $it") }
                 kmInfo.find(info)?.let { if (isNotEmpty()) append(" | "); append("${it.groupValues[1]} km") }
                 kwInfo.find(info)?.let { if (isNotEmpty()) append(" | "); append("${it.groupValues[1]} kW") }
             }.takeIf { it.isNotBlank() }
+
+            // The card text carries EZ/km/kW precisely; fuel, gearbox and body come from the
+            // rest of the same text via the shared parser.
+            val vehicle = VehicleTextParser.merge(
+                VehicleInfo(
+                    firstRegYear = reg?.substringAfter("/")?.toIntOrNull(),
+                    firstRegMonth = reg?.substringBefore("/")?.toIntOrNull(),
+                    mileageKm = kmInfo.find(info)?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()
+                        ?.takeIf { it in 1..2_000_000 },
+                    powerKw = kwInfo.find(info)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 20..1000 },
+                ),
+                VehicleTextParser.parse(info),
+            )
 
             val imageUrl = item.selectFirst("img")?.let {
                 it.attr("src").ifBlank { it.attr("data-src") }.ifBlank { it.attr("srcset").substringBefore(" ") }
@@ -82,6 +96,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
                 location = Location(country = "DE"),
                 description = description,
                 scrapedAt = now,
+                vehicle = vehicle,
             )
         }
     }

@@ -156,6 +156,14 @@ class AutoScout24Crawler(
                     }
                 }.takeIf { it.isNotBlank() }
 
+                val structured = VehicleInfo(
+                    firstRegYear = yearText?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() },
+                    mileageKm = mileageText?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+                )
+                val vehicle = VehicleTextParser.merge(
+                    structured, VehicleTextParser.parse("$title ${description ?: ""}"),
+                )
+
                 Listing(
                     id = "${platformId.name}:$id",
                     platformId = platformId,
@@ -167,6 +175,7 @@ class AutoScout24Crawler(
                     location = location,
                     description = description,
                     scrapedAt = now,
+                    vehicle = vehicle,
                 )
             }
         } catch (_: Exception) {

@@ -113,6 +113,9 @@ class BilbasenCrawler(private val client: HttpClient) : Crawler {
             val description = article.selectFirst("div[class^=Listing_description__]")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() }
 
+            // The whole card carries fuel/gearbox/km/power (in hk); parse the full text.
+            val vehicle = VehicleTextParser.parse(article.text())
+
             Listing(
                 id = "${platformId.name}:$externalId",
                 platformId = platformId,
@@ -124,6 +127,7 @@ class BilbasenCrawler(private val client: HttpClient) : Crawler {
                 location = location,
                 description = description,
                 scrapedAt = now,
+                vehicle = vehicle,
             )
         }.distinctBy { it.externalId }
     }

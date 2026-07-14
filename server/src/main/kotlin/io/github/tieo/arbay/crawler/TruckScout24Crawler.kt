@@ -104,6 +104,29 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
             val imageUrl = card.selectFirst("[data-grid=image] img")?.let { img ->
                 img.attr("data-src").ifBlank { img.attr("src") }
             }?.takeIf { it.startsWith("http") }
+
+            // The card carries a labeled attribute line: "<km> km, Leistung: <kW> kW (<PS> PS),
+            // Erstzulassung: MM/YYYY, Kraftstofftyp: <fuel>, Getriebetyp: <gearbox>".
+            val cardText = card.text()
+            val reg = Regex("""Erstzulassung:\s*(\d{1,2}/\d{4})""").find(cardText)?.groupValues?.get(1)
+            val vehicle = VehicleTextParser.merge(
+                VehicleInfo(
+                    firstRegYear = reg?.substringAfter("/")?.toIntOrNull(),
+                    firstRegMonth = reg?.substringBefore("/")?.toIntOrNull(),
+                    mileageKm = Regex("""([\d.]+)\s*km,\s*Leistung""").find(cardText)
+                        ?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+                    powerKw = Regex("""Leistung:\s*(\d+)\s*kW""").find(cardText)
+                        ?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 20..1000 },
+                    fuel = Fuel.parse(Regex("""Kraftstofftyp:\s*([^,]+)""").find(cardText)?.groupValues?.get(1)),
+                    gearbox = when {
+                        Regex("""Getriebetyp:\s*(mechani|schaltg|manu)""", RegexOption.IGNORE_CASE).containsMatchIn(cardText) -> Transmission.MANUAL
+                        Regex("""Getriebetyp:\s*(automat)""", RegexOption.IGNORE_CASE).containsMatchIn(cardText) -> Transmission.AUTOMATIC
+                        else -> null
+                    },
+                ),
+                VehicleTextParser.parse(cardText),
+            )
+
             Listing(
                 id = "${platformId.name}:$externalId",
                 platformId = platformId,
@@ -115,6 +138,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
                 location = locationText?.takeIf { it.isNotBlank() }?.let { Location(city = it) },
                 description = null,
                 scrapedAt = now,
+                vehicle = vehicle,
             )
         }.distinctBy { it.externalId }
     }

@@ -178,6 +178,14 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             key to value
         } ?: emptyMap()
 
+        // Canonical machine values ("diesel", "manual", "177") for structured parsing;
+        // displayValue above is localized ("Manualna") and only used for the description.
+        val paramValues = node["parameters"]?.jsonArray?.associate { param ->
+            val obj = param.jsonObject
+            (obj["key"]?.jsonPrimitive?.contentOrNull ?: "") to
+                (obj["value"]?.jsonPrimitive?.contentOrNull ?: "")
+        } ?: emptyMap()
+
         val description = buildString {
             parameters["year"]?.let { append(it) }
             parameters["mileage"]?.let {
@@ -185,6 +193,21 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
                 append(it)
             }
         }.takeIf { it.isNotBlank() }
+
+        val vehicle = VehicleInfo(
+            firstRegYear = paramValues["year"]?.toIntOrNull(),
+            mileageKm = paramValues["mileage"]?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+            // engine_power is metric HP (KM): 1 kW = 1.35962 KM, so kW = KM / 1.35962.
+            powerKw = paramValues["engine_power"]?.toIntOrNull()?.let { (it / 1.35962).toInt() }?.takeIf { it in 20..1000 },
+            displacementCc = paramValues["engine_capacity"]?.toIntOrNull()?.takeIf { it in 600..8000 },
+            fuel = Fuel.parse(paramValues["fuel_type"]),
+            gearbox = when (paramValues["gearbox"]) {
+                "automatic" -> Transmission.AUTOMATIC
+                "manual" -> Transmission.MANUAL
+                else -> null
+            },
+            bodyType = BodyType.parse(paramValues["body_type"]),
+        )
 
         return Listing(
             id = "${platformId.name}:$externalId",
@@ -197,6 +220,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             location = location,
             description = description,
             scrapedAt = scrapedAt,
+            vehicle = vehicle,
         )
     }
 }

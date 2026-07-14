@@ -144,7 +144,9 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
                 ?: locality?.get("district")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             val location = Location(city = city, country = "CZ")
 
-            val year = obj["manufacturing_date"]?.jsonPrimitive?.contentOrNull?.take(4)
+            // First registration comes from in_operation_date; manufacturing_date is the fallback.
+            val regDate = (obj["in_operation_date"] ?: obj["manufacturing_date"])?.jsonPrimitive?.contentOrNull
+            val year = regDate?.take(4)
             val km = obj["tachometer"]?.jsonPrimitive?.longOrNull
             val description = buildString {
                 year?.let { append("EZ: $it") }
@@ -153,6 +155,18 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
                     append("$it km")
                 }
             }.takeIf { it.isNotBlank() }
+
+            val vehicle = VehicleInfo(
+                firstRegYear = year?.toIntOrNull(),
+                firstRegMonth = regDate?.takeIf { it.length >= 7 }?.substring(5, 7)?.toIntOrNull(),
+                mileageKm = km?.toInt()?.takeIf { it in 1..2_000_000 },
+                fuel = Fuel.parse(obj["fuel_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull),
+                gearbox = when (obj["gearbox_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull) {
+                    "automaticka" -> Transmission.AUTOMATIC
+                    "manualni" -> Transmission.MANUAL
+                    else -> null
+                },
+            )
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -165,6 +179,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
                 location = location,
                 description = description,
                 scrapedAt = now,
+                vehicle = vehicle,
             )
         }.distinctBy { it.externalId }
     }
