@@ -268,6 +268,18 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         }
     }
 
+    /** Fetches the listing's detail page and parses its full structured attribute table into
+     *  verified specs (power, gearbox, fuel, doors, emission, colour…) the search card omits. */
+    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? {
+        return try {
+            val html = fetchWithFallback(client, listing.url, "Kleinanzeigen")
+            KleinanzeigenDetailParser.parse(html)
+        } catch (e: Exception) {
+            log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
+            null
+        }
+    }
+
     /** Verified mileage/first-registration from the card's attribute chips. */
     private fun parseChips(tags: List<String>): VehicleInfo? {
         var mileageKm: Int? = null

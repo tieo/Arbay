@@ -3,12 +3,18 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.VehicleInfo
 import org.slf4j.LoggerFactory
 
 interface Crawler {
     val platformId: PlatformId
 
     suspend fun search(query: SearchQuery): List<Listing>
+
+    /** Fetch a single listing's detail page and return its verified vehicle specs, where the
+     *  detail page carries structured attributes the search card omits (power, gearbox, doors,
+     *  emission, colour…). Default null: the platform's card already holds everything it knows. */
+    suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = null
 }
 
 suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {

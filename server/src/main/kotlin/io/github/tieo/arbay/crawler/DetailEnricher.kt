@@ -1,0 +1,55 @@
+package io.github.tieo.arbay.crawler
+
+import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.VehicleField
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+/**
+ * Promotes a platform's listings from inferred to verified specs by fetching detail pages,
+ * so a filter on power/gearbox/fuel actually enforces instead of soft-passing. Block-safe by
+ * construction: only fetches listings that (a) survived the card-level filters and (b) still
+ * lack a verified value for a field the active filters use; caps the number of fetches per
+ * search; caches each detail permanently (DetailCache); and bounds concurrency. When no active
+ * filter needs an unverified field, it fetches nothing.
+ */
+object DetailEnricher {
+    private const val MAX_FETCHES_PER_PLATFORM = 15
+    private val gate = Semaphore(3)
+
+    /** Fields the given filters constrain and that a detail page could verify. */
+    private fun neededFields(filters: CarFilters): Set<VehicleField> = buildSet {
+        if (filters.minPowerKw != null) add(VehicleField.POWER)
+        if (filters.transmission != null) add(VehicleField.GEARBOX)
+        if (filters.firstRegFromYear != null || filters.firstRegToYear != null) add(VehicleField.FIRST_REG_YEAR)
+        if (filters.maxMileageKm != null) add(VehicleField.MILEAGE)
+    }
+
+    private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {
+        val v = listing.vehicle
+        return needed.any { field -> v == null || !v.isVerified(field) }
+    }
+
+    /** Enrich one platform's listings in place of the crawler that produced them. */
+    suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler): List<Listing> {
+        val needed = neededFields(filters)
+        if (needed.isEmpty()) return listings
+
+        var budget = MAX_FETCHES_PER_PLATFORM
+        return listings.map { listing ->
+            if (!needsDetail(listing, needed)) return@map listing
+
+            // Cache first — a cached detail costs no request.
+            DetailCache.get(listing.id)?.let { cached ->
+                return@map listing.copy(vehicle = VehicleTextParser.merge(cached, listing.vehicle))
+            }
+            if (budget <= 0) return@map listing
+            budget--
+
+            val detail = gate.withPermit { crawler.fetchDetailVehicle(listing) } ?: return@map listing
+            DetailCache.put(listing.id, detail)
+            listing.copy(vehicle = VehicleTextParser.merge(detail, listing.vehicle))
+        }
+    }
+}

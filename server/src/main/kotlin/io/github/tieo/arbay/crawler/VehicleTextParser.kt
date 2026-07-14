@@ -56,6 +56,9 @@ object VehicleTextParser {
             if (v.condition != null) add(VehicleField.CONDITION)
             if (v.color != null) add(VehicleField.COLOR)
             if (v.emissionClassEuro != null) add(VehicleField.EMISSION)
+            if (v.emissionSticker != null) add(VehicleField.EMISSION_STICKER)
+            if (v.inspectionUntil != null) add(VehicleField.INSPECTION)
+            if (v.upholstery != null) add(VehicleField.UPHOLSTERY)
         }
         return v.copy(verified = fields)
     }
