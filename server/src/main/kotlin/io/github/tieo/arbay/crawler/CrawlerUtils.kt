@@ -6,6 +6,7 @@ import io.ktor.client.statement.*
 import kotlinx.coroutines.delay
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+import kotlin.random.Random
 
 internal const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -13,6 +14,9 @@ internal const val USER_AGENT =
 internal fun String.encodeUrl(): String = java.net.URLEncoder.encode(this, "UTF-8")
 
 private val fetchLog = org.slf4j.LoggerFactory.getLogger("FetchChain")
+
+/** Randomized inter-page delay (150-600 ms) so paged fetches don't leave a fixed-interval trail. */
+private fun fetchJitterMs(): Long = Random.nextLong(150, 600)
 
 /** CoroutineContext element for emitting fetch-engine progress to the SSE stream */
 class FetchProgressEmitter(val emit: suspend (stage: String) -> Unit) : CoroutineContext.Element {
@@ -72,12 +76,18 @@ internal suspend fun fetchWithFallback(
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
 
+    // Randomized pause before each page fetch. A fixed cadence across 11 platforms is itself
+    // a bot signature; the jitter spreads the burst and varies the inter-request gap.
+    RequestMonitor.recordRequest(platformName)
+    delay(fetchJitterMs())
+
     if (!browserOnly) {
         // === Step 1: Plain HTTP ===
         emitter?.let { it.emit("HTTP") }
         try {
             val html = fetchHttp(client, url, platformName)
             validateHtml(html, platformName)
+            RequestMonitor.recordTier(platformName, "HTTP")
             return html
         } catch (e: Exception) {
             errors.add("HTTP: ${e.message?.take(60)}")
@@ -90,6 +100,7 @@ internal suspend fun fetchWithFallback(
         try {
             val html = RnetClient.fetch(url, primeUrl = primeUrl)
             validateHtml(html, platformName)
+            RequestMonitor.recordTier(platformName, "Rnet")
             return html
         } catch (e: Exception) {
             errors.add("Rnet: ${e.message?.take(60)}")
@@ -101,6 +112,7 @@ internal suspend fun fetchWithFallback(
         try {
             val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)
             validateHtml(html, platformName)
+            RequestMonitor.recordTier(platformName, "CurlCffi")
             return html
         } catch (e: Exception) {
             errors.add("CurlCffi: ${e.message?.take(60)}")
@@ -116,7 +128,7 @@ internal suspend fun fetchWithFallback(
             waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
             engine = BrowserEngine.CHROMIUM,
         )
-        return validateBrowserResult(result, platformName)
+        return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
     } catch (e: Exception) {
         errors.add("Chromium: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Chromium failed: {}", platformName, e.message?.take(80))
@@ -130,13 +142,14 @@ internal suspend fun fetchWithFallback(
             waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
             engine = BrowserEngine.FIREFOX,
         )
-        return validateBrowserResult(result, platformName)
+        return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
     } catch (e: Exception) {
         errors.add("Firefox: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Firefox failed: {}", platformName, e.message?.take(80))
     }
 
     // All engines failed
+    RequestMonitor.recordBlock(platformName)
     throw CrawlerBlockedException(
         "$platformName blocked by all engines: ${errors.joinToString(" → ")}",
         ErrorType.CAPTCHA,

@@ -18,6 +18,7 @@ data class CrawlerSearchEvent(
     val completedPlatforms: Int = 0,
     val hasMore: Boolean = false,
     val nextPage: Int = 0,
+    val fromCache: Boolean = false,
 )
 
 @Serializable

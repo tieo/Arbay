@@ -10,6 +10,8 @@ import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
+import io.github.tieo.arbay.crawler.QueryResultCache
+import io.github.tieo.arbay.crawler.RequestMonitor
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.classifyException
@@ -120,6 +122,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             call.respond(CrawlerStatusTracker.getAll())
         }
 
+        // Outbound request telemetry: counts, block rate, fetch tier used per platform.
+        get("/request-stats") {
+            call.respond(RequestMonitor.getAll())
+        }
+
         get("/exchange-rates") {
             // Refresh if stale (>6h)
             if (System.currentTimeMillis() - ExchangeRates.lastUpdate > 6 * 3600 * 1000) {
@@ -185,14 +192,16 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try {
-                val rawResults = platforms.flatMap { platformId ->
-                    val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@flatMap emptyList()
-                    crawler.trackedSearch(searchQuery)
+                val perPlatform = platforms.map { platformId ->
+                    val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
+                    QueryResultCache.get(platformId, searchQuery)?.let { return@map it }
+                    val raw = crawler.trackedSearch(searchQuery)
+                    val classified = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
+                    classified.forEach { listingRepo.upsert(it) }
+                    QueryResultCache.put(platformId, searchQuery, classified)
+                    classified
                 }
-                val filtered = RelevanceFilter.filter(rawResults, searchQuery)
-                filtered.map { SoldDetector.classify(it) }
-                    .also { it.forEach { l -> listingRepo.upsert(l) } }
-                    .sortedBy { it.effectivePrice.amount }.take(limit)
+                perPlatform.flatten().sortedBy { it.effectivePrice.amount }.take(limit)
             } finally {
                 permit.release()
             }
@@ -270,6 +279,22 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 flush()
                             }
 
+                            // Fresh cached results for this exact query skip the crawl entirely,
+                            // so re-running a search (e.g. after a filter tweak) fires no requests.
+                            val cached = QueryResultCache.get(platformId, searchQuery)
+                            if (cached != null) {
+                                resultChannel.send(CrawlerSearchEvent(
+                                    type = CrawlerEventType.PLATFORM_DONE,
+                                    platform = platformId.name,
+                                    platformName = platformId.displayName,
+                                    resultCount = cached.size,
+                                    rawCount = cached.size,
+                                    listings = cached,
+                                    fromCache = true,
+                                ))
+                                return@launch
+                            }
+
                             val progressEmitter = FetchProgressEmitter { stage ->
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_PROGRESS,
@@ -292,6 +317,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
                                 val results = relevantResults.map { SoldDetector.classify(it) }
                                 results.forEach { listingRepo.upsert(it) }
+                                QueryResultCache.put(platformId, searchQuery, results)
 
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
