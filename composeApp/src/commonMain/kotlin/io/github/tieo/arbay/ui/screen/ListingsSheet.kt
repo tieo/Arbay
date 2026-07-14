@@ -52,6 +52,20 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** Active car filters as short human labels, for the editable chip row. */
+private fun carFilterChips(f: CarFilters): List<String> = buildList {
+    when {
+        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}")
+        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}")
+        f.firstRegToYear != null -> add("to ${f.firstRegToYear}")
+    }
+    f.maxMileageKm?.let { add("≤${it / 1000}k km") }
+    f.minPowerKw?.let { add("≥$it kW") }
+    f.maxPriceEur?.let { add("≤€${it / 1000}k") }
+    f.transmission?.let { add(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") }
+    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”") }
+}
+
 @Composable
 fun ListingsSheet(
     productName: String,
@@ -62,6 +76,7 @@ fun ListingsSheet(
     onBookmark: (() -> Unit)? = null,
     platforms: List<PlatformId>? = null,
     carFilters: CarFilters? = null,
+    onEditFilters: (() -> Unit)? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
@@ -198,8 +213,8 @@ fun ListingsSheet(
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                // === Product images ===
-                if (imageListings.isNotEmpty()) {
+                // === Product images (not for car search — the hero gallery is noise there) ===
+                if (imageListings.isNotEmpty() && carFilters == null) {
                     item("images") {
                         LazyRow(
                             modifier = Modifier.fillMaxWidth().height(180.dp),
@@ -264,6 +279,29 @@ fun ListingsSheet(
                         }
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.Default.Close, "Close")
+                        }
+                    }
+                    // Active car filters as editable chips + an "Edit" entry to reopen the form.
+                    if (carFilters != null && onEditFilters != null) {
+                        val chips = carFilterChips(carFilters)
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            item {
+                                AssistChip(
+                                    onClick = onEditFilters,
+                                    label = { Text("Filters", style = MaterialTheme.typography.labelMedium) },
+                                    leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
+                                )
+                            }
+                            items(chips) { chip ->
+                                AssistChip(
+                                    onClick = onEditFilters,
+                                    label = { Text(chip, style = MaterialTheme.typography.labelMedium) },
+                                )
+                            }
                         }
                     }
                 }
@@ -356,8 +394,8 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Price overview ===
-                if (listings.isNotEmpty()) {
+                // === Price overview (skip for a car search with a single hit — the card says it) ===
+                if (listings.isNotEmpty() && !(carFilters != null && activeListings.size <= 1)) {
                     item("prices") {
                         Spacer(Modifier.height(16.dp))
                         PriceOverview(
@@ -770,6 +808,42 @@ private fun PlatformOfferCard(
 
 // === Individual listing card ===
 
+/** Key vehicle specs under a car listing's title. A verified value (from the site's structured
+ *  data) is shown solid; an inferred one (guessed from text) is muted and prefixed "~" so the
+ *  user can tell confirmed specs from guesses. */
+@Composable
+private fun VehicleSpecsRow(v: io.github.tieo.arbay.model.VehicleInfo) {
+    data class Spec(val text: String, val field: io.github.tieo.arbay.model.VehicleField)
+    val specs = buildList {
+        v.firstRegYear?.let {
+            val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
+            add(Spec(ym, io.github.tieo.arbay.model.VehicleField.FIRST_REG_YEAR))
+        }
+        v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", io.github.tieo.arbay.model.VehicleField.MILEAGE)) }
+        v.powerKw?.let { add(Spec("$it kW", io.github.tieo.arbay.model.VehicleField.POWER)) }
+        v.gearbox?.let {
+            val g = if (it == io.github.tieo.arbay.model.Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe"
+            add(Spec(g, io.github.tieo.arbay.model.VehicleField.GEARBOX))
+        }
+        v.fuel?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, io.github.tieo.arbay.model.VehicleField.FUEL)) }
+    }
+    if (specs.isEmpty()) return
+    Spacer(Modifier.height(3.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        specs.take(4).forEach { spec ->
+            val verified = v.isVerified(spec.field)
+            Text(
+                if (verified) spec.text else "~${spec.text}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (verified) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 @Composable
 internal fun ListingCard(
     listing: Listing,
@@ -851,6 +925,8 @@ internal fun ListingCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+
+                listing.vehicle?.let { VehicleSpecsRow(it) }
 
                 listing.location?.let { loc ->
                     val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")

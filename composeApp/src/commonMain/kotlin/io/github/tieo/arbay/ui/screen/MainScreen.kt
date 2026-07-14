@@ -31,6 +31,9 @@ import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.ProductIdentifier
+import io.github.tieo.arbay.CarTaxonomyStore
+import io.github.tieo.arbay.model.CarMakeNode
+import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
@@ -38,6 +41,17 @@ import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+
+/** Best-effort make/model nodes from a saved search's query text, for prefilling the editor. */
+private fun resolveCarNodes(query: String): Pair<CarMakeNode?, CarModelNode?> {
+    val q = query.lowercase()
+    val make = CarTaxonomyStore.taxonomy.makes.firstOrNull { m ->
+        val n = m.name.lowercase()
+        q.contains(n) || (n == "volkswagen" && Regex("""\bvw\b""").containsMatchIn(q))
+    }
+    val model = make?.models?.firstOrNull { q.contains(it.name.lowercase()) }
+    return make to model
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +86,8 @@ fun MainScreen(
     var carName by remember { mutableStateOf("") }
     var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
     var carFilters by remember { mutableStateOf<io.github.tieo.arbay.model.CarFilters?>(null) }
+    var carMake by remember { mutableStateOf<io.github.tieo.arbay.model.CarMakeNode?>(null) }
+    var carModel by remember { mutableStateOf<io.github.tieo.arbay.model.CarModelNode?>(null) }
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()
@@ -326,14 +342,19 @@ fun MainScreen(
                     showDiscovery = true
                 }
             } else null,
-            onSearch = { name, query, platforms, filters ->
+            onSearch = { name, query, platforms, filters, make, model ->
                 carName = name
                 carQuery = query
                 carPlatforms = platforms
                 carFilters = filters
+                carMake = make
+                carModel = model
                 showCarSearch = false
                 showCarResults = true
             },
+            initialMake = carMake,
+            initialModel = carModel,
+            initialFilters = carFilters,
         )
     }
 
@@ -345,6 +366,10 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = carPlatforms,
             carFilters = carFilters,
+            onEditFilters = {
+                showCarResults = false
+                showCarSearch = true
+            },
             onDismiss = { showCarResults = false },
             onBack = {
                 showCarResults = false
@@ -406,6 +431,21 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = listingsProduct!!.searchQuery.platforms,
             carFilters = listingsProduct!!.searchQuery.toCarFilters(),
+            onEditFilters = listingsProduct!!.searchQuery.toCarFilters()?.let { f ->
+                {
+                    val p = listingsProduct!!
+                    val (m, mo) = resolveCarNodes(p.searchQuery.text)
+                    carName = p.name
+                    carQuery = p.searchQuery.text
+                    carPlatforms = p.searchQuery.platforms
+                    carFilters = f
+                    carMake = m
+                    carModel = mo
+                    showListings = false
+                    listingsProduct = null
+                    showCarSearch = true
+                }
+            },
             onDismiss = {
                 showListings = false
                 listingsProduct = null

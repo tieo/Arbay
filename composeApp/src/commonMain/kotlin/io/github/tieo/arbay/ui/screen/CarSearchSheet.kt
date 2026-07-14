@@ -55,20 +55,24 @@ private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
 fun CarSearchSheet(
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
-    onSearch: (name: String, query: String, platforms: List<PlatformId>, filters: CarFilters) -> Unit,
+    onSearch: (name: String, query: String, platforms: List<PlatformId>, filters: CarFilters, make: CarMakeNode?, model: CarModelNode?) -> Unit,
+    initialMake: CarMakeNode? = null,
+    initialModel: CarModelNode? = null,
+    initialFilters: CarFilters? = null,
 ) {
     val taxonomy = CarTaxonomyStore.taxonomy
-    var make by remember { mutableStateOf<CarMakeNode?>(null) }
-    var model by remember { mutableStateOf<CarModelNode?>(null) }
+    var make by remember { mutableStateOf(initialMake) }
+    var model by remember { mutableStateOf(initialModel) }
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
-    var showMore by remember { mutableStateOf(false) }
-    var yearFrom by remember { mutableStateOf("") }
-    var yearTo by remember { mutableStateOf("") }
-    var maxKm by remember { mutableStateOf("") }
-    var maxPrice by remember { mutableStateOf("") }
-    var minPowerKw by remember { mutableStateOf("") }
-    var transmission by remember { mutableStateOf<Transmission?>(null) }
+    // Open the advanced section if any advanced filter is already set (editing an existing search).
+    var showMore by remember { mutableStateOf(initialFilters?.let { it.maxMileageKm != null || it.maxPriceEur != null || it.minPowerKw != null || it.transmission != null } ?: false) }
+    var yearFrom by remember { mutableStateOf(initialFilters?.firstRegFromYear?.toString() ?: "") }
+    var yearTo by remember { mutableStateOf(initialFilters?.firstRegToYear?.toString() ?: "") }
+    var maxKm by remember { mutableStateOf(initialFilters?.maxMileageKm?.toString() ?: "") }
+    var maxPrice by remember { mutableStateOf(initialFilters?.maxPriceEur?.toString() ?: "") }
+    var minPowerKw by remember { mutableStateOf(initialFilters?.minPowerKw?.toString() ?: "") }
+    var transmission by remember { mutableStateOf(initialFilters?.transmission) }
     val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
 
     fun buildFilters() = CarFilters(
@@ -215,7 +219,7 @@ fun CarSearchSheet(
             val query = listOfNotNull(make?.name, model?.name).joinToString(" ")
             val name = query.ifBlank { "Car search" }
             Button(
-                onClick = { onSearch(name, query, selectedPlatforms.toList(), buildFilters()) },
+                onClick = { onSearch(name, query, selectedPlatforms.toList(), buildFilters(), make, model) },
                 enabled = selectedPlatforms.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
             ) {
