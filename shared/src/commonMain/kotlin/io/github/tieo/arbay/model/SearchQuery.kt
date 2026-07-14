@@ -21,6 +21,20 @@ data class CarFilters(
             maxPriceEur == null && minPowerKw == null && transmission == null
 }
 
+/** Car filters carried inside a saved search, so opening a bookmark reruns it with the
+ *  same constraints instead of a bare text search. Null when the query has no car filter. */
+fun SearchQuery.toCarFilters(): CarFilters? {
+    val filters = CarFilters(
+        firstRegFromYear = firstRegFromYear,
+        firstRegToYear = firstRegToYear,
+        maxMileageKm = maxMileageKm,
+        maxPriceEur = maxPrice?.let { (it.amount / 100).toInt() },
+        minPowerKw = minPowerKw,
+        transmission = transmission,
+    )
+    return if (filters.isEmpty) null else filters
+}
+
 @Serializable
 data class SearchQuery(
     val text: String,

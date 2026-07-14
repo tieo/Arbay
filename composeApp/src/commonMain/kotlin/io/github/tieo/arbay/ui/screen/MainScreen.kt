@@ -32,6 +32,7 @@ import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.model.TrackedProduct
+import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
@@ -404,6 +405,7 @@ fun MainScreen(
             searchQuery = listingsProduct!!.searchQuery.text,
             listingViewModel = listingViewModel,
             platforms = listingsProduct!!.searchQuery.platforms,
+            carFilters = listingsProduct!!.searchQuery.toCarFilters(),
             onDismiss = {
                 showListings = false
                 listingsProduct = null
