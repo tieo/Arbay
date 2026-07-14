@@ -223,7 +223,18 @@ object RelevanceFilter {
         return matchedCount.toDouble() / tokenCount
     }
 
+    // A parsed price above this (in the listing's own currency's minor units) is a scrape
+    // artifact — digits from several DOM nodes concatenated into one number — not a real
+    // listing. 2e11 minor units clears the priciest genuine listing in every currency we
+    // crawl (weak-currency car prices top out ~1e9) while catching the ~1e15 garbage that
+    // was blowing up the price summary.
+    private const val MAX_PLAUSIBLE_MINOR_UNITS = 200_000_000_000L
+
+    private fun hasSanePrice(listing: Listing): Boolean =
+        listing.effectivePrice.amount in 0..MAX_PLAUSIBLE_MINOR_UNITS
+
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
+        val listings = listings.filter(::hasSanePrice)
         val parsed = parseQuery(query.text)
         val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
         // Single-token queries ("laptop", "monitor"): the platform's own search already filtered
