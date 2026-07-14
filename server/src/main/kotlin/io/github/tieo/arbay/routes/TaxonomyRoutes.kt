@@ -2,6 +2,7 @@ package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.crawler.CarTaxonomyProvider
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
@@ -17,5 +18,11 @@ fun Route.taxonomyRoutes() {
             call.response.headers.append(HttpHeaders.ETag, "\"${taxonomy.version}\"")
             call.respond(taxonomy)
         }
+    }
+    // Force a rebuild from the live site catalog (also runs on boot + daily).
+    post("/api/car-taxonomy/refresh") {
+        CarTaxonomyProvider.refresh()
+        val t = CarTaxonomyProvider.current
+        call.respond(mapOf("version" to t.version, "makes" to t.makes.size.toString()))
     }
 }
