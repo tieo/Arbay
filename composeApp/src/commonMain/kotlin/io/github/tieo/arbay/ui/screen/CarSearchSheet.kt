@@ -1,7 +1,11 @@
 package io.github.tieo.arbay.ui.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -58,6 +62,7 @@ fun CarSearchSheet(
     var model by remember { mutableStateOf<CarModelNode?>(null) }
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
     var yearFrom by remember { mutableStateOf("") }
     var yearTo by remember { mutableStateOf("") }
     var maxKm by remember { mutableStateOf("") }
@@ -77,8 +82,15 @@ fun CarSearchSheet(
 
     AdaptiveFormSheet(onDismiss = onDismiss) {
         if (onBack != null) BackHandler(onBack = onBack)
+        // Scrollable filters above, a sticky Search bar pinned at the bottom (like the
+        // real car apps): every field is optional, so the bar is always reachable + enabled.
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 12.dp, bottom = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.DirectionsCar, null, tint = MaterialTheme.colorScheme.primary)
@@ -104,6 +116,29 @@ fun CarSearchSheet(
                 onClick = { showModelPicker = true },
             )
 
+            Spacer(Modifier.height(16.dp))
+
+            // More filters — collapsed by default so make/model + Show results fit on screen
+            // without scrolling. Everything here is optional.
+            Surface(
+                onClick = { showMore = !showMore },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Text("More filters (year, price, power, markets)", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    Icon(if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                }
+            }
+
+            AnimatedVisibility(visible = showMore) {
+              Column {
             Spacer(Modifier.height(18.dp))
 
             // 2 — Age and mileage
@@ -164,20 +199,29 @@ fun CarSearchSheet(
                     )
                 }
             }
+              }
+            }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
+        }
 
-            // 6 — Actions
+        // Sticky bottom Search bar — always visible + enabled; nothing is required, so a
+        // filter-only search (e.g. year + price, no make) works too (filters apply source-side).
+        Surface(
+            tonalElevation = 3.dp,
+            shadowElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+        ) {
             val query = listOfNotNull(make?.name, model?.name).joinToString(" ")
             val name = query.ifBlank { "Car search" }
             Button(
                 onClick = { onSearch(name, query, selectedPlatforms.toList(), buildFilters()) },
-                enabled = make != null && selectedPlatforms.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedPlatforms.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
             ) {
                 Icon(Icons.Outlined.Search, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Search")
+                Text("Show results")
             }
         }
     }
@@ -240,6 +284,36 @@ private fun PickerField(
     }
 }
 
+/** Common shorthand a buyer types for a make, mapped to a substring of the real name.
+ *  Only the cases plain subsequence matching misses (an extra letter, a nickname). */
+private val makeAliases = mapOf(
+    "vw" to "volkswagen",
+    "merc" to "mercedes",
+    "benz" to "mercedes",
+    "beemer" to "bmw",
+    "bimmer" to "bmw",
+    "chevy" to "chevrolet",
+    "mini" to "mini",
+    "range" to "land rover",
+    "landy" to "land rover",
+)
+
+/** Rank of how well [label] matches [query]; null when it does not match at all.
+ *  Lower is better. Substring beats alias beats in-order subsequence, so "golf" ranks
+ *  Volkswagen models by the literal hit before scattered-letter ones. */
+private fun fuzzyScore(label: String, query: String): Int? {
+    val l = label.lowercase()
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return 0
+    if (l.startsWith(q)) return 0
+    if (l.contains(q)) return 1
+    makeAliases[q]?.let { if (l.contains(it)) return 2 }
+    // Subsequence: every query char appears in order (catches "vw" -> Volkswagen, "merc").
+    var i = 0
+    for (c in l) if (i < q.length && c == q[i]) i++
+    return if (i == q.length) 3 else null
+}
+
 /** Single-select list with a type-to-filter box. The taxonomy is exhaustive, so there is
  *  no free-text "not listed" option. */
 @Composable
@@ -253,7 +327,10 @@ private fun <T> SearchablePickerDialog(
     var queryText by remember { mutableStateOf("") }
     val filtered = remember(queryText, options) {
         if (queryText.isBlank()) options
-        else options.filter { labelOf(it).contains(queryText, ignoreCase = true) }
+        else options
+            .mapNotNull { opt -> fuzzyScore(labelOf(opt), queryText)?.let { opt to it } }
+            .sortedWith(compareBy({ it.second }, { labelOf(it.first) }))
+            .map { it.first }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
