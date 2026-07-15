@@ -12,9 +12,12 @@ import io.github.tieo.arbay.plugins.configureStatusPages
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.calllogging.*
+import io.ktor.server.request.*
 import io.ktor.server.sse.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.slf4j.event.Level
 
 fun main() {
     // CLIP image preprocessing uses java.awt (BufferedImage/Graphics2D); headless avoids
@@ -26,6 +29,12 @@ fun main() {
 
 fun Application.module() {
     install(SSE)
+    // Request log: one line per API call with method, path, status and duration — the audit
+    // trail for what the app asked of the server (and how long crawls took).
+    install(CallLogging) {
+        level = Level.INFO
+        filter { call -> call.request.path().startsWith("/api") }
+    }
     configureSerialization()
     configureStatusPages()
     configureRouting()

@@ -1,12 +1,39 @@
 <configuration>
+    <!-- Console → podman logs / journald. Clean INFO-level view. -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{28} - %msg%n</pattern>
         </encoder>
     </appender>
-    <root level="trace">
+
+    <!-- Persistent rolling file in the data volume (user.home=/var/lib/arbay in prod), so logs
+         survive container recreation. Rolls daily and at 50 MB, keeps 14 days / 500 MB total. -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${user.home}/.arbay/logs/arbay.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${user.home}/.arbay/logs/arbay.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- App code (crawlers, fetch chain, request/block monitors) logs in detail; the file keeps
+         it, the console shows it. Everything else stays at INFO to keep the signal clean. -->
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
     </root>
+    <logger name="io.github.tieo.arbay" level="DEBUG"/>
+    <logger name="FetchChain" level="DEBUG"/>
+
+    <!-- Noise: Ktor's TRACE call tracing and the client-disconnect (ChannelWriteException) that
+         fires whenever the app closes an in-flight SSE stream — not a server fault. -->
+    <logger name="io.ktor.server.plugins.statuspages" level="WARN"/>
+    <logger name="io.ktor.server.plugins.calllogging" level="INFO"/>
     <logger name="org.eclipse.jetty" level="INFO"/>
     <logger name="io.netty" level="INFO"/>
 </configuration>

@@ -133,6 +133,17 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             call.respond(RequestMonitor.getAll())
         }
 
+        // Tail the server log (last N lines, newest last) — inspect crawls/blocks/errors from
+        // the app or a browser without SSH. Behind Authelia like everything else.
+        get("/logs") {
+            val n = (call.queryParameters["lines"]?.toIntOrNull() ?: 300).coerceIn(1, 5000)
+            val logFile = java.io.File(System.getProperty("user.home"), ".arbay/logs/arbay.log")
+            val text = if (logFile.exists())
+                logFile.readLines().takeLast(n).joinToString("\n")
+            else "no log file at ${logFile.path}"
+            call.respondText(text, ContentType.Text.Plain)
+        }
+
         get("/exchange-rates") {
             // Refresh if stale (>6h)
             if (System.currentTimeMillis() - ExchangeRates.lastUpdate > 6 * 3600 * 1000) {

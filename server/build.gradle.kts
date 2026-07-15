@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.ktor.serverNetty)
     implementation(libs.ktor.serverContentNegotiation)
     implementation(libs.ktor.serverStatusPages)
+    implementation(libs.ktor.serverCallLogging)
     implementation(libs.ktor.serverCors)
     implementation(libs.ktor.serverSse)
     implementation(libs.ktor.serializationJson)
