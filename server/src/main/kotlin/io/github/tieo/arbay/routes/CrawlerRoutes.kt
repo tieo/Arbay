@@ -66,22 +66,29 @@ private val GENERAL_PLATFORMS = listOf(
  *  Sauto, DBA, Bytbil, TruckScout24, Bilbasen) turn these into site URL parameters. */
 private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery): SearchQuery {
     val p = queryParameters
+    // Full filter set as one JSON param (handles multi-selects); legacy per-field params below
+    // are the fallback for older app versions.
+    val cf = p["carFilters"]?.let { runCatching { json.decodeFromString<CarFilters>(it) }.getOrNull() }
     val priceToEur = p["priceTo"]?.toLongOrNull()
-    val gear = p["gear"]?.uppercase()?.let {
+    val legacyGear = p["gear"]?.uppercase()?.let {
         when (it) {
             "A", "AUTOMATIC" -> Transmission.AUTOMATIC
             "M", "MANUAL" -> Transmission.MANUAL
             else -> null
         }
     }
+    // Mirror the fields crawlers turn into native URL params (year/mileage/price/power/gearbox);
+    // the rest of cf is enforced by post-filtering.
     return base.copy(
-        firstRegFromYear = p["fregFrom"]?.toIntOrNull(),
-        firstRegToYear = p["fregTo"]?.toIntOrNull(),
-        maxMileageKm = p["kmTo"]?.toIntOrNull(),
-        minPowerKw = p["powerKw"]?.toIntOrNull(),
-        maxPrice = priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
-        transmission = gear,
-        descriptionContains = p["inDescription"]?.takeIf { it.isNotBlank() },
+        carFilters = cf,
+        firstRegFromYear = cf?.firstRegFromYear ?: p["fregFrom"]?.toIntOrNull(),
+        firstRegToYear = cf?.firstRegToYear ?: p["fregTo"]?.toIntOrNull(),
+        maxMileageKm = cf?.maxMileageKm ?: p["kmTo"]?.toIntOrNull(),
+        minPowerKw = cf?.minPowerKw ?: p["powerKw"]?.toIntOrNull(),
+        maxPrice = cf?.maxPriceEur?.let { Money(it * 100L, Currency.EUR) }
+            ?: priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
+        transmission = cf?.transmission ?: legacyGear,
+        descriptionContains = cf?.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
     )
 }
 

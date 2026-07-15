@@ -20,11 +20,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.CarTaxonomyStore
+import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
+import io.github.tieo.arbay.model.Drivetrain
+import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Transmission
+import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import kotlin.math.roundToInt
 
@@ -72,16 +77,42 @@ fun CarSearchSheet(
     var maxKm by remember { mutableStateOf(initialFilters?.maxMileageKm?.toString() ?: "") }
     var maxPrice by remember { mutableStateOf(initialFilters?.maxPriceEur?.toString() ?: "") }
     var minPowerKw by remember { mutableStateOf(initialFilters?.minPowerKw?.toString() ?: "") }
+    var maxPowerKw by remember { mutableStateOf(initialFilters?.maxPowerKw?.toString() ?: "") }
+    var minKm by remember { mutableStateOf(initialFilters?.minMileageKm?.toString() ?: "") }
+    var minPrice by remember { mutableStateOf(initialFilters?.minPriceEur?.toString() ?: "") }
     var transmission by remember { mutableStateOf(initialFilters?.transmission) }
+    val fuels = remember { mutableStateListOf<Fuel>().apply { initialFilters?.fuels?.let { addAll(it) } } }
+    val bodyTypes = remember { mutableStateListOf<BodyType>().apply { initialFilters?.bodyTypes?.let { addAll(it) } } }
+    val conditions = remember { mutableStateListOf<VehicleCondition>().apply { initialFilters?.conditions?.let { addAll(it) } } }
+    val colors = remember { mutableStateListOf<String>().apply { initialFilters?.colors?.let { addAll(it) } } }
+    var drivetrain by remember { mutableStateOf(initialFilters?.drivetrain) }
+    var minDoors by remember { mutableStateOf(initialFilters?.minDoors) }
+    var minSeats by remember { mutableStateOf(initialFilters?.minSeats?.toString() ?: "") }
+    var minEmission by remember { mutableStateOf(initialFilters?.minEmissionEuro) }
+    var sellerType by remember { mutableStateOf(initialFilters?.sellerType) }
+    var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
     val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
 
     fun buildFilters() = CarFilters(
         firstRegFromYear = yearFrom.toIntOrNull(),
         firstRegToYear = yearTo.toIntOrNull(),
+        minMileageKm = minKm.filter { it.isDigit() }.toIntOrNull(),
         maxMileageKm = maxKm.filter { it.isDigit() }.toIntOrNull(),
+        minPriceEur = minPrice.filter { it.isDigit() }.toIntOrNull(),
         maxPriceEur = maxPrice.filter { it.isDigit() }.toIntOrNull(),
         minPowerKw = minPowerKw.toIntOrNull(),
+        maxPowerKw = maxPowerKw.toIntOrNull(),
         transmission = transmission,
+        fuels = fuels.toSet(),
+        bodyTypes = bodyTypes.toSet(),
+        conditions = conditions.toSet(),
+        colors = colors.toSet(),
+        drivetrain = drivetrain,
+        minDoors = minDoors,
+        minSeats = minSeats.toIntOrNull(),
+        minEmissionEuro = minEmission,
+        sellerType = sellerType,
+        descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
     )
 
     AdaptiveFormSheet(onDismiss = onDismiss) {
@@ -180,6 +211,135 @@ fun CarSearchSheet(
                     ) { Text(label) }
                 }
             }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Fuel (multi-select)
+            SectionLabel("Fuel")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Fuel.entries.forEach { f ->
+                    FilterChip(
+                        selected = f in fuels,
+                        onClick = { if (f in fuels) fuels.remove(f) else fuels.add(f) },
+                        label = { Text(enumLabel(f.name), style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Body type (multi-select)
+            SectionLabel("Body type")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                BodyType.entries.forEach { b ->
+                    FilterChip(
+                        selected = b in bodyTypes,
+                        onClick = { if (b in bodyTypes) bodyTypes.remove(b) else bodyTypes.add(b) },
+                        label = { Text(enumLabel(b.name), style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Condition (multi-select)
+            SectionLabel("Condition")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                VehicleCondition.entries.forEach { c ->
+                    FilterChip(
+                        selected = c in conditions,
+                        onClick = { if (c in conditions) conditions.remove(c) else conditions.add(c) },
+                        label = { Text(enumLabel(c.name), style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Drivetrain
+            SectionLabel("Drivetrain")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val opts = listOf<Pair<String, Drivetrain?>>(
+                    "Any" to null, "FWD" to Drivetrain.FWD, "RWD" to Drivetrain.RWD, "AWD" to Drivetrain.AWD,
+                )
+                opts.forEachIndexed { i, (label, value) ->
+                    SegmentedButton(selected = drivetrain == value, onClick = { drivetrain = value },
+                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Doors + minimum emission class
+            SectionLabel("Doors (min)")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val opts = listOf<Pair<String, Int?>>("Any" to null, "2+" to 2, "4+" to 4, "5+" to 5)
+                opts.forEachIndexed { i, (label, value) ->
+                    SegmentedButton(selected = minDoors == value, onClick = { minDoors = value },
+                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            SectionLabel("Emission class (min)")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val opts = listOf<Pair<String, Int?>>("Any" to null, "Euro 4" to 4, "Euro 5" to 5, "Euro 6" to 6)
+                opts.forEachIndexed { i, (label, value) ->
+                    SegmentedButton(selected = minEmission == value, onClick = { minEmission = value },
+                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Seller
+            SectionLabel("Seller")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val opts = listOf<Pair<String, SellerType?>>(
+                    "Any" to null, "Private" to SellerType.PRIVATE, "Dealer" to SellerType.BUSINESS,
+                )
+                opts.forEachIndexed { i, (label, value) ->
+                    SegmentedButton(selected = sellerType == value, onClick = { sellerType = value },
+                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Ranges: lower bounds + seats
+            SectionLabel("More ranges")
+            SliderNumberField("Min mileage (km)", minKm, { minKm = it }, 0f, 300000f, 5000)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField("Min price (EUR)", minPrice, { minPrice = it }, 0f, 100000f, 1000)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField("Max power (kW)", maxPowerKw, { maxPowerKw = it }, 0f, 300f, 5)
+            Spacer(Modifier.height(12.dp))
+            SliderNumberField("Min seats", minSeats, { minSeats = it.take(1) }, 0f, 9f, 1)
+
+            Spacer(Modifier.height(18.dp))
+
+            // Colour (multi-select)
+            SectionLabel("Colour")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CAR_COLORS.forEach { c ->
+                    FilterChip(
+                        selected = c in colors,
+                        onClick = { if (c in colors) colors.remove(c) else colors.add(c) },
+                        label = { Text(c, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Find in description — free text present in title/description on any platform.
+            SectionLabel("Find in description")
+            OutlinedTextField(
+                value = descriptionContains,
+                onValueChange = { descriptionContains = it },
+                placeholder = { Text("e.g. Standheizung, Anhängerkupplung, Camper") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(Modifier.height(18.dp))
 
@@ -378,6 +538,15 @@ private fun <T> SearchablePickerDialog(
         },
     )
 }
+
+/** Common German exterior colours offered as multi-select chips. */
+private val CAR_COLORS = listOf(
+    "Schwarz", "Weiß", "Grau", "Silber", "Blau", "Rot", "Grün", "Braun", "Beige", "Gelb", "Orange", "Gold",
+)
+
+/** "HYBRID_PETROL" -> "Hybrid Petrol" for enum filter chip labels. */
+private fun enumLabel(name: String): String =
+    name.lowercase().split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
 @Composable
 private fun SectionLabel(text: String) {

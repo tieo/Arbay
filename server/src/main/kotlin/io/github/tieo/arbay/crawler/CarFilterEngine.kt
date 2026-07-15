@@ -40,6 +40,14 @@ object CarFilterEngine {
                 return false
         }
 
+        // Price is always known (it's on the listing), so it can always exclude.
+        val priceEur = priceEurCents(listing) / 100
+        filters.minPriceEur?.let { if (priceEur < it) return false }
+        filters.maxPriceEur?.let { if (priceEur > it) return false }
+
+        // Seller type comes from the listing, not VehicleInfo.
+        filters.sellerType?.let { want -> listing.seller?.type?.let { if (it != want) return false } }
+
         if (v != null) {
             // Exclude ONLY on verified fields (from the site's structured data). A text-inferred
             // value that's wrong must never drop a listing that actually fits — false exclusion
@@ -49,17 +57,35 @@ object CarFilterEngine {
                 filters.firstRegToYear?.let { max -> if (it > max) return false }
             }
             if (v.isVerified(VehicleField.MILEAGE)) v.mileageKm?.let {
+                filters.minMileageKm?.let { min -> if (it < min) return false }
                 filters.maxMileageKm?.let { max -> if (it > max) return false }
             }
             if (v.isVerified(VehicleField.POWER)) v.powerKw?.let {
                 filters.minPowerKw?.let { min -> if (it < min) return false }
+                filters.maxPowerKw?.let { max -> if (it > max) return false }
             }
             if (v.isVerified(VehicleField.GEARBOX)) v.gearbox?.let {
                 filters.transmission?.let { want -> if (it != want) return false }
             }
+            if (filters.fuels.isNotEmpty() && v.isVerified(VehicleField.FUEL))
+                v.fuel?.let { if (it !in filters.fuels) return false }
+            if (filters.bodyTypes.isNotEmpty() && v.isVerified(VehicleField.BODY_TYPE))
+                v.bodyType?.let { if (it !in filters.bodyTypes) return false }
+            if (filters.conditions.isNotEmpty() && v.isVerified(VehicleField.CONDITION))
+                v.condition?.let { if (it !in filters.conditions) return false }
+            filters.drivetrain?.let { want -> if (v.isVerified(VehicleField.DRIVETRAIN)) v.drivetrain?.let { if (it != want) return false } }
+            filters.minDoors?.let { min -> if (v.isVerified(VehicleField.DOORS)) v.doors?.let { if (it < min) return false } }
+            filters.minSeats?.let { min -> if (v.isVerified(VehicleField.SEATS)) v.seats?.let { if (it < min) return false } }
+            filters.minEmissionEuro?.let { min -> if (v.isVerified(VehicleField.EMISSION)) v.emissionClassEuro?.let { if (it < min) return false } }
+            if (filters.colors.isNotEmpty() && v.isVerified(VehicleField.COLOR))
+                v.color?.let { c -> if (filters.colors.none { c.contains(it, ignoreCase = true) }) return false }
         }
         return true
     }
+
+    private fun priceEurCents(listing: Listing): Long =
+        if (listing.price.currency == Currency.EUR) listing.price.amount
+        else ExchangeRates.convert(listing.price.amount, listing.price.currency.name, "EUR")
 
     /** A car-query result on a general marketplace with no vehicle signal and a throwaway price
      *  is a part or accessory, not a car. Car-only platforms are exempt (every result is a car). */

@@ -287,12 +287,9 @@ class ArbayClient(
                 parameter("platforms", platforms.joinToString(",") { it.name })
             }
             filters?.takeUnless { it.isEmpty }?.let { f ->
-                f.firstRegFromYear?.let { parameter("fregFrom", it) }
-                f.firstRegToYear?.let { parameter("fregTo", it) }
-                f.maxMileageKm?.let { parameter("kmTo", it) }
-                f.maxPriceEur?.let { parameter("priceTo", it) }
-                f.minPowerKw?.let { parameter("powerKw", it) }
-                f.transmission?.let { parameter("gear", it.name) }
+                // Whole filter set as one JSON param — covers the multi-selects; the server
+                // mirrors the native-param fields itself.
+                parameter("carFilters", streamJson.encodeToString(CarFilters.serializer(), f))
             }
         }.execute { response ->
             val channel = response.bodyAsChannel()

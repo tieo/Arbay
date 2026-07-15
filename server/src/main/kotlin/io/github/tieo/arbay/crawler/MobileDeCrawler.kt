@@ -23,10 +23,18 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
 
         val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
         val seen = mutableSetOf<String>()
+        val platform = platformId.displayName
         return categories.flatMap { vc ->
+            // mobile.de bypasses fetchWithFallback (dedicated stealth browser), so instrument
+            // and enforce the request cutoff here too — it's the most block-sensitive platform.
+            if (RequestMonitor.overBudget(platform))
+                throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
             val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q"
             val pages = StealthBrowserClient.fetch(url, maxPages = maxPages)
-            pages.split(StealthBrowserClient.PAGE_BREAK).flatMap { parseSearchResults(it) }
+            val pageList = pages.split(StealthBrowserClient.PAGE_BREAK)
+            repeat(pageList.size) { RequestMonitor.recordRequest(platform) }
+            RequestMonitor.recordTier(platform, "Browser")
+            pageList.flatMap { parseSearchResults(it) }
         }.filter { seen.add(it.externalId) }
     }
 

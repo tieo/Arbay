@@ -11,23 +11,44 @@ enum class Transmission { AUTOMATIC, MANUAL }
 data class CarFilters(
     val firstRegFromYear: Int? = null,
     val firstRegToYear: Int? = null,
+    val minMileageKm: Int? = null,
     val maxMileageKm: Int? = null,
+    val minPriceEur: Int? = null,
     val maxPriceEur: Int? = null,
     val minPowerKw: Int? = null,
+    val maxPowerKw: Int? = null,
     val transmission: Transmission? = null,
+    // Multi-select: a listing matches if its value is in the set (empty = no constraint).
+    val fuels: Set<Fuel> = emptySet(),
+    val bodyTypes: Set<BodyType> = emptySet(),
+    val conditions: Set<VehicleCondition> = emptySet(),
+    val colors: Set<String> = emptySet(),
+    val drivetrain: Drivetrain? = null,
+    val minDoors: Int? = null,
+    val minSeats: Int? = null,
+    val minEmissionEuro: Int? = null,   // e.g. 6 = at least Euro 6
+    val sellerType: SellerType? = null,
     // Free text that must appear in the listing's title or description. A literal match on
     // text we already have, so it works on every platform and can safely exclude.
     val descriptionContains: String? = null,
 ) {
     val isEmpty: Boolean get() =
-        firstRegFromYear == null && firstRegToYear == null && maxMileageKm == null &&
-            maxPriceEur == null && minPowerKw == null && transmission == null &&
+        firstRegFromYear == null && firstRegToYear == null &&
+            minMileageKm == null && maxMileageKm == null &&
+            minPriceEur == null && maxPriceEur == null &&
+            minPowerKw == null && maxPowerKw == null && transmission == null &&
+            fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
+            drivetrain == null && minDoors == null && minSeats == null &&
+            minEmissionEuro == null && sellerType == null &&
             descriptionContains.isNullOrBlank()
 }
 
 /** Car filters carried inside a saved search, so opening a bookmark reruns it with the
  *  same constraints instead of a bare text search. Null when the query has no car filter. */
 fun SearchQuery.toCarFilters(): CarFilters? {
+    // The full carFilters wins; fall back to the legacy individual fields for older saved
+    // searches that predate it.
+    carFilters?.takeUnless { it.isEmpty }?.let { return it }
     val filters = CarFilters(
         firstRegFromYear = firstRegFromYear,
         firstRegToYear = firstRegToYear,
@@ -61,6 +82,9 @@ data class SearchQuery(
     val minPowerKw: Int? = null,        // minimum engine power in kW
     val transmission: Transmission? = null,
     val descriptionContains: String? = null,  // free text required in title/description
+    // The full filter set, enforced by post-filtering. The individual fields above stay for
+    // the crawlers that turn them into native URL params; everything else lives here.
+    val carFilters: CarFilters? = null,
 ) {
     /** Search text with negative keywords and OR logic resolved — for platforms that don't support exclusion/OR syntax.
      *  For OR queries, picks the group with the most tokens (most specific variant). */

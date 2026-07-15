@@ -76,6 +76,11 @@ internal suspend fun fetchWithFallback(
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
 
+    // Hard cutoff: refuse once a platform has hit the per-window request ceiling, so a runaway
+    // can't hammer a site into flagging our IP.
+    if (RequestMonitor.overBudget(platformName))
+        throw CrawlerBlockedException("$platformName: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
+
     // Randomized pause before each page fetch. A fixed cadence across 11 platforms is itself
     // a bot signature; the jitter spreads the burst and varies the inter-request gap.
     RequestMonitor.recordRequest(platformName)

@@ -29,6 +29,12 @@ object RequestMonitor {
         val blockRate: Double get() = if (totalRequests == 0L) 0.0 else blocks.toDouble() / totalRequests
     }
 
+    // Hard cutoff: no more than this many outbound requests to one platform per rolling window.
+    // A normal search is well under this; the cap only trips a runaway (retry/pagination/detail
+    // fetch stacking) before it can hammer a site into flagging our IP.
+    private const val WINDOW_MS = 60_000L
+    private const val MAX_PER_WINDOW = 45
+
     private class Counters {
         val total = AtomicLong()
         val blocks = AtomicLong()
@@ -38,6 +44,7 @@ object RequestMonitor {
         val browser = AtomicLong()
         @Volatile var lastRequest: Instant? = null
         @Volatile var lastBlock: Instant? = null
+        val recentMs = ArrayDeque<Long>() // request timestamps in the rolling window
     }
 
     private val byPlatform = ConcurrentHashMap<String, Counters>()
@@ -45,9 +52,23 @@ object RequestMonitor {
     private fun counters(platform: String) = byPlatform.getOrPut(platform) { Counters() }
 
     fun recordRequest(platform: String) {
-        counters(platform).apply {
-            total.incrementAndGet()
-            lastRequest = Clock.System.now()
+        val c = counters(platform)
+        c.total.incrementAndGet()
+        c.lastRequest = Clock.System.now()
+        val now = Clock.System.now().toEpochMilliseconds()
+        synchronized(c.recentMs) {
+            c.recentMs.addLast(now)
+            while (c.recentMs.isNotEmpty() && now - c.recentMs.first() > WINDOW_MS) c.recentMs.removeFirst()
+        }
+    }
+
+    /** True when this platform has hit the per-window request ceiling — callers must skip it. */
+    fun overBudget(platform: String): Boolean {
+        val c = byPlatform[platform] ?: return false
+        val now = Clock.System.now().toEpochMilliseconds()
+        return synchronized(c.recentMs) {
+            while (c.recentMs.isNotEmpty() && now - c.recentMs.first() > WINDOW_MS) c.recentMs.removeFirst()
+            c.recentMs.size >= MAX_PER_WINDOW
         }
     }
 
