@@ -87,10 +87,14 @@ object CarFilterEngine {
         if (listing.price.currency == Currency.EUR) listing.price.amount
         else ExchangeRates.convert(listing.price.amount, listing.price.currency.name, "EUR")
 
-    /** A car-query result on a general marketplace with no vehicle signal and a throwaway price
-     *  is a part or accessory, not a car. Car-only platforms are exempt (every result is a car). */
+    // Wanted-ad openers on the German classifieds: someone looking to BUY, not a car for sale.
+    private val wantedAd = Regex("""^\s*(suche|suchen|gesucht|kaufe|ankauf|ankaufe|biete geld)\b""", RegexOption.IGNORE_CASE)
+
+    /** A car-query result on a general marketplace that is a part/accessory or a wanted ad,
+     *  not a car for sale. Car-only platforms are exempt (every result is a car). */
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
+        if (wantedAd.containsMatchIn(listing.title)) return true
         val v = listing.vehicle
         // A bare year is too weak — parts titles ("... MAN TGE 2023") carry one. Require an
         // odometer, power or displacement figure, which parts listings don't have.
