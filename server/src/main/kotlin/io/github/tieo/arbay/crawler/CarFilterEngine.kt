@@ -27,70 +27,38 @@ object CarFilterEngine {
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
         listings.filter { keep(it, filters) }
 
-    /** Per-filter marginal "removed" counts: for each active filter, how many listings pass
-     *  every other filter but fail this one — i.e. how many extra results relaxing it would add.
-     *  Keyed by a stable chip label ("year"/"mileage"/"power"/"gearbox"). Additive across
-     *  platforms, so the app sums per-platform contributions. */
-    fun facetRemoved(listings: List<Listing>, filters: CarFilters): Map<String, Int> {
-        val keys = buildList {
-            if (filters.firstRegFromYear != null || filters.firstRegToYear != null) add("year")
-            if (filters.maxMileageKm != null) add("mileage")
-            if (filters.minPowerKw != null) add("power")
-            if (filters.transmission != null) add("gearbox")
-        }
-        return keys.associateWith { key ->
-            listings.count { l ->
-                passesDescription(l, filters) && !isLikelyNonVehicle(l) &&
-                    keys.filter { it != key }.all { passesField(l, filters, it) } &&
-                    !passesField(l, filters, key)
-            }
-        }.filterValues { it > 0 }
-    }
-
     private fun keep(listing: Listing, filters: CarFilters): Boolean {
+        val v = listing.vehicle
+
         if (isLikelyNonVehicle(listing)) return false
-        if (!passesDescription(listing, filters)) return false
-        return listOf("year", "mileage", "power", "gearbox").all { passesField(listing, filters, it) }
-    }
 
-    /** Find-in-description: every whitespace-separated term must appear in title or description.
-     *  A literal match on text we hold, so excluding is safe. */
-    private fun passesDescription(listing: Listing, filters: CarFilters): Boolean {
-        val needle = filters.descriptionContains?.takeIf { it.isNotBlank() } ?: return true
-        val haystack = "${listing.title} ${listing.description ?: ""}".lowercase()
-        return needle.lowercase().split(Regex("\\s+")).all { it.isBlank() || haystack.contains(it) }
-    }
-
-    /** True if the listing passes one filter dimension. Excludes ONLY on verified fields — a
-     *  text-inferred value that's wrong must never drop a listing that actually fits. */
-    private fun passesField(listing: Listing, filters: CarFilters, key: String): Boolean {
-        val v = listing.vehicle ?: return true
-        return when (key) {
-            "year" -> {
-                val y = v.firstRegYear
-                if (v.isVerified(VehicleField.FIRST_REG_YEAR) && y != null) {
-                    val from = filters.firstRegFromYear
-                    val to = filters.firstRegToYear
-                    (from == null || y >= from) && (to == null || y <= to)
-                } else true
-            }
-            "mileage" -> {
-                val km = v.mileageKm
-                val max = filters.maxMileageKm
-                if (v.isVerified(VehicleField.MILEAGE) && km != null && max != null) km <= max else true
-            }
-            "power" -> {
-                val kw = v.powerKw
-                val min = filters.minPowerKw
-                if (v.isVerified(VehicleField.POWER) && kw != null && min != null) kw >= min else true
-            }
-            "gearbox" -> {
-                val g = v.gearbox
-                val want = filters.transmission
-                if (v.isVerified(VehicleField.GEARBOX) && g != null && want != null) g == want else true
-            }
-            else -> true
+        // Find-in-description: every whitespace-separated term must appear in the title or
+        // description. This is a literal match on text we hold, so excluding is safe.
+        filters.descriptionContains?.takeIf { it.isNotBlank() }?.let { needle ->
+            val haystack = "${listing.title} ${listing.description ?: ""}".lowercase()
+            if (!needle.lowercase().split(Regex("\\s+")).all { it.isBlank() || haystack.contains(it) })
+                return false
         }
+
+        if (v != null) {
+            // Exclude ONLY on verified fields (from the site's structured data). A text-inferred
+            // value that's wrong must never drop a listing that actually fits — false exclusion
+            // loses a real deal, which is worse than a soft-pass we can badge as unverified.
+            if (v.isVerified(VehicleField.FIRST_REG_YEAR)) v.firstRegYear?.let {
+                filters.firstRegFromYear?.let { min -> if (it < min) return false }
+                filters.firstRegToYear?.let { max -> if (it > max) return false }
+            }
+            if (v.isVerified(VehicleField.MILEAGE)) v.mileageKm?.let {
+                filters.maxMileageKm?.let { max -> if (it > max) return false }
+            }
+            if (v.isVerified(VehicleField.POWER)) v.powerKw?.let {
+                filters.minPowerKw?.let { min -> if (it < min) return false }
+            }
+            if (v.isVerified(VehicleField.GEARBOX)) v.gearbox?.let {
+                filters.transmission?.let { want -> if (it != want) return false }
+            }
+        }
+        return true
     }
 
     /** A car-query result on a general marketplace with no vehicle signal and a throwaway price

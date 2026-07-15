@@ -331,7 +331,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 }
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
                                 val classified = relevantResults.map { SoldDetector.classify(it) }
-                                var facets: Map<String, Int> = emptyMap()
                                 val results = if (isCarQuery) {
                                     val filters = searchQuery.toCarFilters() ?: CarFilters()
                                     val enriched = classified.map { VehicleTextParser.enrich(it) }
@@ -339,7 +338,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     // Promote survivors to verified specs from their detail page,
                                     // then re-filter so power/gearbox/etc. actually enforce.
                                     val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-                                    facets = CarFilterEngine.facetRemoved(detailed, filters)
                                     CarFilterEngine.apply(detailed, filters)
                                 } else classified
                                 results.forEach { listingRepo.upsert(it) }
@@ -352,7 +350,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = results.size,
                                     rawCount = rawResults.size,
                                     listings = results,
-                                    facetRemoved = facets,
                                 )
                             } catch (e: TimeoutCancellationException) {
                                 CrawlerStatusTracker.recordError(platformId, "Timeout after 180s", ErrorType.TIMEOUT)

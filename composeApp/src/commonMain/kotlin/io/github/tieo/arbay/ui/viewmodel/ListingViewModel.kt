@@ -59,9 +59,6 @@ class ListingViewModel(
     private val _bannedIds = MutableStateFlow<Set<String>>(loadBannedIds())
     val bannedIds: StateFlow<Set<String>> = _bannedIds
 
-    private val _facetRemoved = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val facetRemoved: StateFlow<Map<String, Int>> = _facetRemoved
-
     private val _priceHistory = MutableStateFlow<List<Listing>>(emptyList())
     val priceHistory: StateFlow<List<Listing>> = _priceHistory
 
@@ -130,7 +127,6 @@ class ListingViewModel(
             _platformStatuses.value = emptyList()
             _completedPlatforms.value = 0
             _totalPlatforms.value = 0
-            _facetRemoved.value = emptyMap()
 
             try {
                 withTimeoutOrNull(360_000L) {
@@ -159,10 +155,6 @@ class ListingViewModel(
                             }
                             _allListings.value = (_allListings.value + event.listings)
                                 .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
-                            if (event.facetRemoved.isNotEmpty()) {
-                                _facetRemoved.value = (_facetRemoved.value.keys + event.facetRemoved.keys)
-                                    .associateWith { (_facetRemoved.value[it] ?: 0) + (event.facetRemoved[it] ?: 0) }
-                            }
                         }
 
                         CrawlerEventType.PLATFORM_ERROR -> {

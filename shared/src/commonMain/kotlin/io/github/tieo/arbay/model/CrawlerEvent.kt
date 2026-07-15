@@ -19,8 +19,6 @@ data class CrawlerSearchEvent(
     val hasMore: Boolean = false,
     val nextPage: Int = 0,
     val fromCache: Boolean = false,
-    // Per-filter "would-add if relaxed" counts for this platform's candidates; summed by the app.
-    val facetRemoved: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
