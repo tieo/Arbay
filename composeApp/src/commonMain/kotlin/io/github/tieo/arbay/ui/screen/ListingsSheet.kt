@@ -52,18 +52,19 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
-/** Active car filters as short human labels, for the editable chip row. */
-private fun carFilterChips(f: CarFilters): List<String> = buildList {
+/** Active car filters as (label, facetKey) pairs for the editable chip row. facetKey matches
+ *  the server's facet map so a chip can show "−N" (how many relaxing it would add); "" = no facet. */
+private fun carFilterChips(f: CarFilters): List<Pair<String, String>> = buildList {
     when {
-        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}")
-        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}")
-        f.firstRegToYear != null -> add("to ${f.firstRegToYear}")
+        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}" to "year")
+        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}" to "year")
+        f.firstRegToYear != null -> add("to ${f.firstRegToYear}" to "year")
     }
-    f.maxMileageKm?.let { add("≤${it / 1000}k km") }
-    f.minPowerKw?.let { add("≥$it kW") }
-    f.maxPriceEur?.let { add("≤€${it / 1000}k") }
-    f.transmission?.let { add(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") }
-    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”") }
+    f.maxMileageKm?.let { add("≤${it / 1000}k km" to "mileage") }
+    f.minPowerKw?.let { add("≥$it kW" to "power") }
+    f.maxPriceEur?.let { add("≤€${it / 1000}k" to "") }
+    f.transmission?.let { add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to "gearbox") }
+    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”" to "") }
 }
 
 @Composable
@@ -86,6 +87,7 @@ fun ListingsSheet(
     val completedPlatforms by listingViewModel.completedPlatforms.collectAsState()
     val priceHistory by listingViewModel.priceHistory.collectAsState()
     val soldLoadingState by listingViewModel.soldLoading.collectAsState()
+    val facetRemoved by listingViewModel.facetRemoved.collectAsState()
 
     val allActiveListings = remember(listings) { listings.filter { !it.sold } }
     // Merge live sold results with persisted history, deduplicate by id, most recent first
@@ -296,10 +298,16 @@ fun ListingsSheet(
                                     leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
                                 )
                             }
-                            items(chips) { chip ->
+                            items(chips) { (label, key) ->
+                                val removed = facetRemoved[key]?.takeIf { it > 0 }
                                 AssistChip(
                                     onClick = onEditFilters,
-                                    label = { Text(chip, style = MaterialTheme.typography.labelMedium) },
+                                    label = {
+                                        Text(
+                                            if (removed != null) "$label  −$removed" else label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    },
                                 )
                             }
                         }

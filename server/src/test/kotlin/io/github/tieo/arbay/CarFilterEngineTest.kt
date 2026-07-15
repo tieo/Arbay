@@ -105,6 +105,26 @@ class CarFilterEngineTest {
         assertEquals(listOf("K:c"), CarFilterEngine.apply(listOf(camper, plain), filters).map { it.id })
     }
 
+    @Test
+    fun facetCountsMarginalRemovalPerFilter() {
+        // Filter: ≥110 kW. Three verified cars: 130 (passes), 90 and 75 (fail power).
+        val filters = CarFilters(minPowerKw = 110)
+        val ls = listOf(
+            listing("a", PlatformId.MOBILE_DE, 1_800_000, verified(mileageKm = 100_000, powerKw = 130)),
+            listing("b", PlatformId.MOBILE_DE, 1_800_000, verified(mileageKm = 100_000, powerKw = 90)),
+            listing("c", PlatformId.MOBILE_DE, 1_800_000, verified(mileageKm = 100_000, powerKw = 75)),
+        )
+        assertEquals(mapOf("power" to 2), CarFilterEngine.facetRemoved(ls, filters))
+    }
+
+    @Test
+    fun facetIgnoresInferredValues() {
+        // Inferred power below the floor must not count — it can't exclude, so it can't "remove".
+        val filters = CarFilters(minPowerKw = 110)
+        val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000, VehicleInfo(mileageKm = 100_000, powerKw = 80))
+        assertTrue(CarFilterEngine.facetRemoved(listOf(inferred), filters).isEmpty())
+    }
+
     private fun verified(
         firstRegYear: Int? = null, mileageKm: Int? = null,
         powerKw: Int? = null, gearbox: Transmission? = null,
