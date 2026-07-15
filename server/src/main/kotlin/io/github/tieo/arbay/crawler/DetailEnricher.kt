@@ -20,10 +20,18 @@ object DetailEnricher {
 
     /** Fields the given filters constrain and that a detail page could verify. */
     private fun neededFields(filters: CarFilters): Set<VehicleField> = buildSet {
-        if (filters.minPowerKw != null) add(VehicleField.POWER)
+        if (filters.minPowerKw != null || filters.maxPowerKw != null) add(VehicleField.POWER)
         if (filters.transmission != null) add(VehicleField.GEARBOX)
         if (filters.firstRegFromYear != null || filters.firstRegToYear != null) add(VehicleField.FIRST_REG_YEAR)
-        if (filters.maxMileageKm != null) add(VehicleField.MILEAGE)
+        if (filters.minMileageKm != null || filters.maxMileageKm != null) add(VehicleField.MILEAGE)
+        if (filters.fuels.isNotEmpty()) add(VehicleField.FUEL)
+        if (filters.bodyTypes.isNotEmpty()) add(VehicleField.BODY_TYPE)
+        if (filters.conditions.isNotEmpty()) add(VehicleField.CONDITION)
+        if (filters.colors.isNotEmpty()) add(VehicleField.COLOR)
+        if (filters.drivetrain != null) add(VehicleField.DRIVETRAIN)
+        if (filters.minDoors != null) add(VehicleField.DOORS)
+        if (filters.minSeats != null) add(VehicleField.SEATS)
+        if (filters.minEmissionEuro != null) add(VehicleField.EMISSION)
     }
 
     private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {
