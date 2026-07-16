@@ -14,7 +14,6 @@ import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.RequestMonitor
-import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.crawler.RelevanceFilter
@@ -223,9 +222,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val raw = crawler.trackedSearch(searchQuery)
                     val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
                     val classified = if (isCarQuery) {
+                        // Specs come from structured sources only (card chips/attributes + the
+                        // detail table) — no free-text description guessing. Unknown stays unknown.
                         val filters = searchQuery.toCarFilters() ?: CarFilters()
-                        val enriched = filtered.map { VehicleTextParser.enrich(it) }
-                        val cardFiltered = CarFilterEngine.apply(enriched, filters)
+                        val cardFiltered = CarFilterEngine.apply(filtered, filters)
                         val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
                         CarFilterEngine.apply(detailed, filters)
                     } else filtered
@@ -350,9 +350,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
                                 val classified = relevantResults.map { SoldDetector.classify(it) }
                                 val results = if (isCarQuery) {
+                                    // Specs from structured sources only (card + detail table),
+                                    // never free-text guessing.
                                     val filters = searchQuery.toCarFilters() ?: CarFilters()
-                                    val enriched = classified.map { VehicleTextParser.enrich(it) }
-                                    val cardFiltered = CarFilterEngine.apply(enriched, filters)
+                                    val cardFiltered = CarFilterEngine.apply(classified, filters)
                                     // Promote survivors to verified specs from their detail page,
                                     // then re-filter so power/gearbox/etc. actually enforce.
                                     val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
