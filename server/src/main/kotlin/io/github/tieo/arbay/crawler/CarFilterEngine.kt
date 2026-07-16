@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleField
+import io.github.tieo.arbay.model.VehicleInfo
 
 /**
  * Enforces car filters against the parsed VehicleInfo, so a constraint a marketplace can't
@@ -25,7 +26,23 @@ object CarFilterEngine {
     private const val JUNK_PRICE_CEILING_CENTS = 100_000L // €1000
 
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
-        listings.filter { keep(it, filters) }
+        listings.map { annotateVanDims(it) }.filter { keep(it, filters) }
+
+    /** Fill the display van size classes from the listing text: explicit L/H codes are verified
+     *  (may exclude), word inferences ("Hochdach", "Maxi") fill gaps for display only. */
+    private fun annotateVanDims(listing: Listing): Listing {
+        val text = "${listing.title} ${listing.description ?: ""}"
+        val inferred = VanDimensions.inferred(text)
+        if (inferred.length == null && inferred.height == null) return listing
+        val codes = VanDimensions.excludable(text)
+        val v = listing.vehicle ?: VehicleInfo()
+        val verified = v.verified.toMutableSet()
+        if (codes.length != null) verified += VehicleField.VAN_LENGTH
+        if (codes.height != null) verified += VehicleField.VAN_HEIGHT
+        return listing.copy(
+            vehicle = v.copy(vanLength = inferred.length, vanHeight = inferred.height, verified = verified),
+        )
+    }
 
     private fun keep(listing: Listing, filters: CarFilters): Boolean {
         val v = listing.vehicle
@@ -79,6 +96,10 @@ object CarFilterEngine {
             filters.minEmissionEuro?.let { min -> if (v.isVerified(VehicleField.EMISSION)) v.emissionClassEuro?.let { if (it < min) return false } }
             if (filters.colors.isNotEmpty() && v.isVerified(VehicleField.COLOR))
                 v.color?.let { c -> if (filters.colors.none { c.contains(it, ignoreCase = true) }) return false }
+            if (filters.vanLengths.isNotEmpty() && v.isVerified(VehicleField.VAN_LENGTH))
+                v.vanLength?.let { if (it !in filters.vanLengths) return false }
+            if (filters.vanHeights.isNotEmpty() && v.isVerified(VehicleField.VAN_HEIGHT))
+                v.vanHeight?.let { if (it !in filters.vanHeights) return false }
         }
         return true
     }

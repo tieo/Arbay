@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 enum class VehicleField {
     FIRST_REG_YEAR, MILEAGE, POWER, DISPLACEMENT, FUEL, BODY_TYPE, GEARBOX,
     DRIVETRAIN, DOORS, SEATS, CONDITION, COLOR, EMISSION,
-    EMISSION_STICKER, INSPECTION, UPHOLSTERY,
+    EMISSION_STICKER, INSPECTION, UPHOLSTERY, VAN_LENGTH, VAN_HEIGHT,
 }
 
 /**
@@ -45,6 +45,8 @@ data class VehicleInfo(
     val emissionSticker: Int? = null,      // Umweltplakette 1-4 (green = 4)
     val inspectionUntil: String? = null,   // HU/TÜV valid until, "YYYY-MM"
     val upholstery: String? = null,        // Material Innenausstattung (Stoff/Leder/…)
+    val vanLength: Int? = null,            // panel-van length class 1-4 (L1..L4)
+    val vanHeight: Int? = null,            // panel-van roof height class 1-3 (H1..H3)
     val verified: Set<VehicleField> = emptySet(),
 ) {
     fun isVerified(field: VehicleField): Boolean = field in verified

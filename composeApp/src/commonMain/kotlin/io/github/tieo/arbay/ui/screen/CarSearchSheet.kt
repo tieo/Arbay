@@ -90,6 +90,8 @@ fun CarSearchSheet(
     var minSeats by remember { mutableStateOf(initialFilters?.minSeats?.toString() ?: "") }
     var minEmission by remember { mutableStateOf(initialFilters?.minEmissionEuro) }
     var sellerType by remember { mutableStateOf(initialFilters?.sellerType) }
+    val vanLengths = remember { mutableStateListOf<Int>().apply { initialFilters?.vanLengths?.let { addAll(it) } } }
+    val vanHeights = remember { mutableStateListOf<Int>().apply { initialFilters?.vanHeights?.let { addAll(it) } } }
     var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
     val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
 
@@ -112,6 +114,8 @@ fun CarSearchSheet(
         minSeats = minSeats.toIntOrNull(),
         minEmissionEuro = minEmission,
         sellerType = sellerType,
+        vanLengths = vanLengths.toSet(),
+        vanHeights = vanHeights.toSet(),
         descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
     )
 
@@ -325,6 +329,28 @@ fun CarSearchSheet(
                         selected = c in colors,
                         onClick = { if (c in colors) colors.remove(c) else colors.add(c) },
                         label = { Text(c, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // Van size (panel vans): filters only on an explicit L/H code in the listing text;
+            // listings that don't state one are kept. Roof words (Hochdach) are model-specific.
+            SectionLabel("Van size (length / height)")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                (1..4).forEach { l ->
+                    FilterChip(
+                        selected = l in vanLengths,
+                        onClick = { if (l in vanLengths) vanLengths.remove(l) else vanLengths.add(l) },
+                        label = { Text("L$l", style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+                (1..3).forEach { h ->
+                    FilterChip(
+                        selected = h in vanHeights,
+                        onClick = { if (h in vanHeights) vanHeights.remove(h) else vanHeights.add(h) },
+                        label = { Text("H$h", style = MaterialTheme.typography.labelSmall) },
                     )
                 }
             }

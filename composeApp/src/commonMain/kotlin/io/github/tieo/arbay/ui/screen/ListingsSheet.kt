@@ -63,6 +63,8 @@ private fun carFilterChips(f: CarFilters): List<String> = buildList {
     f.minPowerKw?.let { add("≥$it kW") }
     f.maxPriceEur?.let { add("≤€${it / 1000}k") }
     f.transmission?.let { add(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") }
+    if (f.vanLengths.isNotEmpty()) add(f.vanLengths.sorted().joinToString("/") { "L$it" })
+    if (f.vanHeights.isNotEmpty()) add(f.vanHeights.sorted().joinToString("/") { "H$it" })
     f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”") }
 }
 
@@ -826,11 +828,22 @@ private fun VehicleSpecsRow(v: io.github.tieo.arbay.model.VehicleInfo) {
             add(Spec(g, io.github.tieo.arbay.model.VehicleField.GEARBOX))
         }
         v.fuel?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, io.github.tieo.arbay.model.VehicleField.FUEL)) }
+        // Van size code — verified when the listing stated an explicit L/H, inferred from a
+        // roof/wheelbase word otherwise. Uses the length field's verification for the marker.
+        val vanCode = buildString {
+            v.vanLength?.let { append("L$it") }
+            v.vanHeight?.let { append("H$it") }
+        }
+        if (vanCode.isNotEmpty()) {
+            val field = if (v.vanLength != null) io.github.tieo.arbay.model.VehicleField.VAN_LENGTH
+            else io.github.tieo.arbay.model.VehicleField.VAN_HEIGHT
+            add(Spec(vanCode, field))
+        }
     }
     if (specs.isEmpty()) return
     Spacer(Modifier.height(3.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        specs.take(4).forEach { spec ->
+        specs.take(5).forEach { spec ->
             val verified = v.isVerified(spec.field)
             Text(
                 if (verified) spec.text else "~${spec.text}",

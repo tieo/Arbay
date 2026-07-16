@@ -44,6 +44,10 @@ data class CarFilters(
     val minSeats: Int? = null,
     val minEmissionEuro: Int? = null,   // e.g. 6 = at least Euro 6
     val sellerType: SellerType? = null,
+    // Panel-van size classes (multi-select): a listing matches if its explicit L/H code is in
+    // the set. Listings with no stated code pass (unknown != excluded).
+    val vanLengths: Set<Int> = emptySet(),   // L1..L4
+    val vanHeights: Set<Int> = emptySet(),   // H1..H3
     // Free text that must appear in the listing's title or description. A literal match on
     // text we already have, so it works on every platform and can safely exclude.
     val descriptionContains: String? = null,
@@ -56,6 +60,7 @@ data class CarFilters(
             fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null &&
+            vanLengths.isEmpty() && vanHeights.isEmpty() &&
             descriptionContains.isNullOrBlank()
 }
 
