@@ -157,11 +157,15 @@ class EbayDeCrawler(
     }
 
     private fun buildSearchUrl(query: SearchQuery, page: Int = 1): String {
+        // For a car query on ebay.de, search the whole-vehicle category by MODEL only. eBay
+        // sellers title vans "VW Crafter", not "Volkswagen Crafter", so the full make token
+        // ("volkswagen") matches nothing; the model ("crafter") plus the vehicle category is the
+        // reliable combination. The relevance filter still confirms make/model downstream.
+        val carQuery = if (domain == "ebay.de") CarQueryResolver.resolve(query.positiveText) else null
+        val keyword = carQuery?.modelSlug?.replace("-", " ") ?: query.text
         val params = buildList {
-            add("_nkw=${query.text.encodeUrl()}")
-            // Constrain a car query to eBay.de's whole-vehicle category so parts/accessories
-            // (engines, bumpers) don't dominate the all-category keyword results.
-            if (domain == "ebay.de" && CarQueryResolver.resolve(query.positiveText) != null) {
+            add("_nkw=${keyword.encodeUrl()}")
+            if (carQuery != null) {
                 CrawlerConfig.current.ebayDeCarCategory?.takeIf { it.isNotBlank() }
                     ?.let { add("_sacat=$it") }
             }

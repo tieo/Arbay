@@ -89,4 +89,16 @@ object CarQueryResolver {
         }
         return null
     }
+
+    /** Every spelling of the make that [token] names — canonical slug plus its aliases,
+     *  lowercased without spaces/hyphens — or null if [token] is not a known make. Lets a
+     *  "Volkswagen" query still match a "VW" title (and vice versa). */
+    fun makeSpellings(token: String): List<String>? {
+        val t = token.lowercase().replace(" ", "").replace("-", "")
+        for ((slug, aliases) in MAKES) {
+            val forms = (listOf(slug) + aliases).map { it.lowercase().replace(" ", "").replace("-", "") }.distinct()
+            if (t in forms) return forms
+        }
+        return null
+    }
 }

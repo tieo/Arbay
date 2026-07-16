@@ -33,7 +33,16 @@ object RelevanceFilter {
                 orGroups.add(alt.trim().split("\\s+".toRegex()).map { normalizeToken(it) })
             }
         } else {
-            plainTokens.addAll(positiveParts.map { normalizeToken(it) })
+            // A make token becomes an OR-group of its spellings so a "Volkswagen" query matches a
+            // "VW" title (and vice versa); other tokens stay as plain required tokens.
+            for (part in positiveParts) {
+                val spellings = CarQueryResolver.makeSpellings(part)
+                if (spellings != null && spellings.size > 1) {
+                    orGroups.add(spellings.map { normalizeToken(it) })
+                } else {
+                    plainTokens.add(normalizeToken(part))
+                }
+            }
         }
 
         return ParsedQuery(
