@@ -30,6 +30,10 @@ object QueryResultCache {
         query.firstRegFromYear, query.firstRegToYear,
         query.maxMileageKm, query.minPowerKw, query.transmission,
         query.location?.lowercase()?.trim(), query.radiusKm,
+        // Fuel is baked into some crawlers' fetch URL (Kleinanzeigen native filter), so it
+        // changes what is fetched and must key the entry. Post-filter-only dims (body, colour,
+        // van size, description, …) are enforced after the cache and stay out of the key.
+        query.carFilters?.fuels?.map { it.name }?.sorted()?.joinToString(","),
     ).joinToString("|") { it?.toString() ?: "" }
 
     /** Cached listings if a fresh entry exists, else null. Sold-only queries never hit. */

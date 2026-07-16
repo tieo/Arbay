@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.crawler.CarQueryResolver
+import io.github.tieo.arbay.crawler.Crawler
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
@@ -89,6 +90,23 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
         transmission = cf?.transmission ?: legacyGear,
         descriptionContains = cf?.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
     )
+}
+
+/** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
+ *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
+ *  filter. Specs come from structured sources only (card + detail table), never free-text
+ *  guessing. Non-car queries pass through unchanged. */
+private suspend fun carPostFilter(
+    listings: List<Listing>,
+    searchQuery: SearchQuery,
+    isCarQuery: Boolean,
+    crawler: Crawler,
+): List<Listing> {
+    if (!isCarQuery) return listings
+    val filters = searchQuery.toCarFilters() ?: CarFilters()
+    val cardFiltered = CarFilterEngine.apply(listings, filters)
+    val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
+    return CarFilterEngine.apply(detailed, filters)
 }
 
 /** Default platforms when the query resolves to a car make/model. Covers Germany
@@ -218,20 +236,17 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 val isCarQuery = CarQueryResolver.resolve(query) != null
                 val perPlatform = platforms.map { platformId ->
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
-                    QueryResultCache.get(platformId, searchQuery)?.let { return@map it }
-                    val raw = crawler.trackedSearch(searchQuery)
-                    val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
-                    val classified = if (isCarQuery) {
-                        // Specs come from structured sources only (card chips/attributes + the
-                        // detail table) — no free-text description guessing. Unknown stays unknown.
-                        val filters = searchQuery.toCarFilters() ?: CarFilters()
-                        val cardFiltered = CarFilterEngine.apply(filtered, filters)
-                        val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-                        CarFilterEngine.apply(detailed, filters)
-                    } else filtered
-                    classified.forEach { listingRepo.upsert(it) }
-                    QueryResultCache.put(platformId, searchQuery, classified)
-                    classified
+                    // Cache holds the raw relevance-filtered crawl; car post-filtering runs after
+                    // it, so tweaking a filter re-filters cached listings instead of re-crawling.
+                    val classified = QueryResultCache.get(platformId, searchQuery) ?: run {
+                        val raw = crawler.trackedSearch(searchQuery)
+                        val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
+                        QueryResultCache.put(platformId, searchQuery, filtered)
+                        filtered
+                    }
+                    val result = carPostFilter(classified, searchQuery, isCarQuery, crawler)
+                    result.forEach { listingRepo.upsert(it) }
+                    result
                 }
                 perPlatform.flatten().sortedBy { it.effectivePrice.amount }.take(limit)
             } finally {
@@ -312,17 +327,20 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 flush()
                             }
 
-                            // Fresh cached results for this exact query skip the crawl entirely,
-                            // so re-running a search (e.g. after a filter tweak) fires no requests.
+                            // Fresh cached crawl for this exact query skips the crawl entirely, so
+                            // re-running a search (e.g. after a filter tweak) fires no requests.
+                            // Car post-filtering still runs on the cached set so the new filters apply.
                             val cached = QueryResultCache.get(platformId, searchQuery)
                             if (cached != null) {
+                                val filtered = carPostFilter(cached, searchQuery, isCarQuery, crawler)
+                                filtered.forEach { listingRepo.upsert(it) }
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
                                     platformName = platformId.displayName,
-                                    resultCount = cached.size,
+                                    resultCount = filtered.size,
                                     rawCount = cached.size,
-                                    listings = cached,
+                                    listings = filtered,
                                     fromCache = true,
                                 ))
                                 return@launch
@@ -349,18 +367,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 }
                                 val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
                                 val classified = relevantResults.map { SoldDetector.classify(it) }
-                                val results = if (isCarQuery) {
-                                    // Specs from structured sources only (card + detail table),
-                                    // never free-text guessing.
-                                    val filters = searchQuery.toCarFilters() ?: CarFilters()
-                                    val cardFiltered = CarFilterEngine.apply(classified, filters)
-                                    // Promote survivors to verified specs from their detail page,
-                                    // then re-filter so power/gearbox/etc. actually enforce.
-                                    val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-                                    CarFilterEngine.apply(detailed, filters)
-                                } else classified
+                                // Cache the raw relevance-filtered crawl; car post-filtering (card
+                                // filter → detail-verify → final filter) runs after, so a later
+                                // filter tweak re-filters from cache without re-crawling.
+                                QueryResultCache.put(platformId, searchQuery, classified)
+                                val results = carPostFilter(classified, searchQuery, isCarQuery, crawler)
                                 results.forEach { listingRepo.upsert(it) }
-                                QueryResultCache.put(platformId, searchQuery, results)
 
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
