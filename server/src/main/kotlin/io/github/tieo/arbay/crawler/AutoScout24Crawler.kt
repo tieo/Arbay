@@ -156,9 +156,16 @@ class AutoScout24Crawler(
                     }
                 }.takeIf { it.isNotBlank() }
 
+                // AutoScout24 carries structured vehicle attributes in the listing's `vehicle`
+                // object (fuel, transmission, displacement) — authoritative, so verified.
+                val v = obj["vehicle"]?.jsonObject
                 val structured = VehicleInfo(
                     firstRegYear = yearText?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() },
                     mileageKm = mileageText?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+                    fuel = Fuel.parse(v?.get("fuel")?.jsonPrimitive?.contentOrNull),
+                    gearbox = Transmission.parse(v?.get("transmission")?.jsonPrimitive?.contentOrNull),
+                    displacementCc = v?.get("engineDisplacementInCCM")?.jsonPrimitive?.contentOrNull
+                        ?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 600..8000 },
                 )
                 val vehicle = VehicleTextParser.merge(
                     VehicleTextParser.verifiedByPresence(structured),

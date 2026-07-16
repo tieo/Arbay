@@ -3,7 +3,23 @@ package io.github.tieo.arbay.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class Transmission { AUTOMATIC, MANUAL }
+enum class Transmission {
+    AUTOMATIC, MANUAL;
+
+    companion object {
+        fun parse(raw: String?): Transmission? {
+            val s = raw?.lowercase()?.trim() ?: return null
+            return when {
+                s.isBlank() -> null
+                "automat" in s || "dsg" in s || "tiptronic" in s || "s tronic" in s ||
+                    "s-tronic" in s || "pdk" in s || "automaat" in s -> AUTOMATIC
+                "schalt" in s || "manuell" in s || "manual" in s || "handgeschakeld" in s ||
+                    "manuál" in s || "manuel" in s -> MANUAL
+                else -> null
+            }
+        }
+    }
+}
 
 /** Structured car-search criteria, carried from the UI to the crawler search endpoint,
  *  which turns them into per-site URL filter parameters. Prices are in EUR. */
