@@ -119,6 +119,14 @@ class EbayDeCrawler(
             }
         }
 
+        // A car query (a resolved make/model) always has eBay listings; zero results after the
+        // full HTTP→CurlCffi→Chrome fallthrough means the IP is being throttled (eBay serves a
+        // valid but empty results page, not a captcha). Surface it as a block so the cooldown
+        // kicks in and we stop hammering it, instead of reporting a misleading "0 results".
+        if (allResults.isEmpty() && CarQueryResolver.resolve(query.positiveText) != null) {
+            throw CrawlerBlockedException("eBay: empty results for a car query — likely IP throttle", ErrorType.BLOCKED_403)
+        }
+
         return allResults
     }
 
