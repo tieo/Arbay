@@ -144,37 +144,15 @@ object CarFilterEngine {
     // power), so they must be caught before the spec-signal exemption below.
     private val rentalAd = Regex("""\b(mieten|zu mieten|vermiet\w+|mietwagen|leihwagen|autovermietung|langzeitmiete|tagesmiete)\b""", RegexOption.IGNORE_CASE)
 
-    // Spare parts and accessories: the title names the part, not a car. Matched only when the
-    // listing has no vehicle signal (below), so a real car that merely mentions "Motor neu" or
-    // "Standheizung" survives on its mileage/power/displacement.
-    private val partsWord = Regex(
-        """\b(motor|engine|getriebe|gearbox|turbolader|turbo|steuergerät|einspritz|""" +
-        """stoßstange|stossstange|bumper|kotflügel|kotflugel|scheinwerfer|headlight|rückleuchte|""" +
-        """tür|türen|door|spiegel|mirror|achse|axle|bremse|brake|kupplung|clutch|anlasser|""" +
-        """lichtmaschine|alternator|zylinderkopf|ölwanne|felge|felgen|reifen|tyre|tire|""" +
-        """sitz|sitze|seat|lenkrad|armaturenbrett|ersatzteil|ersatzteile|teile|spare|""" +
-        """satz|kit|plane|markise|thermomatten|thermomatte|dachträger|dachtrager|standheizung|""" +
-        """tank|zierleiste|trittbrett|trittbretter|schweller|verkleidung|abdeckung|halter|träger|""" +
-        """konsole|drehkonsole|sitzkonsole)\b""",
-        RegexOption.IGNORE_CASE,
-    )
-
-    /** A car-query result on a general marketplace that is a part/accessory, a wanted ad or a
-     *  rental, not a car for sale. Car-only platforms are exempt (every result is a car).
-     *  No price threshold — a cheap running or broken car is still a car. */
+    /** A car-query result that is a wanted ad or a rental, not a car for sale. Both are matched
+     *  on the title only (safe, explicit). Parts/accessories are handled at the source now — the
+     *  car searches are category-constrained (Kleinanzeigen c216, eBay vehicle category), so a
+     *  keyword parts guard is unneeded and would false-drop a real car that merely names a
+     *  feature ("… mit Standheizung"). No price threshold: a cheap or broken car is still a car. */
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         if (wantedAd.containsMatchIn(listing.title)) return true
         if (rentalAd.containsMatchIn(listing.title)) return true
-        val v = listing.vehicle
-        // Odometer, power or displacement is a car signal parts listings don't carry; a bare
-        // year is too weak (parts titles carry "… Crafter 30-50"). A listing with such a signal
-        // is a vehicle regardless of what the title mentions.
-        val hasSignal = v != null &&
-            (v.mileageKm != null || v.powerKw != null || v.displacementCc != null)
-        if (hasSignal) return false
-        // No signal: it is a non-vehicle only when the title actually names a part/accessory —
-        // otherwise keep it (a sparse cheap-car ad has no specs either, and must not be dropped).
-        return partsWord.containsMatchIn(listing.title)
+        return false
     }
 }

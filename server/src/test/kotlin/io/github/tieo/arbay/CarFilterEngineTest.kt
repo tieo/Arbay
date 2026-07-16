@@ -27,23 +27,18 @@ class CarFilterEngineTest {
     )
 
     @Test
-    fun dropsPartsListingByTitleWithNoVehicleSignal() {
-        // eBay "GEBRAUCHTER MOTOR ENGINE ... CRAFTER" — the title names a part, no car signal.
-        val engine = carListing("p1", PlatformId.EBAY_DE, "GEBRAUCHTER MOTOR ENGINE VW Crafter 2.5 TDI", vehicle = VehicleInfo())
-        assertTrue(CarFilterEngine.apply(listOf(engine), CarFilters()).isEmpty())
+    fun keepsCarThatMentionsAFeatureWithNoParsedSpecs() {
+        // A real car whose specs are only in the description (none parsed) must NOT be dropped
+        // just because the title names a feature. Category-constrained car searches already
+        // exclude actual parts at the source, so no keyword parts guard runs here.
+        val withHeater = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter mit Standheizung und Klima",
+            priceCents = 900_000, vehicle = VehicleInfo())
+        assertEquals(1, CarFilterEngine.apply(listOf(withHeater), CarFilters()).size)
     }
 
     @Test
-    fun dropsPartWithPartTitleAndBareYear() {
-        // A year in the title is not a car signal; the part word still drops it.
-        val bumper = carListing("b", PlatformId.EBAY_DE, "Frontstoßstange Stoßstange MAN TGE 2023",
-            priceCents = 27_400, vehicle = VehicleInfo(firstRegYear = 2023))
-        assertTrue(CarFilterEngine.apply(listOf(bumper), CarFilters()).isEmpty())
-    }
-
-    @Test
-    fun keepsCheapCarWithNoSignalAndNoPartWord() {
-        // No price floor: a cheap/broken car with no parsed specs and no part word survives.
+    fun keepsCheapBrokenCarWithNoSignal() {
+        // No price floor: a cheap/broken car with no parsed specs survives.
         val cheap = carListing("cheap", PlatformId.KLEINANZEIGEN, "VW Crafter Bastlerfahrzeug",
             priceCents = 50_000, vehicle = VehicleInfo())
         assertEquals(1, CarFilterEngine.apply(listOf(cheap), CarFilters()).size)
