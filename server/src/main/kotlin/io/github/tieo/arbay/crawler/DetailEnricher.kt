@@ -44,20 +44,29 @@ object DetailEnricher {
         val needed = neededFields(filters)
         if (needed.isEmpty()) return listings
 
-        var budget = MAX_FETCHES_PER_PLATFORM
+        // Spend the fetch budget on the listings most likely to be shown — cheapest first —
+        // so the results the user actually sees get verified, not whatever came first in the
+        // crawler's order. Cached details are free and always applied; the rest fill in on a
+        // re-run from cache.
+        val toFetch = listings
+            .filter { needsDetail(it, needed) && DetailCache.get(it.id) == null }
+            .sortedBy { priceEurCents(it) }
+            .take(MAX_FETCHES_PER_PLATFORM)
+            .mapTo(HashSet()) { it.id }
+
         return listings.map { listing ->
             if (!needsDetail(listing, needed)) return@map listing
-
-            // Cache first — a cached detail costs no request.
             DetailCache.get(listing.id)?.let { cached ->
                 return@map listing.copy(vehicle = VehicleTextParser.merge(cached, listing.vehicle))
             }
-            if (budget <= 0) return@map listing
-            budget--
-
+            if (listing.id !in toFetch) return@map listing // beyond budget → stays inferred, badged unverified
             val detail = gate.withPermit { crawler.fetchDetailVehicle(listing) } ?: return@map listing
             DetailCache.put(listing.id, detail)
             listing.copy(vehicle = VehicleTextParser.merge(detail, listing.vehicle))
         }
     }
+
+    private fun priceEurCents(listing: Listing): Long =
+        if (listing.price.currency == io.github.tieo.arbay.model.Currency.EUR) listing.price.amount
+        else ExchangeRates.convert(listing.price.amount, listing.price.currency.name, "EUR")
 }
