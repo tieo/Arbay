@@ -159,6 +159,12 @@ class EbayDeCrawler(
     private fun buildSearchUrl(query: SearchQuery, page: Int = 1): String {
         val params = buildList {
             add("_nkw=${query.text.encodeUrl()}")
+            // Constrain a car query to eBay.de's whole-vehicle category so parts/accessories
+            // (engines, bumpers) don't dominate the all-category keyword results.
+            if (domain == "ebay.de" && CarQueryResolver.resolve(query.positiveText) != null) {
+                CrawlerConfig.current.ebayDeCarCategory?.takeIf { it.isNotBlank() }
+                    ?.let { add("_sacat=$it") }
+            }
             add("_ipg=${CrawlerConfig.current.ebayItemsPerPage}")
             if (CrawlerConfig.current.sortByPrice) add("_sop=15") // sort by price+shipping lowest first
             if (page > 1) add("_pgn=$page")

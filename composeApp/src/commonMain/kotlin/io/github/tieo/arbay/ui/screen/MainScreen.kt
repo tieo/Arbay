@@ -376,7 +376,7 @@ fun MainScreen(
                 showCarSearch = true
             },
             onBookmark = {
-                productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries)
+                productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries, carFilters = carFilters)
                 showCarResults = false
             },
         )

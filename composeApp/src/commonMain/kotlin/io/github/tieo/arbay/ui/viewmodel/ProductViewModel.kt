@@ -40,6 +40,7 @@ class ProductViewModel(
         searchText: String,
         platforms: List<PlatformId>,
         identifiers: ProductIdentifier = ProductIdentifier(),
+        carFilters: io.github.tieo.arbay.model.CarFilters? = null,
     ) {
         viewModelScope.launch {
             try {
@@ -49,6 +50,7 @@ class ProductViewModel(
                     searchQuery = SearchQuery(
                         text = searchText,
                         platforms = platforms,
+                        carFilters = carFilters?.takeUnless { it.isEmpty },
                     ),
                     identifiers = identifiers,
                     createdAt = Clock.System.now(),

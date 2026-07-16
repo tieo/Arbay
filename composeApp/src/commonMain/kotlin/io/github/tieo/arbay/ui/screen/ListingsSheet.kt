@@ -567,17 +567,16 @@ fun ListingsSheet(
             }
 
             if (onBookmark != null) {
-                SmallFloatingActionButton(
+                ExtendedFloatingActionButton(
                     onClick = onBookmark,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 16.dp, bottom = 16.dp),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Icon(Icons.Outlined.BookmarkAdd, null, modifier = Modifier.size(20.dp))
-                }
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    icon = { Icon(Icons.Outlined.BookmarkAdd, null, modifier = Modifier.size(22.dp)) },
+                    text = { Text("Save search", fontWeight = FontWeight.SemiBold) },
+                )
             }
         }
     }
