@@ -430,7 +430,11 @@ fun MainScreen(
             searchQuery = listingsProduct!!.searchQuery.text,
             listingViewModel = listingViewModel,
             platforms = listingsProduct!!.searchQuery.platforms,
-            carFilters = listingsProduct!!.searchQuery.toCarFilters(),
+            // A car query always gets the car view (specs, filter chips, no hero carousel), even
+            // with no filters set yet — pass empty filters so the view renders, not the generic one.
+            carFilters = if (resolveCarNodes(listingsProduct!!.searchQuery.text).first != null)
+                (listingsProduct!!.searchQuery.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters())
+            else null,
             // Any car bookmark is editable — even one saved with no filters yet, so the user can
             // add them. Gate on the query being a car, not on filters already existing.
             onEditFilters = resolveCarNodes(listingsProduct!!.searchQuery.text).first?.let { _ ->
@@ -459,11 +463,30 @@ fun MainScreen(
     if (showPreview) {
         val name = previewProduct?.displayName ?: previewSearchName
         val query = previewProduct?.searchQuery ?: previewSearchQuery
+        val previewIsCar = resolveCarNodes(query).first != null
         ListingsSheet(
             productName = name,
             searchQuery = query,
             listingViewModel = listingViewModel,
             platforms = previewProduct?.effectivePlatforms,
+            // Car preview gets the car view too; empty filters just render it filter-free.
+            carFilters = if (previewIsCar) io.github.tieo.arbay.model.CarFilters() else null,
+            onEditFilters = if (previewIsCar) {
+                {
+                    val (m, mo) = resolveCarNodes(query)
+                    carName = name
+                    carQuery = query
+                    carPlatforms = previewProduct?.effectivePlatforms
+                    carFilters = io.github.tieo.arbay.model.CarFilters()
+                    carMake = m
+                    carModel = mo
+                    showPreview = false
+                    previewProduct = null
+                    previewSearchQuery = ""
+                    previewSearchName = ""
+                    showCarSearch = true
+                }
+            } else null,
             onDismiss = {
                 showPreview = false
                 previewProduct = null

@@ -91,9 +91,14 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
                 ?: return@mapNotNull null
             val title = card.selectFirst("[data-grid=title]")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            // The price cell can carry both the net and the gross figure ("19.900 € 23.681 €");
+            // text() would merge their digits into one absurd number, so take the first amount
+            // (the headline price the site shows). TruckScout24 prices are all EUR.
             val priceText = card.selectFirst("[data-grid=price]")?.text()
                 ?: return@mapNotNull null
-            val price = Money.parse(priceText) ?: return@mapNotNull null
+            val firstAmount = Regex("""\d[\d.,]*""").find(priceText)?.value
+                ?: return@mapNotNull null
+            val price = Money.parse(firstAmount, Currency.EUR) ?: return@mapNotNull null
             val href = card.selectFirst("a[href^=/tsp/]")?.attr("href")
             val url = if (href.isNullOrBlank()) {
                 "https://www.truckscout24.de"
