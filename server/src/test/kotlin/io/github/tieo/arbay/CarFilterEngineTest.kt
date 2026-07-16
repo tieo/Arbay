@@ -142,19 +142,32 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun vanCodeSoftPassesWhenNoCodeStated() {
-        // A van that fits but never states its size must not be dropped.
+    fun vanSoftPassesWhenNoSizeStated() {
+        // A van that states no size at all (no code, no word) must not be dropped.
         val filters = CarFilters(vanHeights = setOf(2))
-        val noCode = carListing("n", PlatformId.KLEINANZEIGEN, "VW Crafter Kastenwagen 2.0 TDI")
-        assertEquals(1, CarFilterEngine.apply(listOf(noCode), filters).size)
+        val noSize = carListing("n", PlatformId.KLEINANZEIGEN, "VW Crafter Kastenwagen 2.0 TDI")
+        assertEquals(1, CarFilterEngine.apply(listOf(noSize), filters).size)
     }
 
     @Test
-    fun vanRoofWordNeverExcludes() {
-        // "Hochdach" is model-specific — it may fill the display but must never drop a listing.
+    fun vanWordExcludesOnMismatch() {
+        // The reported bug: filtering L3 must drop a van that says "Maxi" (L4), and keep an L3 one.
+        val filters = CarFilters(vanLengths = setOf(3))
+        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")       // L4 → drop
+        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")       // L3 → keep
+        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")        // L1 → drop
+        val kept = CarFilterEngine.apply(listOf(maxi, lang, kurz), filters).map { it.id }
+        assertEquals(listOf("KLEINANZEIGEN:l"), kept)
+    }
+
+    @Test
+    fun vanHeightWordExcludes() {
+        // Filtering H1 (flat roof) drops a "Hochdach" (H2) van — a stated roof is a known size.
         val filters = CarFilters(vanHeights = setOf(1))
-        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach langer Radstand")
-        assertEquals(1, CarFilterEngine.apply(listOf(hochdach), filters).size)
+        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach lang")
+        val flach = carListing("f", PlatformId.KLEINANZEIGEN, "VW Crafter Flachdach kurz")
+        val kept = CarFilterEngine.apply(listOf(hochdach, flach), filters).map { it.id }
+        assertEquals(listOf("KLEINANZEIGEN:f"), kept)
     }
 
     @Test

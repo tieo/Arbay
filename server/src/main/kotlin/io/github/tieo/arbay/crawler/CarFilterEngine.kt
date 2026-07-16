@@ -57,17 +57,18 @@ object CarFilterEngine {
         return out
     }
 
-    /** Fill the display van size classes from the listing text: explicit L/H codes are verified
-     *  (may exclude), word inferences ("Hochdach", "Maxi") fill gaps for display only. */
+    /** Fill the van size classes from the listing text. A size the listing STATES — an explicit
+     *  code ("L3H2") or a wheelbase/roof word ("Maxi", "lang", "Hochdach") — is a known value that
+     *  the filter may exclude on: filtering L3 must drop a van that says "Maxi" (L4). Only a van
+     *  that states nothing is soft-passed. */
     private fun annotateVanDims(listing: Listing): Listing {
         val text = "${listing.title} ${listing.description ?: ""}"
         val inferred = VanDimensions.inferred(text)
         if (inferred.length == null && inferred.height == null) return listing
-        val codes = VanDimensions.excludable(text)
         val v = listing.vehicle ?: VehicleInfo()
         val verified = v.verified.toMutableSet()
-        if (codes.length != null) verified += VehicleField.VAN_LENGTH
-        if (codes.height != null) verified += VehicleField.VAN_HEIGHT
+        if (inferred.length != null) verified += VehicleField.VAN_LENGTH
+        if (inferred.height != null) verified += VehicleField.VAN_HEIGHT
         return listing.copy(
             vehicle = v.copy(vanLength = inferred.length, vanHeight = inferred.height, verified = verified),
         )
