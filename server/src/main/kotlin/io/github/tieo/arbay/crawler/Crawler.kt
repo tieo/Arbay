@@ -43,6 +43,7 @@ suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
         results
     } catch (e: CrawlerBlockedException) {
         CrawlerStatusTracker.recordError(platformId, e.message ?: "Blocked", e.errorType)
+        if (BlockCooldown.isBlock(e.errorType)) BlockCooldown.record(platformId)
         val snapId = ErrorSnapshotStore.capture(
             platform = platformId.name, query = query.text, error = e, errorType = e.errorType,
         )
@@ -57,6 +58,7 @@ suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
         // Skip snapshots for cancellation-like errors
         val isCancellation = e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true
         CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
+        if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)
         if (!isCancellation) {
             val snapId = ErrorSnapshotStore.capture(
                 platform = platformId.name, query = query.text, error = e, errorType = errorType,

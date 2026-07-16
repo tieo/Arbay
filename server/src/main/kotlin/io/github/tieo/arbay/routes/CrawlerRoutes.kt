@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.routes
 
+import io.github.tieo.arbay.crawler.BlockCooldown
 import io.github.tieo.arbay.crawler.CarQueryResolver
 import io.github.tieo.arbay.crawler.Crawler
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
@@ -244,7 +245,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
                     // Cache holds the raw relevance-filtered crawl; car post-filtering runs after
                     // it, so tweaking a filter re-filters cached listings instead of re-crawling.
-                    val classified = QueryResultCache.get(platformId, searchQuery) ?: run {
+                    // Skip the crawl (serve cache only) while the platform is cooling down from a
+                    // recent block — hitting it again would deepen the block.
+                    val classified = QueryResultCache.get(platformId, searchQuery)
+                        ?: if (BlockCooldown.isCoolingDown(platformId)) emptyList()
+                        else run {
                         val raw = crawler.trackedSearch(searchQuery)
                         val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
                         QueryResultCache.put(platformId, searchQuery, filtered)
@@ -361,6 +366,20 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 return@launch
                             }
 
+                            // Cooling down from a recent block: don't re-crawl (would deepen the
+                            // block). Report it so the user sees "cooling down", not a silent 0.
+                            val coolMs = BlockCooldown.remainingMs(platformId)
+                            if (coolMs > 0) {
+                                resultChannel.send(CrawlerSearchEvent(
+                                    type = CrawlerEventType.PLATFORM_ERROR,
+                                    platform = platformId.name,
+                                    platformName = platformId.displayName,
+                                    error = "Cooling down after a block (~${coolMs / 60000} min left)",
+                                    errorType = "COOLING_DOWN",
+                                ))
+                                return@launch
+                            }
+
                             val progressEmitter = FetchProgressEmitter { stage ->
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_PROGRESS,
@@ -417,6 +436,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 )
                             } catch (e: CrawlerBlockedException) {
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Blocked", e.errorType)
+                                if (BlockCooldown.isBlock(e.errorType)) BlockCooldown.record(platformId)
                                 val snapId = ErrorSnapshotStore.capture(
                                     platform = platformId.name, query = query, error = e, errorType = e.errorType,
                                 )
@@ -431,6 +451,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             } catch (e: Exception) {
                                 val errorType = classifyException(e)
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
+                                if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)
                                 val snapId = ErrorSnapshotStore.capture(
                                     platform = platformId.name, query = query, error = e, errorType = errorType,
                                 )

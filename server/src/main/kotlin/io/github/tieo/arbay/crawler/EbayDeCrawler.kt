@@ -55,8 +55,12 @@ class EbayDeCrawler(
             html
         } catch (_: Exception) { null }
 
-        if (curlHtml != null) {
-            val firstPage = parseSearchResults(curlHtml)
+        // A CurlCffi page that parses to zero listings for a keyword search is almost always a
+        // soft block (eBay serves a 200 challenge/empty page), not a genuinely empty result — so
+        // fall through to the real-Chrome tier, which primes cookies and clears most soft blocks.
+        val curlFirstPage = curlHtml?.let { parseSearchResults(it) }
+        if (curlFirstPage != null && curlFirstPage.isNotEmpty()) {
+            val firstPage = curlFirstPage
             allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
             val maxPages = CrawlerConfig.current.maxPages
             if (firstPage.size >= 20) {
