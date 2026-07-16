@@ -431,14 +431,16 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = listingsProduct!!.searchQuery.platforms,
             carFilters = listingsProduct!!.searchQuery.toCarFilters(),
-            onEditFilters = listingsProduct!!.searchQuery.toCarFilters()?.let { f ->
+            // Any car bookmark is editable — even one saved with no filters yet, so the user can
+            // add them. Gate on the query being a car, not on filters already existing.
+            onEditFilters = resolveCarNodes(listingsProduct!!.searchQuery.text).first?.let { _ ->
                 {
                     val p = listingsProduct!!
                     val (m, mo) = resolveCarNodes(p.searchQuery.text)
                     carName = p.name
                     carQuery = p.searchQuery.text
                     carPlatforms = p.searchQuery.platforms
-                    carFilters = f
+                    carFilters = p.searchQuery.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
                     carMake = m
                     carModel = mo
                     showListings = false

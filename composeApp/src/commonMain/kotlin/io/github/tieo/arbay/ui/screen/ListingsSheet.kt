@@ -1743,8 +1743,12 @@ private fun UnifiedPlatformChips(
 }
 
 internal fun Money.format(): String {
-    val displayCur = io.github.tieo.arbay.DisplayCurrency.current
-    val convertedAmount = io.github.tieo.arbay.DisplayCurrency.convert(amount, currency.name)
+    // Show the native currency when we can't convert (unknown rate) rather than mislabelling the
+    // raw amount as the display currency \u2014 a 169 900 PLN van must not read as "\u20AC169,900".
+    val displayCur = if (io.github.tieo.arbay.DisplayCurrency.canConvert(currency.name))
+        io.github.tieo.arbay.DisplayCurrency.current else currency.name
+    val convertedAmount = if (displayCur == currency.name) amount
+        else io.github.tieo.arbay.DisplayCurrency.convert(amount, currency.name)
     val symbol = when (displayCur) {
         "EUR" -> "\u20AC"
         "USD" -> "$"

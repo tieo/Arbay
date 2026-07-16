@@ -92,6 +92,12 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
     )
 }
 
+/** A price in EUR cents, converting from the listing's own currency so cross-border results
+ *  (PLN/SEK/DKK/…) rank by real value instead of raw amount. */
+private fun priceEurCents(money: Money): Long =
+    if (money.currency == Currency.EUR) money.amount
+    else ExchangeRates.convert(money.amount, money.currency.name, "EUR")
+
 /** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
  *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
  *  filter. Specs come from structured sources only (card + detail table), never free-text
@@ -248,7 +254,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }
-                perPlatform.flatten().sortedBy { it.effectivePrice.amount }.take(limit)
+                // Sort by EUR-normalized price so cross-currency listings (PLN/SEK/…) rank by real
+                // value, not raw amount; dedup by id before taking the cheapest N.
+                perPlatform.flatten()
+                    .distinctBy { it.id }
+                    .sortedBy { priceEurCents(it.effectivePrice) }
+                    .take(limit)
             } finally {
                 permit.release()
             }

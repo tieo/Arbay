@@ -154,6 +154,7 @@ class ListingViewModel(
                                 ) else it
                             }
                             _allListings.value = (_allListings.value + event.listings)
+                                .distinctBy { it.id }
                                 .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
                         }
 
