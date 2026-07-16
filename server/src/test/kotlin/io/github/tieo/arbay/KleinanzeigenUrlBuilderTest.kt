@@ -223,4 +223,23 @@ class KleinanzeigenUrlBuilderTest {
     fun `city slug from name - with spaces`() {
         assertEquals("bad-saulgau", KleinanzeigenUrlBuilder.citySlug("Bad Saulgau"))
     }
+
+    @Test
+    fun `car attr filters attach to category code with plus`() {
+        val attrs = KleinanzeigenUrlBuilder.carAttrFilters(fuel = "diesel", gearbox = "automatik")
+        assertEquals(listOf("autos.fuel_s:diesel", "autos.shift_s:automatik"), attrs)
+        val url = KleinanzeigenUrlBuilder.carSearch("vw golf", page = 1, attrFilters = attrs)
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/vw-golf/k0c216+autos.fuel_s:diesel+autos.shift_s:automatik",
+            url,
+        )
+    }
+
+    @Test
+    fun `car search without attr filters is unchanged`() {
+        assertEquals(
+            "https://www.kleinanzeigen.de/s-autos/vw-golf/k0c216",
+            KleinanzeigenUrlBuilder.carSearch("vw golf", page = 1),
+        )
+    }
 }

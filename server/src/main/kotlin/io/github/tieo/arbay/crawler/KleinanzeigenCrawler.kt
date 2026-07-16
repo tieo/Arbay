@@ -119,6 +119,17 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         return allResults
     }
 
+    /** Our Fuel enum -> Kleinanzeigen's autos.fuel_s value, or null where it has no equivalent. */
+    private fun kleinanzeigenFuel(f: Fuel): String? = when (f) {
+        Fuel.PETROL -> "benzin"
+        Fuel.DIESEL -> "diesel"
+        Fuel.ELECTRIC -> "elektro"
+        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "hybrid"
+        Fuel.LPG -> "lpg"
+        Fuel.CNG -> "cng"
+        Fuel.HYDROGEN, Fuel.ETHANOL, Fuel.OTHER -> null
+    }
+
     private suspend fun searchRegular(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
@@ -132,6 +143,15 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         // which surfaces real car ads instead of accessories and parts.
         val carQuery = CarQueryResolver.resolve(query.positiveText)
 
+        // Filter fuel + gearbox at the source via Kleinanzeigen's own attribute params. fuel_s is
+        // single-select, so only a single chosen fuel maps natively; multi-select falls back to
+        // post-filtering.
+        val cf = query.carFilters
+        val attrFilters = KleinanzeigenUrlBuilder.carAttrFilters(
+            fuel = cf?.fuels?.singleOrNull()?.let { kleinanzeigenFuel(it) },
+            gearbox = query.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
+        )
+
         val endPage = query.startPage + maxPages - 1
         for (page in query.startPage..endPage) {
             val url = if (carQuery != null) {
@@ -142,6 +162,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                     radiusKm = if (locationId != null) query.radiusKm else null,
                     minPriceCents = query.minPrice?.amount,
                     maxPriceCents = query.maxPrice?.amount,
+                    attrFilters = attrFilters,
                 )
             } else {
                 KleinanzeigenUrlBuilder.regularSearch(

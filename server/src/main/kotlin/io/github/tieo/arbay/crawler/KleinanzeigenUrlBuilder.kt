@@ -102,6 +102,7 @@ object KleinanzeigenUrlBuilder {
         radiusKm: Int? = null,
         minPriceCents: Long? = null,
         maxPriceCents: Long? = null,
+        attrFilters: List<String> = emptyList(),
     ): String {
         val segments = buildList {
             // Price filter
@@ -116,13 +117,26 @@ object KleinanzeigenUrlBuilder {
             add(query.lowercase().replace(" ", "-"))
         }
 
+        // Kleinanzeigen car attribute filters (fuel/gearbox) attach to the category code with
+        // '+', e.g. k0c216+autos.fuel_s:diesel — verified live to actually filter at the source.
+        val attrSuffix = if (attrFilters.isEmpty()) "" else "+" + attrFilters.joinToString("+")
         val categorySuffix = if (locationId != null && radiusKm != null) {
-            "k0c216l${locationId}r${radiusKm}"
+            "k0c216l${locationId}r${radiusKm}$attrSuffix"
         } else {
-            "k0c216"
+            "k0c216$attrSuffix"
         }
 
         return "$BASE/s-autos/${segments.joinToString("/")}/$categorySuffix"
+    }
+
+    /** Kleinanzeigen `autos.*_s` attribute filter segments derived from the car filters,
+     *  for the dimensions the site supports single-select at the source. */
+    fun carAttrFilters(
+        fuel: String? = null,      // "benzin" | "diesel" | "elektro" | "hybrid" | "lpg" | "cng"
+        gearbox: String? = null,   // "automatik" | "manuell" | "halbautomatik"
+    ): List<String> = buildList {
+        fuel?.let { add("autos.fuel_s:$it") }
+        gearbox?.let { add("autos.shift_s:$it") }
     }
 
     /**
