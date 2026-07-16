@@ -49,6 +49,10 @@ object QueryResultCache {
 
     fun put(platformId: PlatformId, query: SearchQuery, listings: List<Listing>) {
         if (query.soldOnly) return
+        // Never cache an empty result: a 0 is almost always transient (a block, a timeout, or the
+        // anti-flag request cutoff), and caching it would hide real listings for the whole TTL.
+        // The next request re-crawls instead.
+        if (listings.isEmpty()) return
         entries[key(platformId, query)] = Entry(listings, Clock.System.now().toEpochMilliseconds())
     }
 }

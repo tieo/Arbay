@@ -53,19 +53,33 @@ import kotlinx.datetime.toLocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 /** Active car filters as short human labels, for the editable chip row. */
-private fun carFilterChips(f: CarFilters): List<String> = buildList {
+/** Active filters as (label, facet-dimension key) pairs. The key matches the server's facet map
+ *  so each chip can show how many results dropping it would add. */
+private fun carFilterChips(f: CarFilters): List<Pair<String, String>> = buildList {
     when {
-        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}")
-        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}")
-        f.firstRegToYear != null -> add("to ${f.firstRegToYear}")
+        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}" to "year")
+        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}" to "year")
+        f.firstRegToYear != null -> add("to ${f.firstRegToYear}" to "year")
     }
-    f.maxMileageKm?.let { add("≤${it / 1000}k km") }
-    f.minPowerKw?.let { add("≥$it kW") }
-    f.maxPriceEur?.let { add("≤€${it / 1000}k") }
-    f.transmission?.let { add(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") }
-    if (f.vanLengths.isNotEmpty()) add(f.vanLengths.sorted().joinToString("/") { "L$it" })
-    if (f.vanHeights.isNotEmpty()) add(f.vanHeights.sorted().joinToString("/") { "H$it" })
-    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”") }
+    f.maxMileageKm?.let { add("≤${it / 1000}k km" to "mileage") }
+    f.minMileageKm?.let { add("≥${it / 1000}k km" to "mileage") }
+    f.minPowerKw?.let { add("≥$it kW" to "power") }
+    f.maxPowerKw?.let { add("≤$it kW" to "power") }
+    f.maxPriceEur?.let { add("≤€${it / 1000}k" to "price") }
+    f.minPriceEur?.let { add("≥€${it / 1000}k" to "price") }
+    f.transmission?.let { add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to "transmission") }
+    if (f.fuels.isNotEmpty()) add(f.fuels.joinToString("/") { it.name.lowercase().replaceFirstChar(Char::uppercase) } to "fuel")
+    if (f.bodyTypes.isNotEmpty()) add(f.bodyTypes.joinToString("/") { it.name.lowercase() } to "bodyType")
+    if (f.conditions.isNotEmpty()) add(f.conditions.joinToString("/") { it.name.lowercase() } to "condition")
+    if (f.colors.isNotEmpty()) add(f.colors.joinToString("/") to "color")
+    f.drivetrain?.let { add(it.name to "drivetrain") }
+    f.minDoors?.let { add("≥$it doors" to "doors") }
+    f.minSeats?.let { add("≥$it seats" to "seats") }
+    f.minEmissionEuro?.let { add("≥Euro $it" to "emission") }
+    f.sellerType?.let { add((if (it == SellerType.PRIVATE) "Private" else "Dealer") to "seller") }
+    if (f.vanLengths.isNotEmpty()) add(f.vanLengths.sorted().joinToString("/") { "L$it" } to "vanLength")
+    if (f.vanHeights.isNotEmpty()) add(f.vanHeights.sorted().joinToString("/") { "H$it" } to "vanHeight")
+    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”" to "description") }
 }
 
 @Composable
@@ -81,6 +95,7 @@ fun ListingsSheet(
     onEditFilters: (() -> Unit)? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
+    val facets by listingViewModel.facets.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
     val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
@@ -284,6 +299,7 @@ fun ListingsSheet(
                         }
                     }
                     // Active car filters as editable chips + an "Edit" entry to reopen the form.
+                    // Each chip shows "−N": how many more results dropping that filter would add.
                     if (carFilters != null && onEditFilters != null) {
                         val chips = carFilterChips(carFilters)
                         LazyRow(
@@ -298,10 +314,16 @@ fun ListingsSheet(
                                     leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
                                 )
                             }
-                            items(chips) { chip ->
+                            items(chips) { (label, key) ->
+                                val add = facets[key] ?: 0
                                 AssistChip(
                                     onClick = onEditFilters,
-                                    label = { Text(chip, style = MaterialTheme.typography.labelMedium) },
+                                    label = {
+                                        Text(
+                                            if (add > 0) "$label  +$add" else label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    },
                                 )
                             }
                         }

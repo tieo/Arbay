@@ -65,6 +65,10 @@ class ListingViewModel(
     private val _soldLoading = MutableStateFlow(false)
     val soldLoading: StateFlow<Boolean> = _soldLoading
 
+    // Per active car filter, how many more results dropping it would add — summed across platforms.
+    private val _facets = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val facets: StateFlow<Map<String, Int>> = _facets
+
     // Derived: listings filtered by selected platform, not banned
     val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds) { all, platform, banned ->
         val platformFiltered = if (platform == null) all else all.filter { it.platformId == platform }
@@ -127,6 +131,7 @@ class ListingViewModel(
             _platformStatuses.value = emptyList()
             _completedPlatforms.value = 0
             _totalPlatforms.value = 0
+            _facets.value = emptyMap()
 
             try {
                 withTimeoutOrNull(360_000L) {
@@ -156,6 +161,11 @@ class ListingViewModel(
                             _allListings.value = (_allListings.value + event.listings)
                                 .distinctBy { it.id }
                                 .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
+                            if (event.facets.isNotEmpty()) {
+                                _facets.value = (_facets.value.keys + event.facets.keys).associateWith { k ->
+                                    (_facets.value[k] ?: 0) + (event.facets[k] ?: 0)
+                                }
+                            }
                         }
 
                         CrawlerEventType.PLATFORM_ERROR -> {

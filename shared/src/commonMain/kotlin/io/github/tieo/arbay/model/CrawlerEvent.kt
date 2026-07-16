@@ -19,6 +19,10 @@ data class CrawlerSearchEvent(
     val hasMore: Boolean = false,
     val nextPage: Int = 0,
     val fromCache: Boolean = false,
+    // Per active car filter, how many more results this platform would yield if that filter were
+    // removed (computed locally over the fetched candidate set — the "−N" a chip is hiding).
+    // Keyed by filter dimension; summed across platforms by the client.
+    val facets: Map<String, Int> = emptyMap(),
 )
 
 @Serializable

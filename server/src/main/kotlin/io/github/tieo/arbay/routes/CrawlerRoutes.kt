@@ -345,6 +345,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             if (cached != null) {
                                 val filtered = carPostFilter(cached, searchQuery, isCarQuery, crawler)
                                 filtered.forEach { listingRepo.upsert(it) }
+                                val facets = if (isCarQuery)
+                                    CarFilterEngine.facetCounts(cached, searchQuery.toCarFilters() ?: CarFilters())
+                                else emptyMap()
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
@@ -353,6 +356,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     rawCount = cached.size,
                                     listings = filtered,
                                     fromCache = true,
+                                    facets = facets,
                                 ))
                                 return@launch
                             }
@@ -384,6 +388,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 QueryResultCache.put(platformId, searchQuery, classified)
                                 val results = carPostFilter(classified, searchQuery, isCarQuery, crawler)
                                 results.forEach { listingRepo.upsert(it) }
+                                val facets = if (isCarQuery)
+                                    CarFilterEngine.facetCounts(classified, searchQuery.toCarFilters() ?: CarFilters())
+                                else emptyMap()
 
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
@@ -392,6 +399,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = results.size,
                                     rawCount = rawResults.size,
                                     listings = results,
+                                    facets = facets,
                                 )
                             } catch (e: TimeoutCancellationException) {
                                 CrawlerStatusTracker.recordError(platformId, "Timeout after 180s", ErrorType.TIMEOUT)

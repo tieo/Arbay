@@ -26,6 +26,37 @@ object CarFilterEngine {
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
         listings.map { annotateVanDims(it) }.filter { keep(it, filters) }
 
+    /** For each active filter dimension, how many more of [candidates] would pass if that one
+     *  filter were dropped (all others kept) — the "−N" a chip is hiding. Computed locally over
+     *  the fetched candidate set; only card/text-derived specs are known, so it is an estimate
+     *  for detail-only fields (fuel/gearbox), exact for price/year/mileage/power/van size. */
+    fun facetCounts(candidates: List<Listing>, filters: CarFilters): Map<String, Int> {
+        if (filters.isEmpty) return emptyMap()
+        val base = apply(candidates, filters).size
+        val out = mutableMapOf<String, Int>()
+        fun probe(key: String, relaxed: CarFilters) {
+            if (relaxed != filters) out[key] = apply(candidates, relaxed).size - base
+        }
+        probe("price", filters.copy(minPriceEur = null, maxPriceEur = null))
+        probe("year", filters.copy(firstRegFromYear = null, firstRegToYear = null))
+        probe("mileage", filters.copy(minMileageKm = null, maxMileageKm = null))
+        probe("power", filters.copy(minPowerKw = null, maxPowerKw = null))
+        probe("transmission", filters.copy(transmission = null))
+        probe("fuel", filters.copy(fuels = emptySet()))
+        probe("bodyType", filters.copy(bodyTypes = emptySet()))
+        probe("condition", filters.copy(conditions = emptySet()))
+        probe("color", filters.copy(colors = emptySet()))
+        probe("drivetrain", filters.copy(drivetrain = null))
+        probe("doors", filters.copy(minDoors = null))
+        probe("seats", filters.copy(minSeats = null))
+        probe("emission", filters.copy(minEmissionEuro = null))
+        probe("seller", filters.copy(sellerType = null))
+        probe("vanLength", filters.copy(vanLengths = emptySet()))
+        probe("vanHeight", filters.copy(vanHeights = emptySet()))
+        probe("description", filters.copy(descriptionContains = null))
+        return out
+    }
+
     /** Fill the display van size classes from the listing text: explicit L/H codes are verified
      *  (may exclude), word inferences ("Hochdach", "Maxi") fill gaps for display only. */
     private fun annotateVanDims(listing: Listing): Listing {

@@ -37,10 +37,13 @@ object VanDimensions {
         Regex("""\bhochdach\b""", RegexOption.IGNORE_CASE) to 2,
         Regex("""\bflachdach|normaldach|niederdach|tiefdach\b""", RegexOption.IGNORE_CASE) to 1,
     )
+    // Wheelbase words → length class. Checked in order, so L4 before L3 ("extralang" wins over
+    // "lang"). Display-only inference; never excludes (model-specific, like the roof words).
     private val lengthWords = listOf(
-        Regex("""\bkompakt|kurzer radstand\b""", RegexOption.IGNORE_CASE) to 1,
-        Regex("""\bmaxi|extralang|extralanger radstand\b""", RegexOption.IGNORE_CASE) to 4,
-        Regex("""\blanger radstand\b""", RegexOption.IGNORE_CASE) to 3,
+        Regex("""\b(maxi|extralang|extralanger radstand)\b""", RegexOption.IGNORE_CASE) to 4,
+        Regex("""\b(lang|langer radstand|langradstand)\b""", RegexOption.IGNORE_CASE) to 3,
+        Regex("""\b(mittel|mittellang|mittlerer radstand|mittelradstand)\b""", RegexOption.IGNORE_CASE) to 2,
+        Regex("""\b(kompakt|kurz|kurzer radstand)\b""", RegexOption.IGNORE_CASE) to 1,
     )
 
     /** Explicit codes first, then a soft word inference to fill gaps — for display only. */

@@ -162,6 +162,19 @@ class CarFilterEngineTest {
         assertEquals(1, CarFilterEngine.apply(listOf(hochdach), filters).size)
     }
 
+    @Test
+    fun facetCountsReportWhatEachFilterHides() {
+        // 3 cars: one matches all, others fail one dimension each.
+        val f = CarFilters(maxPriceEur = 20000, minPowerKw = 110)
+        val match = listing("m", PlatformId.MOBILE_DE, 1_800_000, verified(mileageKm = 100_000, powerKw = 130))
+        val tooDear = listing("d", PlatformId.MOBILE_DE, 2_500_000, verified(mileageKm = 100_000, powerKw = 130))
+        val tooWeak = listing("w", PlatformId.MOBILE_DE, 1_800_000, verified(mileageKm = 100_000, powerKw = 90))
+        val facets = CarFilterEngine.facetCounts(listOf(match, tooDear, tooWeak), f)
+        assertEquals(1, facets["price"])   // dropping price adds the €25k car
+        assertEquals(1, facets["power"])   // dropping power adds the 90 kW car
+        assertEquals(null, facets["year"]) // year not an active filter
+    }
+
     private fun verified(
         firstRegYear: Int? = null, mileageKm: Int? = null,
         powerKw: Int? = null, gearbox: Transmission? = null,
