@@ -65,6 +65,26 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun doesNotReadOdometerDigitsAsPower() {
+        // "503.661 km" must not yield 661 PS -> ~486 kW. km is never a power unit.
+        val v = VehicleTextParser.parse("VW Crafter Bus 503.661 km")
+        assertEquals(null, v?.powerKw)
+        assertEquals(503_661, v?.mileageKm)
+    }
+
+    @Test
+    fun equipmentTextIsNotElectricFuel() {
+        // "elektrische Fensterheber" (electric windows) must not make a TDI electric.
+        val v = VehicleTextParser.parse("VW Crafter 2.0 TDI elektrische Fensterheber, Klima")!!
+        assertEquals(Fuel.DIESEL, v.fuel)
+    }
+
+    @Test
+    fun realElectricStillDetected() {
+        assertEquals(Fuel.ELECTRIC, VehicleTextParser.parse("VW e-Crafter Elektro 2021")!!.fuel)
+    }
+
+    @Test
     fun blankTextYieldsNull() {
         assertNull(VehicleTextParser.parse(""))
         assertNull(VehicleTextParser.parse(null))

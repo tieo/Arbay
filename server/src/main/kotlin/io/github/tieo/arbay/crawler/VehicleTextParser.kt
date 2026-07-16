@@ -18,8 +18,9 @@ import io.github.tieo.arbay.model.VehicleInfo
  */
 object VehicleTextParser {
     private val mileageRegex = Regex("""([0-9][0-9.\s]{2,})\s?(?:km|kilometer)""", RegexOption.IGNORE_CASE)
-    private val kwRegex = Regex("""([0-9]{2,3})\s?kw""", RegexOption.IGNORE_CASE)
-    private val psRegex = Regex("""([0-9]{2,3})\s?(?:ps|hp|hk|km\b)""", RegexOption.IGNORE_CASE)
+    private val kwRegex = Regex("""([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
+    // "km" is NOT a power unit — including it read the odometer's last digits as PS.
+    private val psRegex = Regex("""([0-9]{2,3})\s?(?:ps|hp|hk)\b""", RegexOption.IGNORE_CASE)
     private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
     private val bareYearRegex = Regex("""\b(19[89]\d|20[0-3]\d)\b""")
     private val displacementCcRegex = Regex("""([0-9]{3,4})\s?(?:cm³|ccm|cc)\b""", RegexOption.IGNORE_CASE)
