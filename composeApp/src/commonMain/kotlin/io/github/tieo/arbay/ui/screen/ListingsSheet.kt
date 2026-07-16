@@ -82,6 +82,62 @@ private fun carFilterChips(f: CarFilters): List<Pair<String, String>> = buildLis
     f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”" to "description") }
 }
 
+private val DIM_LABELS = mapOf(
+    "year" to "Year", "mileage" to "Mileage", "price" to "Price", "power" to "Power",
+    "transmission" to "Gearbox", "fuel" to "Fuel", "bodyType" to "Body", "condition" to "Condition",
+    "color" to "Colour", "drivetrain" to "Drivetrain", "doors" to "Doors", "seats" to "Seats",
+    "emission" to "Emission", "seller" to "Seller", "vanLength" to "Length", "vanHeight" to "Height",
+    "description" to "In description",
+)
+
+/** Per active filter, which result platforms enforce it at the source vs which Arbay post-filters
+ *  locally — so a platform is never silently hidden for lacking a native filter. */
+@Composable
+private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable { expanded = !expanded },
+        ) {
+            Icon(Icons.Outlined.Info, null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "How filters were applied",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded) {
+            Spacer(Modifier.height(2.dp))
+            activeDims.forEach { dim ->
+                val atSource = platforms.filter { CarFilterCapability.isNative(it, dim) }
+                val byUs = platforms.filter { !CarFilterCapability.isNative(it, dim) }
+                val parts = buildList {
+                    if (atSource.isNotEmpty()) add("source: " + atSource.joinToString(", ") { it.displayName })
+                    if (byUs.isNotEmpty()) add("by us: " + byUs.joinToString(", ") { it.displayName })
+                }
+                Text(
+                    "${DIM_LABELS[dim] ?: dim} — ${parts.joinToString(" · ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(vertical = 1.dp),
+                )
+            }
+            Text(
+                "“By us” means we filter on the site's own verified specs; a listing missing that spec is kept, not hidden.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+    }
+}
+
 @Composable
 fun ListingsSheet(
     productName: String,
@@ -326,6 +382,13 @@ fun ListingsSheet(
                                     },
                                 )
                             }
+                        }
+                        val activeDims = remember(carFilters) { carFilterChips(carFilters).map { it.second }.distinct() }
+                        val resultPlatforms = remember(platformStatuses) {
+                            platformStatuses.mapNotNull { runCatching { PlatformId.valueOf(it.platformId) }.getOrNull() }
+                        }
+                        if (activeDims.isNotEmpty() && resultPlatforms.isNotEmpty()) {
+                            CoverageNote(activeDims, resultPlatforms)
                         }
                     }
                 }
