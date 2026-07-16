@@ -33,16 +33,7 @@ object RelevanceFilter {
                 orGroups.add(alt.trim().split("\\s+".toRegex()).map { normalizeToken(it) })
             }
         } else {
-            // A make token becomes an OR-group of its spellings so a "Volkswagen" query matches a
-            // "VW" title (and vice versa); other tokens stay as plain required tokens.
-            for (part in positiveParts) {
-                val spellings = CarQueryResolver.makeSpellings(part)
-                if (spellings != null && spellings.size > 1) {
-                    orGroups.add(spellings.map { normalizeToken(it) })
-                } else {
-                    plainTokens.add(normalizeToken(part))
-                }
-            }
+            plainTokens.addAll(positiveParts.map { normalizeToken(it) })
         }
 
         return ParsedQuery(
@@ -52,8 +43,18 @@ object RelevanceFilter {
         )
     }
 
-    private fun normalizeToken(token: String): String =
-        normalize(token.lowercase()).replace(" ", "")
+    private fun normalizeToken(token: String): String {
+        val n = normalize(token.lowercase()).replace(" ", "")
+        // Fold a make alias to its canonical spelling so "vw" and "volkswagen" are one token.
+        return CarQueryResolver.makeSpellings(n)?.firstOrNull() ?: n
+    }
+
+    /** Canonicalize make aliases word-by-word in a normalized title, so "VW"/"Mercedes" match a
+     *  "Volkswagen"/"Mercedes-Benz" query token (and vice versa). */
+    private fun canonicalizeMakes(normalizedText: String): String =
+        normalizedText.split(" ").joinToString(" ") { w ->
+            CarQueryResolver.makeSpellings(w)?.firstOrNull() ?: w
+        }
 
     fun score(listing: Listing, parsed: ParsedQuery): Double {
         val titleNorm = normalize(listing.title.lowercase())
@@ -61,10 +62,12 @@ object RelevanceFilter {
         // from matching the XM5 query. Amazon uses "gleicher Prozessor wie WH-1000XM5" to cross-sell
         // related products, causing false positives when the model appears only in the comparison clause.
         // Also strip "als X" (German "as X") for comparisons like "besser als WH-1000XM5".
-        val titleNormForMatching = titleNorm
-            .replace(Regex("\\bwie\\s+\\S+(?:\\s+\\S+)?"), " ")
-            .replace(Regex("\\bals\\s+\\S+(?:\\s+\\S+)?"), " ")
-            .replace(Regex("\\s+"), " ").trim()
+        val titleNormForMatching = canonicalizeMakes(
+            titleNorm
+                .replace(Regex("\\bwie\\s+\\S+(?:\\s+\\S+)?"), " ")
+                .replace(Regex("\\bals\\s+\\S+(?:\\s+\\S+)?"), " ")
+                .replace(Regex("\\s+"), " ").trim()
+        )
         val titleCompact = titleNormForMatching.replace(" ", "")
         // Strip context numbers that must NOT match numeric model tokens — BUT only
         // strip storage values if the query doesn't contain storage-like tokens (e.g. "256")
