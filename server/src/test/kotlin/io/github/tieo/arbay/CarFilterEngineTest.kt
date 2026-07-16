@@ -105,6 +105,54 @@ class CarFilterEngineTest {
         assertEquals(listOf("K:c"), CarFilterEngine.apply(listOf(camper, plain), filters).map { it.id })
     }
 
+    private fun carListing(
+        id: String, platform: PlatformId, title: String, description: String? = null,
+        priceCents: Long = 1_800_000, vehicle: VehicleInfo? = null,
+    ) = Listing(
+        id = "$platform:$id", platformId = platform, externalId = id, url = "u",
+        title = title, price = Money(priceCents, Currency.EUR), description = description,
+        scrapedAt = Clock.System.now(), vehicle = vehicle ?: verified(mileageKm = 100_000),
+    )
+
+    @Test
+    fun dropsRentalAdOnGeneralPlatform() {
+        // A van offered to rent carries real specs but is not a car for sale.
+        val rental = carListing("r", PlatformId.KLEINANZEIGEN, "Transporter mieten VW Crafter Langzeitmiete")
+        assertTrue(CarFilterEngine.apply(listOf(rental), CarFilters()).isEmpty())
+    }
+
+    @Test
+    fun keepsRentalWordOnCarOnlyPlatform() {
+        // Car-only platforms are sale-only; don't apply the general-platform guards there.
+        val car = carListing("c", PlatformId.MOBILE_DE, "VW Crafter — auch zur Miete gedacht gewesen")
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
+    @Test
+    fun vanCodeExcludesOnExplicitMismatch() {
+        val filters = CarFilters(vanLengths = setOf(3), vanHeights = setOf(2))
+        val match = carListing("m", PlatformId.KLEINANZEIGEN, "VW Crafter L3H2 Kastenwagen")
+        val wrong = carListing("w", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 kurz")
+        val kept = CarFilterEngine.apply(listOf(match, wrong), filters)
+        assertEquals(listOf("KLEINANZEIGEN:m"), kept.map { it.id })
+    }
+
+    @Test
+    fun vanCodeSoftPassesWhenNoCodeStated() {
+        // A van that fits but never states its size must not be dropped.
+        val filters = CarFilters(vanHeights = setOf(2))
+        val noCode = carListing("n", PlatformId.KLEINANZEIGEN, "VW Crafter Kastenwagen 2.0 TDI")
+        assertEquals(1, CarFilterEngine.apply(listOf(noCode), filters).size)
+    }
+
+    @Test
+    fun vanRoofWordNeverExcludes() {
+        // "Hochdach" is model-specific — it may fill the display but must never drop a listing.
+        val filters = CarFilters(vanHeights = setOf(1))
+        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach langer Radstand")
+        assertEquals(1, CarFilterEngine.apply(listOf(hochdach), filters).size)
+    }
+
     private fun verified(
         firstRegYear: Int? = null, mileageKm: Int? = null,
         powerKw: Int? = null, gearbox: Transmission? = null,

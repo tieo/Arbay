@@ -111,11 +111,16 @@ object CarFilterEngine {
     // Wanted-ad openers on the German classifieds: someone looking to BUY, not a car for sale.
     private val wantedAd = Regex("""^\s*(suche|suchen|gesucht|kaufe|ankauf|ankaufe|biete geld)\b""", RegexOption.IGNORE_CASE)
 
-    /** A car-query result on a general marketplace that is a part/accessory or a wanted ad,
-     *  not a car for sale. Car-only platforms are exempt (every result is a car). */
+    // Rental/hire ads: a van offered to rent, not to buy. These carry real specs (mileage,
+    // power), so they must be caught before the spec-signal exemption below.
+    private val rentalAd = Regex("""\b(mieten|zu mieten|vermiet\w+|mietwagen|leihwagen|autovermietung|langzeitmiete|tagesmiete)\b""", RegexOption.IGNORE_CASE)
+
+    /** A car-query result on a general marketplace that is a part/accessory, a wanted ad or a
+     *  rental, not a car for sale. Car-only platforms are exempt (every result is a car). */
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         if (wantedAd.containsMatchIn(listing.title)) return true
+        if (rentalAd.containsMatchIn(listing.title)) return true
         val v = listing.vehicle
         // A bare year is too weak — parts titles ("... MAN TGE 2023") carry one. Require an
         // odometer, power or displacement figure, which parts listings don't have.
