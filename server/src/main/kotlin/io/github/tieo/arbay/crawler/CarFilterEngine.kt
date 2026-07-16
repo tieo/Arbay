@@ -123,7 +123,8 @@ object CarFilterEngine {
         """lichtmaschine|alternator|zylinderkopf|ölwanne|felge|felgen|reifen|tyre|tire|""" +
         """sitz|sitze|seat|lenkrad|armaturenbrett|ersatzteil|ersatzteile|teile|spare|""" +
         """satz|kit|plane|markise|thermomatten|thermomatte|dachträger|dachtrager|standheizung|""" +
-        """tank|zierleiste|trittbrett|trittbretter|schweller|verkleidung|abdeckung|halter|träger)\b""",
+        """tank|zierleiste|trittbrett|trittbretter|schweller|verkleidung|abdeckung|halter|träger|""" +
+        """konsole|drehkonsole|sitzkonsole)\b""",
         RegexOption.IGNORE_CASE,
     )
 

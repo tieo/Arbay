@@ -18,7 +18,7 @@ data class CrawlerConfig(
     val sortByPrice: Boolean = true,
     // eBay.de category id (_sacat) constraining a car query to whole vehicles instead of the
     // parts/accessories that dominate an all-category keyword search. Null = no constraint.
-    val ebayDeCarCategory: String? = "9801",
+    val ebayDeCarCategory: String? = "9800",
 ) {
     companion object {
         private val file = File(System.getProperty("user.home"), ".arbay/crawler_config.json")
