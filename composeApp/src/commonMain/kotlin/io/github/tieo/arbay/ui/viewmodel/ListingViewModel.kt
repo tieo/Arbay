@@ -69,11 +69,25 @@ class ListingViewModel(
     private val _facets = MutableStateFlow<Map<String, Int>>(emptyMap())
     val facets: StateFlow<Map<String, Int>> = _facets
 
-    // Derived: listings filtered by selected platform, not banned
-    val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds) { all, platform, banned ->
+    // Per-bookmark blocked keywords: a listing whose title or description contains any of these
+    // terms is hidden. Filtered client-side (never sent to a crawler's own search).
+    private val _blockedTerms = MutableStateFlow<List<String>>(emptyList())
+    val blockedTerms: StateFlow<List<String>> = _blockedTerms
+
+    // Derived: listings filtered by selected platform, not banned, not matching a blocked keyword.
+    val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds, _blockedTerms) { all, platform, banned, blocked ->
         val platformFiltered = if (platform == null) all else all.filter { it.platformId == platform }
-        platformFiltered.filter { it.id !in banned }
+        platformFiltered.filter { l ->
+            l.id !in banned && run {
+                if (blocked.isEmpty()) return@run true
+                val hay = "${l.title} ${l.description ?: ""}".lowercase()
+                blocked.none { it.isNotBlank() && hay.contains(it.lowercase()) }
+            }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Set the active blocked-keyword list (from the bookmark being viewed). */
+    fun setBlockedTerms(terms: List<String>) { _blockedTerms.value = terms }
 
     fun ban(listing: Listing) {
         val updated = _bannedIds.value + listing.id

@@ -88,6 +88,11 @@ fun MainScreen(
     var carFilters by remember { mutableStateOf<io.github.tieo.arbay.model.CarFilters?>(null) }
     var carMake by remember { mutableStateOf<io.github.tieo.arbay.model.CarMakeNode?>(null) }
     var carModel by remember { mutableStateOf<io.github.tieo.arbay.model.CarModelNode?>(null) }
+    // Blocked keywords for the bookmark whose listings are open — local state so edits filter live.
+    var listingsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(listingsProduct?.id) {
+        listingsBlockedTerms = listingsProduct?.searchQuery?.excludeKeywords ?: emptyList()
+    }
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()
@@ -451,6 +456,11 @@ fun MainScreen(
                     listingsProduct = null
                     showCarSearch = true
                 }
+            },
+            blockedTerms = listingsBlockedTerms,
+            onBlockedTermsChange = { updated ->
+                listingsBlockedTerms = updated
+                listingsProduct?.let { productViewModel.setBlockedKeywords(it, updated) }
             },
             onDismiss = {
                 showListings = false

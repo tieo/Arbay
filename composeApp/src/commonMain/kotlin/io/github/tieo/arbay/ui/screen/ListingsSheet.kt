@@ -36,7 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -138,6 +140,45 @@ private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) 
     }
 }
 
+/** Per-bookmark blocked keywords: removable chips + an input to add one. Hides any listing whose
+ *  title/description contains a term; changes persist to the bookmark via [onChange]. */
+@Composable
+private fun BlockedTermsRow(terms: List<String>, onChange: (List<String>) -> Unit) {
+    var input by remember { mutableStateOf("") }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Hide if contains:",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+            terms.forEach { term ->
+                InputChip(
+                    selected = false,
+                    onClick = { onChange(terms - term) },
+                    label = { Text(term, style = MaterialTheme.typography.labelSmall) },
+                    trailingIcon = { Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(14.dp)) },
+                )
+            }
+        }
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            placeholder = { Text("block a word (e.g. defekt, bastler)", style = MaterialTheme.typography.labelSmall) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                val t = input.trim()
+                if (t.isNotBlank() && t !in terms) onChange(terms + t)
+                input = ""
+            }),
+        )
+    }
+}
+
 @Composable
 fun ListingsSheet(
     productName: String,
@@ -149,10 +190,14 @@ fun ListingsSheet(
     platforms: List<PlatformId>? = null,
     carFilters: CarFilters? = null,
     onEditFilters: (() -> Unit)? = null,
+    blockedTerms: List<String> = emptyList(),
+    onBlockedTermsChange: ((List<String>) -> Unit)? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
+    // Feed the bookmark's blocked keywords into the view model so results filter them out.
+    LaunchedEffect(blockedTerms) { listingViewModel.setBlockedTerms(blockedTerms) }
     val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
     val totalPlatforms by listingViewModel.totalPlatforms.collectAsState()
@@ -390,6 +435,10 @@ fun ListingsSheet(
                         if (activeDims.isNotEmpty() && resultPlatforms.isNotEmpty()) {
                             CoverageNote(activeDims, resultPlatforms)
                         }
+                    }
+                    // Blocked keywords: hide listings containing these words. Persisted per bookmark.
+                    if (onBlockedTermsChange != null) {
+                        BlockedTermsRow(blockedTerms, onBlockedTermsChange)
                     }
                 }
 

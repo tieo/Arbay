@@ -74,6 +74,25 @@ class ProductViewModel(
         }
     }
 
+    /** Persist an edited bookmark (name, query, platforms, blocked keywords, car filters). */
+    fun updateProduct(product: TrackedProduct) {
+        viewModelScope.launch {
+            try {
+                client.updateProduct(product)
+                loadProducts()
+            } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
+    /** Set the blocked keywords on a bookmark and persist. */
+    fun setBlockedKeywords(product: TrackedProduct, keywords: List<String>) {
+        updateProduct(
+            product.copy(searchQuery = product.searchQuery.copy(excludeKeywords = keywords)),
+        )
+    }
+
     private fun generateId(): String {
         val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
         return (1..12).map { chars.random() }.joinToString("")
