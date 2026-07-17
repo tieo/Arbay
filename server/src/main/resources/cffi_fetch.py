@@ -102,10 +102,19 @@ def cmd_idealo_search(query):
             timeout=10,
             headers=json_headers,
         )
+    except Exception as e:
+        sys.stderr.write(f'suggest request failed: {e}\n')
+        sys.exit(5)
+    # A block serves a 503/403 HTML challenge, not JSON — classify it as the block it is
+    # instead of a cryptic "Expecting value" JSON error.
+    if r.status_code != 200:
+        sys.stderr.write(f'HTTP {r.status_code}\n')
+        sys.exit(_http_exit_code(r.status_code))
+    try:
         data = r.json()
     except Exception as e:
-        sys.stderr.write(f'suggest failed: {e}\n')
-        sys.exit(1)
+        sys.stderr.write(f'HTTP {r.status_code} (non-JSON suggest response — likely blocked): {e}\n')
+        sys.exit(4)
 
     product_items = []
     for group in data.get('groups', []):
@@ -172,10 +181,17 @@ def cmd_refurbed_search(query):
             timeout=10,
             headers=json_headers,
         )
+    except Exception as e:
+        sys.stderr.write(f'refurbed autosuggest request failed: {e}\n')
+        sys.exit(5)
+    if r.status_code != 200:
+        sys.stderr.write(f'HTTP {r.status_code}\n')
+        sys.exit(_http_exit_code(r.status_code))
+    try:
         data = r.json()
     except Exception as e:
-        sys.stderr.write(f'refurbed autosuggest failed: {e}\n')
-        sys.exit(1)
+        sys.stderr.write(f'HTTP {r.status_code} (non-JSON autosuggest — likely blocked): {e}\n')
+        sys.exit(4)
 
     suggestions = data.get('suggestions', [])
     if not suggestions:

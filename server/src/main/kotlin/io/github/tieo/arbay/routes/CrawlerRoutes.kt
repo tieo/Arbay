@@ -449,6 +449,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     captchaUrl = if (e.errorType == ErrorType.CAPTCHA) "https://${platformId.displayName.lowercase().replace(" ", "")}.de" else null,
                                 )
                             } catch (e: Exception) {
+                                // Client disconnected mid-search (a cancelling parent scope) — not a
+                                // crawler failure; don't record it or emit an error event.
+                                if (e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true) {
+                                    return@launch
+                                }
                                 val errorType = classifyException(e)
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
                                 if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)

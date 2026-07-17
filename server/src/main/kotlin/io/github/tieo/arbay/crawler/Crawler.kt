@@ -54,19 +54,20 @@ suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
         log.debug("{}: cancelled for '{}'", platformId.displayName, query.text)
         emptyList()
     } catch (e: Exception) {
+        // A cancelling parent scope (the client disconnected mid-search) surfaces as an
+        // exception whose message mentions Cancelling/Cancelled but is not a CancellationException.
+        // That is not a crawler failure — don't record it as an error or a snapshot.
+        if (e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true) {
+            log.debug("{}: cancelled — {}", platformId.displayName, e.message)
+            return emptyList()
+        }
         val errorType = classifyException(e)
-        // Skip snapshots for cancellation-like errors
-        val isCancellation = e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true
         CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
         if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)
-        if (!isCancellation) {
-            val snapId = ErrorSnapshotStore.capture(
-                platform = platformId.name, query = query.text, error = e, errorType = errorType,
-            )
-            log.error("{}: error — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
-        } else {
-            log.debug("{}: cancelled — {}", platformId.displayName, e.message)
-        }
+        val snapId = ErrorSnapshotStore.capture(
+            platform = platformId.name, query = query.text, error = e, errorType = errorType,
+        )
+        log.error("{}: error — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
         emptyList()
     }
 }
