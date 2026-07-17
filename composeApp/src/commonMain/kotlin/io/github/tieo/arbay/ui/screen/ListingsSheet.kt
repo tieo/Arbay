@@ -40,6 +40,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import kotlin.math.exp
+import kotlin.math.ln
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -137,6 +139,21 @@ private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) 
                 modifier = Modifier.padding(top = 3.dp),
             )
         }
+    }
+}
+
+/** Human age of a listing from its posting date ("today", "3 days ago", …); null if in the future
+ *  or the date is implausible. */
+private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
+    val days = (kotlinx.datetime.Clock.System.now() - posted).inWholeDays
+    return when {
+        days < 0 -> null
+        days == 0L -> "today"
+        days == 1L -> "yesterday"
+        days < 7 -> "$days days ago"
+        days < 30 -> "${days / 7} wk ago"
+        days < 365 -> "${days / 30} mo ago"
+        else -> "${days / 365} yr ago"
     }
 }
 
@@ -460,30 +477,63 @@ fun ListingsSheet(
                                         modifier = Modifier.padding(horizontal = 20.dp),
                                     )
                                 }
-                                // Price range slider
+                                // Price range: a LOG-scale slider (so a cheap sub-range like €300–700
+                                // isn't a hair-thin sliver of a 0–10k track) plus exact numeric
+                                // fields. Value shown live while dragging.
                                 if (activeListings.size >= 2 && priceMax > priceMin) {
+                                    val logLo = ln(priceMin.coerceAtLeast(1f).toDouble())
+                                    val logHi = ln(priceMax.toDouble()).coerceAtLeast(logLo + 0.0001)
+                                    fun priceToPos(p: Float): Float =
+                                        ((ln(p.coerceIn(priceMin, priceMax).coerceAtLeast(1f).toDouble()) - logLo) / (logHi - logLo)).toFloat().coerceIn(0f, 1f)
+                                    fun posToPrice(pos: Float): Float =
+                                        exp(logLo + pos.coerceIn(0f, 1f) * (logHi - logLo)).toFloat().coerceIn(priceMin, priceMax)
+                                    var minText by remember(priceRange.start) { mutableStateOf(priceRange.start.toInt().toString()) }
+                                    var maxText by remember(priceRange.endInclusive) { mutableStateOf(priceRange.endInclusive.toInt().toString()) }
+                                    val cur = activeListings.firstOrNull()?.effectivePrice?.currency ?: Currency.EUR
                                     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                        ) {
-                                            Text(
-                                                Money((priceRange.start * 100).toLong(), activeListings.firstOrNull()?.effectivePrice?.currency ?: Currency.EUR).format(),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                            Text(
-                                                Money((priceRange.endInclusive * 100).toLong(), activeListings.firstOrNull()?.effectivePrice?.currency ?: Currency.EUR).format(),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
                                         RangeSlider(
-                                            value = priceRange,
-                                            onValueChange = { priceRange = it },
-                                            valueRange = priceMin..priceMax,
+                                            value = priceToPos(priceRange.start)..priceToPos(priceRange.endInclusive),
+                                            onValueChange = { pos ->
+                                                val lo = posToPrice(pos.start)
+                                                val hi = posToPrice(pos.endInclusive)
+                                                priceRange = lo..hi.coerceAtLeast(lo)
+                                            },
+                                            valueRange = 0f..1f,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            OutlinedTextField(
+                                                value = minText,
+                                                onValueChange = { s ->
+                                                    minText = s.filter { it.isDigit() }
+                                                    minText.toFloatOrNull()?.let { v ->
+                                                        priceRange = v.coerceIn(priceMin, priceRange.endInclusive)..priceRange.endInclusive
+                                                    }
+                                                },
+                                                label = { Text("min ${cur.name}", style = MaterialTheme.typography.labelSmall) },
+                                                singleLine = true,
+                                                textStyle = MaterialTheme.typography.bodySmall,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            OutlinedTextField(
+                                                value = maxText,
+                                                onValueChange = { s ->
+                                                    maxText = s.filter { it.isDigit() }
+                                                    maxText.toFloatOrNull()?.let { v ->
+                                                        priceRange = priceRange.start..v.coerceIn(priceRange.start, priceMax)
+                                                    }
+                                                },
+                                                label = { Text("max ${cur.name}", style = MaterialTheme.typography.labelSmall) },
+                                                singleLine = true,
+                                                textStyle = MaterialTheme.typography.bodySmall,
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
                                     }
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -1090,6 +1140,25 @@ internal fun ListingCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                // How old the ad is, when the platform exposes a posting date.
+                listing.listingDate?.let { posted ->
+                    ageLabel(posted)?.let { label ->
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.Schedule, null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

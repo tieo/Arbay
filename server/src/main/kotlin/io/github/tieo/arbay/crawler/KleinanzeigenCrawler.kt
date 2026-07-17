@@ -243,6 +243,11 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
             val locationText = item.selectFirst("div.aditem-main--top--left")?.text()?.trim()
             val location = locationText?.let { Location.parse(it) }
 
+            // Posting date: cards show "Heute, HH:MM" / "Gestern, HH:MM" / "TT.MM.YYYY" top-right.
+            val listingDate = ListingDateParser.parse(
+                item.selectFirst("div.aditem-main--top--right")?.text(),
+            )
+
             val imageUrl = item.selectFirst("div.aditem-image img")?.let {
                 val src = it.attr("src")
                 val srcset = it.attr("srcset")
@@ -283,6 +288,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
                 imageUrls = listOfNotNull(imageUrl),
                 location = location,
                 description = descriptionWithTags,
+                listingDate = listingDate,
                 scrapedAt = now,
                 vehicle = chipVehicle,
             )

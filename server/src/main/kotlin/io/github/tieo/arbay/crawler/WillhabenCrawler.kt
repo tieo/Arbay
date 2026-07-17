@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
@@ -81,6 +82,12 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
             val locationStr = attrs["LOCATION"]
             val location = locationStr?.let { Location.parse(it) }
 
+            // Posting date: willhaben carries a PUBLISHED epoch-millis attribute (with a
+            // PUBLISHED_String fallback). Lets the UI show how old the ad is.
+            val listingDate = attrs["PUBLISHED"]?.toLongOrNull()?.let {
+                runCatching { Instant.fromEpochMilliseconds(it) }.getOrNull()
+            }
+
             // Shipping: Willhaben uses "DELIVERY" or "SHIPPING" attribute, or "POSTAGE"
             val shippingAttr = attrs["DELIVERY"] ?: attrs["SHIPPING"] ?: attrs["POSTAGE"]
             val shipping = when {
@@ -100,6 +107,7 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
                 location = location,
                 shipping = shipping,
                 condition = Condition.USED,
+                listingDate = listingDate,
                 scrapedAt = now,
             )
         }
