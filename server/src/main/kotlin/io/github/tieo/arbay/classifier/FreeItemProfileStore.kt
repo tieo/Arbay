@@ -59,6 +59,7 @@ object FreeItemProfileStore {
     /** Cached embedding of the profile text — only recomputed when profile changes. */
     fun getEmbedding(): FloatArray? {
         val profile = get() ?: return null
+        if (profile.description.isBlank()) return null // no interests stated → no profile signal
         cachedEmbedding?.let { return it }
         return FreeItemScorer.embedProfile(profile.description)?.also { cachedEmbedding = it }
     }
