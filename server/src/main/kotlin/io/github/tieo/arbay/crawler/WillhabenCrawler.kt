@@ -131,6 +131,26 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
                 else -> null // Willhaben is mostly local pickup
             }
 
+            // Structured car specs from the advert attributes (car listings only carry these). Names
+            // are tried defensively — an absent attribute just leaves the field to text inference.
+            val year = (attrs["YEAR_MODEL"] ?: attrs["FIRST_REGISTRATION"] ?: attrs["INITIAL_REGISTRATION"])
+                ?.let { Regex("(19|20)\\d{2}").find(it)?.value?.toIntOrNull() }
+            val mileageKm = (attrs["MILEAGE"] ?: attrs["ODOMETER"])
+                ?.filter { it.isDigit() }?.toIntOrNull()?.takeIf { it in 1..2_000_000 }
+            val powerKw = (attrs["ENGINE/POWER"] ?: attrs["MOTOR/POWER"] ?: attrs["POWER"])
+                ?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }?.takeIf { it in 10..1500 }
+            val fuel = Fuel.parse(attrs["ENGINE/FUEL"] ?: attrs["FUEL"])
+            val gearbox = when ((attrs["TRANSMISSION"] ?: attrs["ENGINE/GEARBOX"] ?: attrs["GEARBOX"])?.lowercase()) {
+                "automatik", "automatic", "automatikgetriebe" -> Transmission.AUTOMATIC
+                "schaltgetriebe", "manuell", "manual" -> Transmission.MANUAL
+                else -> null
+            }
+            val vehicle = if (year != null || mileageKm != null || powerKw != null || fuel != null || gearbox != null)
+                VehicleTextParser.verifiedByPresence(
+                    VehicleInfo(firstRegYear = year, mileageKm = mileageKm, powerKw = powerKw, fuel = fuel, gearbox = gearbox),
+                )
+            else null
+
             Listing(
                 id = "${platformId.name}:$id",
                 platformId = platformId,
@@ -143,6 +163,7 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
                 shipping = shipping,
                 condition = Condition.USED,
                 listingDate = listingDate,
+                vehicle = vehicle,
                 scrapedAt = now,
             )
         }
