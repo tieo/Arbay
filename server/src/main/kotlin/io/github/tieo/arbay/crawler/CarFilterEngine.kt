@@ -155,7 +155,9 @@ object CarFilterEngine {
             """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
             """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
             """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|\bsteuergerät\b|""" +
-            """\b(bracket|floor ?mat|seat ?cover|headlight|tail ?light|fender|mudflap|wheel ?trim|badge)\b""",
+            """\b(bracket|floor ?mat|seat ?cover|headlight|tail ?light|fender|mudflap|wheel ?trim|badge)\b|""" +
+            // Dutch (Marktplaats) — unambiguous car-part nouns, never a whole-vehicle listing.
+            """\b(koplamp|achterlicht|spatbord|onderdeel|onderdelen|dakdrager|portier|motorkap|spiegelkap|stoelhoezen?)\b""",
         RegexOption.IGNORE_CASE,
     )
 

@@ -22,11 +22,10 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
         } else {
             query.positiveText
         }
-        val base = if (car != null) {
-            "https://www.marktplaats.nl/l/auto-s/q/${text.encodeUrl()}/"
-        } else {
-            "https://www.marktplaats.nl/q/${text.encodeUrl()}/"
-        }
+        // Free-text search for everything. The old `/l/auto-s/q/` cars-category path returns 0 now
+        // (the category-scoped URL rotted); the plain `/q/` search works, and for a car query the
+        // make+model text is specific enough that relevance + the part guard keep it car-focused.
+        val base = "https://www.marktplaats.nl/q/${text.encodeUrl()}/"
 
         for (page in 1..maxPages) {
             val url = if (page == 1) base else "${base}p/$page/"
