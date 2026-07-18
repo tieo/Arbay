@@ -21,9 +21,7 @@ import io.github.tieo.arbay.model.VehicleInfo
 object CarFilterEngine {
 
     /** Sites that carry non-car inventory, where a car query can return parts/accessories. */
-    private val GENERAL_PLATFORMS = setOf(
-        PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
-    )
+    private val GENERAL_PLATFORMS = setOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS)
 
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
         listings.map { annotateVanDims(it) }.filter { keep(it, filters) }

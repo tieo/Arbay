@@ -17,16 +17,11 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         // the latter's keyword search doesn't reach vehicle stock. The __NEXT_DATA__ shape
         // (searchResult.advertSummaryList.advertSummary) is the same, so the parser is shared;
         // vehicle specs are left to the central text enrichment (soft-pass, per the provenance model).
-        val carQuery = CarQueryResolver.resolve(query.positiveText)
-        val url = if (carQuery != null) {
-            // Search the used-car vertical by MODEL only — the full make token matches too broadly on
-            // willhaben ("Volkswagen Crafter" surfaced a Tiguan); the model ("Crafter") is the
-            // discriminator. Relevance still confirms make+model downstream. Same trick as eBay.
-            val keyword = carQuery.modelSlug?.replace("-", " ") ?: query.positiveText
-            "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse?keyword=${keyword.encodeUrl()}"
-        } else {
-            "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
-        }
+        // NOTE: willhaben's used-car vertical (gebrauchtwagen/auto/gebrauchtwagenboerse) IGNORES the
+        // ?keyword= param — it filters by numeric make/model IDs (carmake=/carmodel=) instead, so a
+        // keyword search returns a default car set (a "Crafter" query gave 22 Tiguans/Audis). Until
+        // those IDs are mapped, willhaben is a general-marktplatz crawler only and is NOT a car market.
+        val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.
         val html = fetchWithFallback(

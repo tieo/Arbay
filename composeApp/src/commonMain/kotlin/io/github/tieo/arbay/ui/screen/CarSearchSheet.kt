@@ -47,7 +47,6 @@ private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
     PlatformId.BILBASEN to "DK",
     PlatformId.BYTBIL to "SE",
     PlatformId.MARKTPLAATS to "NL",
-    PlatformId.WILLHABEN to "AT",
 )
 
 /**
