@@ -552,7 +552,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 ?: throw BadRequestException("no willhaben crawler")
             val permit = call.acquireScrapeSlot() ?: return@get
             val titles = try { crawler.debugFetch(url) } finally { permit.release() }
-            call.respond(mapOf("count" to titles.size, "titles" to titles.take(12)))
+            call.respondText("count=${titles.size}\n" + titles.take(12).joinToString("\n"))
         }
     }
 }
