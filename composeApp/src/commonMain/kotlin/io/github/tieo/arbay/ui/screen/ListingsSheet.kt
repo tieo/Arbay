@@ -157,6 +157,32 @@ private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
     }
 }
 
+/** The country a listing is sourced from, as ISO-2, for the cross-border origin badge. Prefers the
+ *  listing's own location (multi-country platforms like AutoScout24 mix markets), else the platform's
+ *  home country. Returns null for the home market (DE) — no badge — and when the origin is unknown. */
+private fun originCountry(listing: Listing): String? {
+    val iso = listing.location?.country?.let { normalizeCountry(it) } ?: listing.platformId.country
+    return iso?.uppercase()?.takeUnless { it == "DE" }
+}
+
+/** AutoScout24 single-letter codes and German/English country names → ISO-2. */
+private fun normalizeCountry(c: String): String? = when (c.trim().uppercase()) {
+    "D", "DE", "DEUTSCHLAND", "GERMANY" -> "DE"
+    "A", "AT", "ÖSTERREICH", "OESTERREICH", "AUSTRIA" -> "AT"
+    "CH", "SCHWEIZ", "SWITZERLAND", "SUISSE" -> "CH"
+    "F", "FR", "FRANKREICH", "FRANCE" -> "FR"
+    "I", "IT", "ITALIEN", "ITALY", "ITALIA" -> "IT"
+    "E", "ES", "SPANIEN", "SPAIN" -> "ES"
+    "NL", "NIEDERLANDE", "NETHERLANDS" -> "NL"
+    "B", "BE", "BELGIEN", "BELGIUM" -> "BE"
+    "L", "LU", "LUXEMBURG", "LUXEMBOURG" -> "LU"
+    "PL", "POLEN", "POLAND" -> "PL"
+    "CZ", "TSCHECHIEN", "CZECHIA" -> "CZ"
+    "DK", "DÄNEMARK", "DENMARK" -> "DK"
+    "SE", "SCHWEDEN", "SWEDEN" -> "SE"
+    else -> c.trim().takeIf { it.length == 2 && it.all { ch -> ch.isLetter() } }?.uppercase()
+}
+
 /** Two-letter ISO country code → its flag emoji (regional-indicator pair). "DK" → 🇩🇰.
  *  Each letter maps to a code point above U+FFFF, so it's emitted as a UTF-16 surrogate pair. */
 private fun flagEmoji(cc: String): String {
@@ -1099,8 +1125,9 @@ internal fun ListingCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
-                    // Origin badge — this listing is abroad (cross-border), show which country.
-                    listing.platformId.country?.let { cc ->
+                    // Origin badge — the listing's own country when known (multi-country platforms
+                    // like AutoScout24 mix markets), else the platform's home country. Home (DE) = none.
+                    originCountry(listing)?.let { cc ->
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.tertiaryContainer,

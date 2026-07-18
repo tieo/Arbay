@@ -83,7 +83,7 @@ class AutoScout24Crawler(
         /** AutoScout24 country codes reachable from the .de front end, covering Germany
          *  and the EU markets worth sourcing used vehicles from. Cross-border listings
          *  carry their origin in location.country. */
-        val EUROPE = listOf("D", "A", "B", "E", "F", "I", "L", "NL")
+        val EUROPE = listOf("D", "A", "B", "CH", "E", "F", "I", "L", "NL")
     }
 
     internal fun parseFromNextData(html: String): List<Listing>? {
