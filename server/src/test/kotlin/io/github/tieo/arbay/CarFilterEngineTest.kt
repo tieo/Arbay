@@ -111,13 +111,35 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun neverExcludesOnInferredValue() {
-        // A text-inferred (unverified) power that fails the filter must NOT drop the listing —
-        // a misread number would silently discard a car that actually fits.
-        val filters = CarFilters(minPowerKw = 110)
-        val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000,
-            VehicleInfo(mileageKm = 100_000, powerKw = 90)) // powerKw present but NOT verified
-        assertEquals(1, CarFilterEngine.apply(listOf(inferred), filters).size)
+    fun textSpecsExcludeByDefault() {
+        // Default useTextSpecs=true: a stated-but-unverified value that fails the filter DOES drop
+        // the listing (a ≤200k km filter must not show a stated 345.000 km van).
+        val over = listing("o", PlatformId.EBAY_DE, 1_000_000,
+            VehicleInfo(mileageKm = 345_000)) // present, not verified (text-read)
+        assertEquals(0, CarFilterEngine.apply(listOf(over), CarFilters(maxMileageKm = 200_000)).size)
+    }
+
+    @Test
+    fun useTextSpecsOffKeepsInferred() {
+        // Opt out of text specs → only the site's structured data can exclude; a text-read value is
+        // ignored, so an unverified out-of-range power keeps the listing.
+        val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000, VehicleInfo(powerKw = 90))
+        assertEquals(1, CarFilterEngine.apply(listOf(inferred), CarFilters(minPowerKw = 110, useTextSpecs = false)).size)
+    }
+
+    @Test
+    fun strictUnknownDropsMissingSpec() {
+        // Strict mode: a listing whose filtered spec is unknown is excluded.
+        val noPower = listing("n", PlatformId.EBAY_DE, 1_000_000, VehicleInfo(mileageKm = 100_000))
+        assertEquals(0, CarFilterEngine.apply(listOf(noPower), CarFilters(minPowerKw = 110, strictUnknown = true)).size)
+        // Default (lenient): the same unknown-spec listing is kept.
+        assertEquals(1, CarFilterEngine.apply(listOf(noPower), CarFilters(minPowerKw = 110)).size)
+    }
+
+    @Test
+    fun textSpecInRangeIsKept() {
+        val ok = listing("k", PlatformId.EBAY_DE, 1_000_000, VehicleInfo(mileageKm = 150_000))
+        assertEquals(1, CarFilterEngine.apply(listOf(ok), CarFilters(maxMileageKm = 200_000)).size)
     }
 
     @Test

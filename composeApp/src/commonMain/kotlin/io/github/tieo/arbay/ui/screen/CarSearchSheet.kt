@@ -94,6 +94,8 @@ fun CarSearchSheet(
     val vanLengths = remember { mutableStateListOf<Int>().apply { initialFilters?.vanLengths?.let { addAll(it) } } }
     val vanHeights = remember { mutableStateListOf<Int>().apply { initialFilters?.vanHeights?.let { addAll(it) } } }
     var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
+    var useTextSpecs by remember { mutableStateOf(initialFilters?.useTextSpecs ?: true) }
+    var strictUnknown by remember { mutableStateOf(initialFilters?.strictUnknown ?: false) }
     val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
 
     fun buildFilters() = CarFilters(
@@ -118,6 +120,8 @@ fun CarSearchSheet(
         vanLengths = vanLengths.toSet(),
         vanHeights = vanHeights.toSet(),
         descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
+        useTextSpecs = useTextSpecs,
+        strictUnknown = strictUnknown,
     )
 
     AdaptiveFormSheet(onDismiss = onDismiss) {
@@ -367,6 +371,27 @@ fun CarSearchSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Spacer(Modifier.height(18.dp))
+
+            // Matching strictness
+            SectionLabel("Matching")
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Use details from listing text", style = MaterialTheme.typography.bodyMedium)
+                    Text("Filter on year/km/power found in the title, not only the site's own data",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = useTextSpecs, onCheckedChange = { useTextSpecs = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Only exact matches", style = MaterialTheme.typography.bodyMedium)
+                    Text("Hide listings that don't state a filtered spec (fewer results, no maybes)",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = strictUnknown, onCheckedChange = { strictUnknown = it })
+            }
 
             Spacer(Modifier.height(18.dp))
 

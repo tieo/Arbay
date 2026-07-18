@@ -51,6 +51,12 @@ data class CarFilters(
     // Free text that must appear in the listing's title or description. A literal match on
     // text we already have, so it works on every platform and can safely exclude.
     val descriptionContains: String? = null,
+    // Filter strictness (behaviour, not a constraint — excluded from isEmpty). useTextSpecs: also
+    // filter on specs read from the listing text (not only the site's structured data), so a stated
+    // "345.000 km" is honoured. strictUnknown: exclude a listing whose filtered spec can't be
+    // determined at all (precise but loses coverage); off = keep unknowns.
+    val useTextSpecs: Boolean = true,
+    val strictUnknown: Boolean = false,
 ) {
     val isEmpty: Boolean get() =
         firstRegFromYear == null && firstRegToYear == null &&
