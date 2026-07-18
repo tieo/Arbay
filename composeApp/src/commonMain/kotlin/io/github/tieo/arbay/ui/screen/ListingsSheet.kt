@@ -157,6 +157,21 @@ private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
     }
 }
 
+/** Two-letter ISO country code → its flag emoji (regional-indicator pair). "DK" → 🇩🇰.
+ *  Each letter maps to a code point above U+FFFF, so it's emitted as a UTF-16 surrogate pair. */
+private fun flagEmoji(cc: String): String {
+    if (cc.length != 2) return ""
+    return buildString {
+        for (c in cc.uppercase()) {
+            if (c !in 'A'..'Z') return ""
+            val cp = 0x1F1E6 + (c - 'A')
+            val offset = cp - 0x10000
+            append((0xD800 + (offset shr 10)).toChar())
+            append((0xDC00 + (offset and 0x3FF)).toChar())
+        }
+    }
+}
+
 @Composable
 fun ListingsSheet(
     productName: String,
@@ -1083,6 +1098,20 @@ internal fun ListingCard(
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
+                    }
+                    // Origin badge — this listing is abroad (cross-border), show which country.
+                    listing.platformId.country?.let { cc ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                        ) {
+                            Text(
+                                "${flagEmoji(cc)} $cc",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
                     }
                     listing.condition?.let {
                         Surface(
