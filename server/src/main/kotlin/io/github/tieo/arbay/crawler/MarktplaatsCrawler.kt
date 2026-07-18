@@ -80,9 +80,11 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
             val priceEl = item.selectFirst("[class*=hz-Listing-price--desktop]")
                 ?: item.selectFirst("[class*=hz-Listing-price]")
                 ?: return@mapNotNull null
-            // A monthly amount is a private-lease / financing price, not a sale — drop it so it can't
-            // masquerade as a cheap "best price" (Marktplaats renders these with a /mnd or p/m suffix).
-            if (Regex("""(?i)(\bp\s?/?\s?m\b|/\s?mnd|per\s?maand|/\s?maand)""").containsMatchIn(priceEl.text()))
+            // Drop lease/financing OFFERS, not by price value but by structure: their price is quoted
+            // PER MONTH (p/m, /mnd, per maand). A lump-sum sale — including a cheap ex-lease van for
+            // sale — has no such marker and stays. Only the price cell is checked, so an unrelated
+            // "12 mnd garantie" in the description can't trigger it.
+            if (Regex("""(?i)(\bp\s?/?\s?m\b|/\s?mnd\b|per\s?maand|/\s?maand)""").containsMatchIn(priceEl.text()))
                 return@mapNotNull null
             // Unwrap nested h5/span if present
             val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
