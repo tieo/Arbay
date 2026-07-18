@@ -157,45 +157,6 @@ private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
     }
 }
 
-/** Per-bookmark blocked keywords: removable chips + an input to add one. Hides any listing whose
- *  title/description contains a term; changes persist to the bookmark via [onChange]. */
-@Composable
-private fun BlockedTermsRow(terms: List<String>, onChange: (List<String>) -> Unit) {
-    var input by remember { mutableStateOf("") }
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                "Hide if contains:",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-            terms.forEach { term ->
-                InputChip(
-                    selected = false,
-                    onClick = { onChange(terms - term) },
-                    label = { Text(term, style = MaterialTheme.typography.labelSmall) },
-                    trailingIcon = { Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(14.dp)) },
-                )
-            }
-        }
-        OutlinedTextField(
-            value = input,
-            onValueChange = { input = it },
-            placeholder = { Text("block a word (e.g. defekt, bastler)", style = MaterialTheme.typography.labelSmall) },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = {
-                val t = input.trim()
-                if (t.isNotBlank() && t !in terms) onChange(terms + t)
-                input = ""
-            }),
-        )
-    }
-}
-
 @Composable
 fun ListingsSheet(
     productName: String,
@@ -215,6 +176,10 @@ fun ListingsSheet(
     val loading by listingViewModel.loading.collectAsState()
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
     LaunchedEffect(blockedTerms) { listingViewModel.setBlockedTerms(blockedTerms) }
+    val activeBlockedTerms by listingViewModel.blockedTerms.collectAsState()
+    // Block/unblock a word from a listing: filter live and persist onto the bookmark.
+    val blockWord: (String) -> Unit = { w -> onBlockedTermsChange?.invoke(listingViewModel.blockTerm(w)) }
+    val unblockWord: (String) -> Unit = { t -> onBlockedTermsChange?.invoke(listingViewModel.unblockTerm(t)) }
     val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
     val totalPlatforms by listingViewModel.totalPlatforms.collectAsState()
@@ -417,7 +382,8 @@ fun ListingsSheet(
                         }
                     }
                     // Active car filters as editable chips + an "Edit" entry to reopen the form.
-                    // Each chip shows "−N": how many more results dropping that filter would add.
+                    // "N hidden" = cars this filter is holding back right now (known only after the
+                    // broad fetch, since counts come from the local cache of relaxed results).
                     if (carFilters != null && onEditFilters != null) {
                         val chips = carFilterChips(carFilters)
                         LazyRow(
@@ -433,14 +399,27 @@ fun ListingsSheet(
                                 )
                             }
                             items(chips) { (label, key) ->
-                                val add = facets[key] ?: 0
+                                val hidden = facets[key] ?: 0
                                 AssistChip(
                                     onClick = onEditFilters,
                                     label = {
-                                        Text(
-                                            if (add > 0) "$label  +$add" else label,
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(label, style = MaterialTheme.typography.labelMedium)
+                                            if (hidden > 0) {
+                                                Spacer(Modifier.width(6.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                                ) {
+                                                    Text(
+                                                        "$hidden hidden",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
                                     },
                                 )
                             }
@@ -453,9 +432,33 @@ fun ListingsSheet(
                             CoverageNote(activeDims, resultPlatforms)
                         }
                     }
-                    // Blocked keywords: hide listings containing these words. Persisted per bookmark.
-                    if (onBlockedTermsChange != null) {
-                        BlockedTermsRow(blockedTerms, onBlockedTermsChange)
+                    // Currently blocked words — removable chips. New ones are added from a
+                    // listing's Block button (per item), not a free-text field.
+                    if (activeBlockedTerms.isNotEmpty()) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Outlined.Block, null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                            }
+                            items(activeBlockedTerms.sorted()) { term ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = { unblockWord(term) },
+                                    label = { Text(term, style = MaterialTheme.typography.labelSmall) },
+                                    trailingIcon = { Icon(Icons.Default.Close, "Unblock", modifier = Modifier.size(14.dp)) },
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -489,7 +492,9 @@ fun ListingsSheet(
                                         exp(logLo + pos.coerceIn(0f, 1f) * (logHi - logLo)).toFloat().coerceIn(priceMin, priceMax)
                                     var minText by remember(priceRange.start) { mutableStateOf(priceRange.start.toInt().toString()) }
                                     var maxText by remember(priceRange.endInclusive) { mutableStateOf(priceRange.endInclusive.toInt().toString()) }
-                                    val cur = activeListings.firstOrNull()?.effectivePrice?.currency ?: Currency.EUR
+                                    // Slider values are in the display currency (prices are converted),
+                                    // so label it that way — not some listing's native currency.
+                                    val cur = displayCur
                                     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                                         RangeSlider(
                                             value = priceToPos(priceRange.start)..priceToPos(priceRange.endInclusive),
@@ -615,6 +620,7 @@ fun ListingsSheet(
                             onSearchSold = { listingViewModel.searchSold() },
                             soldLoading = soldLoadingState,
                             onBan = { listingViewModel.ban(it) },
+                            onBlockWord = blockWord,
                             searchQuery = searchQuery,
                             modifier = Modifier.padding(horizontal = 20.dp),
                         )
@@ -648,6 +654,7 @@ fun ListingsSheet(
                         ListingCard(
                             listing = listing,
                             onBan = { listingViewModel.ban(listing) },
+                            onBlockWord = blockWord,
                             searchQuery = searchQuery,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 3.dp),
                         )
@@ -743,6 +750,8 @@ fun ListingsSheet(
                             SoldHistoryRow(
                                 listing = listing,
                                 onBan = { listingViewModel.ban(listing) },
+                                onBlockWord = blockWord,
+                                searchQuery = searchQuery,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                             )
                         }
@@ -1044,9 +1053,11 @@ private fun VehicleSpecsRow(v: io.github.tieo.arbay.model.VehicleInfo) {
 internal fun ListingCard(
     listing: Listing,
     onBan: (() -> Unit)? = null,
+    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
+    var showBlockDialog by remember { mutableStateOf(false) }
 
     Card(
         onClick = { openBrowser(listing.url) },
@@ -1199,21 +1210,160 @@ internal fun ListingCard(
                 }
             }
 
-            if (onBan != null) {
-                IconButton(
-                    onClick = onBan,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        Icons.Outlined.DeleteOutline, null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
+            if (onBan != null || onBlockWord != null) {
+                Column {
+                    if (onBan != null) {
+                        IconButton(
+                            onClick = onBan,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.DeleteOutline, "Hide this listing",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+                    if (onBlockWord != null) {
+                        IconButton(
+                            onClick = { showBlockDialog = true },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Block, "Block a word from this listing",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
+    if (showBlockDialog && onBlockWord != null) {
+        BlockTermDialog(
+            listingTitle = listing.title,
+            searchQuery = searchQuery,
+            onBlock = { term ->
+                onBlockWord(term)
+                showBlockDialog = false
+            },
+            onDismiss = { showBlockDialog = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BlockTermDialog(
+    listingTitle: String,
+    searchQuery: String,
+    onBlock: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Don't offer the query's own words as block candidates — blocking "crafter" would empty the list.
+    val queryWords = remember(searchQuery) {
+        searchQuery.lowercase().split(Regex("[\\s\\-]+"))
+            .filter { it.length > 1 && !it.startsWith("-") && it != "or" }
+            .toSet()
+    }
+    val candidateWords = remember(listingTitle, queryWords) {
+        listingTitle.split(Regex("[\\s\\-/|,()\\[\\]]+"))
+            .map { it.trim().replace(Regex("[^\\p{L}\\p{N}]"), "") }
+            .filter { it.length >= 2 }
+            .map { it.lowercase() }
+            .distinct()
+            .filter { word -> queryWords.none { q -> word.contains(q) || q.contains(word) } }
+    }
+
+    var phraseMode by remember { mutableStateOf(false) }
+    val selectedWords = remember { mutableStateListOf<String>() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Block a word", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                if (phraseMode && selectedWords.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    ) {
+                        Text(
+                            selectedWords.joinToString(" "),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp),
+                        )
+                    }
+                }
+                Text(
+                    if (phraseMode) "Tap words to add to phrase:" else "Tap to block. Long press for phrase:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    candidateWords.forEach { word ->
+                        val isSelected = word in selectedWords
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                                .pointerInput(word, phraseMode) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            phraseMode = true
+                                            selectedWords.clear()
+                                            selectedWords.add(word)
+                                        },
+                                        onTap = {
+                                            if (phraseMode) {
+                                                if (isSelected) selectedWords.remove(word)
+                                                else if (word !in selectedWords) selectedWords.add(word)
+                                            } else {
+                                                onBlock(word)
+                                            }
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                word,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (phraseMode && selectedWords.size >= 2) {
+                TextButton(onClick = {
+                    onBlock(selectedWords.joinToString(" "))
+                }) { Text("Block phrase") }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (phraseMode) {
+                    TextButton(onClick = { phraseMode = false; selectedWords.clear() }) { Text("Back") }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 // === Price Distribution Histogram (active listings — New vs Used bars) ===
@@ -1228,6 +1378,7 @@ private fun PriceDistributionChart(
     onSearchSold: () -> Unit = {},
     soldLoading: Boolean = false,
     onBan: ((Listing) -> Unit)? = null,
+    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
@@ -1345,6 +1496,7 @@ private fun PriceDistributionChart(
                     PriceHistoryChart(
                         soldListings = soldListings,
                         onBan = onBan,
+                        onBlockWord = onBlockWord,
                         searchQuery = searchQuery,
                     )
                 } else {
@@ -1475,6 +1627,7 @@ private fun PriceDistributionChart(
 private fun PriceHistoryChart(
     soldListings: List<Listing>,
     onBan: ((Listing) -> Unit)? = null,
+    onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
@@ -1629,6 +1782,7 @@ private fun PriceHistoryChart(
                 ListingCard(
                     listing = listing,
                     onBan = onBan?.let { { it(listing) } },
+                    onBlockWord = onBlockWord,
                     searchQuery = searchQuery,
                 )
             }
@@ -1642,8 +1796,11 @@ private fun PriceHistoryChart(
 private fun SoldHistoryRow(
     listing: Listing,
     onBan: (() -> Unit)? = null,
+    onBlockWord: ((String) -> Unit)? = null,
+    searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
+    var showBlockDialog by remember { mutableStateOf(false) }
     val dateStr = remember(listing) {
         val instant = listing.soldDate ?: listing.scrapedAt
         val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
@@ -1705,13 +1862,34 @@ private fun SoldHistoryRow(
             if (onBan != null) {
                 IconButton(onClick = onBan, modifier = Modifier.size(28.dp)) {
                     Icon(
-                        Icons.Outlined.DeleteOutline, null,
+                        Icons.Outlined.DeleteOutline, "Hide this listing",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    )
+                }
+            }
+            if (onBlockWord != null) {
+                IconButton(onClick = { showBlockDialog = true }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Outlined.Block, "Block a word from this listing",
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     )
                 }
             }
         }
+    }
+
+    if (showBlockDialog && onBlockWord != null) {
+        BlockTermDialog(
+            listingTitle = listing.title,
+            searchQuery = searchQuery,
+            onBlock = { term ->
+                onBlockWord(term)
+                showBlockDialog = false
+            },
+            onDismiss = { showBlockDialog = false },
+        )
     }
 }
 

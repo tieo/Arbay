@@ -89,6 +89,21 @@ class ListingViewModel(
     /** Set the active blocked-keyword list (from the bookmark being viewed). */
     fun setBlockedTerms(terms: List<String>) { _blockedTerms.value = terms }
 
+    /** Add a word/phrase to the block list (from a listing's Block button). Returns the new list. */
+    fun blockTerm(term: String): List<String> {
+        val t = term.trim()
+        if (t.isNotEmpty() && _blockedTerms.value.none { it.equals(t, ignoreCase = true) }) {
+            _blockedTerms.value = _blockedTerms.value + t
+        }
+        return _blockedTerms.value
+    }
+
+    /** Remove a blocked word/phrase (from its removable chip). Returns the new list. */
+    fun unblockTerm(term: String): List<String> {
+        _blockedTerms.value = _blockedTerms.value.filterNot { it.equals(term, ignoreCase = true) }
+        return _blockedTerms.value
+    }
+
     fun ban(listing: Listing) {
         val updated = _bannedIds.value + listing.id
         _bannedIds.value = updated
