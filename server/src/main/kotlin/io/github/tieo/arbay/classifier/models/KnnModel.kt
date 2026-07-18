@@ -18,7 +18,12 @@ class KnnModel(private val k: Int = 7) : ScoringModel {
     @Volatile private var examples: List<TrainingExample> = emptyList()
 
     override fun score(listingEmbedding: FloatArray, listingText: String, context: ScoringContext): Double {
-        if (examples.isEmpty()) return 0.5
+        // No neighbors yet: rank by the profile-driven cold-start signal, not a flat 0.5.
+        if (examples.isEmpty()) return FreeItemScorer.scoreEmbedding(
+            listingEmbedding, listingText,
+            context.profileEmbedding, context.profileText,
+            context.lovedEmbeddings, context.dislikedEmbeddings,
+        )
 
         // Find k nearest neighbors by cosine similarity
         val neighbors = examples

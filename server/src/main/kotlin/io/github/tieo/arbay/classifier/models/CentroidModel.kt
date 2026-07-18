@@ -23,9 +23,15 @@ class CentroidModel : ScoringModel {
     @Volatile private var projection: FloatArray? = null // per-dimension weights
 
     override fun score(listingEmbedding: FloatArray, listingText: String, context: ScoringContext): Double {
-        val lc = loveCentroid ?: return 0.5
-        val dc = dislikeCentroid ?: return 0.5
-        val proj = projection ?: return 0.5
+        // Untrained: fall back to the profile-driven cold-start ranking rather than a flat 0.5.
+        fun coldStart() = FreeItemScorer.scoreEmbedding(
+            listingEmbedding, listingText,
+            context.profileEmbedding, context.profileText,
+            context.lovedEmbeddings, context.dislikedEmbeddings,
+        )
+        val lc = loveCentroid ?: return coldStart()
+        val dc = dislikeCentroid ?: return coldStart()
+        val proj = projection ?: return coldStart()
 
         // Project embedding and centroids
         val projected = applyProjection(listingEmbedding, proj)

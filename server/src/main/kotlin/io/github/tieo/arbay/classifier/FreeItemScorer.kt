@@ -37,6 +37,32 @@ object FreeItemScorer {
         // If embedding model is unavailable, all items score equally
         val listingEmbedding = EmbeddingModel.embed(text) ?: return 0.5
 
+        return scoreEmbedding(
+            listingEmbedding = listingEmbedding,
+            listingText = text,
+            profileEmbedding = profileEmbedding,
+            profileText = profileText,
+            lovedEmbeddings = lovedEmbeddings,
+            dislikedEmbeddings = dislikedEmbeddings,
+        )
+    }
+
+    /**
+     * Score a pre-computed listing embedding against the profile and feedback signals.
+     * This is the profile-driven ranking used both directly (above) and as the cold-start
+     * fallback for the learned models before they have enough feedback to train. It never
+     * returns a flat constant when a profile is set — the profile similarity plus keyword
+     * boost give a real ordering from the very first item.
+     */
+    fun scoreEmbedding(
+        listingEmbedding: FloatArray,
+        listingText: String,
+        profileEmbedding: FloatArray?,
+        profileText: String?,
+        lovedEmbeddings: List<FloatArray>,
+        dislikedEmbeddings: List<FloatArray>,
+    ): Double {
+        val text = listingText
         // ── Signal 1: Profile similarity [0,1] ──────────────────────────────────
         // Maps cosine similarity from [-1,1] → [0,1]. This is the primary signal.
         val profileSim = if (profileEmbedding != null) {

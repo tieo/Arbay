@@ -21,7 +21,13 @@ class LogisticRegressionModel : ScoringModel {
     @Volatile private var trained = false
 
     override fun score(listingEmbedding: FloatArray, listingText: String, context: ScoringContext): Double {
-        val w = weights ?: return 0.5
+        // Untrained: no learned weights yet, so rank by the profile-driven cold-start signal
+        // instead of emitting a flat 0.5 for every item.
+        val w = weights ?: return FreeItemScorer.scoreEmbedding(
+            listingEmbedding, listingText,
+            context.profileEmbedding, context.profileText,
+            context.lovedEmbeddings, context.dislikedEmbeddings,
+        )
         return sigmoid(dot(w, listingEmbedding) + bias)
     }
 

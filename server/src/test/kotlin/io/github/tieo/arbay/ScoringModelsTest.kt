@@ -203,6 +203,55 @@ class ScoringModelsTest {
         assertTrue(CentroidModel().trainable)
     }
 
+    // ── Cold-start (untrained, profile-driven) ──────────────────────────────
+
+    @Test
+    fun `cold-start ranks profile-similar items above dissimilar ones on every untrained model`() {
+        // With a profile set but no feedback yet, the learned models are untrained. They must
+        // still rank by profile similarity instead of emitting a flat 0.5 for everything — the
+        // "always 50%" bug. Profile sits on cluster 1; near item resembles it, far item does not.
+        val ctx = contextWith(profileSeed = 1)
+        val near = cluster(1, 1).first()
+        val far = cluster(50, 1).first()
+
+        for (model in listOf(LogisticRegressionModel(), KnnModel(), CentroidModel())) {
+            val nearScore = model.score(near, "test", ctx)
+            val farScore = model.score(far, "test", ctx)
+            assertTrue(nearScore > farScore,
+                "${model.id}: profile-near ($nearScore) should outscore far ($farScore) at cold-start")
+        }
+    }
+
+    @Test
+    fun `likes alone reshape ranking on untrained logistic without any dislikes`() {
+        // The reported failure: the user only clicks "like" (no dislikes). Logistic never trains
+        // (it needs both classes), so it must lean on the love signal from the cold-start path.
+        // An item resembling a liked one has to outrank one that does not.
+        val model = LogisticRegressionModel()
+        val before = contextWith() // nothing liked yet
+        val ctxLiked = contextWith(lovedSeeds = listOf(50)) // now something on cluster 50 is liked
+
+        val nearLiked = cluster(50, 1).first()
+        val farFromLiked = cluster(1, 1).first()
+
+        assertTrue(model.train(emptyList()).examplesUsed == 0) // still untrained
+        val nearBefore = model.score(nearLiked, "test", before)
+        val nearAfter = model.score(nearLiked, "test", ctxLiked)
+        val farAfter = model.score(farFromLiked, "test", ctxLiked)
+
+        assertTrue(nearAfter > nearBefore, "Liking a similar item must raise its score ($nearBefore → $nearAfter)")
+        assertTrue(nearAfter > farAfter, "Item near a liked one ($nearAfter) must outrank a far one ($farAfter)")
+    }
+
+    @Test
+    fun `cold-start does not collapse every item to a single constant`() {
+        // The regression guard for the reported bug: a spread of listings under a set profile
+        // must not all receive the identical score.
+        val ctx = contextWith(profileSeed = 1)
+        val scores = (1..30).map { LogisticRegressionModel().score(syntheticEmbedding(it * 7), "test", ctx) }
+        assertTrue(scores.toSet().size > 1, "Cold-start scores must vary, got all=${scores.first()}")
+    }
+
     // ── Cross-model consistency ─────────────────────────────────────────────
 
     @Test

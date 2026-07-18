@@ -72,11 +72,13 @@ object FreeItemFeedbackStore {
 
     fun lovedEmbeddings(): List<FloatArray> = synchronized(feedback) {
         feedback.filter { it.action == FeedbackAction.LOVE.name || it.action == FeedbackAction.LIKE.name }
+            .filter { it.embedding.isNotEmpty() }
             .map { it.embedding.toFloatArray() }
     }
 
     fun dislikedEmbeddings(): List<FloatArray> = synchronized(feedback) {
         feedback.filter { it.action == FeedbackAction.DISLIKE.name }
+            .filter { it.embedding.isNotEmpty() }
             .map { it.embedding.toFloatArray() }
     }
 
