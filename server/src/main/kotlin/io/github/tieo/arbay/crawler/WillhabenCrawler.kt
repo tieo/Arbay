@@ -17,9 +17,13 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         // the latter's keyword search doesn't reach vehicle stock. The __NEXT_DATA__ shape
         // (searchResult.advertSummaryList.advertSummary) is the same, so the parser is shared;
         // vehicle specs are left to the central text enrichment (soft-pass, per the provenance model).
-        val isCar = CarQueryResolver.resolve(query.positiveText) != null
-        val url = if (isCar) {
-            "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse?keyword=${query.positiveText.encodeUrl()}"
+        val carQuery = CarQueryResolver.resolve(query.positiveText)
+        val url = if (carQuery != null) {
+            // Search the used-car vertical by MODEL only — the full make token matches too broadly on
+            // willhaben ("Volkswagen Crafter" surfaced a Tiguan); the model ("Crafter") is the
+            // discriminator. Relevance still confirms make+model downstream. Same trick as eBay.
+            val keyword = carQuery.modelSlug?.replace("-", " ") ?: query.positiveText
+            "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse?keyword=${keyword.encodeUrl()}"
         } else {
             "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
         }
