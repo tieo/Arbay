@@ -37,10 +37,9 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
     suspend fun debugRaw(url: String): String {
         val html = fetchWithFallback(client, url, "willhaben-debug", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
         val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return "no __NEXT_DATA__"
-        val sb = StringBuilder("len=${data.length}\n")
-        // Every make label immediately followed by its CAR_MODEL/MAKE numeric id.
-        Regex("\"label\":\"([^\"]{1,30})\"[^}]{0,120}?CAR_MODEL/MAKE\"[^}]{0,60}?\"value\":\"(\\d+)\"")
-            .findAll(data).map { "${it.groupValues[1]}=${it.groupValues[2]}" }.distinct().take(60)
+        val sb = StringBuilder("len=${data.length} titles=${parseSearchResults(html).size}\n")
+        Regex("\"label\":\"([^\"]{1,40})\"[^}]{0,140}?CAR_MODEL/(MAKE|MODEL)\"[^}]{0,60}?\"value\":\"(\\d+)\"")
+            .findAll(data).map { "${it.groupValues[2]}:${it.groupValues[1]}=${it.groupValues[3]}" }.distinct().take(80)
             .forEach { sb.append(it).append("  ") }
         return sb.toString().take(3800)
     }
