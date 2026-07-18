@@ -80,15 +80,23 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
             val priceEl = item.selectFirst("[class*=hz-Listing-price--desktop]")
                 ?: item.selectFirst("[class*=hz-Listing-price]")
                 ?: return@mapNotNull null
-            // Drop lease/financing OFFERS, not by price value but by structure: their price is quoted
-            // PER MONTH (p/m, /mnd, per maand). A lump-sum sale — including a cheap ex-lease van for
-            // sale — has no such marker and stays. Only the price cell is checked, so an unrelated
-            // "12 mnd garantie" in the description can't trigger it.
-            if (Regex("""(?i)(\bp\s?/?\s?m\b|/\s?mnd\b|per\s?maand|/\s?maand)""").containsMatchIn(priceEl.text()))
-                return@mapNotNull null
             // Unwrap nested h5/span if present
             val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
             val price = Money.parse(priceText) ?: return@mapNotNull null
+
+            // Drop lease/financing OFFERS structurally (not by price value). Marktplaats shows the
+            // MONTHLY amount as the price (h5 "€ 373,-") with "Financial lease voor €373 p/mnd" in the
+            // blurb. Two safe signals: (a) a "€<amt> p/mnd" whose amount equals the listed price — the
+            // price IS the monthly figure; (b) an explicit "financial/private/operational lease" plus a
+            // per-month marker. A real sale that merely mentions a lease option (price €10.950, blurb
+            // "Leaseprijs: € 131") matches neither and stays.
+            val cardText = item.text()
+            val leaseAmt = Regex("""€\s?([\d.]{1,7})[,\-\s]*(?:p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand)""", RegexOption.IGNORE_CASE)
+                .find(cardText)?.groupValues?.get(1)?.replace(".", "")?.toLongOrNull()
+            val priceIsMonthly = leaseAmt != null && leaseAmt == price.amount / 100
+            val explicitLease = Regex("""(financial|private|operational|zakelijk)\s*lease""", RegexOption.IGNORE_CASE).containsMatchIn(cardText) &&
+                Regex("""p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand""", RegexOption.IGNORE_CASE).containsMatchIn(cardText)
+            if (priceIsMonthly || explicitLease) return@mapNotNull null
 
             val descriptionText = item.selectFirst("[class*=hz-Listing-description]")?.text()
 
