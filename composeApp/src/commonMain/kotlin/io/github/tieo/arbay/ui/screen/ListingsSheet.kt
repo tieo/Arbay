@@ -117,27 +117,27 @@ private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) 
             )
         }
         if (expanded) {
-            Spacer(Modifier.height(2.dp))
-            activeDims.forEach { dim ->
-                val atSource = platforms.filter { CarFilterCapability.isNative(it, dim) }
-                val byUs = platforms.filter { !CarFilterCapability.isNative(it, dim) }
-                val parts = buildList {
-                    if (atSource.isNotEmpty()) add("source: " + atSource.joinToString(", ") { it.displayName })
-                    if (byUs.isNotEmpty()) add("by us: " + byUs.joinToString(", ") { it.displayName })
-                }
+            Spacer(Modifier.height(3.dp))
+            // Collapse the dim×platform matrix into two lines: filters every market applies itself,
+            // vs filters we apply as a best-effort post-filter where a market can't.
+            val atSource = activeDims.filter { dim -> platforms.all { CarFilterCapability.isNative(it, dim) } }
+            val bestEffort = activeDims.filter { dim -> platforms.any { !CarFilterCapability.isNative(it, dim) } }
+            fun labels(dims: List<String>) = dims.joinToString(", ") { DIM_LABELS[it] ?: it }
+            if (atSource.isNotEmpty()) {
                 Text(
-                    "${DIM_LABELS[dim] ?: dim} — ${parts.joinToString(" · ")}",
+                    "At the marketplace: ${labels(atSource)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                    modifier = Modifier.padding(vertical = 1.dp),
                 )
             }
-            Text(
-                "“By us” means we filter on the site's own verified specs; a listing missing that spec is kept, not hidden.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.padding(top = 3.dp),
-            )
+            if (bestEffort.isNotEmpty()) {
+                Text(
+                    "Best-effort by us: ${labels(bestEffort)} — filtered on each site's verified specs; listings missing that spec are kept, not hidden.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }
