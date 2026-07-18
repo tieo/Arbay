@@ -7,8 +7,8 @@ import kotlinx.serialization.json.*
 
 /**
  * Crawler for sauto.cz (Seznam), the largest Czech used-vehicle marketplace. Listings come
- * straight from the site's own JSON API (/api/v1/items/search) — the same endpoint its React
- * frontend calls — so no HTML scraping is needed and no bot protection stands in the way.
+ * straight from the site's own JSON API (/api/v1/items/search), the same endpoint its React
+ * frontend calls, so no HTML scraping is needed and no bot protection stands in the way.
  */
 class SautoCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.SAUTO
@@ -40,7 +40,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
      * Probes each vehicle category for a single page and returns the first whose results
      * actually carry the requested model. The API silently drops the model filter (and
      * returns the whole make instead) whenever the model doesn't exist in the probed
-     * category — e.g. "Crafter" isn't a passenger car (838), it lives under light
+     * category: "Crafter" isn't a passenger car (838), it lives under light
      * commercial (839). Make-only queries skip probing and use the passenger category,
      * the largest and most common one.
      */
@@ -114,74 +114,79 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
         }
         val results = root["results"]?.jsonArray ?: return emptyList()
 
-        return results.mapNotNull { element ->
-            val obj = element.jsonObject
-            val externalId = obj["id"]?.jsonPrimitive?.longOrNull?.toString() ?: return@mapNotNull null
-            val title = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
-                ?: return@mapNotNull null
+        // A single malformed result is dropped rather than failing the whole page.
+        return results.mapNotNull { element -> runCatching { parseItem(element, now) }.getOrNull() }
+            .distinctBy { it.externalId }
+    }
 
-            if (obj["price_by_agreement"]?.jsonPrimitive?.booleanOrNull == true) return@mapNotNull null
-            val rawPrice = obj["price"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
-            if (rawPrice <= 0) return@mapNotNull null
-            // The API returns whole CZK, Money stores minor units (haléře), so scale by 100.
-            val price = Money(rawPrice * 100, Currency.CZK)
+    private fun parseItem(element: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+        val obj = element as? JsonObject ?: return null
+        val externalId = obj["id"]?.jsonPrimitive?.longOrNull?.toString() ?: return null
+        val title = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: return null
 
-            val categorySeo = obj["category"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
-            val manufacturerSeo = obj["manufacturer_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
-            val modelSeo = obj["model_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
-            val url = if (categorySeo != null && manufacturerSeo != null && modelSeo != null) {
-                "https://www.sauto.cz/$categorySeo/detail/$manufacturerSeo/$modelSeo/$externalId"
-            } else {
-                "https://www.sauto.cz/detail/$externalId"
+        if (obj["price_by_agreement"]?.jsonPrimitive?.booleanOrNull == true) return null
+        val rawPrice = obj["price"]?.jsonPrimitive?.longOrNull?.takeIf { it > 0 } ?: return null
+        // The API returns whole CZK, Money stores minor units (haléře), so scale by 100.
+        val price = Money(rawPrice * 100, Currency.CZK)
+
+        val categorySeo = obj["category"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+        val manufacturerSeo = obj["manufacturer_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+        val modelSeo = obj["model_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull
+        val url = if (categorySeo != null && manufacturerSeo != null && modelSeo != null) {
+            "https://www.sauto.cz/$categorySeo/detail/$manufacturerSeo/$modelSeo/$externalId"
+        } else {
+            "https://www.sauto.cz/detail/$externalId"
+        }
+
+        val imageUrl = obj["images"]?.jsonArray?.firstOrNull()
+            ?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+            ?.let { if (it.startsWith("//")) "https:$it" else it }
+
+        val locality = obj["locality"]?.jsonObject
+        val city = locality?.get("municipality")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?: locality?.get("district")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val location = Location(city = city, country = "CZ")
+
+        // First registration comes from in_operation_date; manufacturing_date is the fallback.
+        // The date is ISO-formatted (yyyy-MM-dd), so year and month come from fixed offsets.
+        val regDate = (obj["in_operation_date"] ?: obj["manufacturing_date"])?.jsonPrimitive?.contentOrNull
+        val year = regDate?.take(4)?.toIntOrNull()?.takeIf { it in 1900..2100 }
+        val km = obj["tachometer"]?.jsonPrimitive?.longOrNull?.takeIf { it in 1..2_000_000 }
+        val description = buildString {
+            year?.let { append("EZ: $it") }
+            km?.let {
+                if (isNotEmpty()) append(" | ")
+                append("$it km")
             }
+        }.takeIf { it.isNotBlank() }
 
-            val imageUrl = obj["images"]?.jsonArray?.firstOrNull()
-                ?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
-                ?.let { if (it.startsWith("//")) "https:$it" else it }
+        val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
+            firstRegYear = year,
+            firstRegMonth = regDate?.takeIf { it.length >= 7 }
+                ?.substring(5, 7)?.toIntOrNull()?.takeIf { it in 1..12 },
+            mileageKm = km?.toInt(),
+            fuel = Fuel.parse(obj["fuel_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull),
+            gearbox = when (obj["gearbox_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull) {
+                "automaticka" -> Transmission.AUTOMATIC
+                "manualni" -> Transmission.MANUAL
+                else -> null
+            },
+        ))
 
-            val locality = obj["locality"]?.jsonObject
-            val city = locality?.get("municipality")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                ?: locality?.get("district")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-            val location = Location(city = city, country = "CZ")
-
-            // First registration comes from in_operation_date; manufacturing_date is the fallback.
-            val regDate = (obj["in_operation_date"] ?: obj["manufacturing_date"])?.jsonPrimitive?.contentOrNull
-            val year = regDate?.take(4)
-            val km = obj["tachometer"]?.jsonPrimitive?.longOrNull
-            val description = buildString {
-                year?.let { append("EZ: $it") }
-                km?.let {
-                    if (isNotEmpty()) append(" | ")
-                    append("$it km")
-                }
-            }.takeIf { it.isNotBlank() }
-
-            val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
-                firstRegYear = year?.toIntOrNull(),
-                firstRegMonth = regDate?.takeIf { it.length >= 7 }?.substring(5, 7)?.toIntOrNull(),
-                mileageKm = km?.toInt()?.takeIf { it in 1..2_000_000 },
-                fuel = Fuel.parse(obj["fuel_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull),
-                gearbox = when (obj["gearbox_cb"]?.jsonObject?.get("seo_name")?.jsonPrimitive?.contentOrNull) {
-                    "automaticka" -> Transmission.AUTOMATIC
-                    "manualni" -> Transmission.MANUAL
-                    else -> null
-                },
-            ))
-
-            Listing(
-                id = "${platformId.name}:$externalId",
-                platformId = platformId,
-                externalId = externalId,
-                url = url,
-                title = title,
-                price = price,
-                imageUrls = listOfNotNull(imageUrl),
-                location = location,
-                description = description,
-                scrapedAt = now,
-                vehicle = vehicle,
-            )
-        }.distinctBy { it.externalId }
+        return Listing(
+            id = "${platformId.name}:$externalId",
+            platformId = platformId,
+            externalId = externalId,
+            url = url,
+            title = title,
+            price = price,
+            imageUrls = listOfNotNull(imageUrl),
+            location = location,
+            description = description,
+            scrapedAt = scrapedAt,
+            vehicle = vehicle,
+        )
     }
 
     companion object {

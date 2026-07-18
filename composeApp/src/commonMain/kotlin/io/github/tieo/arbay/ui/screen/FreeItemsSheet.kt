@@ -70,7 +70,7 @@ fun FreeItemsSheet(
     val newMatches by viewModel.newMatches.collectAsState()
     val lastAction by viewModel.lastAction.collectAsState()
     val undoAnimDirection by viewModel.undoAnimDirection.collectAsState()
-    // Button action trigger — set by bottom bar, consumed by SwipeCardStack animation
+    // Button action trigger, set by the bottom bar and consumed by the SwipeCardStack fly-out animation
     var buttonAction by remember { mutableStateOf<String?>(null) }
 
     var editingProfile by remember { mutableStateOf(profile == null) }
@@ -98,9 +98,8 @@ fun FreeItemsSheet(
         listings.filter { it.id !in dismissedIds }
     }
 
-    // The current card is always visibleListings[0] — we don't track an index.
-    // When an item is dismissed, it disappears from visibleListings and the next
-    // item naturally becomes [0]. This avoids the double-skip bug.
+    // The current card is always visibleListings[0]; dismissing an item removes it
+    // from the list and the next one becomes [0], so no index needs tracking.
 
     // Prefetch more items when running low
     LaunchedEffect(visibleListings.size) {
@@ -119,12 +118,11 @@ fun FreeItemsSheet(
                     profile = profile,
                     editingProfile = editingProfile,
                     loading = loading || loadingMore,
-                    // While the profile editor is open, the form itself guides the user — a search
+                    // While the profile editor is open, the form itself guides the user; a search
                     // error banner (e.g. "set a location") would just be noise on top of it.
                     error = if (editingProfile) null else error,
                     displayRadius = displayRadius,
                     currentRadiusKm = currentRadiusKm,
-
                     currentIndex = if (visibleListings.isNotEmpty()) 1 else 0,
                     totalVisible = visibleListings.size,
                     onRefresh = { viewModel.search() },
@@ -195,14 +193,16 @@ fun FreeItemsSheet(
                 // ── Tinder Card Stack ───────────────────────────────────
                 Box(modifier = Modifier.weight(1f)) {
                     when {
-                        !editingProfile && visibleListings.isEmpty() && !loading && profile != null -> {
+                        !editingProfile && visibleListings.isEmpty() && !loading && !loadingMore && profile != null -> {
                             EmptyState(
                                 hasLocation = profile?.location != null,
                                 onRetry = { viewModel.search() },
                             )
                         }
 
-                        !editingProfile && loading && visibleListings.isEmpty() -> {
+                        // Covers loadingMore too: when the deck empties while a prefetch is in
+                        // flight, a spinner is truthful where "No free items found" is not.
+                        !editingProfile && (loading || loadingMore) && visibleListings.isEmpty() -> {
                             LoadingState(platformStatus = platformStatus)
                         }
 
@@ -292,7 +292,6 @@ private fun SwipeHeader(
     error: String?,
     displayRadius: Int?,
     currentRadiusKm: Int?,
-
     currentIndex: Int,
     totalVisible: Int,
     onRefresh: () -> Unit,
@@ -365,7 +364,6 @@ private fun SwipeHeader(
             }
         }
 
-
         if (loading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         } else {
@@ -396,7 +394,7 @@ private fun SwipeHeader(
 
 @Composable
 private fun SwipeCardStack(
-    listing: Listing?,
+    listing: Listing,
     nextListing: Listing?,
     undoDirection: String?,
     onUndoAnimDone: () -> Unit,
@@ -410,19 +408,6 @@ private fun SwipeCardStack(
     onOpen: () -> Unit,
     onMoreLikeThis: () -> Unit,
 ) {
-    if (listing == null) {
-        if (loadingMore) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(12.dp))
-                    Text("Loading more...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        return
-    }
-
     // Undo slide-back animation: start off-screen, animate to 0
     val undoStartX = when (undoDirection) {
         "right" -> 800f
@@ -450,12 +435,12 @@ private fun SwipeCardStack(
         }
     }
 
-    // Fly-out animation when button is pressed
+    // Fly-out animation when a bottom bar button is pressed ("dislike", "down" or "right")
     LaunchedEffect(buttonAction) {
         val action = buttonAction ?: return@LaunchedEffect
         val targetX = when (action) {
             "right" -> 1200f
-            "left", "dislike" -> -1200f
+            "dislike" -> -1200f
             else -> 0f
         }
         val targetY = if (action == "down") 1200f else 0f
@@ -464,10 +449,9 @@ private fun SwipeCardStack(
             offsetX = targetX * value
             offsetY = targetY * value
         }
-        // Animation done — fire the actual action
+        // Animation done; fire the actual action
         when (action) {
             "right" -> onSwipeRight()
-            "left" -> onSwipeLeft()
             "down" -> onSwipeDown()
             "dislike" -> onDislike()
         }
@@ -495,7 +479,6 @@ private fun SwipeCardStack(
             ) {
                 SwipeCard(
                     listing = nextListing,
-
                     onOpen = {},
                     onMoreLikeThis = {},
                 )
@@ -562,7 +545,7 @@ private fun SwipeCardStack(
                                     offsetY = tentativeY
                                 }
                             } else {
-                                // Axis locked — only move along that rail
+                                // Axis locked; only move along that rail
                                 when (lockedAxis) {
                                     "horizontal" -> offsetX += dragAmount.x
                                     "vertical" -> offsetY = (offsetY + dragAmount.y).coerceAtLeast(0f)
@@ -642,13 +625,11 @@ private fun SwipeCardStack(
 @Composable
 private fun SwipeCard(
     listing: Listing,
-
     onOpen: () -> Unit,
     onMoreLikeThis: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val images = listing.imageUrls.filter { it.startsWith("http") }
-
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -669,11 +650,11 @@ private fun SwipeCard(
                 if (images.isNotEmpty()) {
                     AsyncImage(
                         model = images.first(),
-                        contentDescription = null,
+                        contentDescription = listing.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
-                    // Bottom gradient
+                    // Bottom gradient so the white title overlay stays readable on bright photos
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -755,51 +736,26 @@ private fun SwipeCard(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                // Title (only if no image — otherwise it's on the image)
-                if (images.isNotEmpty()) {
-                    // Metadata row
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        listing.location?.let { loc ->
-                            val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
-                            if (text.isNotBlank()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.LocationOn, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.width(3.dp))
-                                    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                // Location and scrape-time metadata; the title sits on the hero image when one exists
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    listing.location?.let { loc ->
+                        val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
+                        if (text.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.LocationOn, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(3.dp))
+                                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        Text(
-                            formatRelativeTime(listing.scrapedAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
-                } else {
-                    // No image — show location/time
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        listing.location?.let { loc ->
-                            val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
-                            if (text.isNotBlank()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.LocationOn, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.width(3.dp))
-                                    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                        Text(
-                            formatRelativeTime(listing.scrapedAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        formatRelativeTime(listing.scrapedAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 // Description
@@ -815,7 +771,6 @@ private fun SwipeCard(
                         )
                     }
                 }
-
 
                 // Action row
                 Spacer(Modifier.height(8.dp))
@@ -1162,7 +1117,6 @@ private fun SavedSheet(
                         }
                     }
 
-
                     // Background tracking toggle
                     item(key = "activity-tracking") {
                         Row(
@@ -1271,7 +1225,7 @@ private fun SavedSheet(
                                         val fn = model.falseNegatives.toIntOrNull() ?: 0
                                         Text("$preds predictions · $fn false negatives", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
-                                        Text("No predictions yet — swipe some items first", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("No predictions yet, swipe some items first", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
@@ -1288,7 +1242,7 @@ private fun SavedSheet(
                             Spacer(Modifier.width(8.dp))
                             Column {
                                 Text("Rejected Items", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
-                                Text("Items the model scored low — check for false negatives", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Items the model scored low, check for false negatives", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1316,7 +1270,7 @@ private fun SavedSheet(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (item.imageUrl != null) {
-                                            AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                            AsyncImage(model = item.imageUrl, contentDescription = item.title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                                         } else {
                                             Icon(Icons.Default.CardGiftcard, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outlineVariant)
                                         }
@@ -1358,7 +1312,7 @@ private fun SavedItemRow(item: FeedbackHistoryItem, onUnsave: () -> Unit, onOpen
                 contentAlignment = Alignment.Center,
             ) {
                 if (item.imageUrl != null) {
-                    AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    AsyncImage(model = item.imageUrl, contentDescription = item.title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
                     Icon(Icons.Default.CardGiftcard, null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -1419,7 +1373,7 @@ private fun HistoryItemRow(item: FeedbackHistoryItem, onOpen: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 if (item.imageUrl != null) {
-                    AsyncImage(model = item.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    AsyncImage(model = item.imageUrl, contentDescription = item.title, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
                     Icon(Icons.Default.CardGiftcard, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -1492,7 +1446,7 @@ private fun ProfileEditor(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Just set a location to start — swipe through free items and the model learns what you want. A description is optional and only nudges the early ranking.",
+                "Just set a location to start, then swipe through free items and the model learns what you want. A description is optional and only nudges the early ranking.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

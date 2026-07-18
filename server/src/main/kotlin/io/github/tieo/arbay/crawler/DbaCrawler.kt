@@ -36,6 +36,8 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
 
         /** kW to metric horsepower (1 kW = 1.35962 PS). DBA uses HP (hk). */
         private fun kwToHp(kw: Int): Int = (kw * 1.35962).toInt()
+
+        private val json = Json { ignoreUnknownKeys = true }
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
@@ -46,36 +48,39 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
             }
         } ?: query.positiveText
 
+        return if (hasFilters(query)) {
+            collectPages(query) { page ->
+                parseFromApi(fetchJson(buildApiUrl(searchText, query, page)))
+            }
+        } else {
+            collectPages(query) { page ->
+                val pageParam = if (page <= 1) "" else "&page=$page"
+                val url = "https://www.dba.dk/mobility/search/car?q=${searchText.encodeUrl()}$pageParam"
+                parse(fetchWithFallback(client, url, "DBA"))
+            }
+        }
+    }
+
+    /**
+     * Fetches consecutive pages starting at query.startPage, deduplicating by externalId.
+     * Stops on a fetch/parse failure (null), an empty page, a page with no new ids
+     * (the site repeats the last page beyond the end), or the per-platform result cap.
+     */
+    private suspend fun collectPages(
+        query: SearchQuery,
+        fetchPage: suspend (page: Int) -> List<Listing>?,
+    ): List<Listing> {
         val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
         val seen = LinkedHashMap<String, Listing>()
 
-        if (hasFilters(query)) {
-            for (offset in 0 until maxPages) {
-                val page = query.startPage + offset
-                val url = buildApiUrl(searchText, query, page)
-                val json = fetchJson(url)
-                val listings = parseFromApi(json) ?: break
+        for (offset in 0 until maxPages) {
+            val listings = fetchPage(query.startPage + offset) ?: break
 
-                if (listings.isEmpty()) break
-                val newIds = listings.count { it.externalId !in seen }
-                listings.forEach { seen.putIfAbsent(it.externalId, it) }
-                if (newIds == 0) break
-                if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
-            }
-        } else {
-            for (offset in 0 until maxPages) {
-                val page = query.startPage + offset
-                val pageParam = if (page <= 1) "" else "&page=$page"
-                val url = "https://www.dba.dk/mobility/search/car?q=${searchText.encodeUrl()}$pageParam"
-                val html = fetchWithFallback(client, url, "DBA")
-                val listings = parse(html)
-
-                if (listings.isEmpty()) break
-                val newIds = listings.count { it.externalId !in seen }
-                listings.forEach { seen.putIfAbsent(it.externalId, it) }
-                if (newIds == 0) break
-                if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
-            }
+            if (listings.isEmpty()) break
+            val newIds = listings.count { it.externalId !in seen }
+            listings.forEach { seen.putIfAbsent(it.externalId, it) }
+            if (newIds == 0) break
+            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
         }
 
         return seen.values.toList()
@@ -132,10 +137,10 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
      * `year`, `mileage`, and optionally `image.url`. The API uses the same item IDs
      * as the HTML page, so externalId remains stable across both code paths.
      */
-    internal fun parseFromApi(json: String): List<Listing>? {
+    internal fun parseFromApi(body: String): List<Listing>? {
         val now = Clock.System.now()
         return try {
-            val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(json).jsonObject
+            val root = json.parseToJsonElement(body).jsonObject
             val docs = root["docs"]?.jsonArray ?: return null
 
             docs.mapNotNull { el ->
@@ -150,9 +155,8 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                 val url = doc["canonical_url"]?.jsonPrimitive?.contentOrNull
                     ?: "https://www.dba.dk/mobility/item/$externalId"
 
-                val priceObj = doc["price"]?.jsonObject
-                val priceAmount = priceObj?.get("amount")?.jsonPrimitive?.longOrNull
-                    ?: return@mapNotNull null
+                val priceAmount = doc["price"]?.jsonObject?.get("amount")?.jsonPrimitive?.longOrNull
+                    ?.takeIf { it >= 0 } ?: return@mapNotNull null
                 // amount is already in the major unit (kr.), not cents
                 val price = Money(priceAmount * 100, Currency.DKK)
 
@@ -173,8 +177,9 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                 }.takeIf { it.isNotBlank() }
 
                 val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
-                    firstRegYear = year,
-                    mileageKm = mileage?.toInt()?.takeIf { it in 1..2_000_000 },
+                    firstRegYear = year?.takeIf { it in 1980..2035 },
+                    // range check on the Long before narrowing, so garbage values cannot wrap
+                    mileageKm = mileage?.takeIf { it in 1..2_000_000 }?.toInt(),
                     fuel = Fuel.parse(
                         (doc["fuel_type"] ?: doc["fuel"] ?: doc["propellant"])?.jsonPrimitive?.contentOrNull,
                     ),
@@ -210,7 +215,6 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
         val now = Clock.System.now()
 
         return try {
-            val json = Json { ignoreUnknownKeys = true }
             val root = json.parseToJsonElement(structuredData).jsonObject
             val items = root["mainEntity"]?.jsonObject
                 ?.get("itemListElement")?.jsonArray

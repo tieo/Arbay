@@ -13,7 +13,7 @@ import io.github.tieo.arbay.model.VehicleInfo
  * apply server-side (mileage on Kleinanzeigen, anything on the query-only crawlers) is still
  * honored from our own data. A listing is dropped only when it has the relevant value and it
  * fails; a missing value is a soft pass (unknown != excluded), matching the "note it, don't
- * silently hide" rule — the coverage note for unverified filters is layered on separately.
+ * silently hide" rule; the coverage note for unverified filters is layered on separately.
  *
  * Also drops obvious non-vehicles (parts/accessories) that leak from general classifieds on a
  * car query: no year, mileage, power or displacement and a price too low to be a running car.
@@ -29,7 +29,7 @@ object CarFilterEngine {
         listings.map { annotateVanDims(it) }.filter { keep(it, filters) }
 
     /** For each active filter dimension, how many more of [candidates] would pass if that one
-     *  filter were dropped (all others kept) — the "−N" a chip is hiding. Computed locally over
+     *  filter were dropped (all others kept): the count a chip is hiding. Computed locally over
      *  the fetched candidate set; only card/text-derived specs are known, so it is an estimate
      *  for detail-only fields (fuel/gearbox), exact for price/year/mileage/power/van size. */
     fun facetCounts(candidates: List<Listing>, filters: CarFilters): Map<String, Int> {
@@ -59,10 +59,10 @@ object CarFilterEngine {
         return out
     }
 
-    /** Fill the van size classes from the listing text. A size the listing STATES — an explicit
-     *  code ("L3H2") or a wheelbase/roof word ("Maxi", "lang", "Hochdach") — is a known value that
-     *  the filter may exclude on: filtering L3 must drop a van that says "Maxi" (L4). Only a van
-     *  that states nothing is soft-passed. */
+    /** Fill the van size classes from the listing text. A size the listing states, either an
+     *  explicit code ("L3H2") or a wheelbase/roof word ("Maxi", "lang", "Hochdach"), is a known
+     *  value that the filter may exclude on: filtering L3 must drop a van that says "Maxi" (L4).
+     *  Only a van that states nothing is soft-passed. */
     private fun annotateVanDims(listing: Listing): Listing {
         val text = "${listing.title} ${listing.description ?: ""}"
         val inferred = VanDimensions.inferred(text)
@@ -99,8 +99,8 @@ object CarFilterEngine {
 
         // Per-spec strictness (user-controlled). A spec is "known" when its value is present AND
         // either it's from the site's structured data (verified) or the user allows text-read specs
-        // (useTextSpecs) — a stated "345.000 km" then counts. Known + out-of-range → drop. Unknown →
-        // drop only in strict mode; otherwise soft-pass (keep, don't lose a listing missing that spec).
+        // (useTextSpecs): a stated "345.000 km" then counts. Known + out-of-range drops. Unknown
+        // drops only in strict mode; otherwise soft-pass (keep, don't lose a listing missing that spec).
         val useText = filters.useTextSpecs
         val strict = filters.strictUnknown
         fun drop(active: Boolean, field: VehicleField, present: Boolean, matches: () -> Boolean): Boolean {
@@ -147,7 +147,7 @@ object CarFilterEngine {
     private val rentalAd = Regex("""\b(mieten|zu mieten|vermiet\w+|mietwagen|leihwagen|autovermietung|langzeitmiete|tagesmiete)\b""", RegexOption.IGNORE_CASE)
 
     // A part or accessory, never a whole vehicle. Only nouns that a car-for-sale title would not
-    // lead with — deliberately NOT the "recently replaced" parts a seller brags about (Zahnriemen,
+    // lead with; deliberately not the "recently replaced" parts a seller brags about (Zahnriemen,
     // Kupplung, Bremsscheibe, Turbolader), which appear in genuine car titles and would false-drop.
     private val partAccessory = Regex(
         """\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
@@ -155,7 +155,7 @@ object CarFilterEngine {
             """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
             """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|\bsteuergerät\b|""" +
             """\b(bracket|floor ?mat|seat ?cover|headlight|tail ?light|fender|mudflap|wheel ?trim|badge)\b|""" +
-            // Dutch (Marktplaats) — unambiguous car-part nouns, never a whole-vehicle listing.
+            // Dutch (Marktplaats): unambiguous car-part nouns, never a whole-vehicle listing.
             """\b(koplamp|achterlicht|spatbord|onderdeel|onderdelen|dakdrager|portier|motorkap|spiegelkap|stoelhoezen?)\b""",
         RegexOption.IGNORE_CASE,
     )
@@ -163,7 +163,7 @@ object CarFilterEngine {
     /** A car-query result that is not a car for sale: a wanted ad, a rental, or a part/accessory.
      *  All matched on the title only (safe, explicit). The part guard is needed because eBay's
      *  price-ascending sort floats up cheap seller-miscategorised parts that sit inside the vehicle
-     *  category (a "Drehkonsole" listed under Fahrzeuge) — the source category alone does not stop
+     *  category (a "Drehkonsole" listed under Fahrzeuge); the source category alone does not stop
      *  them. Any listing the site gave structured vehicle specs for (verified mileage / first-reg /
      *  power) is exempt, so a real car is never dropped. No price threshold: a cheap or broken car
      *  is still a car. */

@@ -32,6 +32,9 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
 
         /** km to Swedish mil, rounded up so the ceiling is inclusive. */
         private fun kmToMil(km: Int): Int = (km + 9) / 10
+
+        /** Extracts the URL from a CSS background-image declaration, quotes included. */
+        private val CSS_URL_REGEX = Regex("""url\(([^)]+)\)""")
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
@@ -103,11 +106,11 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
 
             val link = card.selectFirst("a.js-link-target") ?: return@mapNotNull null
             val title = link.text().trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val href = link.attr("href")
+            val href = link.attr("href").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val url = if (href.startsWith("http")) href else "https://www.bytbil.com$href"
 
             val priceText = card.selectFirst("span.car-price-main")?.text()
-                ?: return@mapNotNull null
+                ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val price = Money.parse(priceText, Currency.SEK) ?: return@mapNotNull null
 
             // The single truncated <p> after the title holds "year | mileage | place",
@@ -131,7 +134,8 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
             }.takeIf { it.isNotBlank() }
 
             val imageStyle = card.selectFirst("div.car-image")?.attr("style")
-            val imageUrl = imageStyle?.let { Regex("""url\(([^)]+)\)""").find(it)?.groupValues?.get(1) }
+            val imageUrl = imageStyle?.let { CSS_URL_REGEX.find(it)?.groupValues?.get(1) }
+                ?.trim('\'', '"')
                 ?.takeIf { it.startsWith("http") }
 
             // Year is the structured first info part; fuel/gearbox/power come from the card text.

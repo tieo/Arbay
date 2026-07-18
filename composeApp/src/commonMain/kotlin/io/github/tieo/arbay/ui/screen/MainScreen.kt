@@ -26,12 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
-import io.github.tieo.arbay.model.FreeItemInsights
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.CarTaxonomyStore
+import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.TrackedProduct
@@ -66,7 +66,6 @@ fun MainScreen(
     val error by productViewModel.error.collectAsState()
     val freeItemProfile by freeItemViewModel.profile.collectAsState()
     val freeItemStats by freeItemViewModel.stats.collectAsState()
-    val freeItemInsights by freeItemViewModel.insights.collectAsState()
     var showDiscovery by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
     var addSheetPrefill by remember { mutableStateOf<KnownProduct?>(null) }
@@ -85,13 +84,13 @@ fun MainScreen(
     var carQuery by remember { mutableStateOf("") }
     var carName by remember { mutableStateOf("") }
     var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
-    var carFilters by remember { mutableStateOf<io.github.tieo.arbay.model.CarFilters?>(null) }
-    var carMake by remember { mutableStateOf<io.github.tieo.arbay.model.CarMakeNode?>(null) }
-    var carModel by remember { mutableStateOf<io.github.tieo.arbay.model.CarModelNode?>(null) }
+    var carFilters by remember { mutableStateOf<CarFilters?>(null) }
+    var carMake by remember { mutableStateOf<CarMakeNode?>(null) }
+    var carModel by remember { mutableStateOf<CarModelNode?>(null) }
     // Non-null while editing an existing bookmark: the save action updates this one instead of
     // creating a new bookmark. Set from the card's Edit button (and the edit-filters path).
     var editingProduct by remember { mutableStateOf<TrackedProduct?>(null) }
-    // Blocked keywords for the bookmark whose listings are open — local state so edits filter live.
+    // Blocked keywords for the bookmark whose listings are open, held locally so edits filter live.
     var listingsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(listingsProduct?.id) {
         listingsBlockedTerms = listingsProduct?.searchQuery?.excludeKeywords ?: emptyList()
@@ -115,6 +114,13 @@ fun MainScreen(
         showDiscovery = false
         previewProduct = product
         showPreview = true
+    }
+
+    fun closePreview() {
+        showPreview = false
+        previewProduct = null
+        previewSearchQuery = ""
+        previewSearchName = ""
     }
 
     val isDesktop = LocalDesktopMode.current
@@ -198,7 +204,7 @@ fun MainScreen(
                 }
             }
 
-            // Product list — takes all available space
+            // Product list, takes all available space
             val hasFreeItemProfile = freeItemProfile != null
             val hasContent = products.isNotEmpty() || hasFreeItemProfile
             if (loading && products.isEmpty() && !hasFreeItemProfile) {
@@ -223,7 +229,6 @@ fun MainScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(4.dp))
-                        val isDesktop = LocalDesktopMode.current
                         Text(
                             if (isDesktop) "Click the search bar below or press Ctrl+K"
                             else "Tap the search bar below to get started",
@@ -238,7 +243,7 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f),
                 ) {
-                    // Free Items card — always at the top when profile is set
+                    // Free Items card, pinned above the bookmarks when a profile is set
                     if (hasFreeItemProfile) {
                         item(key = "__free_items__") {
                             FreeItemsMainCard(
@@ -260,17 +265,16 @@ fun MainScreen(
                                 editingProduct = product
                                 val (m, mo) = resolveCarNodes(product.searchQuery.text)
                                 if (m != null) {
-                                    // Car bookmark → the structured car form, prefilled.
+                                    // Car bookmark: open the structured car form, prefilled.
                                     carName = product.name
                                     carQuery = product.searchQuery.text
                                     carPlatforms = product.searchQuery.platforms
-                                    carFilters = product.searchQuery.toCarFilters()
-                                        ?: io.github.tieo.arbay.model.CarFilters()
+                                    carFilters = product.searchQuery.toCarFilters() ?: CarFilters()
                                     carMake = m
                                     carModel = mo
                                     showCarSearch = true
                                 } else {
-                                    // Generic bookmark → the add/edit sheet, prefilled.
+                                    // Generic bookmark: open the add/edit sheet, prefilled.
                                     showAddSheet = true
                                 }
                             },
@@ -279,7 +283,7 @@ fun MainScreen(
                 }
             }
 
-            // Search bar at the bottom — single entry point
+            // Search bar at the bottom, the single entry point for adding products
             Surface(
                 onClick = { showDiscovery = true },
                 modifier = Modifier
@@ -323,7 +327,7 @@ fun MainScreen(
         }
     }
 
-    // Discovery sheet — the single entry point for adding products
+    // Discovery sheet
     if (showDiscovery) {
         DiscoverySheet(
             onDismiss = { showDiscovery = false },
@@ -340,7 +344,7 @@ fun MainScreen(
             },
             onFreeItems = { showFreeItems = true },
             onCarSearch = {
-                // A fresh car search — clear any state left from a previous edit so the form
+                // Fresh car search: clear any state left from a previous edit so the form
                 // opens empty, not prefilled with the last bookmark's make/model/filters.
                 editingProduct = null
                 carName = ""
@@ -395,7 +399,7 @@ fun MainScreen(
         )
     }
 
-    // Car search results — reuses the listings view with the structured filters applied
+    // Car search results, reusing the listings view with the structured filters applied
     if (showCarResults) {
         ListingsSheet(
             productName = carName,
@@ -418,7 +422,7 @@ fun MainScreen(
             onBookmark = {
                 val edited = editingProduct
                 if (edited != null) {
-                    // Editing an existing car bookmark — update in place, keep id + blocked keywords.
+                    // Editing an existing car bookmark: update in place, keep id + blocked keywords.
                     productViewModel.updateProduct(
                         edited.copy(
                             name = carName,
@@ -462,7 +466,7 @@ fun MainScreen(
             onConfirm = { name, query, platforms, identifiers ->
                 val edited = editingProduct
                 if (edited != null) {
-                    // Update in place — preserve id, blocked keywords, and any car filters.
+                    // Update in place: preserve id, blocked keywords, and any car filters.
                     productViewModel.updateProduct(
                         edited.copy(
                             name = name,
@@ -481,51 +485,49 @@ fun MainScreen(
         )
     }
 
-    // Alerts
-
     // Settings
     if (showSettings) {
         SettingsSheet(
-                client = client,
-                onDismiss = { showSettings = false },
-                onServerUrlChanged = {
-                    productViewModel.loadProducts()
-                    freeItemViewModel.loadProfile()
-                },
-            )
+            client = client,
+            onDismiss = { showSettings = false },
+            onServerUrlChanged = {
+                productViewModel.loadProducts()
+                freeItemViewModel.loadProfile()
+            },
+        )
     }
 
     // Listings (for tracked products)
-    if (showListings && listingsProduct != null) {
+    val openListingsProduct = listingsProduct
+    if (showListings && openListingsProduct != null) {
+        val (listingsMake, listingsModel) = resolveCarNodes(openListingsProduct.searchQuery.text)
         ListingsSheet(
-            productName = listingsProduct!!.name,
-            searchQuery = listingsProduct!!.searchQuery.text,
+            productName = openListingsProduct.name,
+            searchQuery = openListingsProduct.searchQuery.text,
             listingViewModel = listingViewModel,
-            platforms = listingsProduct!!.searchQuery.platforms,
+            platforms = openListingsProduct.searchQuery.platforms,
             // A car query always gets the car view (specs, filter chips, no hero carousel), even
-            // with no filters set yet — pass empty filters so the view renders, not the generic one.
-            carFilters = if (resolveCarNodes(listingsProduct!!.searchQuery.text).first != null)
-                (listingsProduct!!.searchQuery.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters())
+            // with no filters set yet: pass empty filters so the view renders, not the generic one.
+            carFilters = if (listingsMake != null)
+                (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
             else null,
-            // Any car bookmark is editable — even one saved with no filters yet, so the user can
+            // Any car bookmark is editable, even one saved with no filters yet, so the user can
             // add them. Gate on the query being a car, not on filters already existing.
-            onEditFilters = resolveCarNodes(listingsProduct!!.searchQuery.text).first?.let { _ ->
+            onEditFilters = if (listingsMake != null) {
                 {
-                    val p = listingsProduct!!
-                    val (m, mo) = resolveCarNodes(p.searchQuery.text)
-                    // Editing an existing bookmark's filters — the re-save updates it, not duplicates.
-                    editingProduct = p
-                    carName = p.name
-                    carQuery = p.searchQuery.text
-                    carPlatforms = p.searchQuery.platforms
-                    carFilters = p.searchQuery.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
-                    carMake = m
-                    carModel = mo
+                    // Editing an existing bookmark's filters: the re-save updates it, not duplicates.
+                    editingProduct = openListingsProduct
+                    carName = openListingsProduct.name
+                    carQuery = openListingsProduct.searchQuery.text
+                    carPlatforms = openListingsProduct.searchQuery.platforms
+                    carFilters = openListingsProduct.searchQuery.toCarFilters() ?: CarFilters()
+                    carMake = listingsMake
+                    carModel = listingsModel
                     showListings = false
                     listingsProduct = null
                     showCarSearch = true
                 }
-            },
+            } else null,
             blockedTerms = listingsBlockedTerms,
             onBlockedTermsChange = { updated ->
                 listingsBlockedTerms = updated
@@ -549,36 +551,27 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = previewProduct?.effectivePlatforms,
             // Car preview gets the car view too; empty filters just render it filter-free.
-            carFilters = if (previewIsCar) io.github.tieo.arbay.model.CarFilters() else null,
+            carFilters = if (previewIsCar) CarFilters() else null,
             onEditFilters = if (previewIsCar) {
                 {
                     val (m, mo) = resolveCarNodes(query)
                     carName = name
                     carQuery = query
                     carPlatforms = previewProduct?.effectivePlatforms
-                    carFilters = io.github.tieo.arbay.model.CarFilters()
+                    carFilters = CarFilters()
                     carMake = m
                     carModel = mo
-                    showPreview = false
-                    previewProduct = null
-                    previewSearchQuery = ""
-                    previewSearchName = ""
+                    closePreview()
                     showCarSearch = true
                 }
             } else null,
             onDismiss = {
-                showPreview = false
-                previewProduct = null
-                previewSearchQuery = ""
-                previewSearchName = ""
+                closePreview()
                 cameFromDiscovery = false
             },
             onBack = if (cameFromDiscovery) {
                 {
-                    showPreview = false
-                    previewProduct = null
-                    previewSearchQuery = ""
-                    previewSearchName = ""
+                    closePreview()
                     cameFromDiscovery = false
                     showDiscovery = true
                 }
@@ -592,10 +585,7 @@ fun MainScreen(
                     searchText = bQuery,
                     platforms = bPlatforms,
                 )
-                showPreview = false
-                previewProduct = null
-                previewSearchQuery = ""
-                previewSearchName = ""
+                closePreview()
             },
         )
     }

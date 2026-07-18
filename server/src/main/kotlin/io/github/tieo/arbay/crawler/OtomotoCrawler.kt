@@ -22,6 +22,8 @@ import org.jsoup.Jsoup
 class OtomotoCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.OTOMOTO
 
+    private val json = Json { ignoreUnknownKeys = true }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         val carQuery = CarQueryResolver.resolve(query.positiveText)
 
@@ -124,7 +126,6 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
         val doc = Jsoup.parse(html)
         val nextDataScript = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
         val now = Clock.System.now()
-        val json = Json { ignoreUnknownKeys = true }
 
         return try {
             val root = json.parseToJsonElement(nextDataScript).jsonObject
@@ -134,15 +135,21 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
                 ?: return emptyList()
 
             // The urql cache is keyed by query hash; find whichever entry decodes to an
-            // advertSearch result rather than assuming a fixed key.
+            // advertSearch result rather than assuming a fixed key. Each entry decodes
+            // inside runCatching so one malformed entry cannot hide the advertSearch one.
             val edges = urqlState.values.firstNotNullOfOrNull { entry ->
-                val dataText = entry.jsonObject["data"]?.jsonPrimitive?.contentOrNull
-                    ?: return@firstNotNullOfOrNull null
-                val inner = json.parseToJsonElement(dataText).jsonObject
-                inner["advertSearch"]?.jsonObject?.get("edges")?.jsonArray
+                runCatching {
+                    entry.jsonObject["data"]?.jsonPrimitive?.contentOrNull?.let { dataText ->
+                        json.parseToJsonElement(dataText).jsonObject
+                            .get("advertSearch")?.jsonObject
+                            ?.get("edges")?.jsonArray
+                    }
+                }.getOrNull()
             } ?: return emptyList()
 
-            edges.mapNotNull { edge -> parseNode(edge, now) }.distinctBy { it.externalId }
+            // A single malformed edge is dropped rather than failing the whole page.
+            edges.mapNotNull { edge -> runCatching { parseNode(edge, now) }.getOrNull() }
+                .distinctBy { it.externalId }
         } catch (_: Exception) {
             emptyList()
         }
@@ -155,10 +162,11 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             ?: return null
         val url = node["url"]?.jsonPrimitive?.contentOrNull ?: return null
 
-        // Prices arrive as a whole-PLN integer ("units") plus a "nanos" fraction; otomoto
-        // has never observed to populate nanos, but fold it in for correctness.
+        // The price arrives as a whole-PLN integer ("units") plus a "nanos" fraction;
+        // both fold into grosze (Money minor units). Non-positive units mark a listing
+        // without a usable price.
         val amount = node["price"]?.jsonObject?.get("amount")?.jsonObject ?: return null
-        val units = amount["units"]?.jsonPrimitive?.longOrNull ?: return null
+        val units = amount["units"]?.jsonPrimitive?.longOrNull?.takeIf { it > 0 } ?: return null
         val nanos = amount["nanos"]?.jsonPrimitive?.longOrNull ?: 0L
         val price = Money(units * 100 + nanos / 10_000_000, Currency.PLN)
 
@@ -171,42 +179,41 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             ?.get("name")?.jsonPrimitive?.contentOrNull
         val location = Location(city = city, country = "PL")
 
-        val parameters = node["parameters"]?.jsonArray?.associate { param ->
-            val obj = param.jsonObject
-            val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: ""
-            val value = obj["displayValue"]?.jsonPrimitive?.contentOrNull ?: ""
-            key to value
-        } ?: emptyMap()
-
-        // Canonical machine values ("diesel", "manual", "177") for structured parsing;
-        // displayValue above is localized ("Manualna") and only used for the description.
-        val paramValues = node["parameters"]?.jsonArray?.associate { param ->
-            val obj = param.jsonObject
-            (obj["key"]?.jsonPrimitive?.contentOrNull ?: "") to
-                (obj["value"]?.jsonPrimitive?.contentOrNull ?: "")
-        } ?: emptyMap()
+        // Each parameter carries a localized displayValue ("Manualna", "150 000 km") used
+        // for the description text and a canonical machine value ("manual", "150000")
+        // used for structured parsing. Parameters without a key are skipped.
+        val displayValues = HashMap<String, String>()
+        val machineValues = HashMap<String, String>()
+        node["parameters"]?.jsonArray?.forEach { param ->
+            val obj = param as? JsonObject ?: return@forEach
+            val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@forEach
+            obj["displayValue"]?.jsonPrimitive?.contentOrNull?.let { displayValues[key] = it }
+            obj["value"]?.jsonPrimitive?.contentOrNull?.let { machineValues[key] = it }
+        }
 
         val description = buildString {
-            parameters["year"]?.let { append(it) }
-            parameters["mileage"]?.let {
+            displayValues["year"]?.let { append(it) }
+            displayValues["mileage"]?.let {
                 if (isNotEmpty()) append(" | ")
                 append(it)
             }
         }.takeIf { it.isNotBlank() }
 
         val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
-            firstRegYear = paramValues["year"]?.toIntOrNull(),
-            mileageKm = paramValues["mileage"]?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+            firstRegYear = machineValues["year"]?.toIntOrNull()?.takeIf { it in 1900..2100 },
+            mileageKm = machineValues["mileage"]?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
             // engine_power is metric HP (KM): 1 kW = 1.35962 KM, so kW = KM / 1.35962.
-            powerKw = paramValues["engine_power"]?.toIntOrNull()?.let { (it / 1.35962).toInt() }?.takeIf { it in 20..1000 },
-            displacementCc = paramValues["engine_capacity"]?.toIntOrNull()?.takeIf { it in 600..8000 },
-            fuel = Fuel.parse(paramValues["fuel_type"]),
-            gearbox = when (paramValues["gearbox"]) {
+            powerKw = machineValues["engine_power"]?.toIntOrNull()
+                ?.let { (it / 1.35962).toInt() }
+                ?.takeIf { it in 20..1000 },
+            displacementCc = machineValues["engine_capacity"]?.toIntOrNull()?.takeIf { it in 600..8000 },
+            fuel = Fuel.parse(machineValues["fuel_type"]),
+            gearbox = when (machineValues["gearbox"]) {
                 "automatic" -> Transmission.AUTOMATIC
                 "manual" -> Transmission.MANUAL
                 else -> null
             },
-            bodyType = BodyType.parse(paramValues["body_type"]),
+            bodyType = BodyType.parse(machineValues["body_type"]),
         ))
 
         return Listing(

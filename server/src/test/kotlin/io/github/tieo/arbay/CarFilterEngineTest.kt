@@ -28,9 +28,9 @@ class CarFilterEngineTest {
 
     @Test
     fun keepsCarThatMentionsAFeatureWithNoParsedSpecs() {
-        // A real car whose specs are only in the description (none parsed) must NOT be dropped
-        // just because the title names a feature. Category-constrained car searches already
-        // exclude actual parts at the source, so no keyword parts guard runs here.
+        // A real car whose specs are only in the description (none parsed) must not be dropped
+        // just because the title names a feature: the part guard matches only part nouns, never
+        // feature words like "Standheizung" or "Klima".
         val withHeater = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter mit Standheizung und Klima",
             priceCents = 900_000, vehicle = VehicleInfo())
         assertEquals(1, CarFilterEngine.apply(listOf(withHeater), CarFilters()).size)
@@ -69,7 +69,7 @@ class CarFilterEngineTest {
 
     @Test
     fun keepsCarNamingAReplacedPart() {
-        // "Zahnriemen neu" is a selling point on a real car, not a part listing — must survive.
+        // "Zahnriemen neu" is a selling point on a real car, not a part listing; must survive.
         val car = carListing("z", PlatformId.EBAY_DE, "VW Crafter 2.0 TDI Zahnriemen neu Bremsen neu",
             priceCents = 850_000, vehicle = VehicleInfo())
         assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
@@ -121,7 +121,7 @@ class CarFilterEngineTest {
 
     @Test
     fun useTextSpecsOffKeepsInferred() {
-        // Opt out of text specs → only the site's structured data can exclude; a text-read value is
+        // Opting out of text specs means only the site's structured data can exclude; a text-read value is
         // ignored, so an unverified out-of-range power keeps the listing.
         val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000, VehicleInfo(powerKw = 90))
         assertEquals(1, CarFilterEngine.apply(listOf(inferred), CarFilters(minPowerKw = 110, useTextSpecs = false)).size)
@@ -182,7 +182,7 @@ class CarFilterEngineTest {
     @Test
     fun keepsRentalWordOnCarOnlyPlatform() {
         // Car-only platforms are sale-only; don't apply the general-platform guards there.
-        val car = carListing("c", PlatformId.MOBILE_DE, "VW Crafter — auch zur Miete gedacht gewesen")
+        val car = carListing("c", PlatformId.MOBILE_DE, "VW Crafter, auch zur Miete gedacht gewesen")
         assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
     }
 
@@ -205,18 +205,18 @@ class CarFilterEngineTest {
 
     @Test
     fun vanWordExcludesOnMismatch() {
-        // The reported bug: filtering L3 must drop a van that says "Maxi" (L4), and keep an L3 one.
+        // Filtering L3 must drop a van that says "Maxi" (L4) and keep one that says "lang" (L3).
         val filters = CarFilters(vanLengths = setOf(3))
-        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")       // L4 → drop
-        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")       // L3 → keep
-        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")        // L1 → drop
+        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")       // L4, drop
+        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")       // L3, keep
+        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")        // L1, drop
         val kept = CarFilterEngine.apply(listOf(maxi, lang, kurz), filters).map { it.id }
         assertEquals(listOf("KLEINANZEIGEN:l"), kept)
     }
 
     @Test
     fun vanHeightWordExcludes() {
-        // Filtering H1 (flat roof) drops a "Hochdach" (H2) van — a stated roof is a known size.
+        // Filtering H1 (flat roof) drops a "Hochdach" (H2) van; a stated roof is a known size.
         val filters = CarFilters(vanHeights = setOf(1))
         val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach lang")
         val flach = carListing("f", PlatformId.KLEINANZEIGEN, "VW Crafter Flachdach kurz")
@@ -235,6 +235,66 @@ class CarFilterEngineTest {
         assertEquals(1, facets["price"])   // dropping price adds the €25k car
         assertEquals(1, facets["power"])   // dropping power adds the 90 kW car
         assertEquals(null, facets["year"]) // year not an active filter
+    }
+
+    @Test
+    fun verifiedSpecExcludesEvenWithTextSpecsOff() {
+        // useTextSpecs only gates text-read values; the site's structured data always counts.
+        val over = listing("v", PlatformId.MOBILE_DE, 1_500_000, verified(mileageKm = 300_000))
+        assertEquals(0, CarFilterEngine.apply(listOf(over), CarFilters(maxMileageKm = 200_000, useTextSpecs = false)).size)
+    }
+
+    @Test
+    fun textSpecsOffTreatsTextValueAsUnknownUnderStrict() {
+        // With useTextSpecs off a text-read value is not known, so strict mode drops the listing
+        // even though the stated mileage would pass the filter.
+        val stated = listing("s2", PlatformId.EBAY_DE, 1_000_000, VehicleInfo(mileageKm = 150_000))
+        val filters = CarFilters(maxMileageKm = 200_000, useTextSpecs = false, strictUnknown = true)
+        assertEquals(0, CarFilterEngine.apply(listOf(stated), filters).size)
+    }
+
+    @Test
+    fun strictUnknownKeepsListingWithKnownPassingSpec() {
+        // Strict mode only punishes unknown specs; a known in-range value still passes.
+        val ok = listing("k2", PlatformId.MOBILE_DE, 1_500_000, verified(powerKw = 130))
+        assertEquals(1, CarFilterEngine.apply(listOf(ok), CarFilters(minPowerKw = 110, strictUnknown = true)).size)
+    }
+
+    @Test
+    fun strictUnknownDropsListingWithNoVehicleRecord() {
+        // A null vehicle record means every spec is unknown; strict mode drops the listing.
+        val bare = listing("b", PlatformId.AUTOSCOUT24, 1_500_000, vehicle = null)
+        assertEquals(0, CarFilterEngine.apply(listOf(bare), CarFilters(minPowerKw = 110, strictUnknown = true)).size)
+    }
+
+    @Test
+    fun dropsWantedAdOnGeneralPlatform() {
+        // A wanted ad is a buyer, not a car for sale; it drops even with verified specs attached.
+        val wanted = carListing("wa", PlatformId.KLEINANZEIGEN, "Suche VW Crafter bis 10000 Euro")
+        assertTrue(CarFilterEngine.apply(listOf(wanted), CarFilters()).isEmpty())
+    }
+
+    @Test
+    fun dropsDutchPartOnMarktplaats() {
+        val part = carListing("nl", PlatformId.MARKTPLAATS, "Koplamp VW Crafter links origineel",
+            priceCents = 8_000, vehicle = VehicleInfo())
+        assertEquals(0, CarFilterEngine.apply(listOf(part), CarFilters()).size)
+    }
+
+    @Test
+    fun keepsPartWordOnCarOnlyPlatform() {
+        // The non-vehicle guards apply only to general classifieds; a car-only platform listing
+        // survives a part word in its title even without any parsed specs.
+        val car = carListing("co", PlatformId.MOBILE_DE, "VW Crafter neue Scheinwerfer", vehicle = VehicleInfo())
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
+    @Test
+    fun vanDimsExcludeEvenWithTextSpecsOff() {
+        // A stated van size is annotated as verified, so it excludes regardless of useTextSpecs.
+        val filters = CarFilters(vanLengths = setOf(3), useTextSpecs = false)
+        val wrong = carListing("w2", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 kurz")
+        assertEquals(0, CarFilterEngine.apply(listOf(wrong), filters).size)
     }
 
     private fun verified(

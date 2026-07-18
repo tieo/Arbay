@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -52,13 +54,13 @@ import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 import androidx.compose.ui.geometry.Size
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
-@OptIn(ExperimentalMaterial3Api::class)
-/** Active car filters as short human labels, for the editable chip row. */
-/** Active filters as (label, facet-dimension key) pairs. The key matches the server's facet map
- *  so each chip can show how many results dropping it would add. */
+/** Active car filters as (label, facet-dimension key) pairs for the editable chip row. The key
+ *  matches the server's facet map so each chip can show how many results dropping it would add. */
 private fun carFilterChips(f: CarFilters): List<Pair<String, String>> = buildList {
     when {
         f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}" to "year")
@@ -95,7 +97,7 @@ private val DIM_LABELS = mapOf(
 )
 
 /** Per active filter, which result platforms enforce it at the source vs which Arbay post-filters
- *  locally — so a platform is never silently hidden for lacking a native filter. */
+ *  locally, so a platform is never silently hidden for lacking a native filter. */
 @Composable
 private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) {
     var expanded by remember { mutableStateOf(false) }
@@ -144,8 +146,8 @@ private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) 
 
 /** Human age of a listing from its posting date ("today", "3 days ago", …); null if in the future
  *  or the date is implausible. */
-private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
-    val days = (kotlinx.datetime.Clock.System.now() - posted).inWholeDays
+private fun ageLabel(posted: Instant): String? {
+    val days = (Clock.System.now() - posted).inWholeDays
     return when {
         days < 0 -> null
         days == 0L -> "today"
@@ -159,7 +161,7 @@ private fun ageLabel(posted: kotlinx.datetime.Instant): String? {
 
 /** The country a listing is sourced from, as ISO-2, for the cross-border origin badge. Prefers the
  *  listing's own location (multi-country platforms like AutoScout24 mix markets), else the platform's
- *  home country. Returns null for the home market (DE) — no badge — and when the origin is unknown. */
+ *  home country. Returns null for the home market (DE), which gets no badge, and for unknown origins. */
 private fun originCountry(listing: Listing): String? {
     val iso = listing.location?.country?.let { normalizeCountry(it) } ?: listing.platformId.country
     return iso?.uppercase()?.takeUnless { it == "DE" }
@@ -196,6 +198,13 @@ private fun flagEmoji(cc: String): String {
             append((0xDC00 + (offset and 0x3FF)).toChar())
         }
     }
+}
+
+/** Median of price amounts (cents, already in the display currency) as Money; null when empty. */
+private fun medianMoney(prices: List<Long>, currency: Currency): Money? {
+    if (prices.isEmpty()) return null
+    val sorted = prices.sorted()
+    return Money(sorted[sorted.size / 2], currency)
 }
 
 @Composable
@@ -237,7 +246,7 @@ fun ListingsSheet(
             .sortedByDescending { it.soldDate ?: it.scrapedAt }
     }
 
-    // Price range slider bounds (from ALL active, before filtering) — use converted prices
+    // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
     val allActivePrices = remember(allActiveListings) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
     val priceMin = remember(allActivePrices) { if (allActivePrices.isEmpty()) 0f else (allActivePrices.first() / 100f) }
     val priceMax = remember(allActivePrices) { if (allActivePrices.isEmpty()) 1000f else (allActivePrices.last() / 100f).coerceAtLeast(priceMin + 1f) }
@@ -273,13 +282,11 @@ fun ListingsSheet(
             .let { if (hideUnknownDates) it.filter { l -> l.soldDate != null } else it }
     }
 
-    // All stats computed from FILTERED data — use converted prices for cross-currency comparison
+    // All stats computed from FILTERED data; converted prices make cross-currency listings comparable.
     fun Listing.convertedPrice(): Long = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
     val allPrices = remember(activeListings) { activeListings.map { it.convertedPrice() }.sorted() }
     val displayCur = Currency.valueOf(DisplayCurrency.current)
-    val medianPrice = remember(allPrices) {
-        if (allPrices.isEmpty()) null else Money(allPrices[allPrices.size / 2], displayCur)
-    }
+    val medianPrice = remember(allPrices) { medianMoney(allPrices, displayCur) }
     val minPrice = remember(activeListings) {
         activeListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
@@ -293,21 +300,12 @@ fun ListingsSheet(
     val minUsedPrice = remember(usedListings) {
         usedListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    val medianUsedPrice = remember(usedListings) {
-        val prices = usedListings.map { it.convertedPrice() }.sorted()
-        if (prices.isEmpty()) null else Money(prices[prices.size / 2], displayCur)
-    }
+    val medianUsedPrice = remember(usedListings) { medianMoney(usedListings.map { it.convertedPrice() }, displayCur) }
     val minNewPrice = remember(newListings) {
         newListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    val medianNewPrice = remember(newListings) {
-        val prices = newListings.map { it.convertedPrice() }.sorted()
-        if (prices.isEmpty()) null else Money(prices[prices.size / 2], displayCur)
-    }
-    val medianSoldPrice = remember(soldListings) {
-        val sorted = soldListings.map { it.convertedPrice() }.sorted()
-        if (sorted.isEmpty()) null else Money(sorted[sorted.size / 2], displayCur)
-    }
+    val medianNewPrice = remember(newListings) { medianMoney(newListings.map { it.convertedPrice() }, displayCur) }
+    val medianSoldPrice = remember(soldListings) { medianMoney(soldListings.map { it.convertedPrice() }, displayCur) }
 
     val imageListings = remember(listings) {
         val seen = mutableSetOf<String>()
@@ -354,7 +352,7 @@ fun ListingsSheet(
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                // === Product images (not for car search — the hero gallery is noise there) ===
+                // === Product images (skipped for car search, where the hero gallery is noise) ===
                 if (imageListings.isNotEmpty() && carFilters == null) {
                     item("images") {
                         LazyRow(
@@ -365,7 +363,7 @@ fun ListingsSheet(
                             items(imageListings) { (url, listing) ->
                                 AsyncImage(
                                     model = url,
-                                    contentDescription = null,
+                                    contentDescription = listing.title,
                                     modifier = Modifier
                                         .fillMaxHeight()
                                         .widthIn(min = 140.dp, max = 240.dp)
@@ -460,7 +458,7 @@ fun ListingsSheet(
                             CoverageNote(activeDims, resultPlatforms)
                         }
                     }
-                    // Currently blocked words — removable chips. New ones are added from a
+                    // Currently blocked words as removable chips. New ones are added from a
                     // listing's Block button (per item), not a free-text field.
                     if (activeBlockedTerms.isNotEmpty()) {
                         LazyRow(
@@ -508,9 +506,9 @@ fun ListingsSheet(
                                         modifier = Modifier.padding(horizontal = 20.dp),
                                     )
                                 }
-                                // Price range: a LOG-scale slider (so a cheap sub-range like €300–700
-                                // isn't a hair-thin sliver of a 0–10k track) plus exact numeric
-                                // fields. Value shown live while dragging.
+                                // Price range: a LOG-scale slider (so a cheap sub-range like 300 to
+                                // 700 euro is not a hair-thin sliver of a 0 to 10k track) plus exact
+                                // numeric fields. Value shown live while dragging.
                                 if (activeListings.size >= 2 && priceMax > priceMin) {
                                     val logLo = ln(priceMin.coerceAtLeast(1f).toDouble())
                                     val logHi = ln(priceMax.toDouble()).coerceAtLeast(logLo + 0.0001)
@@ -521,7 +519,7 @@ fun ListingsSheet(
                                     var minText by remember(priceRange.start) { mutableStateOf(priceRange.start.toInt().toString()) }
                                     var maxText by remember(priceRange.endInclusive) { mutableStateOf(priceRange.endInclusive.toInt().toString()) }
                                     // Slider values are in the display currency (prices are converted),
-                                    // so label it that way — not some listing's native currency.
+                                    // so label it that way, not with some listing's native currency.
                                     val cur = displayCur
                                     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                                         RangeSlider(
@@ -613,7 +611,7 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Price overview (skip for a car search with a single hit — the card says it) ===
+                // === Price overview (skipped for a car search with a single hit, the card says it) ===
                 if (listings.isNotEmpty() && !(carFilters != null && activeListings.size <= 1)) {
                     item("prices") {
                         Spacer(Modifier.height(16.dp))
@@ -654,12 +652,6 @@ fun ListingsSheet(
                         )
                     }
                 }
-
-                // (Price range slider moved to sticky header)
-
-                // (platform filter chips are now merged into the unified platform chips above)
-
-                // (Platform offers merged into unified platform chips above)
 
                 // === All listings ===
                 if (conditionFilter != "SOLD" && activeListings.isNotEmpty()) {
@@ -742,7 +734,8 @@ fun ListingsSheet(
                                 IconButton(onClick = { showSold = !showSold }, modifier = Modifier.size(28.dp)) {
                                     Icon(
                                         if (showSold) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        null, modifier = Modifier.size(18.dp),
+                                        if (showSold) "Collapse sold list" else "Expand sold list",
+                                        modifier = Modifier.size(18.dp),
                                     )
                                 }
                             }
@@ -874,7 +867,7 @@ private fun PriceOverview(
             }
         }
 
-        // Condition breakdown row — tap to filter
+        // Condition breakdown row; tap a card to filter by that condition.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -969,94 +962,34 @@ private fun ConditionPriceCard(
     }
 }
 
-// === Platform offer card (like Idealo's shop rows) ===
-
-@Composable
-private fun PlatformOfferCard(
-    offer: PlatformOffer,
-    onSelect: () -> Unit = {},
-    isSelected: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        onClick = onSelect,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceContainer,
-        ),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    offer.platform.displayName,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    "${offer.count} offers",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    offer.minPrice?.format() ?: "",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.primary,
-                )
-                if (offer.medianPrice != null && offer.medianPrice != offer.minPrice) {
-                    Text(
-                        "\u00F8 ${offer.medianPrice.format()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
 // === Individual listing card ===
 
 /** Key vehicle specs under a car listing's title. A verified value (from the site's structured
  *  data) is shown solid; an inferred one (guessed from text) is muted and prefixed "~" so the
  *  user can tell confirmed specs from guesses. */
 @Composable
-private fun VehicleSpecsRow(v: io.github.tieo.arbay.model.VehicleInfo) {
-    data class Spec(val text: String, val field: io.github.tieo.arbay.model.VehicleField)
+private fun VehicleSpecsRow(v: VehicleInfo) {
+    data class Spec(val text: String, val field: VehicleField)
     val specs = buildList {
         v.firstRegYear?.let {
             val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
-            add(Spec(ym, io.github.tieo.arbay.model.VehicleField.FIRST_REG_YEAR))
+            add(Spec(ym, VehicleField.FIRST_REG_YEAR))
         }
-        v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", io.github.tieo.arbay.model.VehicleField.MILEAGE)) }
-        v.powerKw?.let { add(Spec("$it kW", io.github.tieo.arbay.model.VehicleField.POWER)) }
+        v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", VehicleField.MILEAGE)) }
+        v.powerKw?.let { add(Spec("$it kW", VehicleField.POWER)) }
         v.gearbox?.let {
-            val g = if (it == io.github.tieo.arbay.model.Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe"
-            add(Spec(g, io.github.tieo.arbay.model.VehicleField.GEARBOX))
+            val g = if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe"
+            add(Spec(g, VehicleField.GEARBOX))
         }
-        v.fuel?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, io.github.tieo.arbay.model.VehicleField.FUEL)) }
-        // Van size code — verified when the listing stated an explicit L/H, inferred from a
+        v.fuel?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, VehicleField.FUEL)) }
+        // Van size code: verified when the listing stated an explicit L/H, inferred from a
         // roof/wheelbase word otherwise. Uses the length field's verification for the marker.
         val vanCode = buildString {
             v.vanLength?.let { append("L$it") }
             v.vanHeight?.let { append("H$it") }
         }
         if (vanCode.isNotEmpty()) {
-            val field = if (v.vanLength != null) io.github.tieo.arbay.model.VehicleField.VAN_LENGTH
-            else io.github.tieo.arbay.model.VehicleField.VAN_HEIGHT
+            val field = if (v.vanLength != null) VehicleField.VAN_LENGTH else VehicleField.VAN_HEIGHT
             add(Spec(vanCode, field))
         }
     }
@@ -1102,7 +1035,7 @@ internal fun ListingCard(
             if (firstImage != null) {
                 AsyncImage(
                     model = firstImage,
-                    contentDescription = null,
+                    contentDescription = listing.title,
                     modifier = Modifier
                         .size(56.dp)
                         .clip(RoundedCornerShape(8.dp))
@@ -1125,7 +1058,7 @@ internal fun ListingCard(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
-                    // Origin badge — the listing's own country when known (multi-country platforms
+                    // Origin badge: the listing's own country when known (multi-country platforms
                     // like AutoScout24 mix markets), else the platform's home country. Home (DE) = none.
                     originCountry(listing)?.let { cc ->
                         Surface(
@@ -1228,7 +1161,7 @@ internal fun ListingCard(
                     color = if (listing.sold) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.onSurface,
                 )
-                // Show shipping breakdown if shipping cost exists
+                // Shipping breakdown when a cost is known, otherwise a free-shipping note.
                 val shippingCost = listing.shipping?.cost
                 val isFreeShipping = listing.shipping?.free == true
                 if (shippingCost != null) {
@@ -1237,7 +1170,7 @@ internal fun ListingCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else if (isFreeShipping && listing.shipping?.cost == null) {
+                } else if (isFreeShipping) {
                     Text(
                         "Free shipping",
                         style = MaterialTheme.typography.labelSmall,
@@ -1305,7 +1238,7 @@ private fun BlockTermDialog(
     onBlock: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Don't offer the query's own words as block candidates — blocking "crafter" would empty the list.
+    // The query's own words are not offered as block candidates; blocking "crafter" would empty the list.
     val queryWords = remember(searchQuery) {
         searchQuery.lowercase().split(Regex("[\\s\\-]+"))
             .filter { it.length > 1 && !it.startsWith("-") && it != "or" }
@@ -1409,7 +1342,7 @@ private fun BlockTermDialog(
     )
 }
 
-// === Price Distribution Histogram (active listings — New vs Used bars) ===
+// === Price distribution histogram (active listings, New vs Used bars) ===
 
 @Composable
 private fun PriceDistributionChart(
@@ -1425,7 +1358,7 @@ private fun PriceDistributionChart(
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
-    // Internal chart filter — independent of the listing-card filter
+    // Internal chart filter, independent of the listing-card filter.
     // null = all active, "NEW" = new only, "USED" = used only, "SOLD" = sold history chart
     val defaultFilter = if (newListings.isEmpty() && usedListings.isEmpty() && soldListings.isNotEmpty()) "SOLD" else null
     var chartFilter by remember { mutableStateOf(defaultFilter) }
@@ -1784,7 +1717,7 @@ private fun PriceHistoryChart(
                     for (i in 0..xTicks) {
                         val t = minT + timeRange * i / xTicks
                         val x = padL + ((t - minT).toFloat() / timeRange) * chartW
-                        val date = kotlinx.datetime.Instant.fromEpochSeconds(t).toLocalDateTime(TimeZone.currentSystemDefault())
+                        val date = Instant.fromEpochSeconds(t).toLocalDateTime(TimeZone.currentSystemDefault())
                         val lbl = "${date.dayOfMonth}.${date.monthNumber}"
                         val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
                         drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
@@ -1818,7 +1751,7 @@ private fun PriceHistoryChart(
                 }
             }
 
-            // Tapped dot — show full listing card
+            // Tapped dot: show the full listing card.
             tappedIdx?.let { i ->
                 val listing = points[i]
                 Spacer(Modifier.height(4.dp))
@@ -1861,7 +1794,7 @@ private fun SoldHistoryRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Price — most prominent
+            // Price, most prominent
             Text(
                 listing.effectivePrice.format(),
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -1942,11 +1875,9 @@ private fun SoldHistoryRow(
 // === Crawler status row ===
 
 /**
- * Unified platform chips — merges crawler status + platform filter into one row.
- * Each chip shows: real-time search state → then becomes a filter when done.
- * Tap a chip with results → filter to that platform.
- * Tap a failed chip → show error detail below.
- * "All" chip always first.
+ * Unified platform chips: crawler status and platform filter in one row. Each chip shows the live
+ * search state, then acts as a filter when done. Tapping a chip with results filters to that
+ * platform; tapping a failed chip shows its error detail below. The "All" chip is always first.
  */
 @Composable
 private fun UnifiedPlatformChips(
@@ -1964,7 +1895,7 @@ private fun UnifiedPlatformChips(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // "All" chip — only show when we have results
+            // "All" chip, shown only once there are results.
             val totalResults = offers.sumOf { it.count }
             if (totalResults > 0) {
                 FilterChip(
@@ -1978,7 +1909,7 @@ private fun UnifiedPlatformChips(
                 )
             }
 
-            // One chip per platform — sorted: results by price first, then loading, then errors
+            // One chip per platform, sorted: results by price first, then loading, then errors.
             val sortedStatuses = remember(statuses, offerMap) {
                 statuses.sortedWith(compareBy<PlatformStatus> { s ->
                     val pid = try { PlatformId.valueOf(s.platformId) } catch (_: Exception) { null }
@@ -2104,10 +2035,10 @@ private fun UnifiedPlatformChips(
             }
         }
 
-        // Error detail (shown when a failed chip is tapped) — tap to copy
+        // Error detail, shown when a failed chip is tapped; tap the panel to copy the message.
         val expandedStatus = statuses.find { it.platformId == expandedError }
         if (expandedStatus?.error != null) {
-            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            val clipboardManager = LocalClipboardManager.current
             val errorText = buildString {
                 append(expandedStatus.platformName)
                 expandedStatus.errorType?.let { append(" $it") }
@@ -2123,7 +2054,7 @@ private fun UnifiedPlatformChips(
                     else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
                 },
                 modifier = Modifier.clickable {
-                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(errorText))
+                    clipboardManager.setText(AnnotatedString(errorText))
                 },
             ) {
                 Row(
@@ -2171,10 +2102,9 @@ private fun UnifiedPlatformChips(
 internal fun Money.format(): String {
     // Show the native currency when we can't convert (unknown rate) rather than mislabelling the
     // raw amount as the display currency \u2014 a 169 900 PLN van must not read as "\u20AC169,900".
-    val displayCur = if (io.github.tieo.arbay.DisplayCurrency.canConvert(currency.name))
-        io.github.tieo.arbay.DisplayCurrency.current else currency.name
+    val displayCur = if (DisplayCurrency.canConvert(currency.name)) DisplayCurrency.current else currency.name
     val convertedAmount = if (displayCur == currency.name) amount
-        else io.github.tieo.arbay.DisplayCurrency.convert(amount, currency.name)
+        else DisplayCurrency.convert(amount, currency.name)
     val symbol = when (displayCur) {
         "EUR" -> "\u20AC"
         "USD" -> "$"

@@ -18,11 +18,32 @@ import io.github.tieo.arbay.model.VehicleInfo
  */
 object VehicleTextParser {
     private val mileageRegex = Regex("""([0-9][0-9.\s]{2,})\s?(?:km|kilometer)""", RegexOption.IGNORE_CASE)
-    private val kwRegex = Regex("""([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
+    // The digit lookbehind stops a longer figure's tail from posing as power ("1.200 PS" is
+    // not a 200 PS engine, "503.661 km" not a 661 PS one).
+    private val kwRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
     // "km" is NOT a power unit — including it read the odometer's last digits as PS.
-    private val psRegex = Regex("""([0-9]{2,3})\s?(?:ps|hp|hk)\b""", RegexOption.IGNORE_CASE)
+    private val psRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?(?:ps|hp|hk)\b""", RegexOption.IGNORE_CASE)
     private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
     private val bareYearRegex = Regex("""\b(19[89]\d|20[0-3]\d)\b""")
+    // Inspection validity ("APK tot 2027", "TÜV 06/2026", "HU bis 2025") names a deadline,
+    // never the first registration; matched year positions are barred from the bare fallback.
+    private val inspectionYearRegex = Regex(
+        """\b(?:t[üÜu]v|tuev|apk|hu|au|keuring|gekeurd|hauptuntersuchung)\b\D{0,16}(?:(?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""",
+        RegexOption.IGNORE_CASE,
+    )
+    // A year-shaped number next to a currency mark is a price ("Preis 2000 €"), not a year.
+    private val priceYearRegex = Regex(
+        """(?:€|\beuro?\b)\s?((?:19|20)\d{2})\b|\b((?:19|20)\d{2})\s?(?:€|euro?\b|,-)""",
+        RegexOption.IGNORE_CASE,
+    )
+    // A single-decimal figure before "km" is an engine size artifact ("2.0 km-Stand"), never
+    // an odometer reading.
+    private val engineSizeArtifactRegex = Regex("""^\d[.,]\d$""")
+    // Text right after a km figure that marks it as a lease's annual allowance, not an odometer.
+    private val annualKmSuffixRegex = Regex(
+        """^\s*(?:/\s?(?:jahr|year|jaar)|pro\s+jahr|per\s+jaar|p\.\s?a\.|im\s+jahr|j[äÄa]hrlich|frei\b)""",
+        RegexOption.IGNORE_CASE,
+    )
     private val displacementCcRegex = Regex("""([0-9]{3,4})\s?(?:cm³|ccm|cc)\b""", RegexOption.IGNORE_CASE)
     private val displacementLRegex = Regex("""\b([0-9])[.,]([0-9])\s?(?:l|liter|litre)\b""", RegexOption.IGNORE_CASE)
 
@@ -95,6 +116,8 @@ object VehicleTextParser {
     private fun parseMileage(text: String): Int? {
         // Take the largest plausible match; avoids grabbing "2.0" from an engine size.
         return mileageRegex.findAll(text)
+            .filterNot { engineSizeArtifactRegex.matches(it.groupValues[1].trim()) }
+            .filterNot { annualKmSuffixRegex.containsMatchIn(text.substring(it.range.last + 1)) }
             .mapNotNull { digits(it.groupValues[1]) }
             .filter { it in 1..2_000_000 }
             .maxOrNull()
@@ -111,7 +134,18 @@ object VehicleTextParser {
 
     private fun parseYear(text: String): Int? {
         yearRegex.find(text)?.groupValues?.get(2)?.toIntOrNull()?.let { return it }
-        return bareYearRegex.findAll(text).mapNotNull { it.value.toIntOrNull() }
+        // Positions of inspection years and euro prices; those digits never count as a
+        // registration year in the unlabeled fallback.
+        val excludedStarts = buildSet {
+            inspectionYearRegex.findAll(text).forEach { m -> m.groups[1]?.let { add(it.range.first) } }
+            priceYearRegex.findAll(text).forEach { m ->
+                m.groups[1]?.let { add(it.range.first) }
+                m.groups[2]?.let { add(it.range.first) }
+            }
+        }
+        return bareYearRegex.findAll(text)
+            .filter { it.range.first !in excludedStarts }
+            .mapNotNull { it.value.toIntOrNull() }
             .filter { it in 1980..2035 }.maxOrNull()
     }
 

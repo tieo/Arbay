@@ -2,13 +2,13 @@ package io.github.tieo.arbay.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,6 +51,14 @@ private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
     PlatformId.WILLHABEN to "AT",
 )
 
+/** Common German exterior colours offered as multi-select chips. */
+private val CAR_COLORS = listOf(
+    "Schwarz", "Weiß", "Grau", "Silber", "Blau", "Rot", "Grün", "Braun", "Beige", "Gelb", "Orange", "Gold",
+)
+
+/** Metric horsepower per kilowatt, for the hp hint under the power field. */
+private const val HP_PER_KW = 1.35962
+
 /**
  * Structured entry form for a car search. Fields are ordered the way a buyer reasons:
  * vehicle, then age and mileage, then budget and power, then gearbox, then which markets
@@ -72,7 +81,11 @@ fun CarSearchSheet(
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
     // Open the advanced section if any advanced filter is already set (editing an existing search).
-    var showMore by remember { mutableStateOf(initialFilters?.let { it.maxMileageKm != null || it.maxPriceEur != null || it.minPowerKw != null || it.transmission != null } ?: false) }
+    var showMore by remember {
+        mutableStateOf(initialFilters?.let {
+            it.maxMileageKm != null || it.maxPriceEur != null || it.minPowerKw != null || it.transmission != null
+        } ?: false)
+    }
     var yearFrom by remember { mutableStateOf(initialFilters?.firstRegFromYear?.toString() ?: "") }
     var yearTo by remember { mutableStateOf(initialFilters?.firstRegToYear?.toString() ?: "") }
     var maxKm by remember { mutableStateOf(initialFilters?.maxMileageKm?.toString() ?: "") }
@@ -137,14 +150,13 @@ fun CarSearchSheet(
                 .padding(top = 12.dp, bottom = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.DirectionsCar, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Text("Car search", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // 1 — Vehicle
             SectionLabel("Vehicle")
             PickerField(
                 label = "Make",
@@ -162,7 +174,7 @@ fun CarSearchSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // More filters — collapsed by default so make/model + Show results fit on screen
+            // More filters, collapsed by default so make/model + Show results fit on screen
             // without scrolling. Everything here is optional.
             Surface(
                 onClick = { showMore = !showMore },
@@ -174,254 +186,201 @@ fun CarSearchSheet(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(10.dp))
                     Text("More filters (year, price, power, markets)", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    Icon(if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
+                    Icon(
+                        if (showMore) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (showMore) "Collapse filters" else "Expand filters",
+                    )
                 }
             }
 
             AnimatedVisibility(visible = showMore) {
-              Column {
-            Spacer(Modifier.height(18.dp))
+                Column {
+                    Spacer(Modifier.height(18.dp))
 
-            // 2 — Age and mileage
-            SectionLabel("Age & mileage")
-            SliderNumberField("Year from", yearFrom, { yearFrom = it.take(4) }, 1995f, 2026f, 1)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField("Year to", yearTo, { yearTo = it.take(4) }, 1995f, 2026f, 1)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField("Max mileage (km)", maxKm, { maxKm = it }, 0f, 300000f, 5000)
+                    SectionLabel("Age & mileage")
+                    SliderNumberField("Year from", yearFrom, { yearFrom = it.take(4) }, 1995f, 2026f, 1)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField("Year to", yearTo, { yearTo = it.take(4) }, 1995f, 2026f, 1)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField("Max mileage (km)", maxKm, { maxKm = it }, 0f, 300000f, 5000)
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // 3 — Budget and power
-            SectionLabel("Budget & power")
-            SliderNumberField("Max price (EUR)", maxPrice, { maxPrice = it }, 0f, 100000f, 1000)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField(
-                "Min power (kW)", minPowerKw, { minPowerKw = it }, 0f, 300f, 5,
-                supporting = minPowerKw.toIntOrNull()?.let { "≈ ${(it * 1.35962).toInt()} hp" },
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            // 4 — Gearbox
-            SectionLabel("Gearbox")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val options = listOf<Pair<String, Transmission?>>(
-                    "Any" to null, "Automatic" to Transmission.AUTOMATIC, "Manual" to Transmission.MANUAL,
-                )
-                options.forEachIndexed { i, (label, value) ->
-                    SegmentedButton(
-                        selected = transmission == value,
-                        onClick = { transmission = value },
-                        shape = SegmentedButtonDefaults.itemShape(i, options.size),
-                    ) { Text(label) }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Fuel (multi-select)
-            SectionLabel("Fuel")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Fuel.entries.forEach { f ->
-                    FilterChip(
-                        selected = f in fuels,
-                        onClick = { if (f in fuels) fuels.remove(f) else fuels.add(f) },
-                        label = { Text(enumLabel(f.name), style = MaterialTheme.typography.labelSmall) },
+                    SectionLabel("Budget & power")
+                    SliderNumberField("Max price (EUR)", maxPrice, { maxPrice = it }, 0f, 100000f, 1000)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField(
+                        "Min power (kW)", minPowerKw, { minPowerKw = it }, 0f, 300f, 5,
+                        supporting = minPowerKw.toIntOrNull()?.let { "≈ ${(it * HP_PER_KW).toInt()} hp" },
                     )
-                }
-            }
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // Body type (multi-select)
-            SectionLabel("Body type")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                BodyType.entries.forEach { b ->
-                    FilterChip(
-                        selected = b in bodyTypes,
-                        onClick = { if (b in bodyTypes) bodyTypes.remove(b) else bodyTypes.add(b) },
-                        label = { Text(enumLabel(b.name), style = MaterialTheme.typography.labelSmall) },
+                    SectionLabel("Gearbox")
+                    SegmentedChoiceRow(
+                        options = listOf("Any" to null, "Automatic" to Transmission.AUTOMATIC, "Manual" to Transmission.MANUAL),
+                        selected = transmission,
+                        onSelect = { transmission = it },
                     )
-                }
-            }
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // Condition (multi-select)
-            SectionLabel("Condition")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                VehicleCondition.entries.forEach { c ->
-                    FilterChip(
-                        selected = c in conditions,
-                        onClick = { if (c in conditions) conditions.remove(c) else conditions.add(c) },
-                        label = { Text(enumLabel(c.name), style = MaterialTheme.typography.labelSmall) },
+                    SectionLabel("Fuel")
+                    MultiSelectChipRow(Fuel.entries.toList(), fuels) { enumLabel(it.name) }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SectionLabel("Body type")
+                    MultiSelectChipRow(BodyType.entries.toList(), bodyTypes) { enumLabel(it.name) }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SectionLabel("Condition")
+                    MultiSelectChipRow(VehicleCondition.entries.toList(), conditions) { enumLabel(it.name) }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SectionLabel("Drivetrain")
+                    SegmentedChoiceRow(
+                        options = listOf("Any" to null, "FWD" to Drivetrain.FWD, "RWD" to Drivetrain.RWD, "AWD" to Drivetrain.AWD),
+                        selected = drivetrain,
+                        onSelect = { drivetrain = it },
                     )
-                }
-            }
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // Drivetrain
-            SectionLabel("Drivetrain")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val opts = listOf<Pair<String, Drivetrain?>>(
-                    "Any" to null, "FWD" to Drivetrain.FWD, "RWD" to Drivetrain.RWD, "AWD" to Drivetrain.AWD,
-                )
-                opts.forEachIndexed { i, (label, value) ->
-                    SegmentedButton(selected = drivetrain == value, onClick = { drivetrain = value },
-                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Doors + minimum emission class
-            SectionLabel("Doors (min)")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val opts = listOf<Pair<String, Int?>>("Any" to null, "2+" to 2, "4+" to 4, "5+" to 5)
-                opts.forEachIndexed { i, (label, value) ->
-                    SegmentedButton(selected = minDoors == value, onClick = { minDoors = value },
-                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            SectionLabel("Emission class (min)")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val opts = listOf<Pair<String, Int?>>("Any" to null, "Euro 4" to 4, "Euro 5" to 5, "Euro 6" to 6)
-                opts.forEachIndexed { i, (label, value) ->
-                    SegmentedButton(selected = minEmission == value, onClick = { minEmission = value },
-                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Seller
-            SectionLabel("Seller")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val opts = listOf<Pair<String, SellerType?>>(
-                    "Any" to null, "Private" to SellerType.PRIVATE, "Dealer" to SellerType.BUSINESS,
-                )
-                opts.forEachIndexed { i, (label, value) ->
-                    SegmentedButton(selected = sellerType == value, onClick = { sellerType = value },
-                        shape = SegmentedButtonDefaults.itemShape(i, opts.size)) { Text(label) }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Ranges: lower bounds + seats
-            SectionLabel("More ranges")
-            SliderNumberField("Min mileage (km)", minKm, { minKm = it }, 0f, 300000f, 5000)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField("Min price (EUR)", minPrice, { minPrice = it }, 0f, 100000f, 1000)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField("Max power (kW)", maxPowerKw, { maxPowerKw = it }, 0f, 300f, 5)
-            Spacer(Modifier.height(12.dp))
-            SliderNumberField("Min seats", minSeats, { minSeats = it.take(1) }, 0f, 9f, 1)
-
-            Spacer(Modifier.height(18.dp))
-
-            // Colour (multi-select)
-            SectionLabel("Colour")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CAR_COLORS.forEach { c ->
-                    FilterChip(
-                        selected = c in colors,
-                        onClick = { if (c in colors) colors.remove(c) else colors.add(c) },
-                        label = { Text(c, style = MaterialTheme.typography.labelSmall) },
+                    SectionLabel("Doors (min)")
+                    SegmentedChoiceRow(
+                        options = listOf("Any" to null, "2+" to 2, "4+" to 4, "5+" to 5),
+                        selected = minDoors,
+                        onSelect = { minDoors = it },
                     )
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Van size (panel vans): filters only on an explicit L/H code in the listing text;
-            // listings that don't state one are kept. Roof words (Hochdach) are model-specific.
-            SectionLabel("Van size (length / height)")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..4).forEach { l ->
-                    FilterChip(
-                        selected = l in vanLengths,
-                        onClick = { if (l in vanLengths) vanLengths.remove(l) else vanLengths.add(l) },
-                        label = { Text("L$l", style = MaterialTheme.typography.labelSmall) },
+                    Spacer(Modifier.height(12.dp))
+                    SectionLabel("Emission class (min)")
+                    SegmentedChoiceRow(
+                        options = listOf("Any" to null, "Euro 4" to 4, "Euro 5" to 5, "Euro 6" to 6),
+                        selected = minEmission,
+                        onSelect = { minEmission = it },
                     )
-                }
-                (1..3).forEach { h ->
-                    FilterChip(
-                        selected = h in vanHeights,
-                        onClick = { if (h in vanHeights) vanHeights.remove(h) else vanHeights.add(h) },
-                        label = { Text("H$h", style = MaterialTheme.typography.labelSmall) },
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SectionLabel("Seller")
+                    SegmentedChoiceRow(
+                        options = listOf("Any" to null, "Private" to SellerType.PRIVATE, "Dealer" to SellerType.BUSINESS),
+                        selected = sellerType,
+                        onSelect = { sellerType = it },
                     )
-                }
-            }
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // Find in description — free text present in title/description on any platform.
-            SectionLabel("Find in description")
-            OutlinedTextField(
-                value = descriptionContains,
-                onValueChange = { descriptionContains = it },
-                placeholder = { Text("e.g. Standheizung, Anhängerkupplung, Camper") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                    SectionLabel("More ranges")
+                    SliderNumberField("Min mileage (km)", minKm, { minKm = it }, 0f, 300000f, 5000)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField("Min price (EUR)", minPrice, { minPrice = it }, 0f, 100000f, 1000)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField("Max power (kW)", maxPowerKw, { maxPowerKw = it }, 0f, 300f, 5)
+                    Spacer(Modifier.height(12.dp))
+                    SliderNumberField("Min seats", minSeats, { minSeats = it.take(1) }, 0f, 9f, 1)
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // Matching strictness
-            SectionLabel("Matching")
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Use details from listing text", style = MaterialTheme.typography.bodyMedium)
-                    Text("Filter on year/km/power found in the title, not only the site's own data",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = useTextSpecs, onCheckedChange = { useTextSpecs = it })
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Only exact matches", style = MaterialTheme.typography.bodyMedium)
-                    Text("Hide listings that don't state a filtered spec (fewer results, no maybes)",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = strictUnknown, onCheckedChange = { strictUnknown = it })
-            }
+                    SectionLabel("Colour")
+                    MultiSelectChipRow(CAR_COLORS, colors) { it }
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            // 5 — Markets
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Markets (${selectedPlatforms.size}/${CAR_MARKETS.size})", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                TextButton(onClick = { selectedPlatforms.clear(); selectedPlatforms.addAll(CAR_MARKETS.map { it.first }) }) { Text("All", style = MaterialTheme.typography.labelSmall) }
-                TextButton(onClick = { selectedPlatforms.clear() }) { Text("None", style = MaterialTheme.typography.labelSmall) }
-            }
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CAR_MARKETS.forEach { (platform, country) ->
-                    FilterChip(
-                        selected = platform in selectedPlatforms,
-                        onClick = {
-                            if (platform in selectedPlatforms) selectedPlatforms.remove(platform)
-                            else selectedPlatforms.add(platform)
-                        },
-                        label = { Text("${platform.displayName} · $country", style = MaterialTheme.typography.labelSmall) },
-                        leadingIcon = { if (platform in selectedPlatforms) Icon(Icons.Outlined.Check, null, modifier = Modifier.size(14.dp)) },
+                    // Van size (panel vans): filters only on an explicit L/H code in the listing text;
+                    // listings that don't state one are kept. Roof words (Hochdach) are model-specific.
+                    // Length and height chips share one flow row so they wrap as a single group.
+                    SectionLabel("Van size (length / height)")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (1..4).forEach { l ->
+                            FilterChip(
+                                selected = l in vanLengths,
+                                onClick = { if (l in vanLengths) vanLengths.remove(l) else vanLengths.add(l) },
+                                label = { Text("L$l", style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                        (1..3).forEach { h ->
+                            FilterChip(
+                                selected = h in vanHeights,
+                                onClick = { if (h in vanHeights) vanHeights.remove(h) else vanHeights.add(h) },
+                                label = { Text("H$h", style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Free text that must appear in title/description on any platform.
+                    SectionLabel("Find in description")
+                    OutlinedTextField(
+                        value = descriptionContains,
+                        onValueChange = { descriptionContains = it },
+                        placeholder = { Text("e.g. Standheizung, Anhängerkupplung, Camper") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SectionLabel("Matching")
+                    LabeledSwitch(
+                        title = "Use details from listing text",
+                        subtitle = "Filter on year/km/power found in the title, not only the site's own data",
+                        checked = useTextSpecs,
+                        onCheckedChange = { useTextSpecs = it },
+                    )
+                    LabeledSwitch(
+                        title = "Only exact matches",
+                        subtitle = "Hide listings that don't state a filtered spec (fewer results, no maybes)",
+                        checked = strictUnknown,
+                        onCheckedChange = { strictUnknown = it },
+                    )
+
+                    Spacer(Modifier.height(18.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Markets (${selectedPlatforms.size}/${CAR_MARKETS.size})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { selectedPlatforms.clear(); selectedPlatforms.addAll(CAR_MARKETS.map { it.first }) }) {
+                            Text("All", style = MaterialTheme.typography.labelSmall)
+                        }
+                        TextButton(onClick = { selectedPlatforms.clear() }) {
+                            Text("None", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CAR_MARKETS.forEach { (platform, country) ->
+                            FilterChip(
+                                selected = platform in selectedPlatforms,
+                                onClick = {
+                                    if (platform in selectedPlatforms) selectedPlatforms.remove(platform)
+                                    else selectedPlatforms.add(platform)
+                                },
+                                label = { Text("${platform.displayName} · $country", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    if (platform in selectedPlatforms) Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                },
+                            )
+                        }
+                    }
                 }
-            }
-              }
             }
 
             Spacer(Modifier.height(8.dp))
         }
 
-        // Sticky bottom Search bar — always visible + enabled; nothing is required, so a
+        // Sticky bottom Search bar, always visible + enabled; nothing is required, so a
         // filter-only search (e.g. year + price, no make) works too (filters apply source-side).
         Surface(
             tonalElevation = 3.dp,
@@ -435,7 +394,7 @@ fun CarSearchSheet(
                 enabled = selectedPlatforms.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
             ) {
-                Icon(Icons.Outlined.Search, null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Show results")
             }
@@ -471,13 +430,67 @@ fun CarSearchSheet(
     }
 }
 
+/** Full-width segmented row for a single optional choice; the "Any" segment carries null. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T : Any> SegmentedChoiceRow(
+    options: List<Pair<String, T?>>,
+    selected: T?,
+    onSelect: (T?) -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { i, (label, value) ->
+            SegmentedButton(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                shape = SegmentedButtonDefaults.itemShape(i, options.size),
+            ) { Text(label) }
+        }
+    }
+}
+
+/** Wrapping chip row that toggles membership of each option in [selected]. */
+@Composable
+private fun <T> MultiSelectChipRow(
+    options: List<T>,
+    selected: MutableList<T>,
+    labelOf: (T) -> String,
+) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option in selected,
+                onClick = { if (option in selected) selected.remove(option) else selected.add(option) },
+                label = { Text(labelOf(option), style = MaterialTheme.typography.labelSmall) },
+            )
+        }
+    }
+}
+
+/** Title + explanatory subtitle on the left, switch on the right. */
+@Composable
+private fun LabeledSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
 /** A read-only field styled like an input that opens a picker on tap. */
 @Composable
 private fun PickerField(
     label: String,
     value: String?,
     enabled: Boolean = true,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    leadingIcon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
     Box {
@@ -488,8 +501,8 @@ private fun PickerField(
             enabled = enabled,
             label = { Text(label) },
             placeholder = { Text("Select") },
-            leadingIcon = leadingIcon?.let { { Icon(it, null) } },
-            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, null) },
+            leadingIcon = leadingIcon?.let { { Icon(it, contentDescription = null) } },
+            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = "Open $label picker") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -559,7 +572,7 @@ private fun <T> SearchablePickerDialog(
                     value = queryText,
                     onValueChange = { queryText = it },
                     placeholder = { Text("Search") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -591,11 +604,6 @@ private fun <T> SearchablePickerDialog(
     )
 }
 
-/** Common German exterior colours offered as multi-select chips. */
-private val CAR_COLORS = listOf(
-    "Schwarz", "Weiß", "Grau", "Silber", "Blau", "Rot", "Grün", "Braun", "Beige", "Gelb", "Orange", "Gold",
-)
-
 /** "HYBRID_PETROL" -> "Hybrid Petrol" for enum filter chip labels. */
 private fun enumLabel(name: String): String =
     name.lowercase().split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
@@ -611,8 +619,8 @@ private fun SectionLabel(text: String) {
 }
 
 /** A slider paired with an editable number box. The slider is a fast, coarse dragger; the
- *  text box stays authoritative and unbounded — a typed value beyond the slider range is
- *  kept, the slider just pins at its end. Empty means "no limit". */
+ *  text box stays authoritative and unbounded (a typed value beyond the slider range is
+ *  kept, the slider just pins at its end). Empty means "no limit". */
 @Composable
 private fun SliderNumberField(
     label: String,
@@ -644,7 +652,7 @@ private fun SliderNumberField(
         }
         Slider(
             value = (current ?: min).coerceIn(min, max),
-            // Continuous track (no tick dots — a 0..100000 range would render a noisy
+            // Continuous track (no tick dots; a 0..100000 range would render a noisy
             // dotted line), but the emitted value snaps to stepSize.
             onValueChange = { raw -> onValue(((raw / stepSize).roundToInt() * stepSize).toString()) },
             valueRange = min..max,

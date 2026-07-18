@@ -95,4 +95,66 @@ class VehicleTextParserTest {
         val v = VehicleTextParser.parse("Crafter 250.000 km 2015")!!
         assertTrue(v.mileageKm!! in 1..2_000_000)
     }
+
+    @Test
+    fun apkYearIsNotFirstRegYear() {
+        // "APK tot 2027" is the Dutch inspection deadline; the build year is 2016.
+        val v = VehicleTextParser.parse("Volkswagen Crafter 2016, 210.000 km, APK tot 2027")!!
+        assertEquals(2016, v.firstRegYear)
+        assertEquals(210_000, v.mileageKm)
+    }
+
+    @Test
+    fun tuvYearIsNotFirstRegYear() {
+        val v = VehicleTextParser.parse("Opel Corsa 2012, TÜV bis 06/2026, 98.000 km")!!
+        assertEquals(2012, v.firstRegYear)
+    }
+
+    @Test
+    fun inspectionOnlyYearYieldsNoRegYear() {
+        // The only year in the text is an inspection deadline; no registration year exists.
+        val v = VehicleTextParser.parse("VW Transporter, APK tot 2027, rijdt goed")
+        assertNull(v?.firstRegYear)
+    }
+
+    @Test
+    fun labeledYearBeatsInspectionYear() {
+        val v = VehicleTextParser.parse("Golf 7, EZ 06/2018, TÜV bis 2026, 120.000 km")!!
+        assertEquals(2018, v.firstRegYear)
+    }
+
+    @Test
+    fun priceInEurosIsNotYear() {
+        // "2000 €" is the asking price; the bare year fallback must keep 1989.
+        val v = VehicleTextParser.parse("Opel Kadett Oldtimer 1989, fester Preis 2000 €")!!
+        assertEquals(1989, v.firstRegYear)
+    }
+
+    @Test
+    fun leaseAllowanceIsNotMileage() {
+        // "10.000 km/Jahr" is a lease's annual allowance; the ad carries no odometer reading.
+        val v = VehicleTextParser.parse("Leasing: VW ID.3 ab 299 € mtl., 10.000 km/Jahr, Automatik")
+        assertNull(v?.mileageKm)
+    }
+
+    @Test
+    fun odometerWinsOverLeaseAllowance() {
+        val v = VehicleTextParser.parse("Leasingübernahme, 34.000 km Stand, 10.000 km pro Jahr")!!
+        assertEquals(34_000, v.mileageKm)
+    }
+
+    @Test
+    fun engineSizeAloneIsNotMileage() {
+        // "2.0 km-Stand" pairs the engine size with the km label; 20 km would be fabricated.
+        val v = VehicleTextParser.parse("Sharan 2.0 km-Stand unbekannt")
+        assertNull(v?.mileageKm)
+    }
+
+    @Test
+    fun thousandsFigureIsNotPower() {
+        // "1.200 PS" exceeds the plausible range; its tail must not be read as 200 PS.
+        val v = VehicleTextParser.parse("Dragster Umbau 1.200 PS, Bj 2015")
+        assertNull(v?.powerKw)
+        assertEquals(2015, v?.firstRegYear)
+    }
 }
