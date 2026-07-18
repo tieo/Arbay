@@ -32,6 +32,23 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         return parseSearchResults(html)
     }
 
+    /** Diagnostic only: fetch a willhaben car page and surface the make/model filter navigator from
+     *  __NEXT_DATA__ (each option carries its own working URL/ID), to learn the car-search URL shape. */
+    suspend fun debugRaw(url: String): String {
+        val html = fetchWithFallback(client, url, "willhaben-debug", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
+        val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return "no __NEXT_DATA__"
+        val sb = StringBuilder("len=${data.length}\n")
+        Regex("Volkswagen").findAll(data).take(1).forEach { m ->
+            sb.append("[Volkswagen ctx] ")
+                .append(data.substring((m.range.first - 60).coerceAtLeast(0), (m.range.last + 280).coerceAtMost(data.length)))
+                .append("\n")
+        }
+        Regex("\"?(webLink|seoUrl|uri|urlName|navigatorValue|label)\"?\\s*:\\s*\"[^\"]{0,90}")
+            .findAll(data).map { it.value }.filter { it.contains("make", true) || it.contains("auto", true) || it.contains("gebraucht", true) }
+            .distinct().take(20).forEach { sb.append(it).append("\n") }
+        return sb.toString().take(3500)
+    }
+
     private fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
