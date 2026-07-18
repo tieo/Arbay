@@ -145,15 +145,34 @@ object CarFilterEngine {
     // power), so they must be caught before the spec-signal exemption below.
     private val rentalAd = Regex("""\b(mieten|zu mieten|vermiet\w+|mietwagen|leihwagen|autovermietung|langzeitmiete|tagesmiete)\b""", RegexOption.IGNORE_CASE)
 
-    /** A car-query result that is a wanted ad or a rental, not a car for sale. Both are matched
-     *  on the title only (safe, explicit). Parts/accessories are handled at the source now — the
-     *  car searches are category-constrained (Kleinanzeigen c216, eBay vehicle category), so a
-     *  keyword parts guard is unneeded and would false-drop a real car that merely names a
-     *  feature ("… mit Standheizung"). No price threshold: a cheap or broken car is still a car. */
+    // A part or accessory, never a whole vehicle. Only nouns that a car-for-sale title would not
+    // lead with — deliberately NOT the "recently replaced" parts a seller brags about (Zahnriemen,
+    // Kupplung, Bremsscheibe, Turbolader), which appear in genuine car titles and would false-drop.
+    private val partAccessory = Regex(
+        """\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
+            """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
+            """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
+            """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|\bsteuergerät\b|""" +
+            """\b(bracket|floor ?mat|seat ?cover|headlight|tail ?light|fender|mudflap|wheel ?trim|badge)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** A car-query result that is not a car for sale: a wanted ad, a rental, or a part/accessory.
+     *  All matched on the title only (safe, explicit). The part guard is needed because eBay's
+     *  price-ascending sort floats up cheap seller-miscategorised parts that sit inside the vehicle
+     *  category (a "Drehkonsole" listed under Fahrzeuge) — the source category alone does not stop
+     *  them. Any listing the site gave structured vehicle specs for (verified mileage / first-reg /
+     *  power) is exempt, so a real car is never dropped. No price threshold: a cheap or broken car
+     *  is still a car. */
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         if (wantedAd.containsMatchIn(listing.title)) return true
         if (rentalAd.containsMatchIn(listing.title)) return true
+        val hasVehicleSpec = listing.vehicle?.let { v ->
+            v.isVerified(VehicleField.MILEAGE) || v.isVerified(VehicleField.FIRST_REG_YEAR) ||
+                v.isVerified(VehicleField.POWER)
+        } ?: false
+        if (!hasVehicleSpec && partAccessory.containsMatchIn(listing.title)) return true
         return false
     }
 }

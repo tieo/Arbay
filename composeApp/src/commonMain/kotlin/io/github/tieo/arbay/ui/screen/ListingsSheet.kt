@@ -382,8 +382,8 @@ fun ListingsSheet(
                         }
                     }
                     // Active car filters as editable chips + an "Edit" entry to reopen the form.
-                    // "N hidden" = cars this filter is holding back right now (known only after the
-                    // broad fetch, since counts come from the local cache of relaxed results).
+                    // "−N" = cars this filter removes (known only after the broad fetch, since counts
+                    // come from the local cache of relaxed results).
                     if (carFilters != null && onEditFilters != null) {
                         val chips = carFilterChips(carFilters)
                         LazyRow(
@@ -403,23 +403,10 @@ fun ListingsSheet(
                                 AssistChip(
                                     onClick = onEditFilters,
                                     label = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(label, style = MaterialTheme.typography.labelMedium)
-                                            if (hidden > 0) {
-                                                Spacer(Modifier.width(6.dp))
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                                ) {
-                                                    Text(
-                                                        "$hidden hidden",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        Text(
+                                            if (hidden > 0) "$label  −$hidden" else label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
                                     },
                                 )
                             }

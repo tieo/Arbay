@@ -52,6 +52,38 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun dropsEbayPartMiscategorisedAsVehicle() {
+        // eBay's price-ascending sort floats up a seller-miscategorised part; drop it structurally.
+        val part = carListing("p", PlatformId.EBAY_DE,
+            "Drehkonsole DC Sprinter 906 VW Crafter ab 06 bis 2016 Sitzkonsole Beifahrer",
+            priceCents = 20_000, vehicle = VehicleInfo())
+        assertEquals(0, CarFilterEngine.apply(listOf(part), CarFilters()).size)
+    }
+
+    @Test
+    fun dropsKleinanzeigenAccessory() {
+        val cover = carListing("sb", PlatformId.KLEINANZEIGEN, "VW Crafter Sitzbezug Schonbezug",
+            priceCents = 4_000, vehicle = VehicleInfo())
+        assertEquals(0, CarFilterEngine.apply(listOf(cover), CarFilters()).size)
+    }
+
+    @Test
+    fun keepsCarNamingAReplacedPart() {
+        // "Zahnriemen neu" is a selling point on a real car, not a part listing — must survive.
+        val car = carListing("z", PlatformId.EBAY_DE, "VW Crafter 2.0 TDI Zahnriemen neu Bremsen neu",
+            priceCents = 850_000, vehicle = VehicleInfo())
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
+    @Test
+    fun partGuardExemptsListingWithVerifiedSpecs() {
+        // A structured vehicle record is a real car even if its title contains a part word.
+        val car = carListing("ex", PlatformId.EBAY_DE, "VW Crafter mit Dachträger Hochdach",
+            priceCents = 1_500_000, vehicle = verified(firstRegYear = 2020, mileageKm = 80_000))
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
+    @Test
     fun neverDropsCarOnlyPlatformForMissingSignal() {
         // AutoScout24 result with no parsed signal must survive (every result there is a car).
         val car = listing("a1", PlatformId.AUTOSCOUT24, 100, vehicle = null)
