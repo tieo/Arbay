@@ -214,6 +214,16 @@ class FreeItemViewModel(
         }
     }
 
+    /** Sort the deck by fit, but keep the card the user is currently on pinned at the front —
+     *  a re-sort must never swap the card out from under them. */
+    private fun deckSortedPinningCurrent(list: List<Listing>): List<Listing> {
+        val dismissed = _dismissedIds.value
+        val currentId = _listings.value.firstOrNull { it.id !in dismissed }?.id
+        val sorted = list.sortedByDescending { it.relevanceScore ?: 0.0 }
+        val current = sorted.firstOrNull { it.id == currentId }
+        return if (current != null) listOf(current) + sorted.filter { it.id != currentId } else sorted
+    }
+
     private suspend fun fetchBatch(query: String, startPage: Int, append: Boolean) {
         try {
             val radiusKm = _currentRadiusKm.value
@@ -237,13 +247,16 @@ class FreeItemViewModel(
                             resultCount = event.resultCount,
                             rawCount = event.rawCount,
                         )
-                        // Incrementally add listings as they arrive per page, sorted by relevance
+                        // Incrementally add listings as they arrive per page, sorted by relevance.
+                        // The card in view stays pinned so a late-arriving match never swaps it out.
                         if (event.listings.isNotEmpty()) {
                             val existing = _listings.value.map { it.id }.toSet()
                             val newItems = event.listings.filter { it.id !in existing }
                             if (newItems.isNotEmpty()) {
-                                _listings.value = (_listings.value + newItems)
-                                    .sortedByDescending { it.relevanceScore ?: 0.0 }
+                                _listings.value = deckSortedPinningCurrent(_listings.value + newItems)
+                                // First cards in — drop the blocking spinner so the deck is swipeable
+                                // immediately while the remaining pages keep streaming in behind it.
+                                _loading.value = false
                             }
                         }
                     }
@@ -254,15 +267,14 @@ class FreeItemViewModel(
                             rawCount = event.rawCount,
                         )
                         if (append) {
-                            // Merge the new page and re-sort the whole deck by fit, so a later page's
-                            // strong match isn't stranded below a weaker earlier one.
+                            // Merge the new page and re-sort by fit — but keep the current card pinned,
+                            // so a later page's strong match ranks the rest without swapping what's in view.
                             val existing = _listings.value.map { it.id }.toSet()
                             val newItems = event.listings.filter { it.id !in existing }
-                            _listings.value = (_listings.value + newItems)
-                                .sortedByDescending { it.relevanceScore ?: 0.0 }
+                            _listings.value = deckSortedPinningCurrent(_listings.value + newItems)
                             logTelemetry("BATCH_APPENDED", "new=${newItems.size} total=${_listings.value.size} page=$startPage")
                         } else {
-                            _listings.value = event.listings.sortedByDescending { it.relevanceScore ?: 0.0 }
+                            _listings.value = deckSortedPinningCurrent(event.listings)
                             logTelemetry("BATCH_LOADED", "count=${event.listings.size} page=$startPage hasMore=${event.hasMore}")
                         }
                         _hasMore = event.hasMore

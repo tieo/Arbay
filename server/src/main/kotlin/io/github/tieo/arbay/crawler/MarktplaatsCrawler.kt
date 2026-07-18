@@ -98,6 +98,23 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
                 Regex("""p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand""", RegexOption.IGNORE_CASE).containsMatchIn(cardText)
             if (priceIsMonthly || explicitLease) return@mapNotNull null
 
+            // Structured spec row (Bouwjaar / conditie / kilometerstand), rendered as hz-attributes
+            // and distinct from the marketing blurb. Parsing it yields verified mileage + year, so the
+            // km/year filters act on real values instead of APK expiry dates or lease amounts that
+            // pollute the free-text description (a 232.583 km van was leaking a ≤200k filter because
+            // mileage was never read off the card).
+            val attrText = item.selectFirst("[class*=hz-attributes]")?.text()
+            val vehicle = attrText?.let { at ->
+                val km = Regex("""([0-9][0-9.]{2,})\s*km""", RegexOption.IGNORE_CASE)
+                    .find(at)?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 }
+                val year = Regex("""\b(19[89]\d|20[0-3]\d)\b""").find(at)?.value?.toIntOrNull()
+                val condition = VehicleCondition.parse(at)
+                if (km == null && year == null && condition == null) null
+                else VehicleTextParser.verifiedByPresence(
+                    VehicleInfo(mileageKm = km, firstRegYear = year, condition = condition),
+                )
+            }
+
             val descriptionText = item.selectFirst("[class*=hz-Listing-description]")?.text()
 
             val imageUrl = item.selectFirst("[class*=hz-Listing-image-container] img, [class*=hz-Listing-image] img")?.let {
@@ -127,6 +144,7 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
                 imageUrls = listOfNotNull(imageUrl),
                 description = descriptionText,
                 shipping = shipping,
+                vehicle = vehicle,
                 scrapedAt = now,
             )
         }
