@@ -7,6 +7,7 @@ import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.crawler.CrawlerStatusTracker
+import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
@@ -122,7 +123,11 @@ private suspend fun carPostFilter(
 ): List<Listing> {
     if (!isCarQuery) return listings
     val filters = searchQuery.toCarFilters() ?: CarFilters()
-    val cardFiltered = CarFilterEngine.apply(listings, filters)
+    // Parse specs from each card's own title/description first (mileage, year, power, …), so a
+    // platform that ships no structured data — eBay, Kleinanzeigen — is still filterable: a stated
+    // "345.000 km" becomes a value the mileage filter can exclude on (when useTextSpecs is set).
+    val enriched = listings.map { VehicleTextParser.enrich(it) }
+    val cardFiltered = CarFilterEngine.apply(enriched, filters)
     val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
     return CarFilterEngine.apply(detailed, filters)
 }
