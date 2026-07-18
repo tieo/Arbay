@@ -12,36 +12,51 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    private val carBase = "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse"
+
     override suspend fun search(query: SearchQuery): List<Listing> {
-        // A car query goes to willhaben's used-car vertical (Motor), not the general marktplatz —
-        // the latter's keyword search doesn't reach vehicle stock. The __NEXT_DATA__ shape
-        // (searchResult.advertSummaryList.advertSummary) is the same, so the parser is shared;
-        // vehicle specs are left to the central text enrichment (soft-pass, per the provenance model).
-        // NOTE: willhaben's used-car vertical (gebrauchtwagen/auto/gebrauchtwagenboerse) IGNORES the
-        // ?keyword= param — it filters by numeric make/model IDs (carmake=/carmodel=) instead, so a
-        // keyword search returns a default car set (a "Crafter" query gave 22 Tiguans/Audis). Until
-        // those IDs are mapped, willhaben is a general-marktplatz crawler only and is NOT a car market.
+        // willhaben's used-car vertical ignores keyword search — it filters by numeric make/model IDs
+        // (the `CAR_MODEL/MAKE` and `CAR_MODEL/MODEL` params). So a car query is resolved to those IDs:
+        // the make from a static map, the model from the make-filtered page's own filter navigator.
+        // The general marktplatz (keyword) handles everything non-car.
+        val carQuery = CarQueryResolver.resolve(query.positiveText)
+        val makeId = carQuery?.makeSlug?.let { WILLHABEN_MAKE_IDS[it] }
+        if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug)
+
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.
+        val html = fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
+        return parseSearchResults(html)
+    }
+
+    private suspend fun searchCars(makeId: Int, modelSlug: String?): List<Listing> {
+        val makeHtml = fetchWithFallback(
+            client, "$carBase?CAR_MODEL/MAKE=$makeId", "willhaben",
+            primeUrl = "https://www.willhaben.at", extraWaitMs = 1500,
+        )
+        // Resolve the model against this make's filter navigator; if we can't, fall back to the
+        // make-only page (the downstream relevance filter still keeps only the wanted model).
+        val modelId = modelSlug?.let { resolveModelId(makeHtml, it) } ?: return parseSearchResults(makeHtml)
         val html = fetchWithFallback(
-            client, url, "willhaben",
-            primeUrl = "https://www.willhaben.at",
-            extraWaitMs = 1500,
+            client, "$carBase?CAR_MODEL/MAKE=$makeId&CAR_MODEL/MODEL=$modelId", "willhaben",
+            primeUrl = "https://www.willhaben.at", extraWaitMs = 1500,
         )
         return parseSearchResults(html)
     }
 
-    /** Diagnostic only: fetch a willhaben car page and surface the make/model filter navigator from
-     *  __NEXT_DATA__ (each option carries its own working URL/ID), to learn the car-search URL shape. */
-    suspend fun debugRaw(url: String): String {
-        val html = fetchWithFallback(client, url, "willhaben-debug", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
-        val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return "no __NEXT_DATA__"
-        val sb = StringBuilder("len=${data.length} titles=${parseSearchResults(html).size}\n")
-        Regex("\"label\":\"([^\"]{1,40})\"[^}]{0,140}?CAR_MODEL/MODEL\"[^}]{0,60}?\"value\":\"(\\d+)\"")
-            .findAll(data).map { "${it.groupValues[1]}=${it.groupValues[2]}" }.distinct().take(120)
-            .forEach { sb.append(it).append("  ") }
-        return sb.toString().take(3800)
+    /** Find the willhaben CAR_MODEL/MODEL id whose filter label matches [modelSlug], reading the
+     *  model navigator embedded in a make-filtered page's __NEXT_DATA__. */
+    private fun resolveModelId(makeHtml: String, modelSlug: String): Int? {
+        val data = Jsoup.parse(makeHtml).selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val want = modelSlug.lowercase().replace("-", "").replace(" ", "")
+        return Regex("\"label\":\"([^\"]{1,40})\"[^}]{0,140}?CAR_MODEL/MODEL\"[^}]{0,60}?\"value\":\"(\\d+)\"")
+            .findAll(data)
+            .mapNotNull { m -> m.groupValues[2].toIntOrNull()?.let { m.groupValues[1] to it } }
+            .firstOrNull { (label, _) ->
+                val l = label.lowercase().replace("-", "").replace(" ", "")
+                l == want || l.startsWith(want) || want.startsWith(l)
+            }?.second
     }
 
     private fun parseSearchResults(html: String): List<Listing> {
@@ -131,5 +146,21 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
                 scrapedAt = now,
             )
         }
+    }
+
+    companion object {
+        // CarQueryResolver make slug → willhaben's numeric CAR_MODEL/MAKE id (read from its own
+        // car filter navigator). Makes willhaben doesn't list, or that CarQueryResolver doesn't
+        // resolve, simply aren't searched on willhaben (it falls back to skipping cars there).
+        private val WILLHABEN_MAKE_IDS = mapOf(
+            "volkswagen" to 1065, "audi" to 1003, "bmw" to 1005, "mercedes-benz" to 1036,
+            "opel" to 1043, "ford" to 1017, "skoda" to 1057, "seat" to 1056, "cupra" to 10026,
+            "renault" to 1051, "peugeot" to 1045, "citroen" to 1010, "fiat" to 1016,
+            "toyota" to 1062, "hyundai" to 1020, "kia" to 1025, "mazda" to 1035, "nissan" to 1042,
+            "volvo" to 1064, "porsche" to 1048, "dacia" to 1011, "suzuki" to 1061,
+            "mitsubishi" to 1040, "honda" to 1018, "jeep" to 1024, "land-rover" to 1029,
+            "jaguar" to 1023, "alfa-romeo" to 1000, "chevrolet" to 1008, "lexus" to 1030,
+            "byd" to 10034, "iveco" to 1022,
+        )
     }
 }

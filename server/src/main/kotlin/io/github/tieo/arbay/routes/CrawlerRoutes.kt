@@ -544,16 +544,5 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             ))
         }
 
-        // TEMP diagnostic (willhaben.at only): dump the make/model filter navigator to find the
-        // numeric-ID car-search URL willhaben honours.
-        get("/debug-willhaben") {
-            val url = call.queryParameters["url"] ?: throw BadRequestException("url required")
-            if (!url.startsWith("https://www.willhaben.at/")) throw BadRequestException("willhaben.at only")
-            val crawler = CrawlerRegistry.crawlerFor(PlatformId.WILLHABEN) as? io.github.tieo.arbay.crawler.WillhabenCrawler
-                ?: throw BadRequestException("no willhaben crawler")
-            val permit = call.acquireScrapeSlot() ?: return@get
-            val out = try { crawler.debugRaw(url) } finally { permit.release() }
-            call.respondText(out)
-        }
     }
 }
