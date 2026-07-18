@@ -408,36 +408,9 @@ fun Route.freeItemRoutes() {
                     // Track all scored items
                     FreeItemStore.trackBatch(allScored)
 
-                    // Send final PLATFORM_DONE with exploration/uncertainty applied
-                    val sorted = allScored.sortedByDescending { it.relevanceScore }.toMutableList()
-
-                    // Exploration: inject 1 random low-scored item per ~10 items
-                    if (sorted.size >= 20) {
-                        val lowScored = sorted.filter { (it.relevanceScore ?: 0.0) < 0.5 }
-                        if (lowScored.isNotEmpty()) {
-                            val explorationCount = (sorted.size / 10).coerceAtMost(lowScored.size)
-                            val explorationItems = lowScored.shuffled().take(explorationCount)
-                            for ((i, item) in explorationItems.withIndex()) {
-                                sorted.remove(item)
-                                val insertAt = ((i + 1) * 10).coerceAtMost(sorted.size)
-                                sorted.add(insertAt, item.copy(isExploration = true))
-                            }
-                        }
-                    }
-
-                    // Uncertainty: boost items where models disagree most
-                    if (ModelRegistry.allModels().size >= 2) {
-                        for (i in sorted.indices) {
-                            val scores = sorted[i].modelScores?.values ?: continue
-                            if (scores.size < 2) continue
-                            val spread = (scores.max() - scores.min())
-                            if (spread > 0.3 && i > sorted.size / 2) {
-                                val item = sorted.removeAt(i)
-                                val newPos = (sorted.size / 3).coerceAtMost(sorted.size)
-                                sorted.add(newPos, item)
-                            }
-                        }
-                    }
+                    // Rank strictly by fit — best matches first. No exploration or model-disagreement
+                    // reshuffling: injecting low-scored items into top slots reads as broken sorting.
+                    val sorted = allScored.sortedByDescending { it.relevanceScore }
 
                     write(json.encodeToString(CrawlerSearchEvent(
                         type = CrawlerEventType.PLATFORM_DONE,

@@ -254,13 +254,15 @@ class FreeItemViewModel(
                             rawCount = event.rawCount,
                         )
                         if (append) {
-                            // Deduplicate by ID when appending
+                            // Merge the new page and re-sort the whole deck by fit, so a later page's
+                            // strong match isn't stranded below a weaker earlier one.
                             val existing = _listings.value.map { it.id }.toSet()
                             val newItems = event.listings.filter { it.id !in existing }
-                            _listings.value = _listings.value + newItems
+                            _listings.value = (_listings.value + newItems)
+                                .sortedByDescending { it.relevanceScore ?: 0.0 }
                             logTelemetry("BATCH_APPENDED", "new=${newItems.size} total=${_listings.value.size} page=$startPage")
                         } else {
-                            _listings.value = event.listings
+                            _listings.value = event.listings.sortedByDescending { it.relevanceScore ?: 0.0 }
                             logTelemetry("BATCH_LOADED", "count=${event.listings.size} page=$startPage hasMore=${event.hasMore}")
                         }
                         _hasMore = event.hasMore
