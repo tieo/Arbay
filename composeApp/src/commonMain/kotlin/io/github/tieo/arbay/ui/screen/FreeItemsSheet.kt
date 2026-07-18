@@ -79,6 +79,9 @@ fun FreeItemsSheet(
     var radiusDraft by remember(profile) { mutableFloatStateOf((profile?.radiusKm ?: 30).toFloat()) }
     var showSavedSheet by remember { mutableStateOf(false) }
 
+    // A fresh open starts without a stale error banner from an earlier search this app session.
+    LaunchedEffect(Unit) { viewModel.clearError() }
+
     // Auto-search when profile loads (only if location is set)
     LaunchedEffect(profile) {
         val p = profile
@@ -87,6 +90,7 @@ fun FreeItemsSheet(
             viewModel.search()
         } else if (p != null && p.location.isNullOrBlank()) {
             editingProfile = true // Force profile editor open if no location
+            viewModel.clearError()
         }
     }
 
@@ -115,7 +119,9 @@ fun FreeItemsSheet(
                     profile = profile,
                     editingProfile = editingProfile,
                     loading = loading || loadingMore,
-                    error = error,
+                    // While the profile editor is open, the form itself guides the user — a search
+                    // error banner (e.g. "set a location") would just be noise on top of it.
+                    error = if (editingProfile) null else error,
                     displayRadius = displayRadius,
                     currentRadiusKm = currentRadiusKm,
 

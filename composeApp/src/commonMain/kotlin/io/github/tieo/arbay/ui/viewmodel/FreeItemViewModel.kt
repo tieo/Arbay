@@ -111,6 +111,9 @@ class FreeItemViewModel(
         }
     }
 
+    /** Drop a stale error banner — e.g. when the guided profile editor is showing instead. */
+    fun clearError() { _error.value = null }
+
     fun saveProfile(description: String, location: String? = null, radiusKm: Int? = null, trackingEnabled: Boolean? = null) {
         viewModelScope.launch {
             try {

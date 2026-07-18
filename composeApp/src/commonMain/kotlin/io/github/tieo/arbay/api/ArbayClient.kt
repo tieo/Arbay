@@ -17,6 +17,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/** A non-2xx from the server, carrying the server's own plain-text reason as the message so the
+ *  UI can show it verbatim instead of a serializer's "unexpected token" noise. */
+class ArbayApiException(message: String) : Exception(message)
+
 class ArbayClient(
     baseUrl: String = appSecrets().serverUrl ?: defaultServerUrl(),
 ) {
@@ -260,6 +264,9 @@ class ArbayClient(
             if (batchSize != 10) parameter("batchSize", batchSize)
             radiusKm?.let { parameter("radiusKm", it) }
         }.execute { response ->
+            // A non-2xx carries a plain-text reason, not the event JSON — surface it as-is
+            // instead of feeding it to the JSON parser (which would report a bogus token error).
+            if (!response.status.isSuccess()) throw ArbayApiException(response.bodyAsText().ifBlank { response.status.description })
             val channel = response.bodyAsChannel()
             while (!channel.isClosedForRead) {
                 val line = channel.readUTF8Line() ?: break
@@ -292,6 +299,7 @@ class ArbayClient(
                 parameter("carFilters", streamJson.encodeToString(CarFilters.serializer(), f))
             }
         }.execute { response ->
+            if (!response.status.isSuccess()) throw ArbayApiException(response.bodyAsText().ifBlank { response.status.description })
             val channel = response.bodyAsChannel()
             while (!channel.isClosedForRead) {
                 val line = channel.readUTF8Line() ?: break
