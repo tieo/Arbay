@@ -1853,6 +1853,9 @@ private fun SoldHistoryRow(
                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                 )
             }
+            listing.platformId.country?.let { cc ->
+                Text(flagEmoji(cc), style = MaterialTheme.typography.labelSmall)
+            }
             listing.condition?.let {
                 Text(
                     it.name.lowercase().replaceFirstChar { c -> c.uppercase() },
