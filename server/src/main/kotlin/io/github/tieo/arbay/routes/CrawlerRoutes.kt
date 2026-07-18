@@ -16,6 +16,7 @@ import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.RequestMonitor
+import io.github.tieo.arbay.crawler.Translator
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.crawler.RelevanceFilter
@@ -91,6 +92,16 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
         transmission = cf?.transmission ?: legacyGear,
         descriptionContains = cf?.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
     )
+}
+
+/** The search query localized to a platform's language — a cross-border market (e.g. eBay.it) is
+ *  searched with the translated term ("Parkettschleifmaschine" → "levigatrice per parquet") so its
+ *  own search returns local listings; the home language passes through unchanged. Both the crawl
+ *  and the relevance filter then use this same localized query. */
+private suspend fun localizedQuery(base: SearchQuery, platform: PlatformId): SearchQuery {
+    if (platform.searchLanguage == "de" || base.text.isBlank()) return base
+    val translated = Translator.translate(base.text, "de", platform.searchLanguage)
+    return if (translated == base.text) base else base.copy(text = translated)
 }
 
 /** A price in EUR cents, converting from the listing's own currency so cross-border results
@@ -243,19 +254,21 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 val isCarQuery = CarQueryResolver.resolve(query) != null
                 val perPlatform = platforms.map { platformId ->
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
+                    // Cross-border markets are searched in their own language.
+                    val pq = localizedQuery(searchQuery, platformId)
                     // Cache holds the raw relevance-filtered crawl; car post-filtering runs after
                     // it, so tweaking a filter re-filters cached listings instead of re-crawling.
                     // Skip the crawl (serve cache only) while the platform is cooling down from a
                     // recent block — hitting it again would deepen the block.
-                    val classified = QueryResultCache.get(platformId, searchQuery)
+                    val classified = QueryResultCache.get(platformId, pq)
                         ?: if (BlockCooldown.isCoolingDown(platformId)) emptyList()
                         else run {
-                        val raw = crawler.trackedSearch(searchQuery)
-                        val filtered = RelevanceFilter.filter(raw, searchQuery).map { SoldDetector.classify(it) }
-                        QueryResultCache.put(platformId, searchQuery, filtered)
+                        val raw = crawler.trackedSearch(pq)
+                        val filtered = RelevanceFilter.filter(raw, pq).map { SoldDetector.classify(it) }
+                        QueryResultCache.put(platformId, pq, filtered)
                         filtered
                     }
-                    val result = carPostFilter(classified, searchQuery, isCarQuery, crawler)
+                    val result = carPostFilter(classified, pq, isCarQuery, crawler)
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }
@@ -343,15 +356,18 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 flush()
                             }
 
+                            // Cross-border markets are searched in their own language.
+                            val pq = localizedQuery(searchQuery, platformId)
+
                             // Fresh cached crawl for this exact query skips the crawl entirely, so
                             // re-running a search (e.g. after a filter tweak) fires no requests.
                             // Car post-filtering still runs on the cached set so the new filters apply.
-                            val cached = QueryResultCache.get(platformId, searchQuery)
+                            val cached = QueryResultCache.get(platformId, pq)
                             if (cached != null) {
-                                val filtered = carPostFilter(cached, searchQuery, isCarQuery, crawler)
+                                val filtered = carPostFilter(cached, pq, isCarQuery, crawler)
                                 filtered.forEach { listingRepo.upsert(it) }
                                 val facets = if (isCarQuery)
-                                    CarFilterEngine.facetCounts(cached, searchQuery.toCarFilters() ?: CarFilters())
+                                    CarFilterEngine.facetCounts(cached, pq.toCarFilters() ?: CarFilters())
                                 else emptyMap()
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
@@ -391,24 +407,24 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter) { crawler.search(searchQuery) }
+                                    kotlinx.coroutines.withContext(progressEmitter) { crawler.search(pq) }
                                 }
-                                val irrelevance = RelevanceFilter.irrelevanceReport(rawResults, searchQuery)
+                                val irrelevance = RelevanceFilter.irrelevanceReport(rawResults, pq)
                                 if (irrelevance != null) {
                                     CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
                                 } else {
                                     CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
                                 }
-                                val relevantResults = RelevanceFilter.filter(rawResults, searchQuery)
+                                val relevantResults = RelevanceFilter.filter(rawResults, pq)
                                 val classified = relevantResults.map { SoldDetector.classify(it) }
                                 // Cache the raw relevance-filtered crawl; car post-filtering (card
                                 // filter → detail-verify → final filter) runs after, so a later
                                 // filter tweak re-filters from cache without re-crawling.
-                                QueryResultCache.put(platformId, searchQuery, classified)
-                                val results = carPostFilter(classified, searchQuery, isCarQuery, crawler)
+                                QueryResultCache.put(platformId, pq, classified)
+                                val results = carPostFilter(classified, pq, isCarQuery, crawler)
                                 results.forEach { listingRepo.upsert(it) }
                                 val facets = if (isCarQuery)
-                                    CarFilterEngine.facetCounts(classified, searchQuery.toCarFilters() ?: CarFilters())
+                                    CarFilterEngine.facetCounts(classified, pq.toCarFilters() ?: CarFilters())
                                 else emptyMap()
 
                                 CrawlerSearchEvent(
