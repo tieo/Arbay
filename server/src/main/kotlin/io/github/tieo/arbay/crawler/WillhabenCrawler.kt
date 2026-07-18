@@ -32,6 +32,17 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         return parseSearchResults(html)
     }
 
+    /** Diagnostic only: fetch an arbitrary willhaben URL and return the parsed listing titles, so a
+     *  candidate car-search URL shape can be probed live without guessing. Not on any hot path. */
+    suspend fun debugFetch(url: String): List<String> {
+        val html = fetchWithFallback(
+            client, url, "willhaben-debug",
+            primeUrl = "https://www.willhaben.at",
+            extraWaitMs = 1500,
+        )
+        return parseSearchResults(html).map { it.title }
+    }
+
     private fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
