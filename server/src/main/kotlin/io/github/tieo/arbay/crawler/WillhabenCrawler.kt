@@ -38,11 +38,10 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         val html = fetchWithFallback(client, url, "willhaben-debug", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
         val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return "no __NEXT_DATA__"
         val sb = StringBuilder("len=${data.length}\n")
-        for (kw in listOf("makeModelTree", "\"Marke\"", "navigatorValues", "carmodel", "MODEL/MAKE", "\"MAKE\"")) {
-            val i = data.indexOf(kw)
-            sb.append("\n### $kw @ $i\n")
-            if (i >= 0) sb.append(data.substring(i, (i + 420).coerceAtMost(data.length)))
-        }
+        // Every make label immediately followed by its CAR_MODEL/MAKE numeric id.
+        Regex("\"label\":\"([^\"]{1,30})\"[^}]{0,120}?CAR_MODEL/MAKE\"[^}]{0,60}?\"value\":\"(\\d+)\"")
+            .findAll(data).map { "${it.groupValues[1]}=${it.groupValues[2]}" }.distinct().take(60)
+            .forEach { sb.append(it).append("  ") }
         return sb.toString().take(3800)
     }
 
