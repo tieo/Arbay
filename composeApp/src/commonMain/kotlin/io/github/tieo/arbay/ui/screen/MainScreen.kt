@@ -88,6 +88,9 @@ fun MainScreen(
     var carFilters by remember { mutableStateOf<io.github.tieo.arbay.model.CarFilters?>(null) }
     var carMake by remember { mutableStateOf<io.github.tieo.arbay.model.CarMakeNode?>(null) }
     var carModel by remember { mutableStateOf<io.github.tieo.arbay.model.CarModelNode?>(null) }
+    // Non-null while editing an existing bookmark: the save action updates this one instead of
+    // creating a new bookmark. Set from the card's Edit button (and the edit-filters path).
+    var editingProduct by remember { mutableStateOf<TrackedProduct?>(null) }
     // Blocked keywords for the bookmark whose listings are open — local state so edits filter live.
     var listingsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(listingsProduct?.id) {
@@ -102,6 +105,7 @@ fun MainScreen(
         cameFromDiscovery = showDiscovery
         showDiscovery = false
         addSheetPrefill = prefill
+        editingProduct = null
         addSheetInitialQuery = if (prefill != null) prefill.searchQuery else initialQuery
         showAddSheet = true
     }
@@ -252,6 +256,24 @@ fun MainScreen(
                                 listingsProduct = product
                                 showListings = true
                             },
+                            onEdit = {
+                                editingProduct = product
+                                val (m, mo) = resolveCarNodes(product.searchQuery.text)
+                                if (m != null) {
+                                    // Car bookmark → the structured car form, prefilled.
+                                    carName = product.name
+                                    carQuery = product.searchQuery.text
+                                    carPlatforms = product.searchQuery.platforms
+                                    carFilters = product.searchQuery.toCarFilters()
+                                        ?: io.github.tieo.arbay.model.CarFilters()
+                                    carMake = m
+                                    carModel = mo
+                                    showCarSearch = true
+                                } else {
+                                    // Generic bookmark → the add/edit sheet, prefilled.
+                                    showAddSheet = true
+                                }
+                            },
                         )
                     }
                 }
@@ -339,6 +361,7 @@ fun MainScreen(
             onDismiss = {
                 showCarSearch = false
                 cameFromDiscovery = false
+                editingProduct = null
             },
             onBack = if (cameFromDiscovery) {
                 {
@@ -375,14 +398,33 @@ fun MainScreen(
                 showCarResults = false
                 showCarSearch = true
             },
-            onDismiss = { showCarResults = false },
+            onDismiss = {
+                showCarResults = false
+                editingProduct = null
+            },
             onBack = {
                 showCarResults = false
                 showCarSearch = true
             },
             onBookmark = {
-                productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries, carFilters = carFilters)
+                val edited = editingProduct
+                if (edited != null) {
+                    // Editing an existing car bookmark — update in place, keep id + blocked keywords.
+                    productViewModel.updateProduct(
+                        edited.copy(
+                            name = carName,
+                            searchQuery = edited.searchQuery.copy(
+                                text = carQuery,
+                                platforms = carPlatforms ?: PlatformId.entries,
+                                carFilters = carFilters?.takeUnless { it.isEmpty },
+                            ),
+                        ),
+                    )
+                } else {
+                    productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries, carFilters = carFilters)
+                }
                 showCarResults = false
+                editingProduct = null
             },
         )
     }
@@ -391,24 +433,40 @@ fun MainScreen(
     if (showAddSheet) {
         AddProductSheet(
             prefill = addSheetPrefill,
+            editProduct = editingProduct,
             initialQuery = addSheetInitialQuery,
             onDismiss = {
                 showAddSheet = false
                 addSheetPrefill = null
+                editingProduct = null
                 cameFromDiscovery = false
             },
             onBack = if (cameFromDiscovery) {
                 {
                     showAddSheet = false
                     addSheetPrefill = null
+                    editingProduct = null
                     cameFromDiscovery = false
                     showDiscovery = true
                 }
             } else null,
             onConfirm = { name, query, platforms, identifiers ->
-                productViewModel.createProduct(name, query, platforms, identifiers)
+                val edited = editingProduct
+                if (edited != null) {
+                    // Update in place — preserve id, blocked keywords, and any car filters.
+                    productViewModel.updateProduct(
+                        edited.copy(
+                            name = name,
+                            searchQuery = edited.searchQuery.copy(text = query, platforms = platforms),
+                            identifiers = identifiers,
+                        ),
+                    )
+                } else {
+                    productViewModel.createProduct(name, query, platforms, identifiers)
+                }
                 showAddSheet = false
                 addSheetPrefill = null
+                editingProduct = null
                 cameFromDiscovery = false
             },
         )
@@ -446,6 +504,8 @@ fun MainScreen(
                 {
                     val p = listingsProduct!!
                     val (m, mo) = resolveCarNodes(p.searchQuery.text)
+                    // Editing an existing bookmark's filters — the re-save updates it, not duplicates.
+                    editingProduct = p
                     carName = p.name
                     carQuery = p.searchQuery.text
                     carPlatforms = p.searchQuery.platforms
@@ -539,18 +599,36 @@ internal fun ProductCard(
     product: TrackedProduct,
     onDelete: () -> Unit,
     onViewListings: () -> Unit,
+    onEdit: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Remove bookmark?") },
+            text = { Text("\"${product.name}\" will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { confirmDelete = false; onDelete() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
+    }
 
+    // Whole card opens the listings; Edit/Remove are explicit trailing actions.
     Card(
-        onClick = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        onClick = onViewListings,
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -570,96 +648,33 @@ internal fun ProductCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
+                    // Only show the query when it adds info beyond the label (they're often identical).
+                    val platformLabel = "${product.searchQuery.platforms.size} platforms"
+                    val queryDiffers = product.searchQuery.text.trim()
+                        .equals(product.name.trim(), ignoreCase = true).not()
                     Text(
-                        product.searchQuery.text,
+                        if (queryDiffers) "${product.searchQuery.text}  ·  $platformLabel" else platformLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ) {
-                    Text(
-                        "${product.searchQuery.platforms.size} platforms",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                Spacer(Modifier.width(4.dp))
+
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Outlined.Edit, "Edit",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-
-            // GTIN/MPN badges
-            val hasIds = product.identifiers.gtins.isNotEmpty() || product.identifiers.mpn != null
-            if (hasIds) {
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (product.identifiers.gtins.isNotEmpty()) {
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
-                            Text("GTIN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
-                    }
-                    product.identifiers.mpn?.let {
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
-                            Text("MPN: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
-                    }
-                }
-            }
-
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-
-                if (product.identifiers.gtins.isNotEmpty()) {
-                    Text(
-                        "GTINs: ${product.identifiers.gtins.joinToString(", ")}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                IconButton(onClick = { confirmDelete = true }) {
+                    Icon(
+                        Icons.Outlined.Delete, "Remove",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error,
                     )
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    product.searchQuery.platforms.forEach { platform ->
-                        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                            Text(
-                                platform.displayName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = onViewListings) {
-                        Icon(Icons.Outlined.Search, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("View Listings", style = MaterialTheme.typography.labelMedium)
-                    }
-
-                    Row {
-                        TextButton(
-                            onClick = onDelete,
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        ) {
-                            Icon(Icons.Outlined.Delete, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Remove", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
                 }
             }
         }
@@ -774,21 +789,27 @@ internal fun FreeItemsMainCard(
 @Composable
 private fun AddProductSheet(
     prefill: KnownProduct? = null,
+    editProduct: TrackedProduct? = null,
     initialQuery: String = "",
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
     onConfirm: (name: String, query: String, platforms: List<PlatformId>, identifiers: ProductIdentifier) -> Unit,
 ) {
-    var query by remember { mutableStateOf(prefill?.searchQuery ?: initialQuery) }
-    var name by remember { mutableStateOf(prefill?.displayName ?: initialQuery) }
+    var query by remember { mutableStateOf(editProduct?.searchQuery?.text ?: prefill?.searchQuery ?: initialQuery) }
+    var name by remember { mutableStateOf(editProduct?.name ?: prefill?.displayName ?: initialQuery) }
     // Auto-fill name from query when user hasn't manually edited the name
-    var nameManuallyEdited by remember { mutableStateOf(prefill != null) }
-    var gtinText by remember { mutableStateOf(prefill?.gtins?.joinToString(", ") ?: "") }
-    var mpn by remember { mutableStateOf(prefill?.mpn ?: "") }
-    var showIdentifiers by remember { mutableStateOf(prefill != null && (prefill.mpn != null || prefill.gtins.isNotEmpty())) }
+    var nameManuallyEdited by remember { mutableStateOf(prefill != null || editProduct != null) }
+    var gtinText by remember { mutableStateOf(editProduct?.identifiers?.gtins?.joinToString(", ") ?: prefill?.gtins?.joinToString(", ") ?: "") }
+    var mpn by remember { mutableStateOf(editProduct?.identifiers?.mpn ?: prefill?.mpn ?: "") }
+    var showIdentifiers by remember {
+        mutableStateOf(
+            (editProduct?.identifiers?.let { it.mpn != null || it.gtins.isNotEmpty() } ?: false) ||
+                (prefill != null && (prefill.mpn != null || prefill.gtins.isNotEmpty())),
+        )
+    }
     val selectedPlatforms = remember {
         mutableStateListOf<PlatformId>().apply {
-            addAll(prefill?.effectivePlatforms ?: PlatformId.entries)
+            addAll(editProduct?.searchQuery?.platforms ?: prefill?.effectivePlatforms ?: PlatformId.entries)
         }
     }
 
@@ -803,7 +824,11 @@ private fun AddProductSheet(
                 .padding(bottom = 32.dp),
         ) {
             Text(
-                if (prefill != null) "Save ${prefill.displayName}" else "Save Search",
+                when {
+                    editProduct != null -> "Edit bookmark"
+                    prefill != null -> "Save ${prefill.displayName}"
+                    else -> "Save Search"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
