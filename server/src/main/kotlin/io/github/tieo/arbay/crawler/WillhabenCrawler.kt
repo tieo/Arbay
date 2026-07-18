@@ -13,7 +13,16 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
+        // A car query goes to willhaben's used-car vertical (Motor), not the general marktplatz —
+        // the latter's keyword search doesn't reach vehicle stock. The __NEXT_DATA__ shape
+        // (searchResult.advertSummaryList.advertSummary) is the same, so the parser is shared;
+        // vehicle specs are left to the central text enrichment (soft-pass, per the provenance model).
+        val isCar = CarQueryResolver.resolve(query.positiveText) != null
+        val url = if (isCar) {
+            "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse?keyword=${query.positiveText.encodeUrl()}"
+        } else {
+            "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
+        }
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.
         val html = fetchWithFallback(
