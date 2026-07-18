@@ -340,6 +340,15 @@ fun MainScreen(
             },
             onFreeItems = { showFreeItems = true },
             onCarSearch = {
+                // A fresh car search — clear any state left from a previous edit so the form
+                // opens empty, not prefilled with the last bookmark's make/model/filters.
+                editingProduct = null
+                carName = ""
+                carQuery = ""
+                carPlatforms = null
+                carFilters = null
+                carMake = null
+                carModel = null
                 cameFromDiscovery = true
                 showDiscovery = false
                 showCarSearch = true
