@@ -80,6 +80,10 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
             val priceEl = item.selectFirst("[class*=hz-Listing-price--desktop]")
                 ?: item.selectFirst("[class*=hz-Listing-price]")
                 ?: return@mapNotNull null
+            // A monthly amount is a private-lease / financing price, not a sale — drop it so it can't
+            // masquerade as a cheap "best price" (Marktplaats renders these with a /mnd or p/m suffix).
+            if (Regex("""(?i)(\bp\s?/?\s?m\b|/\s?mnd|per\s?maand|/\s?maand)""").containsMatchIn(priceEl.text()))
+                return@mapNotNull null
             // Unwrap nested h5/span if present
             val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
             val price = Money.parse(priceText) ?: return@mapNotNull null
