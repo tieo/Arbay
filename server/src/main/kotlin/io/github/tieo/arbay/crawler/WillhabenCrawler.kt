@@ -38,15 +38,12 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         val html = fetchWithFallback(client, url, "willhaben-debug", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
         val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return "no __NEXT_DATA__"
         val sb = StringBuilder("len=${data.length}\n")
-        Regex("Volkswagen").findAll(data).take(1).forEach { m ->
-            sb.append("[Volkswagen ctx] ")
-                .append(data.substring((m.range.first - 60).coerceAtLeast(0), (m.range.last + 280).coerceAtMost(data.length)))
-                .append("\n")
+        for (kw in listOf("makeModelTree", "\"Marke\"", "navigatorValues", "carmodel", "MODEL/MAKE", "\"MAKE\"")) {
+            val i = data.indexOf(kw)
+            sb.append("\n### $kw @ $i\n")
+            if (i >= 0) sb.append(data.substring(i, (i + 420).coerceAtMost(data.length)))
         }
-        Regex("\"?(webLink|seoUrl|uri|urlName|navigatorValue|label)\"?\\s*:\\s*\"[^\"]{0,90}")
-            .findAll(data).map { it.value }.filter { it.contains("make", true) || it.contains("auto", true) || it.contains("gebraucht", true) }
-            .distinct().take(20).forEach { sb.append(it).append("\n") }
-        return sb.toString().take(3500)
+        return sb.toString().take(3800)
     }
 
     private fun parseSearchResults(html: String): List<Listing> {
