@@ -5,8 +5,16 @@ import io.ktor.client.*
 import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 
-class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
-    override val platformId = PlatformId.MARKTPLAATS
+/**
+ * Crawler for the Adevinta classifieds stack shared by marktplaats.nl (NL) and 2dehands.be (BE):
+ * same /q/ search path, same hz-Listing markup, same hz-attributes spec row. Only the host and
+ * the country the listings sit in differ.
+ */
+class MarktplaatsCrawler(
+    private val client: HttpClient,
+    override val platformId: PlatformId = PlatformId.MARKTPLAATS,
+    private val host: String = "https://www.marktplaats.nl",
+) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
@@ -25,18 +33,18 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
         // Free-text search for everything. The old `/l/auto-s/q/` cars-category path returns 0 now
         // (the category-scoped URL rotted); the plain `/q/` search works, and for a car query the
         // make+model text is specific enough that relevance + the part guard keep it car-focused.
-        val base = "https://www.marktplaats.nl/q/${text.encodeUrl()}/"
+        val base = "$host/q/${text.encodeUrl()}/"
 
         for (page in 1..maxPages) {
             val url = if (page == 1) base else "${base}p/$page/"
             val html = try {
-                CurlCffiClient.fetch(url, primeUrl = if (page == 1) "https://www.marktplaats.nl" else null)
+                CurlCffiClient.fetch(url, primeUrl = if (page == 1) host else null)
             } catch (e: CrawlerBlockedException) {
                 if (page == 1) throw e
                 break
             }
 
-            val pageResults = parseSearchResults(html)
+            val pageResults = parseSearchResults(html, requireVehicleSpecs = car != null)
             if (pageResults.isEmpty()) break
 
             val newResults = pageResults.filter { seenIds.add(it.externalId) }
@@ -49,7 +57,13 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
         return allResults
     }
 
-    private fun parseSearchResults(html: String): List<Listing> {
+    /**
+     * @param requireVehicleSpecs keep only ads that state a year or an odometer reading in the
+     *  attribute row. On a car query this separates vehicles from the parts trade that dominates
+     *  these classifieds: a vehicle ad always carries the row, a part ("Roetfilter", "ABS Pomp",
+     *  "Expansievat van een Crafter") never does.
+     */
+    private fun parseSearchResults(html: String, requireVehicleSpecs: Boolean = false): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
@@ -62,7 +76,7 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
             // Link: find the first <a> with an href to /v/ (actual listing page)
             val linkEl = item.selectFirst("a[href^='/v/']") ?: return@mapNotNull null
             val href = linkEl.attr("href")
-            val url = "https://www.marktplaats.nl$href"
+            val url = "$host$href"
             val externalId = Regex("""[/-]a?(\d{7,})""").find(href)?.groupValues?.get(1)
                 ?: Regex("""/m(\d+)""").find(href)?.groupValues?.get(1)
                 ?: return@mapNotNull null
@@ -113,6 +127,10 @@ class MarktplaatsCrawler(private val client: HttpClient) : Crawler {
                 else VehicleTextParser.verifiedByPresence(
                     VehicleInfo(mileageKm = km, firstRegYear = year, condition = condition),
                 )
+            }
+
+            if (requireVehicleSpecs && vehicle?.let { it.mileageKm != null || it.firstRegYear != null } != true) {
+                return@mapNotNull null
             }
 
             val descriptionText = item.selectFirst("[class*=hz-Listing-description]")?.text()

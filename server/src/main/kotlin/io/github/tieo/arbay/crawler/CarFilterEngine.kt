@@ -23,7 +23,7 @@ object CarFilterEngine {
     /** Sites that carry non-car inventory, where a car query can return parts/accessories. */
     private val GENERAL_PLATFORMS = setOf(
         PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
-        PlatformId.RICARDO, PlatformId.SUBITO,
+        PlatformId.RICARDO, PlatformId.SUBITO, PlatformId.TWEEDEHANDS,
     )
 
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
@@ -164,6 +164,14 @@ object CarFilterEngine {
         RegexOption.IGNORE_CASE,
     )
 
+    // Dutch salvage ads name the component and the donor vehicle: "Expansievat van een Volkswagen
+    // Crafter", "Spiegel Schakelaar van een ...". A whole vehicle is never described as coming from
+    // another vehicle, and a real listing carries verified specs which exempt it from this guard.
+    private val partFromDonorVehicle = Regex(
+        """\b(van|voor)\s+een\s+\w""",
+        RegexOption.IGNORE_CASE,
+    )
+
     // Body panels a van legitimately lists as equipment ("Crafter 35 mit Trennwand"), so they only
     // mark a part when the title leads with them, which is how a parts ad is written.
     private val partAccessoryLead = Regex(
@@ -188,6 +196,7 @@ object CarFilterEngine {
         } ?: false
         if (!hasVehicleSpec && partAccessory.containsMatchIn(listing.title)) return true
         if (!hasVehicleSpec && partAccessoryLead.containsMatchIn(listing.title)) return true
+        if (!hasVehicleSpec && partFromDonorVehicle.containsMatchIn(listing.title)) return true
         return false
     }
 }

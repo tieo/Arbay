@@ -30,6 +30,7 @@ enum class PlatformId(
     AUTOVIT("Autovit", "https://www.autovit.ro", country = "RO"),
     RICARDO("ricardo.ch", "https://www.ricardo.ch", country = "CH"),
     SUBITO("Subito", "https://www.subito.it", "it", "IT"),
+    TWEEDEHANDS("2dehands", "https://www.2dehands.be", "nl", "BE"),
     VINTED_DE("Vinted DE", "https://www.vinted.de"),
     BACKMARKET_DE("Back Market DE", "https://www.backmarket.de"),
     REBUY("reBuy", "https://www.rebuy.de"),

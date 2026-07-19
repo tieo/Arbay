@@ -303,4 +303,23 @@ class CarFilterEngineTest {
     ) = io.github.tieo.arbay.crawler.VehicleTextParser.verifiedByPresence(
         VehicleInfo(firstRegYear = firstRegYear, mileageKm = mileageKm, powerKw = powerKw, gearbox = gearbox),
     )
+
+    @Test
+    fun `dutch salvage part naming its donor vehicle is dropped`() {
+        // "Expansievat van een Volkswagen Crafter" is a component taken from a van, not a van.
+        val part = carListing("Expansievat van een Volkswagen Crafter")
+        val van = carListing("Volkswagen Crafter 2.0 TDI L3H2")
+        val kept = CarFilterEngine.apply(listOf(part, van), CarFilters())
+        assertEquals(listOf("Volkswagen Crafter 2.0 TDI L3H2"), kept.map { it.title })
+    }
+
+    private fun carListing(title: String) = Listing(
+        id = "MARKTPLAATS:$title",
+        platformId = PlatformId.MARKTPLAATS,
+        externalId = title,
+        url = "https://www.2dehands.be/v/1",
+        title = title,
+        price = Money(900_000, Currency.EUR),
+        scrapedAt = kotlinx.datetime.Clock.System.now(),
+    )
 }
