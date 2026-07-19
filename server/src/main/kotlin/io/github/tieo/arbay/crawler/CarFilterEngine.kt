@@ -23,7 +23,7 @@ object CarFilterEngine {
     /** Sites that carry non-car inventory, where a car query can return parts/accessories. */
     private val GENERAL_PLATFORMS = setOf(
         PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
-        PlatformId.RICARDO,
+        PlatformId.RICARDO, PlatformId.SUBITO,
     )
 
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =

@@ -29,6 +29,7 @@ enum class PlatformId(
     AUTOSCOUT24_CH("AutoScout24 CH", "https://www.autoscout24.ch", country = "CH"),
     AUTOVIT("Autovit", "https://www.autovit.ro", country = "RO"),
     RICARDO("ricardo.ch", "https://www.ricardo.ch", country = "CH"),
+    SUBITO("Subito", "https://www.subito.it", "it", "IT"),
     VINTED_DE("Vinted DE", "https://www.vinted.de"),
     BACKMARKET_DE("Back Market DE", "https://www.backmarket.de"),
     REBUY("reBuy", "https://www.rebuy.de"),
