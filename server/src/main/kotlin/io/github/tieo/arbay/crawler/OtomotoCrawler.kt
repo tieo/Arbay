@@ -19,8 +19,17 @@ import org.jsoup.Jsoup
  * even for commercial models such as the VW Crafter or Mercedes Sprinter, which otomoto
  * still lists there with a working model filter.
  */
-class OtomotoCrawler(private val client: HttpClient) : Crawler {
-    override val platformId = PlatformId.OTOMOTO
+class OtomotoCrawler(
+    private val client: HttpClient,
+    override val platformId: PlatformId = PlatformId.OTOMOTO,
+    private val host: String = "https://www.otomoto.pl",
+    private val categoryPath: String = "osobowe",
+    // Currency the site quotes prices and applies its price filter in. Read per-listing from the
+    // node's currencyCode where present; this is the fallback and the price-filter unit.
+    private val siteCurrency: Currency = Currency.PLN,
+    private val countryCode: String = "PL",
+    private val siteLabel: String = "OTOMoto",
+) : Crawler {
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -28,7 +37,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
         val carQuery = CarQueryResolver.resolve(query.positiveText)
 
         val basePath = buildString {
-            append("https://www.otomoto.pl/osobowe")
+            append("$host/$categoryPath")
             if (carQuery != null) {
                 append("/").append(carQuery.makeSlug)
                 carQuery.modelSlug?.let { append("/").append(it) }
@@ -47,7 +56,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
             } else {
                 if (filters.isEmpty()) "$basePath?page=$page" else "$basePath?$filters&page=$page"
             }
-            val html = fetchWithFallback(client, url, "OTOMoto")
+            val html = fetchWithFallback(client, url, siteLabel)
             val listings = parse(html)
 
             if (listings.isEmpty()) break
@@ -99,14 +108,14 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
         query.maxMileageKm?.let { enc("search[filter_float_mileage:to]", it.toString()) }
 
         query.minPrice?.let { min ->
-            val plnCents = if (min.currency == Currency.PLN) min.amount
-            else ExchangeRates.convert(min.amount, min.currency.name, "PLN")
-            enc("search[filter_float_price:from]", (plnCents / 100).toString())
+            val cents = if (min.currency == siteCurrency) min.amount
+            else ExchangeRates.convert(min.amount, min.currency.name, siteCurrency.name)
+            enc("search[filter_float_price:from]", (cents / 100).toString())
         }
         query.maxPrice?.let { max ->
-            val plnCents = if (max.currency == Currency.PLN) max.amount
-            else ExchangeRates.convert(max.amount, max.currency.name, "PLN")
-            enc("search[filter_float_price:to]", (plnCents / 100).toString())
+            val cents = if (max.currency == siteCurrency) max.amount
+            else ExchangeRates.convert(max.amount, max.currency.name, siteCurrency.name)
+            enc("search[filter_float_price:to]", (cents / 100).toString())
         }
 
         query.minPowerKw?.let { kw ->
@@ -168,7 +177,11 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
         val amount = node["price"]?.jsonObject?.get("amount")?.jsonObject ?: return null
         val units = amount["units"]?.jsonPrimitive?.longOrNull?.takeIf { it > 0 } ?: return null
         val nanos = amount["nanos"]?.jsonPrimitive?.longOrNull ?: 0L
-        val price = Money(units * 100 + nanos / 10_000_000, Currency.PLN)
+        // The node states its own currency (Otomoto quotes PLN, Autovit quotes EUR); fall back to
+        // the site default when absent or unrecognised.
+        val currency = amount["currencyCode"]?.jsonPrimitive?.contentOrNull
+            ?.let { code -> Currency.entries.firstOrNull { it.name == code } } ?: siteCurrency
+        val price = Money(units * 100 + nanos / 10_000_000, currency)
 
         val imageUrl = node["thumbnail"]?.jsonObject?.let { thumb ->
             thumb["x2"]?.jsonPrimitive?.contentOrNull ?: thumb["x1"]?.jsonPrimitive?.contentOrNull
@@ -177,7 +190,7 @@ class OtomotoCrawler(private val client: HttpClient) : Crawler {
         val city = node["location"]?.jsonObject
             ?.get("city")?.jsonObject
             ?.get("name")?.jsonPrimitive?.contentOrNull
-        val location = Location(city = city, country = "PL")
+        val location = Location(city = city, country = countryCode)
 
         // Each parameter carries a localized displayValue ("Manualna", "150 000 km") used
         // for the description text and a canonical machine value ("manual", "150000")

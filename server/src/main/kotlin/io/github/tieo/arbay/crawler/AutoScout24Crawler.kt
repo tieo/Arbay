@@ -9,8 +9,8 @@ import org.jsoup.Jsoup
 class AutoScout24Crawler(
     private val client: HttpClient,
     private val countries: List<String> = EUROPE,
+    override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
 ) : Crawler {
-    override val platformId = PlatformId.AUTOSCOUT24
 
     private val countryParam: String get() = countries.joinToString("%2C")
 
