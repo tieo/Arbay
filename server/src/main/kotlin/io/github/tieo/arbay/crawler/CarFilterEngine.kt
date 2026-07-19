@@ -23,6 +23,7 @@ object CarFilterEngine {
     /** Sites that carry non-car inventory, where a car query can return parts/accessories. */
     private val GENERAL_PLATFORMS = setOf(
         PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
+        PlatformId.RICARDO,
     )
 
     fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
@@ -154,9 +155,19 @@ object CarFilterEngine {
             """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
             """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
             """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|\bsteuergerät\b|""" +
+            // Never a whole vehicle: a repair kit, a bulb, a brochure, a lift kit, a keyring.
+            """\breparatursatz\b|\bkeilrippenriemen\b|\bkennzeichenleuchte\b|\bpositionsleuchte\b|""" +
+            """\bschl(ü|ue)sselanh(ä|ae)nger\b|\bprospekt\b|\bpreisliste\b|\bh(ö|oe)herlegungs?\s?kit\b|""" +
             """\b(bracket|floor ?mat|seat ?cover|headlight|tail ?light|fender|mudflap|wheel ?trim|badge)\b|""" +
             // Dutch (Marktplaats): unambiguous car-part nouns, never a whole-vehicle listing.
             """\b(koplamp|achterlicht|spatbord|onderdeel|onderdelen|dakdrager|portier|motorkap|spiegelkap|stoelhoezen?)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // Body panels a van legitimately lists as equipment ("Crafter 35 mit Trennwand"), so they only
+    // mark a part when the title leads with them, which is how a parts ad is written.
+    private val partAccessoryLead = Regex(
+        """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -176,6 +187,7 @@ object CarFilterEngine {
                 v.isVerified(VehicleField.POWER)
         } ?: false
         if (!hasVehicleSpec && partAccessory.containsMatchIn(listing.title)) return true
+        if (!hasVehicleSpec && partAccessoryLead.containsMatchIn(listing.title)) return true
         return false
     }
 }

@@ -44,6 +44,7 @@ object CrawlerRegistry {
         PlatformId.BILBASEN to BilbasenCrawler(httpClient),
         PlatformId.BYTBIL to BytbilCrawler(httpClient),
         PlatformId.SAUTO to SautoCrawler(httpClient),
+        PlatformId.RICARDO to RicardoCrawler(httpClient),
         // Autovit.ro (Romania) runs the same OLX/Otomoto stack; only host, category and currency differ.
         PlatformId.AUTOVIT to OtomotoCrawler(
             httpClient,
