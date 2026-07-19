@@ -46,6 +46,7 @@ object CrawlerRegistry {
         PlatformId.SAUTO to SautoCrawler(httpClient),
         PlatformId.RICARDO to RicardoCrawler(httpClient),
         PlatformId.SUBITO to SubitoCrawler(httpClient),
+        PlatformId.AUTOPLIUS to AutopliusCrawler(httpClient),
         // 2dehands.be is the Belgian sibling of marktplaats.nl on the same Adevinta stack.
         PlatformId.TWEEDEHANDS to MarktplaatsCrawler(
             httpClient,
