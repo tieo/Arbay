@@ -227,7 +227,11 @@ private fun isRetryable(e: Exception): Boolean {
         e is io.ktor.client.plugins.HttpRequestTimeoutException ||
         e is io.ktor.client.network.sockets.ConnectTimeoutException ||
         msg.contains("timeout") || msg.contains("prematurely closed") ||
-        msg.contains("connection reset") || msg.contains("connection refused") || msg.contains("eof")
+        msg.contains("connection reset") || msg.contains("connection refused") || msg.contains("eof") ||
+        // A redirect loop ("Max send count 20 exceeded") means the site bounces this client over a
+        // cookie or consent hop it cannot satisfy. Another engine carrying a browser's cookie jar
+        // usually loads the same URL fine, so the chain must continue rather than abort here.
+        msg.contains("max send count")
 }
 
 internal fun classifyHttpError(response: HttpResponse): ErrorType {
