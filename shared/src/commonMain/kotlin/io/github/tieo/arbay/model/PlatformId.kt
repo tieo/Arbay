@@ -33,6 +33,7 @@ enum class PlatformId(
     TWEEDEHANDS("2dehands", "https://www.2dehands.be", "nl", "BE"),
     AUTOPLIUS("Autoplius", "https://autoplius.lt", country = "LT"),
     NETTIAUTO("Nettiauto", "https://www.nettiauto.com", country = "FI"),
+    FINN("FINN", "https://www.finn.no", country = "NO"),
     VINTED_DE("Vinted DE", "https://www.vinted.de"),
     BACKMARKET_DE("Back Market DE", "https://www.backmarket.de"),
     REBUY("reBuy", "https://www.rebuy.de"),

@@ -59,6 +59,7 @@ private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
     PlatformId.TWEEDEHANDS to "BE",
     PlatformId.AUTOPLIUS to "LT",
     PlatformId.NETTIAUTO to "FI",
+    PlatformId.FINN to "NO",
 )
 
 /** Common German exterior colours offered as multi-select chips. */
