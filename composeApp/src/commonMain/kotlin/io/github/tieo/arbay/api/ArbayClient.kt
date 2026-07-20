@@ -93,6 +93,9 @@ class ArbayClient(
 
 
     @Serializable
+    data class MakeModelsDto(val makeId: String = "", val models: List<CarModelNode> = emptyList())
+
+    @Serializable
     data class CrawlerConfigDto(
         val maxResultsPerPlatform: Int = 60,
         val maxPages: Int = 8,
@@ -105,6 +108,14 @@ class ArbayClient(
 
     suspend fun getCarTaxonomy(): CarTaxonomy =
         client.get("$baseUrl/api/car-taxonomy").body()
+
+    /** Live model catalog for a make, probed from the site and cached server-side. Returns null
+     *  on any error so the caller keeps the bundled models. */
+    suspend fun getCarModels(makeId: String): List<CarModelNode>? = try {
+        client.get("$baseUrl/api/car-taxonomy/models/$makeId").body<MakeModelsDto>().models
+    } catch (_: Exception) {
+        null
+    }
 
     suspend fun getCrawlerConfig(): CrawlerConfigDto =
         client.get("$baseUrl/api/crawler/config").body()

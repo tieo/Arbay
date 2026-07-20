@@ -87,12 +87,21 @@ fun CarSearchSheet(
     initialMake: CarMakeNode? = null,
     initialModel: CarModelNode? = null,
     initialFilters: CarFilters? = null,
+    // Fetches the make's live model catalog from the server (probed from the site, cached). Returns
+    // null on failure, so the bundled models stay. Defaults to none for previews.
+    loadModels: suspend (makeId: String) -> List<CarModelNode>? = { null },
 ) {
     val taxonomy = CarTaxonomyStore.taxonomy
     var make by remember { mutableStateOf(initialMake) }
     var model by remember { mutableStateOf(initialModel) }
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
+    // Live models for the selected make, replacing the bundled seed once fetched.
+    var liveModels by remember { mutableStateOf<List<CarModelNode>?>(null) }
+    LaunchedEffect(make?.id) {
+        liveModels = null
+        make?.id?.let { liveModels = loadModels(it) }
+    }
     // Open the advanced section if any advanced filter is already set (editing an existing search).
     var showMore by remember {
         mutableStateOf(initialFilters?.let {
@@ -431,7 +440,7 @@ fun CarSearchSheet(
         make?.let { mk ->
             SearchablePickerDialog(
                 title = "Select ${mk.name} model",
-                options = mk.models,
+                options = liveModels?.takeIf { it.isNotEmpty() } ?: mk.models,
                 labelOf = { it.name },
                 onDismiss = { showModelPicker = false },
                 onSelect = { picked ->
