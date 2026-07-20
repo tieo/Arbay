@@ -35,6 +35,23 @@ object BlockAlerter {
         fire(platform, "$platform block rate $pct% ($blocks/$total). IP may be getting flagged.")
     }
 
+    /** Send an arbitrary push (used by the saved-search updater). No-op when ntfy is unconfigured. */
+    fun notify(title: String, message: String) {
+        if (ntfyUrl == null) return
+        Thread {
+            try {
+                val req = HttpRequest.newBuilder(URI.create(ntfyUrl))
+                    .header("Title", title)
+                    .header("Tags", "mag")
+                    .POST(HttpRequest.BodyPublishers.ofString(message))
+                    .build()
+                http.send(req, HttpResponse.BodyHandlers.discarding())
+            } catch (e: Exception) {
+                log.warn("ntfy notify failed: ${e.message}")
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
     private fun fire(platform: String, message: String) {
         Thread {
             try {
