@@ -57,6 +57,31 @@ class MarktplaatsCrawler(
         return allResults
     }
 
+    private companion object {
+        /** A monthly instalment: "€373 p/mnd", "€597 p/m", or a bare "Leaseprijs: € 131". */
+        val LEASE_PRICE = Regex(
+            """(?:€\s?([\d.]{1,7})(?:,\d{2})?[,\-\s]*(?:p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand)""" +
+                """|lease\s?prijs\s*:?\s*€\s?([\d.]{1,7}))""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** An advert whose title offers a lease rather than a sale, so its price is an instalment
+         *  and the vehicle is not actually for sale at that figure. */
+        val LEASE_OFFER_TITLE = Regex(
+            """^\s*(zakelijke|financial|private|operational)\s*lease\b|^\s*lease\s*(vanaf|deal)\b""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** What the van actually sells for, where a lease advert also states it. */
+        val PURCHASE_PRICE = Regex(
+            """(?:koop\s?(?:direct)?\s?voor|koopprijs|vraagprijs)\s*:?\s*€\s?([\d.]{2,9})""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** Dutch amounts group thousands with a dot: "36.250" is 36250 euro. */
+        fun String.euroAmount(): Long? = replace(".", "").toLongOrNull()
+    }
+
     /**
      * @param requireVehicleSpecs keep only ads that state a year or an odometer reading in the
      *  attribute row. On a car query this separates vehicles from the parts trade that dominates
@@ -96,21 +121,31 @@ class MarktplaatsCrawler(
                 ?: return@mapNotNull null
             // Unwrap nested h5/span if present
             val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
-            val price = Money.parse(priceText) ?: return@mapNotNull null
+            val cardPrice = Money.parse(priceText) ?: return@mapNotNull null
 
-            // Drop lease/financing OFFERS structurally (not by price value). Marktplaats shows the
-            // MONTHLY amount as the price (h5 "€ 373,-") with "Financial lease voor €373 p/mnd" in the
-            // blurb. Two safe signals: (a) a "€<amt> p/mnd" whose amount equals the listed price — the
-            // price IS the monthly figure; (b) an explicit "financial/private/operational lease" plus a
-            // per-month marker. A real sale that merely mentions a lease option (price €10.950, blurb
-            // "Leaseprijs: € 131") matches neither and stays.
+            // A lease advert puts the MONTHLY instalment where a sale puts the asking price, in
+            // several shapes: "Financial lease voor €373 p/mnd", "... €597 p/m of koop direct voor
+            // €36.250,-", and a bare "Leaseprijs: € 131" with no per-month marker at all. Showing
+            // any of them as the price advertises a van at a fraction of what it costs.
+            //
+            // Where the advert also states what the van actually sells for, that price is used;
+            // otherwise the listing is dropped, because its price cannot be trusted. This is a
+            // structural read of the advert, never a threshold on the amount: a genuinely cheap or
+            // broken van has no lease wording and stays.
             val cardText = item.text()
-            val leaseAmt = Regex("""€\s?([\d.]{1,7})[,\-\s]*(?:p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand)""", RegexOption.IGNORE_CASE)
-                .find(cardText)?.groupValues?.get(1)?.replace(".", "")?.toLongOrNull()
-            val priceIsMonthly = leaseAmt != null && leaseAmt == price.amount / 100
-            val explicitLease = Regex("""(financial|private|operational|zakelijk)\s*lease""", RegexOption.IGNORE_CASE).containsMatchIn(cardText) &&
-                Regex("""p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand""", RegexOption.IGNORE_CASE).containsMatchIn(cardText)
-            if (priceIsMonthly || explicitLease) return@mapNotNull null
+            val leaseMatch = LEASE_PRICE.find(cardText)
+            val leasePrice = leaseMatch?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }?.euroAmount()
+            val priceIsInstalment = leasePrice != null && leasePrice == cardPrice.amount / 100
+            val purchasePrice = PURCHASE_PRICE.find(cardText)?.groupValues?.get(1)?.euroAmount()
+
+            val isLeaseOffer = priceIsInstalment || LEASE_OFFER_TITLE.containsMatchIn(title)
+            val price = when {
+                // A stated purchase price above the instalment is what the van actually costs.
+                isLeaseOffer && purchasePrice != null && purchasePrice > cardPrice.amount / 100 ->
+                    Money(purchasePrice * 100, Currency.EUR)
+                isLeaseOffer -> return@mapNotNull null
+                else -> cardPrice
+            }
 
             // Structured spec row (Bouwjaar / conditie / kilometerstand), rendered as hz-attributes
             // and distinct from the marketing blurb. Parsing it yields verified mileage + year, so the
