@@ -45,28 +45,15 @@ class OtomotoCrawler(
         }
 
         val filters = filterParams(query)
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             // Page 1 uses no page param; subsequent pages append &page=N after the filter params.
             val url = if (page <= 1) {
                 if (filters.isEmpty()) basePath else "$basePath?$filters"
             } else {
                 if (filters.isEmpty()) "$basePath?page=$page" else "$basePath?$filters&page=$page"
             }
-            val html = fetchWithFallback(client, url, siteLabel)
-            val listings = parse(html)
-
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, siteLabel))
         }
-
-        return seen.values.toList()
     }
 
     /**

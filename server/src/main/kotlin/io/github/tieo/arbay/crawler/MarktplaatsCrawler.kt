@@ -26,44 +26,24 @@ class MarktplaatsCrawler(
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val allResults = mutableListOf<Listing>()
-        val seenIds = mutableSetOf<String>()
-        val maxPages = CrawlerConfig.current.maxPages
-
-        // Car queries are scoped to the auto-s (cars) category; everything else is a
-        // free-text marketplace search. Pagination is a /p/N/ suffix on the base URL
-        // (verified for both paths).
+        // Car queries carry their make+model as the free-text term; everything else searches the
+        // marketplace verbatim. Pagination is a /p/N/ suffix on the base URL. The old `/l/auto-s/q/`
+        // cars-category path returns 0 now (the category-scoped URL rotted); the plain `/q/` search
+        // works, and for a car query the make+model text plus relevance + the part guard keep it
+        // car-focused.
         val car = CarQueryResolver.resolve(query.positiveText)
         val text = if (car != null) {
             listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
         } else {
             query.positiveText
         }
-        // Free-text search for everything. The old `/l/auto-s/q/` cars-category path returns 0 now
-        // (the category-scoped URL rotted); the plain `/q/` search works, and for a car query the
-        // make+model text is specific enough that relevance + the part guard keep it car-focused.
         val base = "$host/q/${text.encodeUrl()}/"
 
-        for (page in 1..maxPages) {
-            val url = if (page == 1) base else "${base}p/$page/"
-            val html = try {
-                CurlCffiClient.fetch(url, primeUrl = if (page == 1) host else null)
-            } catch (e: CrawlerBlockedException) {
-                if (page == 1) throw e
-                break
-            }
-
-            val pageResults = parseSearchResults(html, requireVehicleSpecs = car != null)
-            if (pageResults.isEmpty()) break
-
-            val newResults = pageResults.filter { seenIds.add(it.externalId) }
-            allResults.addAll(newResults)
-
-            if (newResults.size < 10) break
-            if (allResults.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+        return paginate(query) { page ->
+            val url = if (page <= 1) base else "${base}p/$page/"
+            val html = CurlCffiClient.fetch(url, primeUrl = if (page <= 1) host else null)
+            parseSearchResults(html, requireVehicleSpecs = car != null)
         }
-
-        return allResults
     }
 
     private companion object {

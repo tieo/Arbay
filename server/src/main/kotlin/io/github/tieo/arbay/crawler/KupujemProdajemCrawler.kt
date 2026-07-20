@@ -29,30 +29,11 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
             query.positiveText
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             val base = "https://www.kupujemprodajem.com/automobili/pretraga?keywords=${keyword.encodeUrl()}"
             val url = if (page <= 1) base else "$base&page=$page"
-
-            val html = try {
-                fetchWithFallback(client, url, "KupujemProdajem")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
-                break
-            }
-
-            val listings = parse(html, car?.modelSlug)
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, "KupujemProdajem"), car?.modelSlug)
         }
-
-        return seen.values.toList()
     }
 
     /** @param modelSlug when set, keep only ads whose car_model_name matches, since the keyword is loose. */

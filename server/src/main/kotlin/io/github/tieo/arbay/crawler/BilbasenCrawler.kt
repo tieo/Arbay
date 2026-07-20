@@ -24,25 +24,12 @@ class BilbasenCrawler(private val client: HttpClient) : Crawler {
             }
         } ?: query.positiveText
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             val pageParam = if (page <= 1) "" else "&page=$page"
             val url = "https://www.bilbasen.dk/brugt/bil?free=${searchText.encodeUrl()}" +
                 "&includeengroscvr=true&includeleasing=false${filterParams(query)}$pageParam"
-            val html = fetchWithFallback(client, url, "Bilbasen", waitSelector = "article[class^=Listing_listing__]")
-            val listings = parse(html)
-
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, "Bilbasen", waitSelector = "article[class^=Listing_listing__]"))
         }
-
-        return seen.values.toList()
     }
 
     /**

@@ -25,30 +25,11 @@ class FinnCrawler(private val client: HttpClient) : Crawler {
             query.positiveText
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             val base = "https://www.finn.no/mobility/search/car?q=${text.encodeUrl()}"
             val url = if (page <= 1) base else "$base&page=$page"
-
-            val html = try {
-                fetchWithFallback(client, url, "FINN")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
-                break
-            }
-
-            val listings = parse(html)
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, "FINN"))
         }
-
-        return seen.values.toList()
     }
 
     internal fun parse(html: String): List<Listing> {

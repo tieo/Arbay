@@ -24,24 +24,12 @@ class AutoScout24Crawler(
             carQuery.modelSlug?.let { append("/").append(it) }
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             val pageParam = if (page <= 1) "" else "&page=$page"
             val url = "$basePath?atype=C&cy=$countryParam&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}$pageParam"
             val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
-            val listings = parseFromNextData(html) ?: parseFromHtml(html)
-
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parseFromNextData(html) ?: parseFromHtml(html)
         }
-
-        return seen.values.toList()
     }
 
     /**

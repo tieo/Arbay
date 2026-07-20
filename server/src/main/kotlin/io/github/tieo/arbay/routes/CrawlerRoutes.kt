@@ -12,6 +12,7 @@ import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
+import io.github.tieo.arbay.crawler.PartialResultEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
 import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
@@ -419,10 +420,44 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 ))
                             }
 
+                            // Pipeline: as the crawler parses each page it streams the batch here,
+                            // which card-filters it (relevance + sold + car card filter, no detail
+                            // enrichment — that runs once at the end) and pushes it to the client so
+                            // early pages render while later pages and platforms keep fetching. The
+                            // final PLATFORM_DONE carries the authoritative detail-enriched set that
+                            // the client reconciles against, so preview items filtered out later drop.
+                            val emittedIds = java.util.Collections.synchronizedSet(HashSet<String>())
+                            val partialFilters = pq.toCarFilters() ?: CarFilters()
+                            val partsIntent = CarFilterEngine.isPartQuery(pq.positiveText)
+                            val partialEmitter = PartialResultEmitter { pageListings ->
+                                val relevant = RelevanceFilter.filter(pageListings, pq)
+                                val classified = relevant.map { SoldDetector.classify(it) }
+                                val card = if (isCarQuery)
+                                    CarFilterEngine.apply(classified.map { VehicleTextParser.enrich(it) }, partialFilters, keepNonVehicles = partsIntent)
+                                else classified
+                                val fresh = card.filter { emittedIds.add(it.id) }
+                                if (fresh.isNotEmpty()) {
+                                    fresh.forEach { listingRepo.upsert(it) }
+                                    resultChannel.send(CrawlerSearchEvent(
+                                        type = CrawlerEventType.PLATFORM_PROGRESS,
+                                        platform = platformId.name,
+                                        platformName = platformId.displayName,
+                                        listings = fresh,
+                                        resultCount = fresh.size,
+                                    ))
+                                }
+                            }
+
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter) { crawler.search(pq) }
+                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter) { crawler.search(pq) }
                                 }
+                                // A crawler that does not stream per page (single-fetch, or one not
+                                // yet wired) still surfaces its whole parsed set here, before the
+                                // detail-enrichment step below adds latency. Already-streamed pages
+                                // are deduped inside the emitter, so a per-page crawler emits nothing
+                                // extra.
+                                partialEmitter.emit(rawResults)
                                 val irrelevance = RelevanceFilter.irrelevanceReport(rawResults, pq)
                                 if (irrelevance != null) {
                                     CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)

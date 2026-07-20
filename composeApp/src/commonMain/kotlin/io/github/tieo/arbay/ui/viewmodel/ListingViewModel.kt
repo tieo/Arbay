@@ -187,7 +187,10 @@ class ListingViewModel(
                                     rawCount = event.rawCount,
                                 ) else it
                             }
-                            _allListings.value = (_allListings.value + event.listings)
+                            // Reconcile: replace this platform's streamed preview listings with its
+                            // authoritative detail-enriched set, so any preview item the final filter
+                            // dropped disappears and enriched specs replace the card-only ones.
+                            _allListings.value = (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
                                 .distinctBy { it.id }
                                 .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
                             if (event.facets.isNotEmpty()) {
@@ -216,8 +219,16 @@ class ListingViewModel(
                         }
 
                         CrawlerEventType.PLATFORM_PROGRESS -> {
+                            // A progress event either carries a fetch-stage label or a just-parsed
+                            // page of listings (pipelined). Append the page live so results stream in
+                            // rather than landing all at once when the platform finishes.
+                            if (event.listings.isNotEmpty()) {
+                                _allListings.value = (_allListings.value + event.listings)
+                                    .distinctBy { it.id }
+                                    .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
+                            }
                             _platformStatuses.value = _platformStatuses.value.map {
-                                if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage)
+                                if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)
                                 else it
                             }
                         }

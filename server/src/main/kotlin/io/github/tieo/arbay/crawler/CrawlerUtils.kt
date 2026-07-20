@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SearchQuery
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -22,6 +24,53 @@ private fun fetchJitterMs(): Long = Random.nextLong(150, 600)
 class FetchProgressEmitter(val emit: suspend (stage: String) -> Unit) : CoroutineContext.Element {
     companion object Key : CoroutineContext.Key<FetchProgressEmitter>
     override val key: CoroutineContext.Key<*> = Key
+}
+
+/** CoroutineContext element for streaming a page's parsed listings to the SSE stream as soon as it
+ *  is parsed, so a slow multi-page crawler (mobile.de under the stealth browser) surfaces its first
+ *  page immediately instead of dumping everything at the end. Absent outside the streaming search,
+ *  where [emitPartialResults] is a no-op and the crawler's return value is used as before. */
+class PartialResultEmitter(val emit: suspend (listings: List<Listing>) -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<PartialResultEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+/** Stream one just-parsed page of [listings] to the live result feed if a [PartialResultEmitter] is
+ *  attached; a no-op otherwise. Crawlers call this after each page so results pipeline in. */
+internal suspend fun emitPartialResults(listings: List<Listing>) {
+    if (listings.isEmpty()) return
+    coroutineContext[PartialResultEmitter]?.emit(listings)
+}
+
+/** Runs the page-by-page crawl every list crawler shares: fetch and parse one page via [fetchPage],
+ *  stopping when a page comes back empty, adds nothing new, or the per-platform cap is reached.
+ *  Deduplicates by [Listing.externalId] (keeping first-seen order), streams each page's freshly
+ *  parsed listings to the live feed as they arrive, and returns the full ordered set. A block on the
+ *  first page propagates (the platform failed); a block on a later page just stops paging and keeps
+ *  what was already collected. Crawlers supply only how to fetch+parse a single page number; the
+ *  loop, dedup, cap, block handling and streaming live in this one place. [page] counts from
+ *  [SearchQuery.startPage]. */
+internal suspend fun paginate(
+    query: SearchQuery,
+    fetchPage: suspend (page: Int) -> List<Listing>,
+): List<Listing> {
+    val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+    val seen = LinkedHashMap<String, Listing>()
+    for (offset in 0 until maxPages) {
+        val listings = try {
+            fetchPage(query.startPage + offset)
+        } catch (e: CrawlerBlockedException) {
+            if (offset == 0) throw e
+            break
+        }
+        if (listings.isEmpty()) break
+        emitPartialResults(listings)
+        val newIds = listings.count { it.externalId !in seen }
+        listings.forEach { seen.putIfAbsent(it.externalId, it) }
+        if (newIds == 0) break
+        if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+    }
+    return seen.values.toList()
 }
 
 /** Validate HTML — throws if it's a block/captcha page */

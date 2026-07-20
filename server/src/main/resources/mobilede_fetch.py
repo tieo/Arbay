@@ -6,17 +6,18 @@ Uses zendriver (undetected CDP) driving real Google Chrome, headed under a virtu
 display (Xvfb). This combination passes Akamai Bot Manager where TLS impersonation,
 Playwright/patchright, and ungoogled-chromium all fail: real Chrome supplies a clean
 fingerprint, zendriver hides the Runtime.enable automation leak, and a headed window
-(even under Xvfb) avoids the headless-environment signal. Verified live returning
-mobile.de search results.
+(even under Xvfb) avoids the headless-environment signal.
 
 Usage:
   mobilede_fetch.py <url> [max_pages] [wait_seconds]
       Solve the Akamai challenge once, then page through `pageNumber=2..max_pages` in the
       same warmed session (much cheaper than one solve per page), pausing between pages to
-      stay polite. Pages are printed to stdout separated by a sentinel line.
+      stay polite. Each page's HTML is printed to stdout and flushed as soon as it loads,
+      terminated by a sentinel line, so the caller can parse and surface pages live.
 
 Requires: zendriver (pip), google-chrome-stable (apt), a display (run under xvfb-run).
-Exit codes: 2 = still blocked on page 1, 1 = launch/other error.
+Exit codes: 2 = the Akamai challenge never cleared on page 1 (a genuine block),
+            1 = launch/navigation error (e.g. a CDP timeout — NOT a block).
 """
 import sys
 import os
@@ -27,10 +28,19 @@ import zendriver as zd
 PAGE_BREAK = "\n<!--ARBAY_PAGE_BREAK-->\n"
 CHROME = os.environ.get("MOBILEDE_CHROME", "/usr/bin/google-chrome-stable")
 
+# Markers that prove the search result page actually rendered.
+RESULT_MARKERS = ('data-testid="result-list', 'data-testid="listing-title', "/fahrzeuge/details")
+# Markers of the Akamai interstitial / block page — the only thing that counts as "still blocked".
+CHALLENGE_MARKERS = ("sec-if-cpt", "zugriff verweigert", "access denied", "captcha-delivery")
 
-def blocked(html: str) -> bool:
+
+def has_results(html: str) -> bool:
+    return any(m in html for m in RESULT_MARKERS)
+
+
+def is_challenge(html: str) -> bool:
     t = html.lower()
-    return "sec-if-cpt" in t or "zugriff verweigert" in t or "access denied" in t or len(t) < 20000
+    return any(m in t for m in CHALLENGE_MARKERS)
 
 
 def with_page(url: str, page: int) -> str:
@@ -41,34 +51,54 @@ def with_page(url: str, page: int) -> str:
 
 
 async def load(page, url: str, wait_s: float) -> str | None:
+    """Navigate to `url` and poll until the results render or the wait elapses. Returns the page
+    HTML once results are present, or a fully-rendered no-results page (a valid answer). Returns
+    None only when the Akamai challenge never clears. A transient CDP error during a poll is ignored
+    and retried; a hard navigation failure propagates to the caller (classified as an error, not a
+    block)."""
     p = await page.get(url)
     html = ""
-    for _ in range(int(wait_s // 3) + 1):
-        await asyncio.sleep(3)
-        html = await p.get_content()
-        if not blocked(html):
+    for _ in range(int(wait_s // 2) + 1):
+        await asyncio.sleep(2)
+        try:
+            html = await p.get_content()
+        except Exception:
+            continue
+        if has_results(html):
             return html
-    return None
+        if is_challenge(html):
+            continue
+        # A settled page that is neither results nor a challenge is a real page (e.g. 0 hits).
+        if len(html) > 40000:
+            return html
+    # Timed out. If what we have is not the challenge stub, it is a usable page; else it is a block.
+    return html if (html and not is_challenge(html) and len(html) > 40000) else None
 
 
-async def run(url: str, max_pages: int, wait_s: float) -> tuple[bool, list[str]]:
+def emit(html: str) -> None:
+    sys.stdout.write(html)
+    sys.stdout.write(PAGE_BREAK)
+    sys.stdout.flush()
+
+
+async def run(url: str, max_pages: int, wait_s: float) -> bool:
+    """Streams each parsed page to stdout as it loads. Returns True if page 1 was blocked."""
     kwargs = {"headless": False}
     if os.path.exists(CHROME):
         kwargs["browser_executable_path"] = CHROME
     browser = await zd.start(**kwargs)
-    pages: list[str] = []
     try:
         first = await load(browser, url, wait_s)
         if first is None:
-            return True, []
-        pages.append(first)
+            return True
+        emit(first)
         for page in range(2, max_pages + 1):
             await asyncio.sleep(2.0)  # rate limit between pages
             html = await load(browser, with_page(url, page), 12.0)
             if html is None or "/fahrzeuge/details" not in html:
                 break
-            pages.append(html)
-        return False, pages
+            emit(html)
+        return False
     finally:
         await browser.stop()
 
@@ -81,14 +111,13 @@ def main() -> None:
     max_pages = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     wait_s = float(sys.argv[3]) if len(sys.argv) > 3 else 30.0
     try:
-        is_blocked, pages = asyncio.run(run(url, max_pages, wait_s))
+        is_blocked = asyncio.run(run(url, max_pages, wait_s))
     except Exception as e:
         sys.stderr.write(f"error: {e}\n")
         sys.exit(1)
     if is_blocked:
         sys.stderr.write("blocked: challenge did not resolve\n")
         sys.exit(2)
-    sys.stdout.write(PAGE_BREAK.join(pages))
 
 
 if __name__ == "__main__":

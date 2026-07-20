@@ -28,31 +28,12 @@ class SubitoCrawler(private val client: HttpClient) : Crawler {
             query.positiveText
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             // The vendita/auto category scopes the search to whole vehicles; `o` is the page.
             val base = "https://www.subito.it/annunci-italia/vendita/auto/?q=${text.encodeUrl()}"
             val url = if (page <= 1) base else "$base&o=$page"
-
-            val html = try {
-                fetchWithFallback(client, url, "Subito")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
-                break
-            }
-
-            val listings = parse(html)
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, "Subito"))
         }
-
-        return seen.values.toList()
     }
 
     internal fun parse(html: String): List<Listing> {

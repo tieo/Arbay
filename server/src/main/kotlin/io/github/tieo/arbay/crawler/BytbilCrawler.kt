@@ -51,23 +51,9 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
             append(filterParams(query))
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
-            val url = "$basePath&Page=$page"
-            val html = fetchWithFallback(client, url, "Bytbil")
-            val listings = parse(html)
-
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+        return paginate(query) { page ->
+            parse(fetchWithFallback(client, "$basePath&Page=$page", "Bytbil"))
         }
-
-        return seen.values.toList()
     }
 
     /**

@@ -49,41 +49,16 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
         } ?: query.positiveText
 
         return if (hasFilters(query)) {
-            collectPages(query) { page ->
-                parseFromApi(fetchJson(buildApiUrl(searchText, query, page)))
+            paginate(query) { page ->
+                parseFromApi(fetchJson(buildApiUrl(searchText, query, page))) ?: emptyList()
             }
         } else {
-            collectPages(query) { page ->
+            paginate(query) { page ->
                 val pageParam = if (page <= 1) "" else "&page=$page"
                 val url = "https://www.dba.dk/mobility/search/car?q=${searchText.encodeUrl()}$pageParam"
                 parse(fetchWithFallback(client, url, "DBA"))
             }
         }
-    }
-
-    /**
-     * Fetches consecutive pages starting at query.startPage, deduplicating by externalId.
-     * Stops on a fetch/parse failure (null), an empty page, a page with no new ids
-     * (the site repeats the last page beyond the end), or the per-platform result cap.
-     */
-    private suspend fun collectPages(
-        query: SearchQuery,
-        fetchPage: suspend (page: Int) -> List<Listing>?,
-    ): List<Listing> {
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val listings = fetchPage(query.startPage + offset) ?: break
-
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
-        }
-
-        return seen.values.toList()
     }
 
     private fun hasFilters(query: SearchQuery) =

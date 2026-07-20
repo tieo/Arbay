@@ -22,20 +22,33 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
         }
 
         val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = mutableSetOf<String>()
         val platform = platformId.displayName
-        return categories.flatMap { vc ->
-            // mobile.de bypasses fetchWithFallback (dedicated stealth browser), so instrument
-            // and enforce the request cutoff here too — it's the most block-sensitive platform.
+        val seen = mutableSetOf<String>()
+        val all = mutableListOf<Listing>()
+
+        for (vc in categories) {
+            // mobile.de bypasses fetchWithFallback (dedicated stealth browser), so instrument and
+            // enforce the request cutoff here too — it's the most block-sensitive platform.
             if (RequestMonitor.overBudget(platform))
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
             val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q"
-            val pages = StealthBrowserClient.fetch(url, maxPages = maxPages)
-            val pageList = pages.split(StealthBrowserClient.PAGE_BREAK)
-            repeat(pageList.size) { RequestMonitor.recordRequest(platform) }
             RequestMonitor.recordTier(platform, "Browser")
-            pageList.flatMap { parseSearchResults(it) }
-        }.filter { seen.add(it.externalId) }
+            try {
+                // Each page streams in as the stealth browser loads it; parse and surface it live
+                // instead of blocking ~90s on the whole multi-page, multi-category crawl.
+                StealthBrowserClient.fetchStreaming(url, maxPages = maxPages) { html ->
+                    RequestMonitor.recordRequest(platform)
+                    val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }
+                    emitPartialResults(fresh)
+                    all.addAll(fresh)
+                }
+            } catch (e: CrawlerBlockedException) {
+                // A block with nothing collected yet is a real failure; otherwise keep what streamed
+                // in — e.g. the Car category returned before the Van category got challenged.
+                if (all.isEmpty()) throw e
+            }
+        }
+        return all
     }
 
     // Result cards render with CSS-module hashed classes and stable data-testid values: each

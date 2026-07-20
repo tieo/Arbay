@@ -30,30 +30,11 @@ class AutopliusCrawler(private val client: HttpClient) : Crawler {
             "/skelbimai/naudoti-automobiliai?keyword=${query.positiveText.encodeUrl()}"
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        val seen = LinkedHashMap<String, Listing>()
-
-        for (offset in 0 until maxPages) {
-            val page = query.startPage + offset
+        return paginate(query) { page ->
             val sep = if ("?" in path) "&" else "?"
             val url = "https://autoplius.lt$path" + if (page <= 1) "" else "${sep}page_nr=$page"
-
-            val html = try {
-                fetchWithFallback(client, url, "Autoplius")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
-                break
-            }
-
-            val listings = parse(html)
-            if (listings.isEmpty()) break
-            val newIds = listings.count { it.externalId !in seen }
-            listings.forEach { seen.putIfAbsent(it.externalId, it) }
-            if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            parse(fetchWithFallback(client, url, "Autoplius"))
         }
-
-        return seen.values.toList()
     }
 
     internal fun parse(html: String): List<Listing> {
