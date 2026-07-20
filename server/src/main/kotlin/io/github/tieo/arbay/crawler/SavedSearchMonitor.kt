@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
@@ -27,6 +29,12 @@ class SavedSearchMonitor(private val productRepo: ProductRepo) {
     private val enabled = System.getenv("ARBAY_SAVED_SEARCH_UPDATES")?.equals("on", true) == true
     private val intervalMs =
         (System.getenv("ARBAY_SAVED_SEARCH_INTERVAL_MIN")?.toLongOrNull() ?: 360L).coerceAtLeast(60L) * 60_000L
+
+    // Opportunistic-buying threshold: a fresh listing priced at or below this fraction of the
+    // search's median counts as a deal worth a distinct alert. Needs at least DEAL_MIN_SAMPLE
+    // priced listings for the median to mean anything.
+    private val dealRatio = (System.getenv("ARBAY_DEAL_RATIO")?.toDoubleOrNull() ?: 0.75).coerceIn(0.3, 0.99)
+    private val dealMinSample = 5
 
     private val json = Json { ignoreUnknownKeys = true }
     private val seenFile = File(System.getProperty("user.home"), ".arbay/saved_search_seen.json")
@@ -70,7 +78,7 @@ class SavedSearchMonitor(private val productRepo: ProductRepo) {
                 .filter { CrawlerRegistry.crawlerFor(it) != null }
                 .ifEmpty { continue }
 
-            val found = LinkedHashMap<String, String>() // listing id -> title
+            val found = LinkedHashMap<String, Listing>() // listing id -> listing
             for (platformId in platforms) {
                 if (BlockCooldown.isCoolingDown(platformId)) continue
                 val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
@@ -81,15 +89,36 @@ class SavedSearchMonitor(private val productRepo: ProductRepo) {
                     log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
                     continue
                 }
-                RelevanceFilter.filter(results, query).forEach { found[it.id] = it.title }
+                RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
             }
 
             val known = seen.getOrPut(product.id) { mutableSetOf() }
             val fresh = found.keys.filter { it !in known }
             known.addAll(found.keys)
+            if (fresh.isEmpty() || silent) { saveSeen(); continue }
 
-            if (fresh.isNotEmpty() && !silent) {
-                val examples = fresh.take(3).joinToString("; ") { found[it].orEmpty().take(50) }
+            // Opportunistic buying: a fresh listing priced well below the search's typical price is a
+            // deal — a distinct, higher-value alert than mere new stock.
+            val median = medianEur(found.values)
+            val deals = if (median != null) {
+                fresh.mapNotNull { found[it] }
+                    .mapNotNull { l -> eurCents(l.price)?.let { l to it } }
+                    .filter { (_, cents) -> cents <= median * dealRatio }
+                    .sortedBy { it.second }
+            } else emptyList()
+
+            if (deals.isNotEmpty() && median != null) {
+                val best = deals.take(3).joinToString("; ") { (l, cents) ->
+                    val pct = (100 - cents * 100 / median)
+                    val where = l.location?.let { it.city ?: it.country }?.let { " ($it)" } ?: ""
+                    "${l.title.take(40)} €${cents / 100} −$pct%$where"
+                }
+                BlockAlerter.notify(
+                    title = "Arbay deal: ${deals.size} under market for ${product.name}",
+                    message = best,
+                )
+            } else {
+                val examples = fresh.take(3).joinToString("; ") { found[it]?.title.orEmpty().take(50) }
                 BlockAlerter.notify(
                     title = "Arbay: ${fresh.size} new for ${product.name}",
                     message = examples,
@@ -98,6 +127,18 @@ class SavedSearchMonitor(private val productRepo: ProductRepo) {
         }
         saveSeen()
     }
+
+    /** Median listing price in EUR cents, or null if too few priced listings for a stable baseline. */
+    private fun medianEur(listings: Collection<Listing>): Long? {
+        val prices = listings.mapNotNull { eurCents(it.price) }.filter { it > 0 }.sorted()
+        if (prices.size < dealMinSample) return null
+        return prices[prices.size / 2]
+    }
+
+    /** Price in EUR cents, converting from the listing's own currency so cross-border deals compare. */
+    private fun eurCents(money: Money): Long? =
+        if (money.currency == Currency.EUR) money.amount
+        else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
 
     private fun loadSeen(): MutableMap<String, MutableSet<String>> = try {
         if (seenFile.exists()) {
