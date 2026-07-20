@@ -62,6 +62,9 @@ private val GENERAL_PLATFORMS = listOf(
     PlatformId.IDEALO,
     PlatformId.BACKMARKET_DE, PlatformId.REBUY, PlatformId.REFURBED,
     PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.MARKTPLAATS,
+    // Cross-border sourcing: the query is translated into each site's language (localizedQuery)
+    // before searching, so a German product term reaches Italian/French/Spanish/Dutch listings.
+    PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.TWEEDEHANDS,
 )
 
 /** Reads the optional car-search filters from the request and applies them to a

@@ -44,7 +44,7 @@ enum class PlatformId(
     GEIZHALS("Geizhals", "https://geizhals.de"),
     AMAZON_DE("Amazon DE", "https://www.amazon.de"),
     WILLHABEN("willhaben", "https://www.willhaben.at", country = "AT"),
-    MARKTPLAATS("Marktplaats", "https://www.marktplaats.nl", country = "NL"),
+    MARKTPLAATS("Marktplaats", "https://www.marktplaats.nl", "nl", "NL"),
     IMMOSCOUT24("ImmobilienScout24", "https://www.immobilienscout24.de"),
     TRUCKSCOUT24("TruckScout24", "https://www.truckscout24.de"),
     OTOMOTO("OTOMoto", "https://www.otomoto.pl", country = "PL"),
