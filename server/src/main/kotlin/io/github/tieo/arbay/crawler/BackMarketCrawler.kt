@@ -10,9 +10,12 @@ class BackMarketCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.backmarket.de/de-de/search?q=${query.positiveText.encodeUrl()}"
-        // Cloudflare Bot Management blocks Playwright headless Chromium (TLS/canvas fingerprint).
-        // curl_cffi with Chrome 131 TLS impersonation passes CF with homepage session priming.
-        val html = CurlCffiClient.fetch(url, primeUrl = "https://www.backmarket.de/de-de")
+        // Cloudflare serves a challenge to curl_cffi and to Playwright Chromium; the zendriver
+        // real-Chrome stealth tier passes it. The product grid is client-rendered after the
+        // challenge clears, so wait for the productCard marker rather than the bare shell.
+        // Require several card matches so a lone preload reference to the selector does not satisfy
+        // the wait before the grid paints.
+        val html = StealthBrowserClient.fetchRendered(url, waitMarker = "data-qa=\"productCard\"", waitSeconds = 30, minMatches = 3)
         return parseSearchResults(html)
     }
 
@@ -42,9 +45,15 @@ class BackMarketCrawler(private val client: HttpClient) : Crawler {
                 ?: Regex("""/p/([^/?#]+)""").find(href)?.groupValues?.get(1)
                 ?: return@mapNotNull null
 
-            val priceText = card.selectFirst("[data-qa=productCardPrice]")?.text() ?: return@mapNotNull null
-            // Price is like "473,00" (no € symbol in element) — append € so Money.parse sets EUR
-            val price = Money.parse("$priceText €") ?: return@mapNotNull null
+            // The price element reads "Preis des erneuerten Produkts: 209 ,00 € 379,99 € neu …":
+            // an sr-only label, the refurbished price, then the struck-through new price. Drop the
+            // label, then take the first "euros,cents" amount (the refurbished price). The euros and
+            // cents can be split by an element boundary, so allow whitespace around the comma.
+            val priceText = card.selectFirst("[data-qa=productCardPrice]")?.text()
+                ?.substringAfter(':')?.replace(Regex("""\s+"""), " ") ?: return@mapNotNull null
+            val amount = Regex("""(\d[\d.]*)\s*,\s*(\d{2})""").find(priceText) ?: return@mapNotNull null
+            val euros = amount.groupValues[1].replace(".", "").toLongOrNull() ?: return@mapNotNull null
+            val price = Money(euros * 100 + amount.groupValues[2].toLong(), Currency.EUR)
 
             // Image: srcset contains relative /cdn-cgi/image/.../https://cloudfront.net/... paths
             val srcset = card.selectFirst("img[srcset]")?.attr("srcset") ?: ""

@@ -29,6 +29,47 @@ object StealthBrowserClient {
     /** Sentinel between paginated pages in the sidecar's stdout. */
     const val PAGE_BREAK = "\n<!--ARBAY_PAGE_BREAK-->\n"
 
+    private val genericScriptPath: String by lazy {
+        val resource = StealthBrowserClient::class.java.getResourceAsStream("/stealth_fetch.py")
+            ?: error("stealth_fetch.py not found in classpath")
+        val tmp = File.createTempFile("stealth_fetch", ".py")
+        tmp.writeBytes(resource.readBytes())
+        tmp.deleteOnExit()
+        tmp.absolutePath
+    }
+
+    /** Load [url] in real Chrome and return its HTML once [waitMarker] (a literal substring, e.g. a
+     *  data-qa attribute) appears in the rendered DOM, so a client-rendered grid is present rather
+     *  than the empty post-challenge shell. For Cloudflare/Datadome pages whose content is painted
+     *  after the challenge clears. */
+    fun fetchRendered(url: String, waitMarker: String, waitSeconds: Int = 30, minMatches: Int = 1): String {
+        val args = listOf("xvfb-run", "-a", "python3", genericScriptPath, url, waitMarker, waitSeconds.toString(), minMatches.toString())
+        val process = ProcessBuilder(args).redirectErrorStream(false).start()
+
+        var stderr = ""
+        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
+        stderrThread.isDaemon = true
+        stderrThread.start()
+
+        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
+        val output = try {
+            outputFuture.get((waitSeconds + 45).toLong(), TimeUnit.SECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            process.destroyForcibly()
+            throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
+        }
+        stderrThread.join(3_000)
+        process.waitFor(5, TimeUnit.SECONDS)
+
+        val exitCode = process.exitValue()
+        if (exitCode != 0) {
+            log.warn("stealth render exit {} for {}: {}", exitCode, url, stderr.take(200))
+            val type = if (exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
+            throw CrawlerBlockedException("stealth render $url: exit $exitCode", type)
+        }
+        return output.toString(Charsets.UTF_8)
+    }
+
     /** Load [url] in real Chrome, solve the Akamai challenge once, then page through up to
      *  [maxPages] in the same session. Returns each page's HTML joined by [PAGE_BREAK]. */
     fun fetch(url: String, maxPages: Int = 1, waitSeconds: Int = 30): String {
