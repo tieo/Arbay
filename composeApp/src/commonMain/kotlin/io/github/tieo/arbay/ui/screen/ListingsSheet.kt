@@ -1626,6 +1626,7 @@ private fun PriceHistoryChart(
         Currency.PLN -> "z\u0142"
         Currency.CZK -> "K\u010D"
         Currency.DKK, Currency.SEK, Currency.NOK -> "kr"
+        Currency.RSD -> "din"
     }
     fun Listing.priceIn() = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
 

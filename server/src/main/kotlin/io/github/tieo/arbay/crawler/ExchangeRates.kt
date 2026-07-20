@@ -18,12 +18,13 @@ object ExchangeRates {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = HttpClient()
 
-    private val SUPPORTED = setOf("EUR", "USD", "GBP", "CHF", "PLN", "DKK", "SEK", "CZK", "NOK")
+    private val SUPPORTED = setOf("EUR", "USD", "GBP", "CHF", "PLN", "DKK", "SEK", "CZK", "NOK", "RSD")
 
     // Fallback rates (units per 1 EUR) until the first refresh; approximate.
     @Volatile var rates: Map<String, Double> = mapOf(
         "EUR" to 1.0, "USD" to 1.08, "GBP" to 0.84, "CHF" to 0.94,
         "PLN" to 4.30, "DKK" to 7.46, "SEK" to 11.30, "CZK" to 25.0, "NOK" to 11.70,
+        "RSD" to 117.0,
     )
         private set
     @Volatile var lastUpdate: Long = 0

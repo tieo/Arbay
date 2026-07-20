@@ -35,6 +35,7 @@ enum class PlatformId(
     NETTIAUTO("Nettiauto", "https://www.nettiauto.com", country = "FI"),
     FINN("FINN", "https://www.finn.no", country = "NO"),
     OLX_PT("OLX PT", "https://www.olx.pt", "pt", "PT"),
+    KUPUJEM("KupujemProdajem", "https://www.kupujemprodajem.com", country = "RS"),
     VINTED_DE("Vinted DE", "https://www.vinted.de"),
     BACKMARKET_DE("Back Market DE", "https://www.backmarket.de"),
     REBUY("reBuy", "https://www.rebuy.de"),

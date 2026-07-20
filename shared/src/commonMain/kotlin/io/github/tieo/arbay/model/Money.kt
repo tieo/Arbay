@@ -88,5 +88,5 @@ data class Money(
 
 @Serializable
 enum class Currency {
-    EUR, USD, CHF, GBP, PLN, DKK, SEK, CZK, NOK
+    EUR, USD, CHF, GBP, PLN, DKK, SEK, CZK, NOK, RSD
 }
