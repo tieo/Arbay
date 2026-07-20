@@ -49,29 +49,36 @@ jobs:
         run: |
           set -euo pipefail
           # Car platforms get a car query, everything else a product query.
-          car='AUTOSCOUT24 MOBILE_DE TRUCKSCOUT24 OTOMOTO DBA BILBASEN BYTBIL SAUTO'
+          car='AUTOSCOUT24 MOBILE_DE KLEINANZEIGEN EBAY_DE TRUCKSCOUT24 OTOMOTO DBA BILBASEN
+               BYTBIL SAUTO MARKTPLAATS WILLHABEN AUTOSCOUT24_IT AUTOSCOUT24_FR AUTOSCOUT24_ES
+               AUTOSCOUT24_BE AUTOVIT RICARDO SUBITO TWEEDEHANDS AUTOPLIUS NETTIAUTO FINN OLX_PT KUPUJEM'
+          # Known-degraded: hard anti-block or token walls (Cloudflare/Akamai/Datadome/PoW) that
+          # need a browser, geo exit or captcha solver. A 0 here is tolerated; a >0 means the
+          # crawler recovered and should be promoted out of this list.
+          degraded='BILBASEN AMAZON_DE IDEALO BACKMARKET_DE REFURBED VINTED_DE'
           platforms=$(curl -s http://localhost:8090/api/crawler/platforms | tr ',' '\n' \
             | grep -o '"id":"[A-Z0-9_]*"' | cut -d'"' -f4)
           echo "| Platform | Query | Results | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          any_ok=0
-          fails=""
+          regressions=""; recoveries=""
           for p in $platforms; do
             case " $car " in *" $p "*) q="Volkswagen Crafter";; *) q="Sony WH-1000XM4";; esac
             body=$(curl -s --max-time 320 "http://localhost:8090/api/crawler/test/$p?q=$(printf '%s' "$q" | sed 's/ /%20/g')" || echo '{}')
             count=$(printf '%s' "$body" | grep -o '"resultCount":[0-9]*' | head -1 | cut -d: -f2)
             count=${count:-0}
+            is_degraded=0; case " $degraded " in *" $p "*) is_degraded=1;; esac
             if [ "$count" -gt 0 ]; then
-              state="ok"; any_ok=1
+              if [ "$is_degraded" -eq 1 ]; then state="RECOVERED — promote"; recoveries="$recoveries $p"; else state="ok"; fi
             else
-              state="EMPTY/blocked"; fails="$fails $p"
+              if [ "$is_degraded" -eq 1 ]; then state="degraded (known)"; else state="REGRESSION"; regressions="$regressions $p"; fi
             fi
             echo "| $p | $q | $count | $state |" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$fails" ]; then echo "Empty/blocked:$fails" >> "$GITHUB_STEP_SUMMARY"; fi
-          if [ "$any_ok" -eq 0 ]; then
-            echo "No platform returned results — server or fetch chain is broken"
+          [ -n "$recoveries" ] && echo "Recovered (drop from degraded list):$recoveries" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$regressions" ]; then
+            echo "REGRESSION — these healthy crawlers returned nothing:$regressions"
+            echo "REGRESSION:$regressions" >> "$GITHUB_STEP_SUMMARY"
             docker logs arbay; exit 1
           fi
 
