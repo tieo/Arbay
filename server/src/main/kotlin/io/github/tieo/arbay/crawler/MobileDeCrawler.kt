@@ -35,8 +35,13 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
             RequestMonitor.recordTier(platform, "Browser")
             try {
                 // Each page streams in as the stealth browser loads it; parse and surface it live
-                // instead of blocking ~90s on the whole multi-page, multi-category crawl.
-                StealthBrowserClient.fetchStreaming(url, maxPages = maxPages) { html ->
+                // instead of blocking ~90s on the whole multi-page, multi-category crawl. When the
+                // sidecar puts a captcha up for an interactive solve, forward that to the client.
+                StealthBrowserClient.fetchStreaming(
+                    url,
+                    maxPages = maxPages,
+                    onControl = { msg -> if (msg == "CAPTCHA_INTERACTIVE") emitCaptchaInteractive() },
+                ) { html ->
                     RequestMonitor.recordRequest(platform)
                     val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }
                     emitPartialResults(fresh)

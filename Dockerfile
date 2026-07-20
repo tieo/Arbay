@@ -5,8 +5,11 @@ FROM mcr.microsoft.com/playwright/java:v1.51.0-noble
 #  - HeadlessBrowser launches non-headless Chromium under Xvfb on DISPLAY :99
 #  - StealthBrowserClient runs real Google Chrome via zendriver under xvfb-run to
 #    pass mobile.de's Akamai Bot Manager (real Chrome + undetected CDP + headed display)
+#  - When a stealth fetch hits a captcha the automation cannot clear, x11vnc + websockify expose
+#    that live Chrome session over noVNC so the user can solve it in the crawler's own browser
+#    (same IP + fingerprint the token binds to); novnc ships the static web client.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip xvfb wget \
+    && apt-get install -y --no-install-recommends python3 python3-pip xvfb wget x11vnc websockify novnc \
     && wget -qO /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get install -y --no-install-recommends /tmp/chrome.deb \
     && rm /tmp/chrome.deb \

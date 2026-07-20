@@ -1,8 +1,8 @@
 package io.github.tieo.arbay.crawler
 
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.CompletableFuture
@@ -20,26 +20,26 @@ import java.util.concurrent.TimeUnit
 object StealthBrowserClient {
     private val log = LoggerFactory.getLogger(StealthBrowserClient::class.java)
 
-    private val scriptPath: String by lazy {
-        val resource = StealthBrowserClient::class.java.getResourceAsStream("/mobilede_fetch.py")
-            ?: error("mobilede_fetch.py not found in classpath")
-        val tmp = File.createTempFile("mobilede_fetch", ".py")
-        tmp.writeBytes(resource.readBytes())
-        tmp.deleteOnExit()
-        tmp.absolutePath
-    }
-
     /** Sentinel between paginated pages in the sidecar's stdout. */
     const val PAGE_BREAK = "\n<!--ARBAY_PAGE_BREAK-->\n"
 
-    private val genericScriptPath: String by lazy {
-        val resource = StealthBrowserClient::class.java.getResourceAsStream("/stealth_fetch.py")
-            ?: error("stealth_fetch.py not found in classpath")
-        val tmp = File.createTempFile("stealth_fetch", ".py")
-        tmp.writeBytes(resource.readBytes())
-        tmp.deleteOnExit()
-        tmp.absolutePath
+    /** Prefix of the sidecars' stderr control lines (captcha interactive/solved/timeout). */
+    const val CTRL_PREFIX = "ARBAY_CTRL:"
+
+    /** All sidecar scripts extracted together into one directory so they can import each other —
+     *  mobilede_fetch.py and stealth_fetch.py both import captcha_gate.py for the interactive
+     *  captcha solve. */
+    private val scriptDir: File by lazy {
+        val dir = File(System.getProperty("java.io.tmpdir"), "arbay-stealth").apply { mkdirs() }
+        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py")) {
+            val res = StealthBrowserClient::class.java.getResourceAsStream("/$name")
+                ?: error("$name not found in classpath")
+            File(dir, name).outputStream().use { res.copyTo(it) }
+        }
+        dir
     }
+    private val scriptPath: String get() = File(scriptDir, "mobilede_fetch.py").absolutePath
+    private val genericScriptPath: String get() = File(scriptDir, "stealth_fetch.py").absolutePath
 
     /** Load [url] in real Chrome and return its HTML once [waitMarker] (a literal substring, e.g. a
      *  data-qa attribute) appears in the rendered DOM, so a client-rendered grid is present rather
@@ -73,23 +73,47 @@ object StealthBrowserClient {
         return output.toString(Charsets.UTF_8)
     }
 
+    /** How long a human is given to solve an interactive captcha once the sidecar exposes the live
+     *  browser over noVNC. The crawl's timeout is extended by this once solving begins. */
+    private const val INTERACTIVE_SOLVE_MS = 200_000L
+
     /** Load [url] in real Chrome, solve the Akamai challenge once, then page through up to
      *  [maxPages] in the same session, invoking [onPage] with each page's HTML the moment the
      *  sidecar flushes it — so a caller can parse and stream results live instead of waiting for the
-     *  whole multi-page crawl. Throws [CrawlerBlockedException] if page 1 is blocked (exit 2 →
-     *  CAPTCHA) or the process errors/times out; pages already delivered to [onPage] stand. */
-    suspend fun fetchStreaming(url: String, maxPages: Int = 1, waitSeconds: Int = 30, onPage: suspend (html: String) -> Unit) {
+     *  whole multi-page crawl. [onControl] receives the sidecar's control messages (e.g.
+     *  "CAPTCHA_INTERACTIVE" when it exposes the live browser for a human solve). Throws
+     *  [CrawlerBlockedException] if page 1 is blocked (exit 2 → CAPTCHA) or the process errors/times
+     *  out; pages already delivered to [onPage] stand. */
+    suspend fun fetchStreaming(
+        url: String,
+        maxPages: Int = 1,
+        waitSeconds: Int = 30,
+        onControl: suspend (msg: String) -> Unit = {},
+        onPage: suspend (html: String) -> Unit,
+    ) {
         val args = listOf("xvfb-run", "-a", "python3", scriptPath, url, maxPages.toString(), waitSeconds.toString())
         val process = ProcessBuilder(args).redirectErrorStream(false).start()
 
-        var stderr = ""
-        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
+        val pages = Channel<String>(Channel.UNLIMITED)
+        val controls = Channel<String>(Channel.UNLIMITED)
+
+        // stderr carries control lines (ARBAY_CTRL:*) that must be reacted to live, plus diagnostics.
+        val stderrBuf = StringBuilder()
+        val stderrThread = Thread {
+            try {
+                process.errorStream.bufferedReader().forEachLine { line ->
+                    if (line.startsWith(CTRL_PREFIX)) controls.trySend(line.removePrefix(CTRL_PREFIX).trim())
+                    else stderrBuf.appendLine(line)
+                }
+            } catch (_: Exception) {
+            } finally {
+                controls.close()
+            }
+        }
         stderrThread.isDaemon = true
         stderrThread.start()
 
-        // A reader thread splits the child's stdout on the page sentinel and feeds whole pages to a
-        // channel; the coroutine consumes them and calls onPage as each arrives.
-        val channel = Channel<String>(Channel.UNLIMITED)
+        // stdout is split on the page sentinel into whole pages.
         val readerThread = Thread {
             try {
                 val reader = process.inputStream.bufferedReader()
@@ -102,34 +126,53 @@ object StealthBrowserClient {
                     var idx = buf.indexOf(PAGE_BREAK)
                     while (idx >= 0) {
                         val page = buf.substring(0, idx)
-                        if (page.isNotBlank()) channel.trySend(page)
+                        if (page.isNotBlank()) pages.trySend(page)
                         buf.delete(0, idx + PAGE_BREAK.length)
                         idx = buf.indexOf(PAGE_BREAK)
                     }
                 }
                 val tail = buf.toString()
-                if (tail.isNotBlank()) channel.trySend(tail)
+                if (tail.isNotBlank()) pages.trySend(tail)
             } catch (_: Exception) {
             } finally {
-                channel.close()
+                pages.close()
             }
         }
         readerThread.isDaemon = true
         readerThread.start()
 
-        val timeoutMs = (waitSeconds + maxPages * 20 + 60) * 1000L
-        try {
-            withTimeout(timeoutMs) {
-                for (page in channel) onPage(page)
+        // A watchdog kills the process if it overruns the deadline; a human solve pushes the deadline
+        // out so the wait for the user does not trip the timeout. The channels close when the process
+        // dies, which ends the consumption loops below.
+        val deadline = java.util.concurrent.atomic.AtomicLong(
+            System.currentTimeMillis() + (waitSeconds + maxPages * 20 + 60) * 1000L)
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val watchdog = Thread {
+            while (process.isAlive) {
+                if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); process.destroyForcibly(); break }
+                Thread.sleep(1_000)
             }
-        } catch (_: TimeoutCancellationException) {
-            process.destroyForcibly()
-            throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
         }
+        watchdog.isDaemon = true
+        watchdog.start()
+
+        coroutineScope {
+            val ctrlJob = launch {
+                for (msg in controls) {
+                    if (msg == "CAPTCHA_INTERACTIVE") deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
+                    onControl(msg)
+                }
+            }
+            for (page in pages) onPage(page)
+            ctrlJob.join()
+        }
+
+        if (timedOut.get()) throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
 
         stderrThread.join(3_000)
         if (!process.waitFor(10, TimeUnit.SECONDS)) process.destroyForcibly()
 
+        val stderr = stderrBuf.toString()
         val exitCode = runCatching { process.exitValue() }.getOrElse { -1 }
         if (exitCode != 0) {
             log.warn("stealth browser exit {} for {}: {}", exitCode, url, stderr.take(200))

@@ -11,6 +11,7 @@ import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.PartialResultEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
@@ -448,9 +449,22 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 }
                             }
 
+                            // When a stealth crawl exposes its live browser for a human captcha
+                            // solve, push the noVNC path to the client. It rides the same Authelia-
+                            // gated arbay host (Caddy /captcha/ → the container's noVNC), so the app
+                            // prepends its own base URL.
+                            val captchaEmitter = CaptchaInteractiveEmitter {
+                                resultChannel.send(CrawlerSearchEvent(
+                                    type = CrawlerEventType.CAPTCHA_INTERACTIVE,
+                                    platform = platformId.name,
+                                    platformName = platformId.displayName,
+                                    captchaUrl = "/captcha/vnc.html?autoconnect=true&resize=scale",
+                                ))
+                            }
+
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter) { crawler.search(pq) }
+                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) { crawler.search(pq) }
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
                                 // yet wired) still surfaces its whole parsed set here, before the

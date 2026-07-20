@@ -2086,7 +2086,7 @@ private fun UnifiedPlatformChips(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (expandedStatus.status == PlatformSearchStatus.CAPTCHA && expandedStatus.captchaUrl != null) {
+                    if (expandedStatus.captchaUrl != null) {
                         TextButton(
                             onClick = { openBrowser(expandedStatus.captchaUrl!!) },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),

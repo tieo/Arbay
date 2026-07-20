@@ -25,6 +25,8 @@ import asyncio
 
 import zendriver as zd
 
+import captcha_gate
+
 PAGE_BREAK = "\n<!--ARBAY_PAGE_BREAK-->\n"
 CHROME = os.environ.get("MOBILEDE_CHROME", "/usr/bin/google-chrome-stable")
 
@@ -71,8 +73,15 @@ async def load(page, url: str, wait_s: float) -> str | None:
         # A settled page that is neither results nor a challenge is a real page (e.g. 0 hits).
         if len(html) > 40000:
             return html
-    # Timed out. If what we have is not the challenge stub, it is a usable page; else it is a block.
-    return html if (html and not is_challenge(html) and len(html) > 40000) else None
+    # Auto-wait exhausted. If still on the Akamai challenge, expose this live browser over noVNC so a
+    # human can solve it in place — the token binds to this session's IP and fingerprint, so no other
+    # browser can solve it for us. Continue once solved.
+    if is_challenge(html) or not html:
+        display = os.environ.get("DISPLAY", ":99")
+        solved = await captcha_gate.await_human_solve(
+            p, lambda h: has_results(h) or (not is_challenge(h) and len(h) > 40000), display)
+        return (await p.get_content()) if solved else None
+    return html if len(html) > 40000 else None
 
 
 def emit(html: str) -> None:

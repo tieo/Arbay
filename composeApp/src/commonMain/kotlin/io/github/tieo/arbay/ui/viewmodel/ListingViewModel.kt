@@ -185,6 +185,7 @@ class ListingViewModel(
                                     status = PlatformSearchStatus.DONE,
                                     resultCount = event.resultCount,
                                     rawCount = event.rawCount,
+                                    captchaUrl = null, // solved (or never needed) — drop the link
                                 ) else it
                             }
                             // Reconcile: replace this platform's streamed preview listings with its
@@ -230,6 +231,18 @@ class ListingViewModel(
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)
                                 else it
+                            }
+                        }
+
+                        CrawlerEventType.CAPTCHA_INTERACTIVE -> {
+                            // The crawl exposed its live browser for a human to solve a captcha in
+                            // place. Attach the (base-qualified) solve link to the platform, which is
+                            // still running — it resumes once solved.
+                            val full = event.captchaUrl?.let {
+                                if (it.startsWith("http")) it else client.baseUrl + it
+                            }
+                            _platformStatuses.value = _platformStatuses.value.map {
+                                if (it.platformId == event.platform) it.copy(captchaUrl = full) else it
                             }
                         }
 

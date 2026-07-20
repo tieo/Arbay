@@ -42,6 +42,20 @@ internal suspend fun emitPartialResults(listings: List<Listing>) {
     coroutineContext[PartialResultEmitter]?.emit(listings)
 }
 
+/** CoroutineContext element notified when a stealth fetch exposes its live browser for a human to
+ *  solve a captcha in place (same IP + fingerprint the token binds to), so the search route can push
+ *  the solve link to the client. */
+class CaptchaInteractiveEmitter(val emit: suspend () -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<CaptchaInteractiveEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+/** Signal that the current crawl has put a captcha up for interactive solving, if a
+ *  [CaptchaInteractiveEmitter] is attached; a no-op otherwise. */
+internal suspend fun emitCaptchaInteractive() {
+    coroutineContext[CaptchaInteractiveEmitter]?.emit()
+}
+
 /** Runs the page-by-page crawl every list crawler shares: fetch and parse one page via [fetchPage],
  *  stopping when a page comes back empty, adds nothing new, or the per-platform cap is reached.
  *  Deduplicates by [Listing.externalId] (keeping first-seen order), streams each page's freshly

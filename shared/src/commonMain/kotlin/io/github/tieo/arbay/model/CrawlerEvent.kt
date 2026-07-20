@@ -32,6 +32,9 @@ enum class CrawlerEventType {
     PLATFORM_PROGRESS,
     PLATFORM_DONE,
     PLATFORM_ERROR,
+    // A crawl has exposed its live browser (noVNC) for the user to solve a captcha in place; the
+    // captchaUrl carries the path to open. The crawl continues once solved.
+    CAPTCHA_INTERACTIVE,
     SEARCH_COMPLETE,
 }
 
