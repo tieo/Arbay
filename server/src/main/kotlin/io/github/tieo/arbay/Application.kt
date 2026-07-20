@@ -46,8 +46,8 @@ fun Application.module() {
     ModelRegistry.retrainAll()
 
     launch { ExchangeRates.refresh() }
-    // Rebuild the car taxonomy from site catalogs daily; refresh() is a no-op until
-    // per-site probing lands, so the bundled seed stays authoritative meanwhile.
+    // Rebuild the make list from AutoScout24's live catalog on boot and daily; per-make model
+    // lists are probed on demand and cached (see CarTaxonomyProvider.modelsFor).
     launch {
         while (true) {
             try { CarTaxonomyProvider.refresh() } catch (_: Exception) {}
