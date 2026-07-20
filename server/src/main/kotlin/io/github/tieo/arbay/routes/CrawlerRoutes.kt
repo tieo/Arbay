@@ -126,10 +126,13 @@ private suspend fun carPostFilter(
     // Parse specs from each card's own title/description first (mileage, year, power, …), so a
     // platform that ships no structured data — eBay, Kleinanzeigen — is still filterable: a stated
     // "345.000 km" becomes a value the mileage filter can exclude on (when useTextSpecs is set).
+    // A query that is itself after a part ("Crafter Drehkonsole") must not have the non-vehicle
+    // guard strip those parts out; then it returns the parts the user asked for.
+    val partsIntent = CarFilterEngine.isPartQuery(searchQuery.positiveText)
     val enriched = listings.map { VehicleTextParser.enrich(it) }
-    val cardFiltered = CarFilterEngine.apply(enriched, filters)
+    val cardFiltered = CarFilterEngine.apply(enriched, filters, keepNonVehicles = partsIntent)
     val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-    return CarFilterEngine.apply(detailed, filters)
+    return CarFilterEngine.apply(detailed, filters, keepNonVehicles = partsIntent)
 }
 
 /** Default platforms when the query resolves to a car make/model. Covers Germany

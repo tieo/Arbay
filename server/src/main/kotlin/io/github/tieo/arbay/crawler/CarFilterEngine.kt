@@ -26,8 +26,19 @@ object CarFilterEngine {
         PlatformId.RICARDO, PlatformId.SUBITO, PlatformId.TWEEDEHANDS,
     )
 
-    fun apply(listings: List<Listing>, filters: CarFilters): List<Listing> =
-        listings.map { annotateVanDims(it) }.filter { keep(it, filters) }
+    /** @param keepNonVehicles when true, the parts/accessories guard is skipped, for a query that
+     *  is itself asking for a part ("Crafter Drehkonsole") rather than a whole vehicle. */
+    fun apply(listings: List<Listing>, filters: CarFilters, keepNonVehicles: Boolean = false): List<Listing> =
+        listings.map { annotateVanDims(it) }.filter { keep(it, filters, keepNonVehicles) }
+
+    /** A car query that is really after a part or accessory, so the non-vehicle guard must not fire.
+     *  Recognised from the same part nouns the guard drops, plus the wheels/tyres wording those
+     *  omit because a car-for-sale never leads with them. */
+    fun isPartQuery(text: String): Boolean =
+        partAccessory.containsMatchIn(text) || partAccessoryLead.containsMatchIn(text) ||
+            partFromDonorVehicle.containsMatchIn(text) ||
+            Regex("""\b(felge|felgen|reifen|winterreifen|sommerreifen|kompletträder|alufelgen|tyres?|wheels?)\b""",
+                RegexOption.IGNORE_CASE).containsMatchIn(text)
 
     /** For each active filter dimension, how many more of [candidates] would pass if that one
      *  filter were dropped (all others kept): the count a chip is hiding. Computed locally over
@@ -77,10 +88,10 @@ object CarFilterEngine {
         )
     }
 
-    private fun keep(listing: Listing, filters: CarFilters): Boolean {
+    private fun keep(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false): Boolean {
         val v = listing.vehicle
 
-        if (isLikelyNonVehicle(listing)) return false
+        if (!keepNonVehicles && isLikelyNonVehicle(listing)) return false
 
         // Find-in-description: every whitespace-separated term must appear in the title or
         // description. This is a literal match on text we hold, so excluding is safe.

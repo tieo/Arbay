@@ -11,6 +11,9 @@ import io.github.tieo.arbay.model.VehicleInfo
 import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CarFilterEngineTest {
@@ -320,6 +323,32 @@ class CarFilterEngineTest {
         url = "https://www.2dehands.be/v/1",
         title = title,
         price = Money(900_000, Currency.EUR),
+        scrapedAt = kotlinx.datetime.Clock.System.now(),
+    )
+
+    @Test
+    fun `a part query keeps parts that the guard would otherwise drop`() {
+        val part = partListing("Drehkonsole VW Crafter Mercedes Sprinter")
+        // Without parts intent the guard drops it; with it, the part is kept.
+        assertTrue(CarFilterEngine.apply(listOf(part), CarFilters()).isEmpty())
+        assertEquals(1, CarFilterEngine.apply(listOf(part), CarFilters(), keepNonVehicles = true).size)
+    }
+
+    @Test
+    fun `isPartQuery recognises part and wheel searches, not a plain model`() {
+        assertTrue(CarFilterEngine.isPartQuery("Crafter Drehkonsole"))
+        assertTrue(CarFilterEngine.isPartQuery("Golf Winterreifen Alufelgen"))
+        assertTrue(CarFilterEngine.isPartQuery("Scheinwerfer VW Crafter"))
+        assertFalse(CarFilterEngine.isPartQuery("Volkswagen Crafter"))
+    }
+
+    private fun partListing(title: String) = io.github.tieo.arbay.model.Listing(
+        id = "KLEINANZEIGEN:$title",
+        platformId = io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
+        externalId = title,
+        url = "https://x/1",
+        title = title,
+        price = io.github.tieo.arbay.model.Money(5000, io.github.tieo.arbay.model.Currency.EUR),
         scrapedAt = kotlinx.datetime.Clock.System.now(),
     )
 }
