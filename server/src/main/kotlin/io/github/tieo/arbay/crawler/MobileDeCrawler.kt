@@ -38,9 +38,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
         }.filter { seen.add(it.externalId) }
     }
 
-    // Result cards render with CSS-module hashed classes and stable data-testid values:
-    // each listing container is `(top|base)-result-listing-N`, with `-title` and
-    // `-price-section` descendants and a `/fahrzeuge/details` link.
+    // Result cards render with CSS-module hashed classes and stable data-testid values: each
+    // listing container is `(top|base)-result-listing-N`, holding a `listing-title-card-view`
+    // title, a `main-price-label` price and a `/fahrzeuge/details` link.
     private val containerTestId = Regex("^(?:top|base)-result-listing-\\d+$")
     private val idInHref = Regex("""[?&]id=(\d+)""")
     private val firstPrice = Regex("""([0-9][0-9.]*)\s*€""")
@@ -60,15 +60,23 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
             val externalId = idInHref.find(href)?.groupValues?.get(1) ?: return@mapNotNull null
             val url = if (href.startsWith("http")) href else "https://suchen.mobile.de$href"
 
-            val title = item.selectFirst("[data-testid$=-title]")?.text()?.trim()
+            // `listing-title-card-view` is the bare model name; the `-title` wrapper also holds a
+            // "Gesponsert" sponsored badge and a subtitle, which would leak into the title text.
+            val title = (item.selectFirst("[data-testid=listing-title-card-view]")
+                ?: item.selectFirst("[data-testid$=-title]"))?.text()?.trim()
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
 
-            val priceText = item.selectFirst("[data-testid$=-price-section]")?.text()
-                ?: item.selectFirst("[class*=Price],[class*=price]")?.text()
+            // Price lives in `main-price-label` ("42.900 €"); `price-label` is the same amount
+            // elsewhere in the card, `-price-section` is the legacy testid. nbsp (U+00A0) between
+            // the number and € would defeat the \s* in firstPrice, so normalise it to a space.
+            val priceText = (item.selectFirst("[data-testid=main-price-label]")
+                ?: item.selectFirst("[data-testid=price-label]")
+                ?: item.selectFirst("[data-testid$=-price-section]")
+                ?: item.selectFirst("[class*=Price],[class*=price]"))?.text()?.replace('\u00a0', ' ')
             val price = priceText?.let { firstPrice.find(it)?.value }?.let { Money.parse(it) }
                 ?: return@mapNotNull null
 
-            val info = item.text()
+            val info = item.text().replace('\u00a0', ' ')
             val reg = regInfo.find(info)?.groupValues?.get(1)  // "MM/YYYY"
             val description = buildString {
                 reg?.let { append("EZ: $it") }
