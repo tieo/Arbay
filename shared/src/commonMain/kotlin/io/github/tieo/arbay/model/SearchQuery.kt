@@ -51,6 +51,10 @@ data class CarFilters(
     // Free text that must appear in the listing's title or description. A literal match on
     // text we already have, so it works on every platform and can safely exclude.
     val descriptionContains: String? = null,
+    // Free-form description of the ideal car ("well kept, tow bar, no accidents, full service
+    // history"). Not a hard filter — the server embeds it and ranks results by semantic similarity
+    // to each listing's text, surfacing the best matches first. Local embeddings, no API cost.
+    val idealDescription: String? = null,
     // Filter strictness (behaviour, not a constraint — excluded from isEmpty). useTextSpecs: also
     // filter on specs read from the listing text (not only the site's structured data), so a stated
     // "345.000 km" is honoured. strictUnknown: exclude a listing whose filtered spec can't be
@@ -67,7 +71,7 @@ data class CarFilters(
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
-            descriptionContains.isNullOrBlank()
+            descriptionContains.isNullOrBlank() && idealDescription.isNullOrBlank()
 }
 
 /** Car filters carried inside a saved search, so opening a bookmark reruns it with the

@@ -193,7 +193,11 @@ class ListingViewModel(
                             // dropped disappears and enriched specs replace the card-only ones.
                             _allListings.value = (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
                                 .distinctBy { it.id }
-                                .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
+                                .sortedWith(
+                                    // Ideal-car match ranking wins when present (a semantic score is
+                                    // attached); otherwise, and to break ties, cheapest first.
+                                    compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
+                                        .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
                             if (event.facets.isNotEmpty()) {
                                 _facets.value = (_facets.value.keys + event.facets.keys).associateWith { k ->
                                     (_facets.value[k] ?: 0) + (event.facets[k] ?: 0)
@@ -226,7 +230,11 @@ class ListingViewModel(
                             if (event.listings.isNotEmpty()) {
                                 _allListings.value = (_allListings.value + event.listings)
                                     .distinctBy { it.id }
-                                    .sortedBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }
+                                    .sortedWith(
+                                    // Ideal-car match ranking wins when present (a semantic score is
+                                    // attached); otherwise, and to break ties, cheapest first.
+                                    compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
+                                        .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
                             }
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)

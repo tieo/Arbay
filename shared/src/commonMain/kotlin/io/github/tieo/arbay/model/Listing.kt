@@ -28,6 +28,9 @@ data class Listing(
     val scrapedAt: Instant,
     val extras: JsonObject? = null,
     val relevanceScore: Double? = null,
+    // Semantic match [0,1] to a car search's free-form idealDescription; null when none set. Used to
+    // rank car results by how well each fits the described ideal.
+    val matchScore: Double? = null,
     val modelScores: Map<String, Double>? = null,
     val isExploration: Boolean = false,
     val vehicle: VehicleInfo? = null,

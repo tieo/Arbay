@@ -11,6 +11,7 @@ import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.PartialResultEmitter
@@ -137,7 +138,11 @@ private suspend fun carPostFilter(
     val enriched = listings.map { VehicleTextParser.enrich(it) }
     val cardFiltered = CarFilterEngine.apply(enriched, filters, keepNonVehicles = partsIntent)
     val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-    return CarFilterEngine.apply(detailed, filters, keepNonVehicles = partsIntent)
+    val filtered = CarFilterEngine.apply(detailed, filters, keepNonVehicles = partsIntent)
+    // A free-form ideal-car description ranks (not filters) the survivors by local semantic
+    // similarity, so the best matches surface first. Skipped when none was given.
+    return filters.idealDescription?.takeIf { it.isNotBlank() }
+        ?.let { CarCriteriaScorer.rank(filtered, it) } ?: filtered
 }
 
 /** Default platforms when the query resolves to a car make/model. Covers Germany

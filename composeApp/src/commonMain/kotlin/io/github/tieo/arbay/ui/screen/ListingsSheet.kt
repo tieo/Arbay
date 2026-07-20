@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -1110,6 +1111,22 @@ internal fun ListingCard(
                 )
 
                 listing.vehicle?.let { VehicleSpecsRow(it) }
+
+                // Semantic fit to the searcher's ideal-car description, when they gave one.
+                listing.matchScore?.let { score ->
+                    Spacer(Modifier.height(3.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Text(
+                            "${(score * 100).roundToInt()}% match",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
 
                 listing.location?.let { loc ->
                     val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")

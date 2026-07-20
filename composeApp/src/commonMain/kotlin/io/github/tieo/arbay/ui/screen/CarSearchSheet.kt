@@ -129,6 +129,7 @@ fun CarSearchSheet(
     val vanLengths = remember { mutableStateListOf<Int>().apply { initialFilters?.vanLengths?.let { addAll(it) } } }
     val vanHeights = remember { mutableStateListOf<Int>().apply { initialFilters?.vanHeights?.let { addAll(it) } } }
     var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
+    var idealDescription by remember { mutableStateOf(initialFilters?.idealDescription ?: "") }
     var useTextSpecs by remember { mutableStateOf(initialFilters?.useTextSpecs ?: true) }
     var strictUnknown by remember { mutableStateOf(initialFilters?.strictUnknown ?: false) }
     val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
@@ -155,6 +156,7 @@ fun CarSearchSheet(
         vanLengths = vanLengths.toSet(),
         vanHeights = vanHeights.toSet(),
         descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
+        idealDescription = idealDescription.trim().takeIf { it.isNotBlank() },
         useTextSpecs = useTextSpecs,
         strictUnknown = strictUnknown,
     )
@@ -346,6 +348,19 @@ fun CarSearchSheet(
                         placeholder = { Text("e.g. Standheizung, Anhängerkupplung, Camper") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Free-form ideal-car description: ranks (does not filter) results by local
+                    // semantic similarity, best matches first. No API cost.
+                    SectionLabel("Describe your ideal car")
+                    OutlinedTextField(
+                        value = idealDescription,
+                        onValueChange = { idealDescription = it },
+                        placeholder = { Text("e.g. well kept, full service history, tow bar, no accidents") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
                     )
 
                     Spacer(Modifier.height(18.dp))
