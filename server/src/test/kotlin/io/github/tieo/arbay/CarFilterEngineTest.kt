@@ -366,6 +366,40 @@ class CarFilterEngineTest {
         assertEquals(cars.size, CarFilterEngine.apply(cars, CarFilters()).size)
     }
 
+    @Test
+    fun `part guard drops the brake, glass, filter, hinge and radio families eBay floats up`() {
+        val parts = listOf(
+            "TÜRSCHARNIER HINTEN LINKS VW GOLF (PLUS) 1K4833411Q",
+            "VW Golf 4 Filter, Innenraumfilter, Motorfilter, Ölfilter",
+            "Hutablage Original VW Golf 5",
+            "VW Golf Bremskraftverstärker original Top Zustand",
+            "Vorfacelift für Composition Autoradio VW Golf 7",
+            "Automatikgetriebesteuergerät VW Golf 3",
+            "VW Golf 1 Cabrio Seitenscheibe Rechts",
+            "Diesel Pumpe VW GOLF VI BOSCH",
+            "VW Golf V Stoßstangengitter",
+            "original VW Golf 1 2 GTI Schaltknauf Knauf",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        val survivors = CarFilterEngine.apply(parts, CarFilters()).map { it.title }
+        assertTrue(survivors.isEmpty(), "not dropped: $survivors")
+    }
+
+    @Test
+    fun `wheel-tyre ad drops on a size or lead word, but a car bragging new tyres survives`() {
+        val wheelAds = listOf(
+            "4x VW Golf 4 Sommerreifen auf Alufelge 195/65 R15",
+            "VW Golf 6 Alufelgen (17 Zoll) mit Sommerreifen 225/45 ZR17",
+            "Sommerreifen VW Golf",
+            "VW CADDY-GOLF FELGEN",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        assertTrue(CarFilterEngine.apply(wheelAds, CarFilters()).isEmpty(),
+            "wheel ad kept: ${CarFilterEngine.apply(wheelAds, CarFilters()).map { it.title }}")
+        // A real car that merely mentions fresh tyres (no size, tyre word not leading) is kept.
+        val car = carListing("c", PlatformId.EBAY_DE, "VW Golf 4 1.9 TDI mit neuen Reifen und TÜV",
+            vehicle = VehicleInfo())
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
     private fun partListing(title: String) = io.github.tieo.arbay.model.Listing(
         id = "KLEINANZEIGEN:$title",
         platformId = io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,

@@ -163,7 +163,14 @@ object CarFilterEngine {
         """\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
             """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
             """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
-            """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|\bsteuergerät\b|""" +
+            """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|steuerger(ä|ae)t|""" +
+            // Bodies of parts an eBay vehicle search floats up: brake components, glass, a parcel
+            // shelf, a radio, a catalytic converter, filters — none the subject of a car-for-sale ad.
+            """\bhutablage\b|\bautoradio\b|\b(euro)?kat(alysator)?\b|\bbremssattel\b|\bbremskl(ö|oe)tze\b|""" +
+            """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|""" +
+            // Rims/alloys on their own are a wheel ad, not a car; unlike tyres (which a car brags
+            // about, "mit neuen Reifen"), a whole car is never titled after its Felgen.
+            """\b(alu|stahl)?felgen?\b|\bkomplettr(ä|ae)der\b|\brims?\b|""" +
             // Never a whole vehicle: a repair kit, a bulb, a brochure, a lift kit, a keyring.
             """\breparatursatz\b|\bkeilrippenriemen\b|\bkennzeichenleuchte\b|\bpositionsleuchte\b|""" +
             """\bschl(ü|ue)sselanh(ä|ae)nger\b|\bprospekt\b|\bpreisliste\b|\bh(ö|oe)herlegungs?\s?kit\b|""" +
@@ -172,6 +179,15 @@ object CarFilterEngine {
             """\b(koplamp|achterlicht|spatbord|onderdeel|onderdelen|dakdrager|portier|motorkap|spiegelkap|stoelhoezen?)\b""",
         RegexOption.IGNORE_CASE,
     )
+
+    // Bare tyres are softer than rims: a real car brags "mit neuen Reifen", so a tyre word marks an
+    // ad only when it also carries a size token (195/65 R15, 17 Zoll) or leads the title — a bragging
+    // car does neither. The no-spec gate still exempts any car the site gave specs for.
+    private val tyres = Regex("""\b(sommer|winter|ganzjahres)?reifen\b|\btyres?\b""", RegexOption.IGNORE_CASE)
+    private val tyreSize = Regex("""\b\d{3}/\d{2}\s?(r|zr)?\s?\d{2}\b|\b1\d\s?(zoll|inch|")\b""", RegexOption.IGNORE_CASE)
+    private val leadingTyre = Regex("""^\s*\d*\s*x?\s*(sommer|winter|ganzjahres)?reifen\b""", RegexOption.IGNORE_CASE)
+    private fun isTyreAd(title: String) =
+        tyres.containsMatchIn(title) && (tyreSize.containsMatchIn(title) || leadingTyre.containsMatchIn(title))
 
     // Dutch salvage ads name the component and the donor vehicle: "Expansievat van een Volkswagen
     // Crafter", "Spiegel Schakelaar van een ...". A whole vehicle is never described as coming from
@@ -197,7 +213,8 @@ object CarFilterEngine {
     // (without it, ü splits the word and the two-letter stem before the suffix is lost).
     private val partSuffix = Regex(
         """(?U)\b\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
-            """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter)\b""",
+            """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter|""" +
+            """scharnier|verst(ä|ae)rker|scheiben?|gitter|pumpen?|kn(auf|opf|äufe)|kedern?|filter)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -220,6 +237,7 @@ object CarFilterEngine {
         if (!hasVehicleSpec && partAccessoryLead.containsMatchIn(listing.title)) return true
         if (!hasVehicleSpec && partFromDonorVehicle.containsMatchIn(listing.title)) return true
         if (!hasVehicleSpec && partSuffix.containsMatchIn(listing.title)) return true
+        if (!hasVehicleSpec && isTyreAd(listing.title)) return true
         return false
     }
 }
