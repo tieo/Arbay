@@ -29,10 +29,27 @@ class NettiautoCrawler(private val client: HttpClient) : Crawler {
             "/haku?search_type=1&free_word=${query.positiveText.encodeUrl()}"
         }
 
+        val filters = filterParams(query)
         return paginate(query) { page ->
-            val sep = if ("?" in path) "&" else "?"
-            val url = "https://www.nettiauto.com$path" + if (page <= 1) "" else "${sep}page=$page"
+            val query = filters + (if (page <= 1) "" else "&page=$page")
+            val url = "https://www.nettiauto.com$path" +
+                if (query.isEmpty()) "" else (if ("?" in path) "&" else "?") + query.removePrefix("&")
             parse(fetchWithFallback(client, url, "Nettiauto"))
+        }
+    }
+
+    /** nettiauto's native filter query params, read from its own search form (no power field exists,
+     *  so power is left unfiltered here; gearbox/fuel stay with the post-filter, which the card
+     *  carries). */
+    private fun filterParams(query: SearchQuery): String {
+        val f = query.toCarFilters() ?: return ""
+        return buildString {
+            f.firstRegFromYear?.let { append("&yearFrom=$it") }
+            f.firstRegToYear?.let { append("&yearTo=$it") }
+            f.minMileageKm?.let { append("&kilometersFrom=$it") }
+            f.maxMileageKm?.let { append("&kilometersTo=$it") }
+            f.minPriceEur?.let { append("&priceFrom=$it") }
+            f.maxPriceEur?.let { append("&priceTo=$it") }
         }
     }
 
