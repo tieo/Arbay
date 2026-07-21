@@ -13,6 +13,9 @@ data class CrawlerSearchEvent(
     val error: String? = null,
     val errorType: String? = null,
     val captchaUrl: String? = null,
+    // The term this platform was actually searched with when it differs from the user's query — a
+    // cross-border market translated into its own language (e.g. "levigatrice per parquet").
+    val queryUsed: String? = null,
     val fetchStage: String? = null,
     val totalPlatforms: Int = 0,
     val completedPlatforms: Int = 0,

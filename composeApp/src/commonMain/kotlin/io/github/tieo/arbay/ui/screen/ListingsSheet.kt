@@ -415,6 +415,28 @@ fun ListingsSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            // Cross-border markets are searched in their own language; show the
+                            // distinct translated terms so the user sees what was actually queried.
+                            val translations = remember(platformStatuses) {
+                                platformStatuses.mapNotNull { it.queryUsed?.takeIf { q -> q.isNotBlank() } }.distinct()
+                            }
+                            if (translations.isNotEmpty()) {
+                                Spacer(Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Outlined.Translate,
+                                        null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "abroad: ${translations.joinToString(" · ")}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
                         }
                         if (!loading) {
                             IconButton(

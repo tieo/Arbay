@@ -26,6 +26,8 @@ data class PlatformStatus(
     val errorType: String? = null,
     val captchaUrl: String? = null,
     val fetchStage: String? = null,
+    // The translated term a cross-border market was searched with, when it differs from the query.
+    val queryUsed: String? = null,
 )
 
 class ListingViewModel(
@@ -199,6 +201,7 @@ class ListingViewModel(
                                 platformId = event.platform,
                                 platformName = event.platformName,
                                 status = PlatformSearchStatus.SEARCHING,
+                                queryUsed = event.queryUsed,
                             )
                         }
 

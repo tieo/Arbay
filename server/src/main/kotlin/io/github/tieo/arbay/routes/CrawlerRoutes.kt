@@ -386,19 +386,21 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 return@launch
                             }
 
+                            // Cross-border markets are searched in their own language; surface the
+                            // translated term so the user sees what each foreign site was queried with.
+                            val pq = localizedQuery(searchQuery, platformId)
+
                             // Send PLATFORM_STARTED
                             val startedEvent = CrawlerSearchEvent(
                                 type = CrawlerEventType.PLATFORM_STARTED,
                                 platform = platformId.name,
                                 platformName = platformId.displayName,
+                                queryUsed = pq.text.takeIf { it != searchQuery.text },
                             )
                             synchronized(this@respondTextWriter) {
                                 write(json.encodeToString(startedEvent) + "\n")
                                 flush()
                             }
-
-                            // Cross-border markets are searched in their own language.
-                            val pq = localizedQuery(searchQuery, platformId)
 
                             // Fresh cached crawl for this exact query skips the crawl entirely, so
                             // re-running a search (e.g. after a filter tweak) fires no requests.
