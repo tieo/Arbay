@@ -4,6 +4,7 @@ import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
+import kotlin.math.roundToInt
 import org.jsoup.Jsoup
 
 /**
@@ -117,6 +118,9 @@ class OlxCrawler(
                 ?.takeIf { it in 1..2_000_000 },
             displacementCc = params["engine_capacity"]?.filter { it.isDigit() }?.toIntOrNull()
                 ?.takeIf { it in 600..8000 },
+            // OLX's engine_power is metric hp (PS); convert to kW so the power filter enforces.
+            powerKw = params["engine_power"]?.filter { it.isDigit() }?.toIntOrNull()
+                ?.let { (it * 0.7355).roundToInt() }?.takeIf { it in 10..1500 },
             fuel = Fuel.parse(params["combustivel"]),
             gearbox = when (params["gearbox"]) {
                 "automatic", "automatica", "automatico" -> Transmission.AUTOMATIC
