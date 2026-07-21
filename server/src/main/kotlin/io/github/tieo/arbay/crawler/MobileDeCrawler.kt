@@ -4,46 +4,65 @@ import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
+import org.slf4j.LoggerFactory
 
 class MobileDeCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.MOBILE_DE
 
+    private val log = LoggerFactory.getLogger(MobileDeCrawler::class.java)
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         // mobile.de is behind Akamai Bot Manager. Only real Google Chrome driven by zendriver
         // (undetected CDP) under a headed display passes it; StealthBrowserClient runs that.
-        // When the query resolves to a make and model, both vehicle categories are fetched,
-        // because large vans (Crafter, Sprinter) can be listed under VanUpTo7500, not Car.
+        // Each category is a separate, slow stealth crawl, so only add the VanUpTo7500 category when
+        // the query is actually after a large van (Crafter, Sprinter, …) — which does list there,
+        // not under Car. A normal car search stays a single Car crawl (half the browser time).
         val resolved = CarQueryResolver.resolve(query.positiveText)
-        val categories = if (resolved != null) listOf("Car", "VanUpTo7500") else listOf("Car")
+        val categories = when {
+            resolved == null -> listOf("Car")
+            isVanQuery(resolved, query.toCarFilters()) -> listOf("Car", "VanUpTo7500")
+            else -> listOf("Car")
+        }
         val q = if (resolved != null) {
             listOfNotNull(resolved.makeSlug, resolved.modelSlug).joinToString(" ").encodeUrl()
         } else {
             query.positiveText.encodeUrl()
         }
 
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        // Every page is a slow stealth browser navigation, so keep mobile.de deliberately shallow:
+        // a few pages per category is already ~60-80 cars, and the result cap stops it early. A
+        // deeper crawl here is what made a van search (two categories) take ~80 s.
+        val cap = CrawlerConfig.current.maxResultsPerPlatform
+        val maxPages = (query.maxPages ?: CrawlerConfig.current.maxPages).coerceAtMost(3)
         val platform = platformId.displayName
         val seen = mutableSetOf<String>()
         val all = mutableListOf<Listing>()
 
         for (vc in categories) {
+            if (all.size >= cap) break // first category already filled the budget — skip the rest
             // mobile.de bypasses fetchWithFallback (dedicated stealth browser), so instrument and
             // enforce the request cutoff here too — it's the most block-sensitive platform.
             if (RequestMonitor.overBudget(platform))
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
             val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q"
             RequestMonitor.recordTier(platform, "Browser")
+            var pageNo = 0
+            val vcStart = System.currentTimeMillis()
             try {
                 // Each page streams in as the stealth browser loads it; parse and surface it live
-                // instead of blocking ~90s on the whole multi-page, multi-category crawl. When the
-                // sidecar puts a captcha up for an interactive solve, forward that to the client.
+                // instead of blocking on the whole multi-page, multi-category crawl. When the sidecar
+                // puts a captcha up for an interactive solve, forward that to the client.
                 StealthBrowserClient.fetchStreaming(
                     url,
                     maxPages = maxPages,
                     onControl = { msg -> if (msg == "CAPTCHA_INTERACTIVE") emitCaptchaInteractive() },
                 ) { html ->
+                    pageNo++
                     RequestMonitor.recordRequest(platform)
                     val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }
+                    // Per-page trickle timing, so the stealth-browser cadence is visible in the log.
+                    log.info("mobile.de {} page {} +{} (total {}, {}ms in)",
+                        vc, pageNo, fresh.size, all.size + fresh.size, System.currentTimeMillis() - vcStart)
                     emitPartialResults(fresh)
                     all.addAll(fresh)
                 }
@@ -55,6 +74,22 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
         }
         return all
     }
+
+    /** Whether this query is after a large van/transporter, which mobile.de lists under the separate
+     *  VanUpTo7500 category. True when a van body-type filter is set or the model is a known
+     *  transporter; a normal car then skips that second, expensive stealth crawl. */
+    private fun isVanQuery(car: CarQueryResolver.CarQuery, filters: CarFilters?): Boolean {
+        if (filters?.bodyTypes?.any { it == BodyType.VAN || it == BodyType.MINIVAN || it == BodyType.TRANSPORTER } == true)
+            return true
+        val model = car.modelSlug?.lowercase() ?: return false
+        return VAN_MODELS.any { model == it || model.startsWith("$it-") }
+    }
+
+    private val VAN_MODELS = setOf(
+        "crafter", "sprinter", "transporter", "transit", "ducato", "boxer", "jumper", "master",
+        "movano", "interstar", "daily", "vito", "viano", "trafic", "vivaro", "talento", "primastar",
+        "expert", "jumpy", "scudo", "proace", "combo", "doblo", "nv200", "nv300", "nv400", "hiace",
+    )
 
     // Result cards render with CSS-module hashed classes and stable data-testid values: each
     // listing container is `(top|base)-result-listing-N`, holding a `listing-title-card-view`

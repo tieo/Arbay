@@ -60,8 +60,8 @@ async def load(page, url: str, wait_s: float) -> str | None:
     block)."""
     p = await page.get(url)
     html = ""
-    for _ in range(int(wait_s // 2) + 1):
-        await asyncio.sleep(2)
+    for _ in range(int(wait_s // 1.5) + 1):
+        await asyncio.sleep(1.5)
         try:
             html = await p.get_content()
         except Exception:
@@ -102,7 +102,7 @@ async def run(url: str, max_pages: int, wait_s: float) -> bool:
             return True
         emit(first)
         for page in range(2, max_pages + 1):
-            await asyncio.sleep(2.0)  # rate limit between pages
+            await asyncio.sleep(1.0)  # brief rate limit between pages
             html = await load(browser, with_page(url, page), 12.0)
             if html is None or "/fahrzeuge/details" not in html:
                 break
