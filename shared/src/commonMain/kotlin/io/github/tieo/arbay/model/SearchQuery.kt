@@ -55,11 +55,10 @@ data class CarFilters(
     // history"). Not a hard filter — the server embeds it and ranks results by semantic similarity
     // to each listing's text, surfacing the best matches first. Local embeddings, no API cost.
     val idealDescription: String? = null,
-    // Filter strictness (behaviour, not a constraint — excluded from isEmpty). useTextSpecs: also
-    // filter on specs read from the listing text (not only the site's structured data), so a stated
-    // "345.000 km" is honoured. strictUnknown: exclude a listing whose filtered spec can't be
-    // determined at all (precise but loses coverage); off = keep unknowns.
-    val useTextSpecs: Boolean = true,
+    // Filter strictness (behaviour, not a constraint — excluded from isEmpty). Specs read from the
+    // listing text always count (a stated "345.000 km" is honoured), so filtering works on sites with
+    // no structured data. strictUnknown: exclude a listing whose filtered spec can't be determined at
+    // all (precise but loses coverage); off = keep unknowns.
     val strictUnknown: Boolean = false,
 ) {
     val isEmpty: Boolean get() =

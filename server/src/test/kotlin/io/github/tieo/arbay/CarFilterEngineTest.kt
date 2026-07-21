@@ -115,19 +115,11 @@ class CarFilterEngineTest {
 
     @Test
     fun textSpecsExcludeByDefault() {
-        // Default useTextSpecs=true: a stated-but-unverified value that fails the filter DOES drop
-        // the listing (a ≤200k km filter must not show a stated 345.000 km van).
+        // A stated-but-unverified (text-read) value that fails the filter DOES drop the listing:
+        // a ≤200k km filter must not show a stated 345.000 km van.
         val over = listing("o", PlatformId.EBAY_DE, 1_000_000,
             VehicleInfo(mileageKm = 345_000)) // present, not verified (text-read)
         assertEquals(0, CarFilterEngine.apply(listOf(over), CarFilters(maxMileageKm = 200_000)).size)
-    }
-
-    @Test
-    fun useTextSpecsOffKeepsInferred() {
-        // Opting out of text specs means only the site's structured data can exclude; a text-read value is
-        // ignored, so an unverified out-of-range power keeps the listing.
-        val inferred = listing("i", PlatformId.KLEINANZEIGEN, 1_800_000, VehicleInfo(powerKw = 90))
-        assertEquals(1, CarFilterEngine.apply(listOf(inferred), CarFilters(minPowerKw = 110, useTextSpecs = false)).size)
     }
 
     @Test
@@ -241,19 +233,18 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun verifiedSpecExcludesEvenWithTextSpecsOff() {
-        // useTextSpecs only gates text-read values; the site's structured data always counts.
+    fun verifiedSpecExcludes() {
+        // A verified (structured) out-of-range value drops the listing.
         val over = listing("v", PlatformId.MOBILE_DE, 1_500_000, verified(mileageKm = 300_000))
-        assertEquals(0, CarFilterEngine.apply(listOf(over), CarFilters(maxMileageKm = 200_000, useTextSpecs = false)).size)
+        assertEquals(0, CarFilterEngine.apply(listOf(over), CarFilters(maxMileageKm = 200_000)).size)
     }
 
     @Test
-    fun textSpecsOffTreatsTextValueAsUnknownUnderStrict() {
-        // With useTextSpecs off a text-read value is not known, so strict mode drops the listing
-        // even though the stated mileage would pass the filter.
+    fun statedPassingSpecKeptUnderStrict() {
+        // A text-read spec counts as known, so strict mode keeps a listing whose stated value passes.
         val stated = listing("s2", PlatformId.EBAY_DE, 1_000_000, VehicleInfo(mileageKm = 150_000))
-        val filters = CarFilters(maxMileageKm = 200_000, useTextSpecs = false, strictUnknown = true)
-        assertEquals(0, CarFilterEngine.apply(listOf(stated), filters).size)
+        val filters = CarFilters(maxMileageKm = 200_000, strictUnknown = true)
+        assertEquals(1, CarFilterEngine.apply(listOf(stated), filters).size)
     }
 
     @Test
@@ -293,9 +284,9 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun vanDimsExcludeEvenWithTextSpecsOff() {
-        // A stated van size is annotated as verified, so it excludes regardless of useTextSpecs.
-        val filters = CarFilters(vanLengths = setOf(3), useTextSpecs = false)
+    fun vanDimsExcludeWrongSize() {
+        // A stated van size (L1) excludes when the filter wants a different one (L3).
+        val filters = CarFilters(vanLengths = setOf(3))
         val wrong = carListing("w2", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 kurz")
         assertEquals(0, CarFilterEngine.apply(listOf(wrong), filters).size)
     }

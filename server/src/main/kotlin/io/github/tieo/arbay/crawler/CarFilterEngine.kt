@@ -109,41 +109,39 @@ object CarFilterEngine {
         // Seller type comes from the listing, not VehicleInfo.
         filters.sellerType?.let { want -> listing.seller?.type?.let { if (it != want) return false } }
 
-        // Per-spec strictness (user-controlled). A spec is "known" when its value is present AND
-        // either it's from the site's structured data (verified) or the user allows text-read specs
-        // (useTextSpecs): a stated "345.000 km" then counts. Known + out-of-range drops. Unknown
-        // drops only in strict mode; otherwise soft-pass (keep, don't lose a listing missing that spec).
-        val useText = filters.useTextSpecs
+        // Per-spec strictness. A spec is "known" when its value is present — whether from the site's
+        // structured data or read from the listing text (a stated "345.000 km" counts). Known +
+        // out-of-range drops. Unknown drops only in strict mode; otherwise soft-pass (keep, don't
+        // lose a listing that simply doesn't state that spec).
         val strict = filters.strictUnknown
-        fun drop(active: Boolean, field: VehicleField, present: Boolean, matches: () -> Boolean): Boolean {
+        fun drop(active: Boolean, present: Boolean, matches: () -> Boolean): Boolean {
             if (!active) return false
-            val known = present && (useText || (v?.isVerified(field) == true))
-            return if (known) !matches() else strict
+            return if (present) !matches() else strict
         }
 
-        if (drop(filters.firstRegFromYear != null || filters.firstRegToYear != null, VehicleField.FIRST_REG_YEAR, v?.firstRegYear != null) {
+        if (drop(filters.firstRegFromYear != null || filters.firstRegToYear != null, v?.firstRegYear != null) {
                 val y = v!!.firstRegYear!!
                 (filters.firstRegFromYear?.let { y >= it } ?: true) && (filters.firstRegToYear?.let { y <= it } ?: true)
             }) return false
-        if (drop(filters.minMileageKm != null || filters.maxMileageKm != null, VehicleField.MILEAGE, v?.mileageKm != null) {
+        if (drop(filters.minMileageKm != null || filters.maxMileageKm != null, v?.mileageKm != null) {
                 val km = v!!.mileageKm!!
                 (filters.minMileageKm?.let { km >= it } ?: true) && (filters.maxMileageKm?.let { km <= it } ?: true)
             }) return false
-        if (drop(filters.minPowerKw != null || filters.maxPowerKw != null, VehicleField.POWER, v?.powerKw != null) {
+        if (drop(filters.minPowerKw != null || filters.maxPowerKw != null, v?.powerKw != null) {
                 val kw = v!!.powerKw!!
                 (filters.minPowerKw?.let { kw >= it } ?: true) && (filters.maxPowerKw?.let { kw <= it } ?: true)
             }) return false
-        if (drop(filters.transmission != null, VehicleField.GEARBOX, v?.gearbox != null) { v!!.gearbox == filters.transmission }) return false
-        if (drop(filters.fuels.isNotEmpty(), VehicleField.FUEL, v?.fuel != null) { v!!.fuel in filters.fuels }) return false
-        if (drop(filters.bodyTypes.isNotEmpty(), VehicleField.BODY_TYPE, v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return false
-        if (drop(filters.conditions.isNotEmpty(), VehicleField.CONDITION, v?.condition != null) { v!!.condition in filters.conditions }) return false
-        if (drop(filters.drivetrain != null, VehicleField.DRIVETRAIN, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return false
-        if (drop(filters.minDoors != null, VehicleField.DOORS, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return false
-        if (drop(filters.minSeats != null, VehicleField.SEATS, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return false
-        if (drop(filters.minEmissionEuro != null, VehicleField.EMISSION, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return false
-        if (drop(filters.colors.isNotEmpty(), VehicleField.COLOR, v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return false
-        if (drop(filters.vanLengths.isNotEmpty(), VehicleField.VAN_LENGTH, v?.vanLength != null) { v!!.vanLength in filters.vanLengths }) return false
-        if (drop(filters.vanHeights.isNotEmpty(), VehicleField.VAN_HEIGHT, v?.vanHeight != null) { v!!.vanHeight in filters.vanHeights }) return false
+        if (drop(filters.transmission != null, v?.gearbox != null) { v!!.gearbox == filters.transmission }) return false
+        if (drop(filters.fuels.isNotEmpty(), v?.fuel != null) { v!!.fuel in filters.fuels }) return false
+        if (drop(filters.bodyTypes.isNotEmpty(), v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return false
+        if (drop(filters.conditions.isNotEmpty(), v?.condition != null) { v!!.condition in filters.conditions }) return false
+        if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return false
+        if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return false
+        if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return false
+        if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return false
+        if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return false
+        if (drop(filters.vanLengths.isNotEmpty(), v?.vanLength != null) { v!!.vanLength in filters.vanLengths }) return false
+        if (drop(filters.vanHeights.isNotEmpty(), v?.vanHeight != null) { v!!.vanHeight in filters.vanHeights }) return false
         return true
     }
 

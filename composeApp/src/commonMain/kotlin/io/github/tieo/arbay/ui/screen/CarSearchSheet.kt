@@ -134,7 +134,6 @@ fun CarSearchSheet(
     val vanHeights = remember { mutableStateListOf<Int>().apply { initialFilters?.vanHeights?.let { addAll(it) } } }
     var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
     var idealDescription by remember { mutableStateOf(initialFilters?.idealDescription ?: "") }
-    var useTextSpecs by remember { mutableStateOf(initialFilters?.useTextSpecs ?: true) }
     var strictUnknown by remember { mutableStateOf(initialFilters?.strictUnknown ?: false) }
     val selectedPlatforms = remember {
         mutableStateListOf<PlatformId>().apply { addAll(initialPlatforms ?: CAR_MARKETS.map { it.first }) }
@@ -167,7 +166,6 @@ fun CarSearchSheet(
         vanHeights = vanHeights.toSet(),
         descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
         idealDescription = idealDescription.trim().takeIf { it.isNotBlank() },
-        useTextSpecs = useTextSpecs,
         strictUnknown = strictUnknown,
     )
 
@@ -376,12 +374,6 @@ fun CarSearchSheet(
                     Spacer(Modifier.height(18.dp))
 
                     SectionLabel("Matching")
-                    LabeledSwitch(
-                        title = "Use details from listing text",
-                        subtitle = "Filter on year/km/power found in the title, not only the site's own data",
-                        checked = useTextSpecs,
-                        onCheckedChange = { useTextSpecs = it },
-                    )
                     LabeledSwitch(
                         title = "Only exact matches",
                         subtitle = "Hide listings that don't state a filtered spec (fewer results, no maybes)",
