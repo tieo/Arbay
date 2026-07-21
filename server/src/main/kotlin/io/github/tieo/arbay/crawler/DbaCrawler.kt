@@ -31,12 +31,6 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.DBA
 
     companion object {
-        private const val SEARCH_API =
-            "https://www.dba.dk/mobility/search/api/search/SEARCH_ID_CAR_USED"
-
-        /** kW to metric horsepower (1 kW = 1.35962 PS). DBA uses HP (hk). */
-        private fun kwToHp(kw: Int): Int = (kw * 1.35962).toInt()
-
         private val json = Json { ignoreUnknownKeys = true }
     }
 
@@ -50,7 +44,8 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
 
         return if (hasFilters(query)) {
             paginate(query) { page ->
-                parseFromApi(fetchJson(buildApiUrl(searchText, query, page))) ?: emptyList()
+                val url = MobilityApi.searchUrl("www.dba.dk", searchText, query, page, Currency.DKK)
+                MobilityApi.parseDocs(fetchJson(url), platformId, Currency.DKK, "DK", "www.dba.dk") ?: emptyList()
             }
         } else {
             paginate(query) { page ->
@@ -70,31 +65,6 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
             query.maxPrice != null ||
             query.minPrice != null
 
-    private fun buildApiUrl(text: String, query: SearchQuery, page: Int): String = buildString {
-        append(SEARCH_API)
-        append("?q=").append(text.encodeUrl())
-        query.firstRegFromYear?.let { append("&year_from=$it") }
-        query.firstRegToYear?.let { append("&year_to=$it") }
-        query.maxMileageKm?.let { append("&mileage_to=$it") }
-        query.minPowerKw?.let { append("&engine_effect_from=${kwToHp(it)}") }
-        query.maxPrice?.let { max ->
-            val dkk = if (max.currency == Currency.DKK) max.amount / 100
-            else ExchangeRates.convert(max.amount, max.currency.name, "DKK") / 100
-            append("&price_to=$dkk")
-        }
-        query.minPrice?.let { min ->
-            val dkk = if (min.currency == Currency.DKK) min.amount / 100
-            else ExchangeRates.convert(min.amount, min.currency.name, "DKK") / 100
-            append("&price_from=$dkk")
-        }
-        when (query.transmission) {
-            Transmission.AUTOMATIC -> append("&transmission=2")
-            Transmission.MANUAL -> append("&transmission=1")
-            null -> {}
-        }
-        if (page > 1) append("&page=$page")
-    }
-
     private suspend fun fetchJson(url: String): String {
         val response = client.get(url) {
             headers {
@@ -103,85 +73,6 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
             }
         }
         return response.body()
-    }
-
-    /**
-     * Parses the JSON response from the internal search API at
-     * /mobility/search/api/search/SEARCH_ID_CAR_USED. Each doc carries an `id`,
-     * `heading`, `canonical_url`, `price.amount`/`price.currency_code`, `location`,
-     * `year`, `mileage`, and optionally `image.url`. The API uses the same item IDs
-     * as the HTML page, so externalId remains stable across both code paths.
-     */
-    internal fun parseFromApi(body: String): List<Listing>? {
-        val now = Clock.System.now()
-        return try {
-            val root = json.parseToJsonElement(body).jsonObject
-            val docs = root["docs"]?.jsonArray ?: return null
-
-            docs.mapNotNull { el ->
-                val doc = el.jsonObject
-
-                val externalId = doc["id"]?.jsonPrimitive?.contentOrNull
-                    ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-
-                val title = doc["heading"]?.jsonPrimitive?.contentOrNull?.trim()
-                    ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-
-                val url = doc["canonical_url"]?.jsonPrimitive?.contentOrNull
-                    ?: "https://www.dba.dk/mobility/item/$externalId"
-
-                val priceAmount = doc["price"]?.jsonObject?.get("amount")?.jsonPrimitive?.longOrNull
-                    ?.takeIf { it >= 0 } ?: return@mapNotNull null
-                // amount is already in the major unit (kr.), not cents
-                val price = Money(priceAmount * 100, Currency.DKK)
-
-                val imageUrl = doc["image"]?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
-
-                val city = doc["location"]?.jsonPrimitive?.contentOrNull?.trim()
-                    ?.takeIf { it.isNotBlank() }
-
-                val year = doc["year"]?.jsonPrimitive?.intOrNull
-                val mileage = doc["mileage"]?.jsonPrimitive?.longOrNull
-
-                val description = buildString {
-                    year?.let { append(it) }
-                    mileage?.let {
-                        if (isNotEmpty()) append(" | ")
-                        append("$it km")
-                    }
-                }.takeIf { it.isNotBlank() }
-
-                val vehicle = VehicleTextParser.verifiedByPresence(VehicleInfo(
-                    firstRegYear = year?.takeIf { it in 1980..2035 },
-                    // range check on the Long before narrowing, so garbage values cannot wrap
-                    mileageKm = mileage?.takeIf { it in 1..2_000_000 }?.toInt(),
-                    fuel = Fuel.parse(
-                        (doc["fuel_type"] ?: doc["fuel"] ?: doc["propellant"])?.jsonPrimitive?.contentOrNull,
-                    ),
-                    gearbox = when ((doc["transmission"] ?: doc["gear"])?.jsonPrimitive?.contentOrNull?.lowercase()) {
-                        "automatic", "automatisk", "automatgear" -> Transmission.AUTOMATIC
-                        "manual", "manuel", "manuelt" -> Transmission.MANUAL
-                        else -> null
-                    },
-                ))
-
-                Listing(
-                    id = "${platformId.name}:$externalId",
-                    platformId = platformId,
-                    externalId = externalId,
-                    url = url,
-                    title = title,
-                    price = price,
-                    imageUrls = listOfNotNull(imageUrl),
-                    location = Location(city = city, country = "DK"),
-                    description = description,
-                    scrapedAt = now,
-                    vehicle = vehicle,
-                )
-            }
-        } catch (_: Exception) {
-            null
-        }
     }
 
     internal fun parse(html: String): List<Listing> {
