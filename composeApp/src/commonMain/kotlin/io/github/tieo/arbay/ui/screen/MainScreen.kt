@@ -98,6 +98,12 @@ fun MainScreen(
     LaunchedEffect(listingsProduct?.id) {
         listingsBlockedTerms = listingsProduct?.searchQuery?.excludeKeywords ?: emptyList()
     }
+    // Same, for the car results sheet; seeded from the bookmark being edited (empty for a fresh
+    // search, where blocks still filter live and are saved into the bookmark on Save search).
+    var carBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(editingProduct?.id, showCarResults) {
+        if (showCarResults) carBlockedTerms = editingProduct?.searchQuery?.excludeKeywords ?: emptyList()
+    }
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()
@@ -432,6 +438,11 @@ fun MainScreen(
                 showCarResults = false
                 showCarSearch = true
             },
+            blockedTerms = carBlockedTerms,
+            onBlockedTermsChange = { updated ->
+                carBlockedTerms = updated
+                editingProduct?.let { productViewModel.setBlockedKeywords(it, updated) }
+            },
             onBookmark = {
                 val edited = editingProduct
                 if (edited != null) {
@@ -443,6 +454,7 @@ fun MainScreen(
                                 text = carQuery,
                                 platforms = carPlatforms ?: PlatformId.entries,
                                 carFilters = carFilters?.takeUnless { it.isEmpty },
+                                excludeKeywords = carBlockedTerms,
                             ),
                         ),
                     )

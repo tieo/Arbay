@@ -229,9 +229,17 @@ fun ListingsSheet(
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
     LaunchedEffect(blockedTerms) { listingViewModel.setBlockedTerms(blockedTerms) }
     val activeBlockedTerms by listingViewModel.blockedTerms.collectAsState()
-    // Block/unblock a word from a listing: filter live and persist onto the bookmark.
-    val blockWord: (String) -> Unit = { w -> onBlockedTermsChange?.invoke(listingViewModel.blockTerm(w)) }
-    val unblockWord: (String) -> Unit = { t -> onBlockedTermsChange?.invoke(listingViewModel.unblockTerm(t)) }
+    // Block/unblock a word from a listing: filter live (always) and persist onto the bookmark when
+    // a change sink is wired. The mutation must run first — folding it into a null-safe call would
+    // short-circuit and never block when no sink is attached (the car/preview sheets).
+    val blockWord: (String) -> Unit = { w ->
+        val updated = listingViewModel.blockTerm(w)
+        onBlockedTermsChange?.invoke(updated)
+    }
+    val unblockWord: (String) -> Unit = { t ->
+        val updated = listingViewModel.unblockTerm(t)
+        onBlockedTermsChange?.invoke(updated)
+    }
     val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
     val totalPlatforms by listingViewModel.totalPlatforms.collectAsState()
@@ -1444,6 +1452,8 @@ private fun PriceDistributionChart(
     // null = all active, "NEW" = new only, "USED" = used only, "SOLD" = sold history chart
     val defaultFilter = if (newListings.isEmpty() && usedListings.isEmpty() && soldListings.isNotEmpty()) "SOLD" else null
     var chartFilter by remember { mutableStateOf(defaultFilter) }
+    // Distribution render style, user-switchable: discrete bars or a continuous line over buckets.
+    var chartStyle by remember { mutableStateOf("BAR") }
 
     if (newListings.isEmpty() && usedListings.isEmpty() && soldListings.isEmpty()) return
 
@@ -1487,7 +1497,21 @@ private fun PriceDistributionChart(
                     "Price chart",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Bar/line switch, only meaningful for the active distribution (not the sold view).
+                    if (chartFilter != "SOLD") {
+                        IconButton(
+                            onClick = { chartStyle = if (chartStyle == "BAR") "LINE" else "BAR" },
+                            modifier = Modifier.size(26.dp),
+                        ) {
+                            Icon(
+                                if (chartStyle == "BAR") Icons.Outlined.ShowChart else Icons.Outlined.BarChart,
+                                contentDescription = if (chartStyle == "BAR") "Switch to line" else "Switch to bars",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     if (newListings.isNotEmpty()) {
                         FilterChip(
                             selected = chartFilter == "NEW",
@@ -1595,19 +1619,21 @@ private fun PriceDistributionChart(
                     val newBarH = (buckets[i].newCount.toFloat() / maxBarCount) * chartH
                     val usedBarH = (buckets[i].usedCount.toFloat() / maxBarCount) * chartH
 
-                    if (buckets[i].newCount > 0) {
-                        drawRect(
-                            primary.copy(alpha = newAlpha),
-                            topLeft = Offset(bucketX + bucketPad, chartH - newBarH),
-                            size = Size(barW, newBarH),
-                        )
-                    }
-                    if (buckets[i].usedCount > 0) {
-                        drawRect(
-                            tertiary.copy(alpha = usedAlpha),
-                            topLeft = Offset(bucketX + bucketPad + barW + barGap, chartH - usedBarH),
-                            size = Size(barW, usedBarH),
-                        )
+                    if (chartStyle == "BAR") {
+                        if (buckets[i].newCount > 0) {
+                            drawRect(
+                                primary.copy(alpha = newAlpha),
+                                topLeft = Offset(bucketX + bucketPad, chartH - newBarH),
+                                size = Size(barW, newBarH),
+                            )
+                        }
+                        if (buckets[i].usedCount > 0) {
+                            drawRect(
+                                tertiary.copy(alpha = usedAlpha),
+                                topLeft = Offset(bucketX + bucketPad + barW + barGap, chartH - usedBarH),
+                                size = Size(barW, usedBarH),
+                            )
+                        }
                     }
 
                     // Tap highlight
@@ -1623,6 +1649,34 @@ private fun PriceDistributionChart(
                         val lx = (bucketX + bw / 2 - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width)
                         drawText(tr, topLeft = Offset(lx, size.height - tr.size.height))
                     }
+                }
+
+                // Continuous mode: a smoothed line over the per-bucket counts, filled to the axis,
+                // one series each for new and used (dimmed by the active New/Used filter, as the bars).
+                if (chartStyle == "LINE") {
+                    fun seriesLine(count: (Int) -> Int, color: Color, alpha: Float) {
+                        if ((0 until bucketCount).all { count(it) == 0 }) return
+                        val pts = (0 until bucketCount).map { i ->
+                            Offset(padL + i * bw + bw / 2f, chartH - (count(i).toFloat() / maxBarCount) * chartH)
+                        }
+                        val stroke = Path().apply {
+                            moveTo(pts.first().x, pts.first().y)
+                            for (i in 1 until pts.size) {
+                                val midX = (pts[i - 1].x + pts[i].x) / 2f
+                                cubicTo(midX, pts[i - 1].y, midX, pts[i].y, pts[i].x, pts[i].y)
+                            }
+                        }
+                        val area = Path().apply {
+                            addPath(stroke)
+                            lineTo(pts.last().x, chartH)
+                            lineTo(pts.first().x, chartH)
+                            close()
+                        }
+                        drawPath(area, color.copy(alpha = alpha * 0.15f))
+                        drawPath(stroke, color.copy(alpha = alpha), style = Stroke(width = 3f))
+                    }
+                    seriesLine({ buckets[it].newCount }, primary, newAlpha)
+                    seriesLine({ buckets[it].usedCount }, tertiary, usedAlpha)
                 }
 
                 // Draw median lines ON TOP of bars

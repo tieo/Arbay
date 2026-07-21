@@ -41,6 +41,7 @@ class ProductViewModel(
         platforms: List<PlatformId>,
         identifiers: ProductIdentifier = ProductIdentifier(),
         carFilters: io.github.tieo.arbay.model.CarFilters? = null,
+        excludeKeywords: List<String> = emptyList(),
     ) {
         viewModelScope.launch {
             try {
@@ -51,6 +52,7 @@ class ProductViewModel(
                         text = searchText,
                         platforms = platforms,
                         carFilters = carFilters?.takeUnless { it.isEmpty },
+                        excludeKeywords = excludeKeywords,
                     ),
                     identifiers = identifiers,
                     createdAt = Clock.System.now(),
