@@ -30,6 +30,8 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
         }
 
         return paginate(query) { page ->
+            // kupujem's general search takes no car-spec URL filters (year/km/gearbox live on the
+            // card, price too), so those are enforced by the post-filter, which is exact here.
             val base = "https://www.kupujemprodajem.com/automobili/pretraga?keywords=${keyword.encodeUrl()}"
             val url = if (page <= 1) base else "$base&page=$page"
             parse(fetchWithFallback(client, url, "KupujemProdajem"), car?.modelSlug)
