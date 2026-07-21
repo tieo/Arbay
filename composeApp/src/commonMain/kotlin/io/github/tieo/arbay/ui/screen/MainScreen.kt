@@ -85,6 +85,9 @@ fun MainScreen(
     var carName by remember { mutableStateOf("") }
     var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
     var carFilters by remember { mutableStateOf<CarFilters?>(null) }
+    // The bookmark whose platforms are currently loaded, so re-opening the SAME bookmark's edit keeps
+    // an unsaved market change instead of reloading the saved set each time.
+    var carPlatformsLoadedFor by remember { mutableStateOf<String?>(null) }
     var carMake by remember { mutableStateOf<CarMakeNode?>(null) }
     var carModel by remember { mutableStateOf<CarModelNode?>(null) }
     // Non-null while editing an existing bookmark: the save action updates this one instead of
@@ -268,7 +271,12 @@ fun MainScreen(
                                     // Car bookmark: open the structured car form, prefilled.
                                     carName = product.name
                                     carQuery = product.searchQuery.text
-                                    carPlatforms = product.searchQuery.platforms
+                                    // Load the saved markets only when switching to a different
+                                    // bookmark, so a deselection survives re-opening this one's edit.
+                                    if (carPlatformsLoadedFor != product.id) {
+                                        carPlatforms = product.searchQuery.platforms
+                                        carPlatformsLoadedFor = product.id
+                                    }
                                     carFilters = product.searchQuery.toCarFilters() ?: CarFilters()
                                     carMake = m
                                     carModel = mo
@@ -351,6 +359,7 @@ fun MainScreen(
                 carQuery = ""
                 // carPlatforms is kept: the market selection is a sticky preference, not per-search
                 // state, so a deselected platform stays deselected across searches.
+                carPlatformsLoadedFor = null // a fresh search is not tied to a bookmark
                 carFilters = null
                 carMake = null
                 carModel = null
