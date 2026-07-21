@@ -44,7 +44,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
             // enforce the request cutoff here too — it's the most block-sensitive platform.
             if (RequestMonitor.overBudget(platform))
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
-            val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q"
+            val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q${filterParams(query)}"
             RequestMonitor.recordTier(platform, "Browser")
             var pageNo = 0
             val vcStart = System.currentTimeMillis()
@@ -73,6 +73,27 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler {
             }
         }
         return all
+    }
+
+    /** mobile.de's native URL filter params, so the site returns only matching cars instead of
+     *  everything (which then leaks unverifiable cards past the post-filter). Range params take
+     *  `min:max`; either side may be empty. Names verified live against the search page: fr =
+     *  first-registration year, ml = mileage, pw = power in kW, p = price in EUR, tr = gearbox. */
+    private fun filterParams(query: SearchQuery): String {
+        val f = query.toCarFilters() ?: return ""
+        fun range(min: Any?, max: Any?): String? =
+            if (min != null || max != null) "${min ?: ""}:${max ?: ""}" else null
+        return buildString {
+            range(f.firstRegFromYear, f.firstRegToYear)?.let { append("&fr=$it") }
+            range(f.minMileageKm, f.maxMileageKm)?.let { append("&ml=$it") }
+            range(f.minPowerKw, f.maxPowerKw)?.let { append("&pw=$it") }
+            range(f.minPriceEur, f.maxPriceEur)?.let { append("&p=$it") }
+            when (f.transmission) {
+                Transmission.AUTOMATIC -> append("&tr=AUTOMATIC_GEAR")
+                Transmission.MANUAL -> append("&tr=MANUAL_GEAR")
+                null -> {}
+            }
+        }
     }
 
     /** Whether this query is after a large van/transporter, which mobile.de lists under the separate
