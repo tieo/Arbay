@@ -249,9 +249,25 @@ fun ListingsSheet(
     }
 
     // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
+    // Bounds are the 5th/95th percentile, not the absolute min/max: a lone cheap part or a single
+    // dear outlier must not stretch the track so the real cluster is a hair-thin sliver. Listings
+    // outside the band still show (the filter only bites once the user narrows inside the band).
     val allActivePrices = remember(allActiveListings) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
-    val priceMin = remember(allActivePrices) { if (allActivePrices.isEmpty()) 0f else (allActivePrices.first() / 100f) }
-    val priceMax = remember(allActivePrices) { if (allActivePrices.isEmpty()) 1000f else (allActivePrices.last() / 100f).coerceAtLeast(priceMin + 1f) }
+    val priceMin = remember(allActivePrices) {
+        if (allActivePrices.isEmpty()) 0f
+        else {
+            val i = if (allActivePrices.size >= 12) (allActivePrices.size * 0.05f).toInt() else 0
+            allActivePrices[i] / 100f
+        }
+    }
+    val priceMax = remember(allActivePrices) {
+        if (allActivePrices.isEmpty()) 1000f
+        else {
+            val n = allActivePrices.size
+            val i = if (n >= 12) (n - 1 - (n * 0.05f).toInt()).coerceIn(0, n - 1) else n - 1
+            (allActivePrices[i] / 100f).coerceAtLeast(priceMin + 1f)
+        }
+    }
     var priceRange by remember(priceMin, priceMax) { mutableStateOf(priceMin..priceMax) }
     var conditionFilter by remember { mutableStateOf<String?>(null) }
     var showSold by remember { mutableStateOf(true) }
