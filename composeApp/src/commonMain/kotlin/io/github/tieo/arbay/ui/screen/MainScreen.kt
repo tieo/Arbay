@@ -349,7 +349,8 @@ fun MainScreen(
                 editingProduct = null
                 carName = ""
                 carQuery = ""
-                carPlatforms = null
+                // carPlatforms is kept: the market selection is a sticky preference, not per-search
+                // state, so a deselected platform stays deselected across searches.
                 carFilters = null
                 carMake = null
                 carModel = null
@@ -397,6 +398,8 @@ fun MainScreen(
             initialMake = carMake,
             initialModel = carModel,
             initialFilters = carFilters,
+            initialPlatforms = carPlatforms,
+            onPlatformsChange = { carPlatforms = it },
         )
     }
 

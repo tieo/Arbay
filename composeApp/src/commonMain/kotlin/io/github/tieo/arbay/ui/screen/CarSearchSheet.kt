@@ -87,6 +87,10 @@ fun CarSearchSheet(
     initialMake: CarMakeNode? = null,
     initialModel: CarModelNode? = null,
     initialFilters: CarFilters? = null,
+    // The last market selection, so deselecting a platform survives closing/reopening the sheet.
+    // Null = default to all markets. onPlatformsChange reports every toggle back to the caller.
+    initialPlatforms: List<PlatformId>? = null,
+    onPlatformsChange: (List<PlatformId>) -> Unit = {},
     // Fetches the make's live model catalog from the server (probed from the site, cached). Returns
     // null on failure, so the bundled models stay. Defaults to none for previews.
     loadModels: suspend (makeId: String) -> List<CarModelNode>? = { null },
@@ -132,7 +136,13 @@ fun CarSearchSheet(
     var idealDescription by remember { mutableStateOf(initialFilters?.idealDescription ?: "") }
     var useTextSpecs by remember { mutableStateOf(initialFilters?.useTextSpecs ?: true) }
     var strictUnknown by remember { mutableStateOf(initialFilters?.strictUnknown ?: false) }
-    val selectedPlatforms = remember { mutableStateListOf<PlatformId>().apply { addAll(CAR_MARKETS.map { it.first }) } }
+    val selectedPlatforms = remember {
+        mutableStateListOf<PlatformId>().apply { addAll(initialPlatforms ?: CAR_MARKETS.map { it.first }) }
+    }
+    fun togglePlatform(p: PlatformId) {
+        if (p in selectedPlatforms) selectedPlatforms.remove(p) else selectedPlatforms.add(p)
+        onPlatformsChange(selectedPlatforms.toList())
+    }
 
     fun buildFilters() = CarFilters(
         firstRegFromYear = yearFrom.toIntOrNull(),
@@ -388,10 +398,13 @@ fun CarSearchSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = { selectedPlatforms.clear(); selectedPlatforms.addAll(CAR_MARKETS.map { it.first }) }) {
+                        TextButton(onClick = {
+                            selectedPlatforms.clear(); selectedPlatforms.addAll(CAR_MARKETS.map { it.first })
+                            onPlatformsChange(selectedPlatforms.toList())
+                        }) {
                             Text("All", style = MaterialTheme.typography.labelSmall)
                         }
-                        TextButton(onClick = { selectedPlatforms.clear() }) {
+                        TextButton(onClick = { selectedPlatforms.clear(); onPlatformsChange(emptyList()) }) {
                             Text("None", style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -400,10 +413,7 @@ fun CarSearchSheet(
                         CAR_MARKETS.forEach { (platform, country) ->
                             FilterChip(
                                 selected = platform in selectedPlatforms,
-                                onClick = {
-                                    if (platform in selectedPlatforms) selectedPlatforms.remove(platform)
-                                    else selectedPlatforms.add(platform)
-                                },
+                                onClick = { togglePlatform(platform) },
                                 label = { Text("${platform.displayName} · $country", style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     if (platform in selectedPlatforms) Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(14.dp))
