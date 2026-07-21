@@ -13,6 +13,7 @@ import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
+import io.github.tieo.arbay.crawler.Geocoder
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
 import io.github.tieo.arbay.crawler.PartialResultEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
@@ -90,6 +91,8 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
     // the rest of cf is enforced by post-filtering.
     return base.copy(
         carFilters = cf,
+        userLat = p["lat"]?.toDoubleOrNull(),
+        userLon = p["lon"]?.toDoubleOrNull(),
         firstRegFromYear = cf?.firstRegFromYear ?: p["fregFrom"]?.toIntOrNull(),
         firstRegToYear = cf?.firstRegToYear ?: p["fregTo"]?.toIntOrNull(),
         maxMileageKm = cf?.maxMileageKm ?: p["kmTo"]?.toIntOrNull(),
@@ -143,6 +146,23 @@ private suspend fun carPostFilter(
     // similarity, so the best matches surface first. Skipped when none was given.
     return filters.idealDescription?.takeIf { it.isNotBlank() }
         ?.let { CarCriteriaScorer.rank(filtered, it) } ?: filtered
+}
+
+/** Fill in each listing's distanceKm from the searcher's coordinates, geocoding the listing's
+ *  location (zip/city + country) once. A no-op when the search carries no position or a listing has
+ *  no resolvable location. */
+private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<Listing> {
+    val lat = query.userLat ?: return listings
+    val lon = query.userLon ?: return listings
+    return listings.map { l ->
+        val loc = l.location ?: return@map l
+        val coords = if (loc.latitude != null && loc.longitude != null) loc.latitude!! to loc.longitude!!
+            else Geocoder.resolve(loc.country, loc.zip, loc.city) ?: return@map l
+        l.copy(
+            location = loc.copy(latitude = coords.first, longitude = coords.second),
+            distanceKm = Geocoder.haversine(lat, lon, coords.first, coords.second),
+        )
+    }
 }
 
 /** Default platforms when the query resolves to a car make/model. Covers Germany
@@ -385,7 +405,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // Car post-filtering still runs on the cached set so the new filters apply.
                             val cached = QueryResultCache.get(platformId, pq)
                             if (cached != null) {
-                                val filtered = carPostFilter(cached, pq, isCarQuery, crawler)
+                                val filtered = annotateDistance(carPostFilter(cached, pq, isCarQuery, crawler), pq)
                                 filtered.forEach { listingRepo.upsert(it) }
                                 val facets = if (isCarQuery)
                                     CarFilterEngine.facetCounts(cached, pq.toCarFilters() ?: CarFilters())
@@ -441,7 +461,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val card = if (isCarQuery)
                                     CarFilterEngine.apply(classified.map { VehicleTextParser.enrich(it) }, partialFilters, keepNonVehicles = partsIntent)
                                 else classified
-                                val fresh = card.filter { emittedIds.add(it.id) }
+                                val fresh = annotateDistance(card.filter { emittedIds.add(it.id) }, pq)
                                 if (fresh.isNotEmpty()) {
                                     fresh.forEach { listingRepo.upsert(it) }
                                     resultChannel.send(CrawlerSearchEvent(
@@ -489,7 +509,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // filter → detail-verify → final filter) runs after, so a later
                                 // filter tweak re-filters from cache without re-crawling.
                                 QueryResultCache.put(platformId, pq, classified)
-                                val results = carPostFilter(classified, pq, isCarQuery, crawler)
+                                val results = annotateDistance(carPostFilter(classified, pq, isCarQuery, crawler), pq)
                                 results.forEach { listingRepo.upsert(it) }
                                 val facets = if (isCarQuery)
                                     CarFilterEngine.facetCounts(classified, pq.toCarFilters() ?: CarFilters())

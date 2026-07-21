@@ -31,6 +31,9 @@ data class Listing(
     // Semantic match [0,1] to a car search's free-form idealDescription; null when none set. Used to
     // rank car results by how well each fits the described ideal.
     val matchScore: Double? = null,
+    // Great-circle distance in km from the searcher's position to this listing, set when the search
+    // carried the user's coordinates and the listing's location could be geocoded.
+    val distanceKm: Double? = null,
     val modelScores: Map<String, Double>? = null,
     val isExploration: Boolean = false,
     val vehicle: VehicleInfo? = null,

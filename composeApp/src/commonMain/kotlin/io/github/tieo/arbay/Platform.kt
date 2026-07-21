@@ -9,6 +9,11 @@ expect fun openBrowser(url: String)
 @androidx.compose.runtime.Composable
 expect fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit
 
+/** Returns a trigger that fetches the device's coordinates (for nearest-first car results) and calls
+ *  back with lat/lon, or (null, null) if unavailable/denied. */
+@androidx.compose.runtime.Composable
+expect fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Unit
+
 expect fun loadBannedIds(): Set<String>
 expect fun saveBannedIds(ids: Set<String>)
 

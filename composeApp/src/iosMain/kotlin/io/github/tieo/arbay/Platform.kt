@@ -10,3 +10,6 @@ actual fun cancelPolling() {}
 
 @androidx.compose.runtime.Composable
 actual fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit = { onCity(null) }
+
+@androidx.compose.runtime.Composable
+actual fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Unit = { onCoords(null, null) }

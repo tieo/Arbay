@@ -297,6 +297,8 @@ class ArbayClient(
         platform: PlatformId? = null,
         platforms: List<PlatformId>? = null,
         filters: CarFilters? = null,
+        lat: Double? = null,
+        lon: Double? = null,
     ): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/crawler/search/stream") {
             parameter("q", query)
@@ -304,6 +306,8 @@ class ArbayClient(
             if (platforms != null && platform == null) {
                 parameter("platforms", platforms.joinToString(",") { it.name })
             }
+            // The device position, so the server can fill in each listing's distance.
+            if (lat != null && lon != null) { parameter("lat", lat); parameter("lon", lon) }
             filters?.takeUnless { it.isEmpty }?.let { f ->
                 // Whole filter set as one JSON param — covers the multi-selects; the server
                 // mirrors the native-param fields itself.

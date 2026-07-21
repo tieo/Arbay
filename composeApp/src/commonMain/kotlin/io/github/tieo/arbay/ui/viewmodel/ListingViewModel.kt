@@ -146,6 +146,30 @@ class ListingViewModel(
         }
     }
 
+    // Device position, sent so the server fills in each listing's distance; and whether to order the
+    // results nearest-first.
+    private var userLat: Double? = null
+    private var userLon: Double? = null
+    private val _sortByDistance = MutableStateFlow(false)
+    val sortByDistance: StateFlow<Boolean> = _sortByDistance
+
+    fun setLocation(lat: Double?, lon: Double?) { userLat = lat; userLon = lon }
+
+    fun setSortByDistance(on: Boolean) {
+        _sortByDistance.value = on
+        _allListings.value = sortListings(_allListings.value)
+    }
+
+    /** Order results: nearest-first when the user asked and a position is known, else best ideal-car
+     *  match first (when scored), then cheapest. */
+    private fun sortListings(list: List<Listing>): List<Listing> =
+        if (_sortByDistance.value)
+            list.sortedWith(compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }
+                .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
+        else
+            list.sortedWith(compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
+                .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
+
     fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
         if (query.isBlank()) return
         if (!force && query == _searchQuery.value && filters == carFilters && (_allListings.value.isNotEmpty() || _loading.value)) return
@@ -164,7 +188,7 @@ class ListingViewModel(
 
             try {
                 withTimeoutOrNull(360_000L) {
-                client.crawlerSearchStream(query, platforms = platforms, filters = filters).collect { event ->
+                client.crawlerSearchStream(query, platforms = platforms, filters = filters, lat = userLat, lon = userLon).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {
                             _totalPlatforms.value = event.totalPlatforms
@@ -191,13 +215,9 @@ class ListingViewModel(
                             // Reconcile: replace this platform's streamed preview listings with its
                             // authoritative detail-enriched set, so any preview item the final filter
                             // dropped disappears and enriched specs replace the card-only ones.
-                            _allListings.value = (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
-                                .distinctBy { it.id }
-                                .sortedWith(
-                                    // Ideal-car match ranking wins when present (a semantic score is
-                                    // attached); otherwise, and to break ties, cheapest first.
-                                    compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
-                                        .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
+                            _allListings.value = sortListings(
+                                (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
+                                    .distinctBy { it.id })
                             if (event.facets.isNotEmpty()) {
                                 _facets.value = (_facets.value.keys + event.facets.keys).associateWith { k ->
                                     (_facets.value[k] ?: 0) + (event.facets[k] ?: 0)
@@ -228,13 +248,8 @@ class ListingViewModel(
                             // page of listings (pipelined). Append the page live so results stream in
                             // rather than landing all at once when the platform finishes.
                             if (event.listings.isNotEmpty()) {
-                                _allListings.value = (_allListings.value + event.listings)
-                                    .distinctBy { it.id }
-                                    .sortedWith(
-                                    // Ideal-car match ranking wins when present (a semantic score is
-                                    // attached); otherwise, and to break ties, cheapest first.
-                                    compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
-                                        .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
+                                _allListings.value = sortListings(
+                                    (_allListings.value + event.listings).distinctBy { it.id })
                             }
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)

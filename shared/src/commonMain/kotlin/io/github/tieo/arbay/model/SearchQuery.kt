@@ -104,6 +104,10 @@ data class SearchQuery(
     val excludeKeywords: List<String> = emptyList(),
     val location: String? = null,   // city name / zip for location-based search
     val radiusKm: Int = 30,         // search radius in km
+    // The searcher's position (from the device GPS). When set, the server geocodes each listing and
+    // fills in distanceKm, so results can be shown and sorted nearest-first.
+    val userLat: Double? = null,
+    val userLon: Double? = null,
     val maxPages: Int? = null,      // override crawler's default page limit (null = use CrawlerConfig)
     val startPage: Int = 1,         // start from this page (for paginated batches)
     // Vehicle filters — applied at the source by crawlers that support them (e.g. AutoScout24).

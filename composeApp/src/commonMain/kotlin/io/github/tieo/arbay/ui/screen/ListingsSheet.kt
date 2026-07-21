@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
@@ -255,6 +256,15 @@ fun ListingsSheet(
     var conditionFilter by remember { mutableStateOf<String?>(null) }
     var showSold by remember { mutableStateOf(true) }
     var hideUnknownDates by remember { mutableStateOf(false) }
+
+    // Nearest-first: fetch the device position, re-run the search so the server fills in distances,
+    // and order by them. Toggling off restores the default (match/price) order.
+    val sortByDistance by listingViewModel.sortByDistance.collectAsState()
+    val detectAndSortNearest = rememberCoordDetector { lat, lon ->
+        listingViewModel.setLocation(lat, lon)
+        listingViewModel.setSortByDistance(lat != null)
+        if (lat != null) listingViewModel.search(searchQuery, platforms, carFilters, force = true)
+    }
 
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
     val priceFiltered = priceRange.start > priceMin || priceRange.endInclusive < priceMax
@@ -663,11 +673,25 @@ fun ListingsSheet(
                             conditionFilter == "USED" -> "Used listings (${displayedActiveListings.size})"
                             else -> "All listings (${activeListings.size})"
                         }
-                        Text(
-                            filterLabel,
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                filterLabel,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.weight(1f),
+                            )
+                            FilterChip(
+                                selected = sortByDistance,
+                                onClick = {
+                                    if (sortByDistance) listingViewModel.setSortByDistance(false)
+                                    else detectAndSortNearest()
+                                },
+                                label = { Text("Nearest", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Outlined.LocationOn, null, Modifier.size(14.dp)) },
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
 
@@ -1129,7 +1153,10 @@ internal fun ListingCard(
                 }
 
                 listing.location?.let { loc ->
-                    val text = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
+                    val locText = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
+                    // Distance from the searcher, when the search carried the device position.
+                    val distText = listing.distanceKm?.let { "${it.roundToInt()} km away" }
+                    val text = listOfNotNull(locText.takeIf { it.isNotBlank() }, distText).joinToString(" · ")
                     if (text.isNotBlank()) {
                         Spacer(Modifier.height(2.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
