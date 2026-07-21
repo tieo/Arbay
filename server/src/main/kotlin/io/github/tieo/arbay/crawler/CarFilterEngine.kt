@@ -36,7 +36,7 @@ object CarFilterEngine {
      *  omit because a car-for-sale never leads with them. */
     fun isPartQuery(text: String): Boolean =
         partAccessory.containsMatchIn(text) || partAccessoryLead.containsMatchIn(text) ||
-            partFromDonorVehicle.containsMatchIn(text) ||
+            partFromDonorVehicle.containsMatchIn(text) || partSuffix.containsMatchIn(text) ||
             Regex("""\b(felge|felgen|reifen|winterreifen|sommerreifen|kompletträder|alufelgen|tyres?|wheels?)\b""",
                 RegexOption.IGNORE_CASE).containsMatchIn(text)
 
@@ -188,6 +188,19 @@ object CarFilterEngine {
         RegexOption.IGNORE_CASE,
     )
 
+    // German car parts are compounds whose head noun is a small set of morphemes a whole-vehicle
+    // title never leads with: a Golf is sold as "VW Golf 1.4 TSI", never as an "-schalter" or
+    // "-leuchte". Catching the suffix generalises past a fixed noun list (Radzierblende,
+    // Fensterheberschalter, Einstiegsleuchte, Schachtleiste, Kopfstütze all fall out of one rule).
+    // Gated on the no-spec branch, so a real car the site gave specs for is never touched.
+    // (?U) makes \w match umlauts, so a compound like "Türverkleidung" keeps its head noun intact
+    // (without it, ü splits the word and the two-letter stem before the suffix is lost).
+    private val partSuffix = Regex(
+        """(?U)\b\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
+            """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     /** A car-query result that is not a car for sale: a wanted ad, a rental, or a part/accessory.
      *  All matched on the title only (safe, explicit). The part guard is needed because eBay's
      *  price-ascending sort floats up cheap seller-miscategorised parts that sit inside the vehicle
@@ -206,6 +219,7 @@ object CarFilterEngine {
         if (!hasVehicleSpec && partAccessory.containsMatchIn(listing.title)) return true
         if (!hasVehicleSpec && partAccessoryLead.containsMatchIn(listing.title)) return true
         if (!hasVehicleSpec && partFromDonorVehicle.containsMatchIn(listing.title)) return true
+        if (!hasVehicleSpec && partSuffix.containsMatchIn(listing.title)) return true
         return false
     }
 }

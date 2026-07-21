@@ -333,6 +333,39 @@ class CarFilterEngineTest {
         assertFalse(CarFilterEngine.isPartQuery("Volkswagen Crafter"))
     }
 
+    @Test
+    fun `part-suffix guard drops compound part titles a fixed noun list misses`() {
+        // Real eBay "vw golf" hits: parts whose head noun ends in a part morpheme, no parsed specs.
+        val leaks = listOf(
+            "4 Radzierblenden VW Golf 6",
+            "Blinkschalter Abblendschalter VW Golf V, Tiguan 5N",
+            "Fensterheber Schalter Master Switch VW Golf 4 Passat B5",
+            "VW Golf Kopfstütze",
+            "VW Golf 1 Schachtleiste 4 türig",
+            "ORIG. VW Golf 7 Einstiegsleuchte Außenspiegel",
+            "Türverkleidung Türpappe VW Golf 4",
+            "Tankdeckel Tankklappe VW Golf 5",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        val survivors = CarFilterEngine.apply(leaks, CarFilters()).map { it.title }
+        assertTrue(survivors.isEmpty(), "not dropped: $survivors")
+        // A whole car with the same suffix-bearing word in its title is exempt once it has specs.
+        val realCar = carListing("real", PlatformId.EBAY_DE, "VW Golf 4 Kombi 1.9 TDI Klimaanlage",
+            vehicle = verified(firstRegYear = 2003, mileageKm = 180_000))
+        assertEquals(1, CarFilterEngine.apply(listOf(realCar), CarFilters()).size)
+    }
+
+    @Test
+    fun `part-suffix guard does not drop genuine car titles`() {
+        // Model, trim, engine, and equipment words a real car leads with — none is a part morpheme.
+        val cars = listOf(
+            "VW Golf 4 Kombi 1.4 75 PS für Export",
+            "Volkswagen Golf VII GTI 2.0 TSI DSG",
+            "VW Golf Bluemotion Comfortline Highline Trendline",
+            "Golf 6 Cabrio 1.6 TDI Bastlerfahrzeug",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        assertEquals(cars.size, CarFilterEngine.apply(cars, CarFilters()).size)
+    }
+
     private fun partListing(title: String) = io.github.tieo.arbay.model.Listing(
         id = "KLEINANZEIGEN:$title",
         platformId = io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
