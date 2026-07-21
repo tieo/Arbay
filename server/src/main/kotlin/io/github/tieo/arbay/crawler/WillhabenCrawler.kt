@@ -21,7 +21,7 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         // The general marktplatz (keyword) handles everything non-car.
         val carQuery = CarQueryResolver.resolve(query.positiveText)
         val makeId = carQuery?.makeSlug?.let { WILLHABEN_MAKE_IDS[it] }
-        if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug)
+        if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug, query)
 
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
@@ -30,19 +30,37 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler {
         return parseSearchResults(html)
     }
 
-    private suspend fun searchCars(makeId: Int, modelSlug: String?): List<Listing> {
+    private suspend fun searchCars(makeId: Int, modelSlug: String?, query: SearchQuery): List<Listing> {
         val makeHtml = fetchWithFallback(
             client, "$carBase?CAR_MODEL/MAKE=$makeId", "willhaben",
             primeUrl = "https://www.willhaben.at", extraWaitMs = 1500,
         )
-        // Resolve the model against this make's filter navigator; if we can't, fall back to the
-        // make-only page (the downstream relevance filter still keeps only the wanted model).
-        val modelId = modelSlug?.let { resolveModelId(makeHtml, it) } ?: return parseSearchResults(makeHtml)
-        val html = fetchWithFallback(
-            client, "$carBase?CAR_MODEL/MAKE=$makeId&CAR_MODEL/MODEL=$modelId", "willhaben",
-            primeUrl = "https://www.willhaben.at", extraWaitMs = 1500,
+        // Resolve the model against this make's filter navigator, then apply the native spec filters
+        // so willhaben returns only matching cars.
+        val modelId = modelSlug?.let { resolveModelId(makeHtml, it) }
+        val url = buildString {
+            append("$carBase?CAR_MODEL/MAKE=$makeId")
+            modelId?.let { append("&CAR_MODEL/MODEL=$it") }
+            append(filterParams(query))
+        }
+        return parseSearchResults(
+            fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500),
         )
-        return parseSearchResults(html)
+    }
+
+    /** willhaben's native car filter params, verified live. ENGINEEFFECT is in PS (metric hp), so a
+     *  kW floor is converted. Gearbox is left to the post-filter — willhaben ships it on the card. */
+    private fun filterParams(query: SearchQuery): String {
+        val f = query.toCarFilters() ?: return ""
+        return buildString {
+            f.firstRegFromYear?.let { append("&YEAR_MODEL_FROM=$it") }
+            f.firstRegToYear?.let { append("&YEAR_MODEL_TO=$it") }
+            f.minMileageKm?.let { append("&MILEAGE_FROM=$it") }
+            f.maxMileageKm?.let { append("&MILEAGE_TO=$it") }
+            f.minPriceEur?.let { append("&PRICE_FROM=$it") }
+            f.maxPriceEur?.let { append("&PRICE_TO=$it") }
+            f.minPowerKw?.let { append("&ENGINEEFFECT_FROM=${kotlin.math.round(it / 0.7355).toInt()}") }
+        }
     }
 
     /** Find the willhaben CAR_MODEL/MODEL id whose filter label matches [modelSlug], reading the
