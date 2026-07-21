@@ -379,6 +379,9 @@ class CarFilterEngineTest {
             "Diesel Pumpe VW GOLF VI BOSCH",
             "VW Golf V Stoßstangengitter",
             "original VW Golf 1 2 GTI Schaltknauf Knauf",
+            "Bedienungsanleitung Serviceplan VW Golf 4",
+            "VW Golf 2 org. gebrauchter mechan. Fensterheber vorne links",
+            "VW Golf 4 Lüftungsgitterset",
         ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
         val survivors = CarFilterEngine.apply(parts, CarFilters()).map { it.title }
         assertTrue(survivors.isEmpty(), "not dropped: $survivors")

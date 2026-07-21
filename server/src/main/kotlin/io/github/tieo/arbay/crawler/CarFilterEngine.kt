@@ -167,7 +167,9 @@ object CarFilterEngine {
             // Bodies of parts an eBay vehicle search floats up: brake components, glass, a parcel
             // shelf, a radio, a catalytic converter, filters — none the subject of a car-for-sale ad.
             """\bhutablage\b|\bautoradio\b|\b(euro)?kat(alysator)?\b|\bbremssattel\b|\bbremskl(ö|oe)tze\b|""" +
-            """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|""" +
+            """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|\bfensterheber\b|""" +
+            // Paperwork sold for a model, never the car: an owner's manual, a service book.
+            """\b(bedienungsanleitung|betriebsanleitung|serviceplan|handbuch|reparaturhandbuch)\b|""" +
             // Rims/alloys on their own are a wheel ad, not a car; unlike tyres (which a car brags
             // about, "mit neuen Reifen"), a whole car is never titled after its Felgen.
             """\b(alu|stahl)?felgen?\b|\bkomplettr(ä|ae)der\b|\brims?\b|""" +
@@ -214,7 +216,7 @@ object CarFilterEngine {
     private val partSuffix = Regex(
         """(?U)\b\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
             """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter|""" +
-            """scharnier|verst(ä|ae)rker|scheiben?|gitter|pumpen?|kn(auf|opf|äufe)|kedern?|filter)\b""",
+            """scharnier|verst(ä|ae)rker|scheiben?|gitter(sets?|n)?|pumpen?|kn(auf|opf|äufe)|kedern?|filter)\b""",
         RegexOption.IGNORE_CASE,
     )
 
