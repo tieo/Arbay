@@ -88,10 +88,22 @@ object SoldDetector {
         return listing
     }
 
+    // "500 verkauft", "1.000+ sold", "12 verkocht" is a units-sold counter that marketplaces print on
+    // listings that are very much still for sale. Stripped before the sold patterns run, otherwise
+    // every popular active listing reads as sold.
+    private val QUANTITY_SOLD = Regex(
+        """\b\d[\d.,]*\s*\+?\s*(?:verkauft|sold|verkocht|vendus?|venduti?)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun withoutSalesCounts(text: String) = QUANTITY_SOLD.replace(text, " ")
+
     private fun isSoldByRules(title: String, description: String): Boolean {
-        if (TITLE_SOLD_MARKERS.any { it.containsMatchIn(title) }) return true
-        if (SOLD_PATTERNS.any { it.containsMatchIn(title) }) return true
-        if (SOLD_PATTERNS.any { it.containsMatchIn(description) }) return true
+        val cleanTitle = withoutSalesCounts(title)
+        val cleanDescription = withoutSalesCounts(description)
+        if (TITLE_SOLD_MARKERS.any { it.containsMatchIn(cleanTitle) }) return true
+        if (SOLD_PATTERNS.any { it.containsMatchIn(cleanTitle) }) return true
+        if (SOLD_PATTERNS.any { it.containsMatchIn(cleanDescription) }) return true
         return false
     }
 

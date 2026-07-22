@@ -245,14 +245,15 @@ class EbayDeCrawler(
                 }?.text()
             val shipping = parseShipping(shippingText)
 
-            // Sold date: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026" / "Ended ..."
-            val soldDateText = item.selectFirst("span.su-styled-text.positive")?.text()
-                ?: item.select("span").firstOrNull { it.text().let { t ->
-                    t.startsWith("Verkauft", true) || t.startsWith("Sold", true) ||
-                    t.startsWith("Ended", true) || t.startsWith("Beendet", true)
-                } }?.text()
+            // Sold date: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026" / "Ended ...".
+            // eBay styles the price with the same "positive" class as the sold date, so the span
+            // must be picked by what it says, not by its class alone — taking the first positive
+            // span grabbed "EUR 36,00", which marked every live listing sold and left no date.
+            val soldDateText = item.select("span.su-styled-text.positive, span")
+                .map { it.text() }
+                .firstOrNull { SOLD_MARKER.containsMatchIn(it) }
             val soldDate = parseSoldDate(soldDateText)
-            val isSold = soldDate != null || soldDateText != null
+            val isSold = soldDateText != null
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -348,6 +349,9 @@ class EbayDeCrawler(
     )
 
     private val DAY_OF_WEEK = setOf("mo", "di", "mi", "do", "fr", "sa", "so", "mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+    /** Words that actually mark a listing as ended/sold. A price is not one of them. */
+    private val SOLD_MARKER = Regex("""\b(verkauft|sold|beendet|ended)\b""", RegexOption.IGNORE_CASE)
 
     private fun parseSoldDate(text: String?): Instant? {
         if (text == null) return null

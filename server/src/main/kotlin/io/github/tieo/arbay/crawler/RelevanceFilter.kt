@@ -245,17 +245,83 @@ object RelevanceFilter {
     private fun hasSanePrice(listing: Listing): Boolean =
         listing.effectivePrice.amount in 0..MAX_PLAUSIBLE_MINOR_UNITS
 
+    // An offer to hire the item out, not to sell it. Its daily rate ("Parkettschleifmaschine
+    // Mieten, 1 EUR") is not a purchase price, so it wrecks the cheapest/median figures. Dropped
+    // unless the query itself asks to rent, in which case the user wants exactly these.
+    private val NON_ALNUM = Regex("""[^\p{L}\p{N}]""")
+
+    private val rentalOffer = Regex(
+        """\b(mieten|vermieten|zu\s+vermieten|vermietung|miete|mietpreis|leihen|verleih|""" +
+            """ausleihen|leihgeb(ü|ue)hr|te\s+huur|noleggio|a\s+noleggio|alquiler|""" +
+            """for\s+(hire|rent)|rental)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isRentalOffer(listing: Listing, queryText: String): Boolean {
+        if (rentalOffer.containsMatchIn(queryText)) return false
+        return rentalOffer.containsMatchIn(listing.title)
+    }
+
+    // "<something> für <the thing searched for>" names an accessory made FOR the product, not the
+    // product: a dust bag for a floor sander, a case for a phone. The giveaway is positional — the
+    // searched-for words sit only AFTER the preposition, while the head noun before it is something
+    // else entirely. A genuine listing puts the product itself in the head ("Lägler Hummel
+    // Parkettschleifmaschine für Profis"), so it keeps its query tokens before the preposition.
+    private val accessoryPreposition = Regex(
+        """\b(passend\s+für|geeignet\s+für|kompatibel\s+(mit|für)|für|fuer|compatible\s+with|""" +
+            """suitable\s+for|for|voor|per|pour|para)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isAccessoryFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        val tokens = parsed.positiveTokens
+        if (tokens.isEmpty()) return false
+        val match = accessoryPreposition.find(listing.title) ?: return false
+        val head = listing.title.substring(0, match.range.first).lowercase()
+        val tail = listing.title.substring(match.range.last + 1).lowercase()
+        // Compared with separators stripped, since query tokens are normalised the same way — a
+        // title's "MFC-L2750DW" must still match the token "mfcl2750dw".
+        fun holds(text: String, token: String) =
+            text.contains(token) || text.replace(NON_ALNUM, "").contains(token.replace(NON_ALNUM, ""))
+        // Only fires when the head names none of the query and the tail names it — otherwise the
+        // product itself leads the title and the phrase is a normal qualifier.
+        val headHasQuery = tokens.any { holds(head, it.lowercase()) }
+        val tailHasQuery = tokens.any { holds(tail, it.lowercase()) }
+        if (headHasQuery || !tailHasQuery) return false
+        // The head is the accessory's own noun. If the query already asks for that noun, keep it.
+        val q = queryText.lowercase()
+        val headWords = head.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 }
+        return headWords.none { q.contains(it) }
+    }
+
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
-        val listings = listings.filter(::hasSanePrice)
         val parsed = parseQuery(query.text)
+        val listings = listings
+            .filter(::hasSanePrice)
+            .filterNot { isRentalOffer(it, query.text) }
+            .filterNot { isAccessoryFor(it, parsed, query.text) }
         val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
         // Single-token queries ("laptop", "monitor"): the platform's own search already filtered
         // results. A product called "Lenovo ThinkPad X1" IS a laptop even without the word —
         // applying lexical filtering would drop 95%+ of results. Skip filtering entirely.
         if (tokenCount <= 1) {
+            // Trusting the platform's own search breaks down for a long compound term: reBuy answers
+            // "parkettschleifmaschine" with novels that merely end in "-maschine". A specific compound
+            // must therefore still share its leading stem ("parkett") with the listing. Short generic
+            // category words ("laptop", "monitor") stay exempt — a ThinkPad X1 IS a laptop without
+            // saying so, and stem-matching them would drop nearly everything.
+            val token = parsed.positiveTokens.firstOrNull()?.lowercase()
+            val stem = token?.replace(NON_ALNUM, "")?.takeIf { it.length >= 10 }?.take(7)
             return listings.mapNotNull { listing ->
                 val s = score(listing, parsed)
-                if (s < 0) null else listing to s
+                if (s < 0) return@mapNotNull null
+                // Compared with separators stripped from both sides, so a normalised token
+                // ("mfcl2750dw") still matches the title's punctuated form ("MFC-L2750DW").
+                if (stem != null &&
+                    !"${listing.title} ${listing.description ?: ""}".lowercase()
+                        .replace(NON_ALNUM, "").contains(stem)
+                ) return@mapNotNull null
+                listing to s
             }.sortedByDescending { it.second }.map { it.first }
         }
         return listings.mapNotNull { listing ->

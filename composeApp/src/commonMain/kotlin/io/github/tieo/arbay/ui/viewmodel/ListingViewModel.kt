@@ -11,10 +11,20 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+
+/** How the results list is ordered; chosen by the user from the sort menu. */
+enum class SortMode(val label: String) {
+    BEST_MATCH("Best match"),
+    PRICE_ASC("Price: low to high"),
+    PRICE_DESC("Price: high to low"),
+    NEAREST("Nearest first"),
+    NEWEST("Newest first"),
+}
 
 data class PlatformStatus(
     val platformId: String,
@@ -152,25 +162,38 @@ class ListingViewModel(
     // results nearest-first.
     private var userLat: Double? = null
     private var userLon: Double? = null
-    private val _sortByDistance = MutableStateFlow(false)
-    val sortByDistance: StateFlow<Boolean> = _sortByDistance
+    private val _sortMode = MutableStateFlow(SortMode.BEST_MATCH)
+    val sortMode: StateFlow<SortMode> = _sortMode
+    // Kept for the callers that only ask "are we nearest-first?".
+    val sortByDistance: StateFlow<Boolean> = _sortMode
+        .map { it == SortMode.NEAREST }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setLocation(lat: Double?, lon: Double?) { userLat = lat; userLon = lon }
 
     fun setSortByDistance(on: Boolean) {
-        _sortByDistance.value = on
+        setSortMode(if (on) SortMode.NEAREST else SortMode.BEST_MATCH)
+    }
+
+    fun setSortMode(mode: SortMode) {
+        _sortMode.value = mode
         _allListings.value = sortListings(_allListings.value)
     }
 
-    /** Order results: nearest-first when the user asked and a position is known, else best ideal-car
-     *  match first (when scored), then cheapest. */
-    private fun sortListings(list: List<Listing>): List<Listing> =
-        if (_sortByDistance.value)
-            list.sortedWith(compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }
-                .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
-        else
-            list.sortedWith(compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
-                .thenBy { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) })
+    private fun priceOf(listing: Listing): Long =
+        DisplayCurrency.convert(listing.effectivePrice.amount, listing.effectivePrice.currency.name)
+
+    /** Order results by the mode the user picked from the sort menu. */
+    private fun sortListings(list: List<Listing>): List<Listing> = when (_sortMode.value) {
+        SortMode.NEAREST -> list.sortedWith(
+            compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }.thenBy { priceOf(it) })
+        SortMode.PRICE_ASC -> list.sortedBy { priceOf(it) }
+        SortMode.PRICE_DESC -> list.sortedByDescending { priceOf(it) }
+        SortMode.NEWEST -> list.sortedByDescending { it.soldDate ?: it.scrapedAt }
+        SortMode.BEST_MATCH -> list.sortedWith(
+            compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
+                .thenBy { priceOf(it) })
+    }
 
     fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
         if (query.isBlank()) return

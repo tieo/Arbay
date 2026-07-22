@@ -126,13 +126,14 @@ class RelevanceFilterTest {
             listing("Schutzhülle Case für MFC-L2750DW"),
             listing("Brother MFC-L2750DW Mainboard Formatter"),
         ))
-        // All listings containing the model should pass (no hardcoded kills). A
-        // single-token query relies on the platform's own search for relevance, so
-        // lexical score-filtering is intentionally skipped here.
+        // No hardcoded kill lists: the printer itself and a spare part named without an
+        // "accessory for" phrasing both pass. What does not pass is an accessory whose title
+        // says it is made FOR the searched product — a searcher after the printer does not
+        // want its toner or a case (see the accessory-for tests below).
         assertTrue(results.any { it.title.contains("Multifunktionsdrucker") })
-        assertTrue(results.any { it.title.contains("Toner") })
-        assertTrue(results.any { it.title.contains("Schutzhülle") })
         assertTrue(results.any { it.title.contains("Mainboard") })
+        assertTrue(results.none { it.title.contains("Toner") }, "toner is an accessory for the printer")
+        assertTrue(results.none { it.title.contains("Schutzhülle") }, "case is an accessory for the printer")
     }
 
     // === Irrelevance report (platform ignored the query) ===
@@ -179,5 +180,45 @@ class RelevanceFilterTest {
     fun `irrelevanceReport skips small result sets`() {
         val report = RelevanceFilter.irrelevanceReport(garbageListings.take(4), SearchQuery(text = "Volkswagen Crafter"))
         assertNull(report, "Fewer than 5 results is too small a sample to flag")
+    }
+
+    @Test
+    fun `rental offers are dropped, unless the query asks to rent`() {
+        val listings = listOf(
+            listing("Parkettschleifmaschine Mieten", price = 100),
+            listing("Parkettschleifmaschine Lägler Hummel", price = 90000),
+            listing("Parkettschleifmaschine zu vermieten", price = 500),
+        )
+        val kept = search("parkettschleifmaschine", listings).map { it.title }
+        assertEquals(listOf("Parkettschleifmaschine Lägler Hummel"), kept)
+        // Asking to rent keeps them: that is exactly what was searched for.
+        val rentKept = search("parkettschleifmaschine mieten", listings).map { it.title }
+        assertTrue(rentKept.any { it.contains("Mieten") }, "rental query must keep rental offers")
+    }
+
+
+
+    @Test
+    fun `a long compound single-token query drops results that only share its tail`() {
+        val listings = listOf(
+            listing("Die Zeitmaschine", price = 389),
+            listing("Leo und die Abenteuermaschine", price = 289),
+            listing("Parkettschleifmaschine Lägler Hummel", price = 250000),
+            listing("Parkett Schleifmaschine Bandschleifer", price = 90000),
+        )
+        val kept = search("parkettschleifmaschine", listings).map { it.title }.toSet()
+        assertEquals(
+            setOf("Parkettschleifmaschine Lägler Hummel", "Parkett Schleifmaschine Bandschleifer"),
+            kept,
+        )
+    }
+
+    @Test
+    fun `a short generic single-token query still trusts the platform search`() {
+        val listings = listOf(
+            listing("Lenovo ThinkPad X1 Carbon", price = 50000),
+            listing("Dell XPS 13", price = 60000),
+        )
+        assertEquals(2, search("laptop", listings).size, "generic category words must not stem-match")
     }
 }

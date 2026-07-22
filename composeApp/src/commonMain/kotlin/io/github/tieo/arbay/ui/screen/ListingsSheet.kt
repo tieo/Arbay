@@ -55,6 +55,7 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
+import io.github.tieo.arbay.ui.viewmodel.SortMode
 import androidx.compose.ui.geometry.Size
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -284,6 +285,7 @@ fun ListingsSheet(
     // Nearest-first: fetch the device position, re-run the search so the server fills in distances,
     // and order by them. Toggling off restores the default (match/price) order.
     val sortByDistance by listingViewModel.sortByDistance.collectAsState()
+    val sortMode by listingViewModel.sortMode.collectAsState()
     val detectAndSortNearest = rememberCoordDetector { lat, lon ->
         listingViewModel.setLocation(lat, lon)
         listingViewModel.setSortByDistance(lat != null)
@@ -439,14 +441,25 @@ fun ListingsSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            // Cross-border markets are searched in their own language; show the
-                            // distinct translated terms so the user sees what was actually queried.
+                            // Cross-border markets are searched in their own language. Each term is
+                            // tagged with the country it was used in, kept to one line so the header
+                            // stays compact; tap to see them all.
+                            var translationsExpanded by remember { mutableStateOf(false) }
                             val translations = remember(platformStatuses) {
-                                platformStatuses.mapNotNull { it.queryUsed?.takeIf { q -> q.isNotBlank() } }.distinct()
+                                platformStatuses
+                                    .mapNotNull { s ->
+                                        val q = s.queryUsed?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                                        val cc = runCatching { PlatformId.valueOf(s.platformId).country }.getOrNull()
+                                        (cc ?: "") to q
+                                    }
+                                    .distinctBy { it.second }
                             }
                             if (translations.isNotEmpty()) {
                                 Spacer(Modifier.height(2.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { translationsExpanded = true },
+                                ) {
                                     Icon(
                                         Icons.Outlined.Translate,
                                         null,
@@ -455,11 +468,34 @@ fun ListingsSheet(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        "abroad: ${translations.joinToString(" · ")}",
+                                        "translated for ${translations.size} markets",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
+                            }
+                            if (translationsExpanded) {
+                                AlertDialog(
+                                    onDismissRequest = { translationsExpanded = false },
+                                    title = { Text("Searched abroad as", style = MaterialTheme.typography.titleMedium) },
+                                    text = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            translations.forEach { (cc, term) ->
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Text(
+                                                        cc.ifEmpty { "–" },
+                                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                    Text(term, style = MaterialTheme.typography.bodyMedium)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    confirmButton = {
+                                        TextButton(onClick = { translationsExpanded = false }) { Text("Close") }
+                                    },
+                                )
                             }
                         }
                         if (!loading) {
@@ -681,8 +717,6 @@ fun ListingsSheet(
                             minUsedPrice = minUsedPrice,
                             medianUsedPrice = medianUsedPrice,
                             usedCount = usedListings.size,
-                            medianSoldPrice = medianSoldPrice,
-                            soldCount = soldListings.size,
                             conditionFilter = conditionFilter,
                             onConditionFilterChange = { conditionFilter = if (conditionFilter == it) null else it },
                             modifier = Modifier.padding(horizontal = 20.dp),
@@ -700,6 +734,7 @@ fun ListingsSheet(
                             soldListings = soldListings,
                             medianNewPrice = medianNewPrice?.amount,
                             medianUsedPrice = medianUsedPrice?.amount,
+                            conditionFilter = conditionFilter,
                             onSearchSold = { listingViewModel.searchSold() },
                             soldLoading = soldLoadingState,
                             onBan = { listingViewModel.ban(it) },
@@ -711,7 +746,7 @@ fun ListingsSheet(
                 }
 
                 // === All listings ===
-                if (conditionFilter != "SOLD" && activeListings.isNotEmpty()) {
+                if (activeListings.isNotEmpty()) {
                     item("listings_header") {
                         Spacer(Modifier.height(16.dp))
                         val filterLabel = when {
@@ -728,15 +763,37 @@ fun ListingsSheet(
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                                 modifier = Modifier.weight(1f),
                             )
-                            FilterChip(
-                                selected = sortByDistance,
-                                onClick = {
-                                    if (sortByDistance) listingViewModel.setSortByDistance(false)
-                                    else detectAndSortNearest()
-                                },
-                                label = { Text("Nearest", style = MaterialTheme.typography.labelSmall) },
-                                leadingIcon = { Icon(Icons.Outlined.LocationOn, null, Modifier.size(14.dp)) },
-                            )
+                            // Sort menu: the order is an explicit choice, not a single toggle.
+                            // Nearest needs the device position, so it routes through the detector.
+                            var sortMenuOpen by remember { mutableStateOf(false) }
+                            Box {
+                                FilterChip(
+                                    selected = sortMode != SortMode.BEST_MATCH,
+                                    onClick = { sortMenuOpen = true },
+                                    label = { Text(sortMode.label, style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = { Icon(Icons.Outlined.SwapVert, null, Modifier.size(14.dp)) },
+                                )
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    SortMode.entries.forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = { Text(mode.label) },
+                                            onClick = {
+                                                sortMenuOpen = false
+                                                if (mode == SortMode.NEAREST) detectAndSortNearest()
+                                                else listingViewModel.setSortMode(mode)
+                                            },
+                                            leadingIcon = {
+                                                if (mode == sortMode) {
+                                                    Icon(Icons.Default.Check, null, Modifier.size(16.dp))
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                     }
@@ -889,8 +946,6 @@ private fun PriceOverview(
     minUsedPrice: Money?,
     medianUsedPrice: Money?,
     usedCount: Int,
-    medianSoldPrice: Money?,
-    soldCount: Int,
     conditionFilter: String?,
     onConditionFilterChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -938,7 +993,8 @@ private fun PriceOverview(
             }
         }
 
-        // Condition breakdown row; tap a card to filter by that condition.
+        // Condition breakdown row; tap a card to filter by that condition. Only the conditions a
+        // listing can currently be in — sold is history, not stock, so it lives on the price chart.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -966,19 +1022,6 @@ private fun PriceOverview(
                     onClick = { onConditionFilterChange("USED") },
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     onColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            if (soldCount > 0 && medianSoldPrice != null) {
-                ConditionPriceCard(
-                    label = "Sold",
-                    minPrice = null,
-                    medianPrice = medianSoldPrice,
-                    count = soldCount,
-                    isSelected = conditionFilter == "SOLD",
-                    onClick = { onConditionFilterChange("SOLD") },
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    onColor = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -1441,6 +1484,8 @@ private fun PriceDistributionChart(
     soldListings: List<Listing> = emptyList(),
     medianNewPrice: Long?,
     medianUsedPrice: Long?,
+    // The one shared New/Used selection (null = both); the chart dims to match the listing filter.
+    conditionFilter: String? = null,
     onSearchSold: () -> Unit = {},
     soldLoading: Boolean = false,
     onBan: ((Listing) -> Unit)? = null,
@@ -1448,10 +1493,12 @@ private fun PriceDistributionChart(
     searchQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
-    // Internal chart filter, independent of the listing-card filter.
-    // null = all active, "NEW" = new only, "USED" = used only, "SOLD" = sold history chart
-    val defaultFilter = if (newListings.isEmpty() && usedListings.isEmpty() && soldListings.isNotEmpty()) "SOLD" else null
-    var chartFilter by remember { mutableStateOf(defaultFilter) }
+    // New/Used comes from the one condition filter shared with the listing cards, so the chart and
+    // the list never disagree. Sold is not a condition a listing is in — it is price history, so it
+    // is the chart's own mode and nothing else responds to it.
+    var showSoldHistory by remember {
+        mutableStateOf(newListings.isEmpty() && usedListings.isEmpty() && soldListings.isNotEmpty())
+    }
     // Distribution render style, user-switchable: discrete bars or a continuous line over buckets.
     var chartStyle by remember { mutableStateOf("BAR") }
 
@@ -1459,9 +1506,20 @@ private fun PriceDistributionChart(
 
     val allActive = newListings + usedListings
     val hasActive = allActive.isNotEmpty()
-    val allPrices = allActive.map { it.effectivePrice.amount }
-    val minPriceAll = allPrices.minOrNull() ?: 0L
-    val maxPriceAll = allPrices.maxOrNull() ?: 0L
+    val allPrices = allActive.map { it.effectivePrice.amount }.sorted()
+    // Axis bounds are the 5th/95th percentile, not the extremes: a single dear outlier otherwise
+    // stretches the axis so every real listing collapses into one spike at the left. Prices outside
+    // the band still count — bucket() clamps them into the first/last bucket.
+    val minPriceAll = when {
+        allPrices.isEmpty() -> 0L
+        allPrices.size >= 12 -> allPrices[(allPrices.size * 0.05f).toInt()]
+        else -> allPrices.first()
+    }
+    val maxPriceAll = when {
+        allPrices.isEmpty() -> 0L
+        allPrices.size >= 12 -> allPrices[(allPrices.size - 1 - (allPrices.size * 0.05f).toInt()).coerceIn(0, allPrices.size - 1)]
+        else -> allPrices.last()
+    }
     val priceRange = (maxPriceAll - minPriceAll).coerceAtLeast(500L)
     val bucketCount = 9
 
@@ -1499,7 +1557,7 @@ private fun PriceDistributionChart(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     // Bar/line switch, only meaningful for the active distribution (not the sold view).
-                    if (chartFilter != "SOLD") {
+                    if (!showSoldHistory) {
                         IconButton(
                             onClick = { chartStyle = if (chartStyle == "BAR") "LINE" else "BAR" },
                             modifier = Modifier.size(26.dp),
@@ -1512,37 +1570,11 @@ private fun PriceDistributionChart(
                             )
                         }
                     }
-                    if (newListings.isNotEmpty()) {
-                        FilterChip(
-                            selected = chartFilter == "NEW",
-                            onClick = { chartFilter = if (chartFilter == "NEW") null else "NEW" },
-                            label = { Text("New", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = primary.copy(alpha = 0.2f),
-                                selectedLabelColor = primary,
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.height(26.dp),
-                        )
-                    }
-                    if (usedListings.isNotEmpty()) {
-                        FilterChip(
-                            selected = chartFilter == "USED",
-                            onClick = { chartFilter = if (chartFilter == "USED") null else "USED" },
-                            label = { Text("Used", style = MaterialTheme.typography.labelSmall) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = tertiary.copy(alpha = 0.2f),
-                                selectedLabelColor = tertiary,
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.height(26.dp),
-                        )
-                    }
                     FilterChip(
-                        selected = chartFilter == "SOLD",
+                        selected = showSoldHistory,
                         onClick = {
-                            val wasSold = chartFilter == "SOLD"
-                            chartFilter = if (wasSold) null else "SOLD"
+                            val wasSold = showSoldHistory
+                            showSoldHistory = !wasSold
                             if (!wasSold && soldListings.isEmpty()) onSearchSold()
                         },
                         label = {
@@ -1553,7 +1585,7 @@ private fun PriceDistributionChart(
                                 }
                             } else {
                                 Text(
-                                    if (soldListings.isNotEmpty()) "Sold (${soldListings.size})" else "Sold",
+                                    if (soldListings.isNotEmpty()) "Sold history (${soldListings.size})" else "Sold history",
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             }
@@ -1569,7 +1601,7 @@ private fun PriceDistributionChart(
             }
             Spacer(Modifier.height(6.dp))
 
-            if (chartFilter == "SOLD") {
+            if (showSoldHistory) {
                 if (soldLoading) {
                     Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
@@ -1609,8 +1641,8 @@ private fun PriceDistributionChart(
                 val barGap = bw * 0.06f  // gap between new and used bars
                 val bucketPad = bw * 0.09f
 
-                val newAlpha = if (chartFilter == "USED") 0.2f else 1f
-                val usedAlpha = if (chartFilter == "NEW") 0.2f else 1f
+                val newAlpha = if (conditionFilter == "USED") 0.2f else 1f
+                val usedAlpha = if (conditionFilter == "NEW") 0.2f else 1f
                 val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
 
                 // Draw bars first
@@ -1681,13 +1713,13 @@ private fun PriceDistributionChart(
 
                 // Draw median lines ON TOP of bars
                 medianNewPrice?.let {
-                    if (chartFilter != "USED") {
+                    if (conditionFilter != "USED") {
                         val x = padL + ((it - minPriceAll).toFloat() / priceRange) * chartW
                         drawLine(primary, Offset(x, 0f), Offset(x, chartH), strokeWidth = 2f, pathEffect = dash)
                     }
                 }
                 medianUsedPrice?.let {
-                    if (chartFilter != "NEW") {
+                    if (conditionFilter != "NEW") {
                         val x = padL + ((it - minPriceAll).toFloat() / priceRange) * chartW
                         drawLine(tertiary, Offset(x, 0f), Offset(x, chartH), strokeWidth = 2f, pathEffect = dash)
                     }
