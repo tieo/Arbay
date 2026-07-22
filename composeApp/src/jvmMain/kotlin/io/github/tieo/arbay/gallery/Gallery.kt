@@ -61,11 +61,39 @@ private fun ResultsBody() {
 private val PHONE_W = 390
 private val PHONE_H = 1600
 
+/** Every top-level view rendered inline (the sheets normally wrap in a Dialog, which an off-screen
+ *  scene cannot capture; LocalRenderInline makes them paint in place). */
+private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
+    "results" to { ResultsBody() },
+    "search" to {
+        androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true) {
+            io.github.tieo.arbay.ui.screen.DiscoverySheet(
+                onDismiss = {}, onProductSelected = {}, onCustomSearch = {},
+                onLiveSearch = {}, onFreeItems = {}, onCarSearch = {},
+            )
+        }
+    },
+    "car-search" to {
+        androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true) {
+            io.github.tieo.arbay.ui.screen.CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _ -> })
+        }
+    },
+    "settings" to {
+        androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true) {
+            io.github.tieo.arbay.ui.screen.SettingsSheet(client = io.github.tieo.arbay.api.ArbayClient(), onDismiss = {})
+        }
+    },
+)
+
 fun main() {
     val outDir = File(System.getProperty("gallery.out") ?: "build/gallery")
-    for (dark in listOf(false, true)) {
-        val suffix = if (dark) "dark" else "light"
-        renderToPng("results-$suffix", PHONE_W, PHONE_H, dark = dark, outDir = outDir) { ResultsBody() }
+    for ((name, view) in VIEWS) {
+        for (dark in listOf(false, true)) {
+            val suffix = if (dark) "dark" else "light"
+            runCatching {
+                renderToPng("$name-$suffix", PHONE_W, PHONE_H, dark = dark, outDir = outDir, content = view)
+            }.onFailure { println("FAILED $name-$suffix: ${it.message}") }
+        }
     }
     println("gallery written to ${outDir.absolutePath}")
 }

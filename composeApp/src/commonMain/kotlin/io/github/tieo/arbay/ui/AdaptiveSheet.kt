@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 
 val LocalDesktopMode = compositionLocalOf { false }
 
+// When true (set only by the off-screen gallery renderer), the adaptive sheets paint their content
+// inline instead of inside a Dialog — an ImageComposeScene cannot capture a Dialog's own window, so
+// this is what lets every sheet be rendered to a gallery PNG.
+val LocalRenderInline = compositionLocalOf { false }
+
 @Composable
 fun AdaptiveSheet(
     onDismiss: () -> Unit,
@@ -24,6 +29,10 @@ fun AdaptiveSheet(
     maxWidth: Int = 640,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (LocalRenderInline.current) {
+        Column(Modifier.fillMaxSize(), content = content)
+        return
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = fullBleedDialogProperties(),
@@ -57,6 +66,10 @@ fun AdaptiveFormSheet(
     maxWidth: Int = 520,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (LocalRenderInline.current) {
+        Column(Modifier.fillMaxSize(), content = content)
+        return
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = fullBleedDialogProperties(),
