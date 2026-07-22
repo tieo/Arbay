@@ -69,6 +69,8 @@ private val GENERAL_PLATFORMS = listOf(
     // Cross-border sourcing: the query is translated into each site's language (localizedQuery)
     // before searching, so a German product term reaches Italian/French/Spanish/Dutch listings.
     PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.TWEEDEHANDS,
+    // Switzerland's largest general marketplace; German-language, so the query needs no translation.
+    PlatformId.RICARDO,
 )
 
 /** Reads the optional car-search filters from the request and applies them to a

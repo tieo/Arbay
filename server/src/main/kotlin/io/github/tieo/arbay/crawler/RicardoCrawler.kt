@@ -33,20 +33,23 @@ class RicardoCrawler(private val client: HttpClient) : Crawler {
             query.positiveText
         }
 
+        // The vehicle-type guard only makes sense for a car search; a product search ("Parkett-
+        // schleifmaschine") legitimately wants grinding_machine etc., so it must not be filtered out.
+        val vehiclesOnly = car != null
         return paginate(query) { page ->
             val base = "https://www.ricardo.ch/de/s/${text.encodeUrl()}/"
             val url = if (page <= 1) base else "$base?page=$page"
-            parse(fetchWithFallback(client, url, "ricardo.ch"))
+            parse(fetchWithFallback(client, url, "ricardo.ch"), vehiclesOnly)
         }
     }
 
     /** Decode the RSC stream and map its `articles` array to listings. */
-    internal fun parse(html: String): List<Listing> {
+    internal fun parse(html: String, vehiclesOnly: Boolean = false): List<Listing> {
         val articles = extractArticles(html) ?: return emptyList()
         val now = Clock.System.now()
 
         return articles.mapNotNull { element ->
-            runCatching { parseArticle(element, now) }.getOrNull()
+            runCatching { parseArticle(element, now, vehiclesOnly) }.getOrNull()
         }
     }
 
@@ -56,14 +59,7 @@ class RicardoCrawler(private val client: HttpClient) : Crawler {
      * as one, which handles every escape the stream uses.
      */
     private fun extractArticles(html: String): JsonArray? {
-        val blob = buildString {
-            CHUNK_REGEX.findAll(html).forEach { match ->
-                val decoded = runCatching {
-                    json.parseToJsonElement("\"${match.groupValues[1]}\"").jsonPrimitive.content
-                }.getOrNull()
-                if (decoded != null) append(decoded)
-            }
-        }
+        val blob = decodeChunks(html)
 
         val start = blob.indexOf(ARTICLES_KEY)
         if (start < 0) return null
@@ -87,18 +83,44 @@ class RicardoCrawler(private val client: HttpClient) : Crawler {
         return null
     }
 
-    private fun parseArticle(element: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    /** Concatenate every `self.__next_f.push([1,"…"])` chunk body, escape-decoded. Scanned by hand,
+     *  not by regex: the bodies are ~1 MB and a backtracking string pattern overflows the stack. */
+    private fun decodeChunks(html: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (true) {
+            val start = html.indexOf(CHUNK_MARKER, i)
+            if (start < 0) break
+            var j = start + CHUNK_MARKER.length
+            val body = StringBuilder()
+            while (j < html.length) {
+                val c = html[j]
+                if (c == '\\' && j + 1 < html.length) { body.append(c).append(html[j + 1]); j += 2; continue }
+                if (c == '"') break
+                body.append(c); j++
+            }
+            runCatching { json.parseToJsonElement("\"$body\"").jsonPrimitive.content }
+                .getOrNull()?.let { sb.append(it) }
+            i = j + 1
+        }
+        return sb.toString()
+    }
+
+    private fun parseArticle(element: JsonElement, scrapedAt: kotlinx.datetime.Instant, vehiclesOnly: Boolean): Listing? {
         val obj = element as? JsonObject ?: return null
         val externalId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
         val title = obj["title"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
 
-        // A general marketplace answers a car query with as many parts as vehicles (a Crafter
+        // On a car query, a general marketplace answers with as many parts as vehicles (a Crafter
         // search returns floor mats, a licence-plate light, a keychain). ricardo states the kind
         // in productTypeKey, so drop anything it classifies as something other than a vehicle.
-        // A missing key is kept: unknown must not silently discard a real listing.
-        val productType = obj["productTypeKey"]?.jsonPrimitive?.contentOrNull
-        if (productType != null && productType !in VEHICLE_PRODUCT_TYPES) return null
+        // A missing key is kept: unknown must not silently discard a real listing. Product searches
+        // pass through untouched — their productType (grinding_machine, …) is exactly what's wanted.
+        if (vehiclesOnly) {
+            val productType = obj["productTypeKey"]?.jsonPrimitive?.contentOrNull
+            if (productType != null && productType !in VEHICLE_PRODUCT_TYPES) return null
+        }
 
         // Prices are whole Swiss francs. A buy-now price wins; otherwise the current bid stands in,
         // which is what a buyer would pay right now on an auction listing.
@@ -138,7 +160,7 @@ class RicardoCrawler(private val client: HttpClient) : Crawler {
     }
 
     private companion object {
-        val CHUNK_REGEX = Regex("""self\.__next_f\.push\(\[1,"(.*?)"]\)""", RegexOption.DOT_MATCHES_ALL)
+        const val CHUNK_MARKER = "self.__next_f.push([1,\""
         const val ARTICLES_KEY = "\"articles\":"
 
         /** ricardo product types that are a whole vehicle. Everything else it classifies

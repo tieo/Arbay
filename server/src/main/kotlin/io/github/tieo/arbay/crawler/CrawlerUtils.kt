@@ -64,6 +64,36 @@ internal suspend fun emitCaptchaInteractive() {
  *  what was already collected. Crawlers supply only how to fetch+parse a single page number; the
  *  loop, dedup, cap, block handling and streaming live in this one place. [page] counts from
  *  [SearchQuery.startPage]. */
+/** One page, retried once on a thrown error before it is believed failed. A single transient
+ *  403/503 on page two used to end pagination and silently drop the rest of a platform's results;
+ *  one backed-off retry recovers those. An empty page is NOT retried — it is the normal end of
+ *  results, and retrying it would double the tail fetch for every platform on every search.
+ *  Returns null when the page could not be fetched after the retry: the first page rethrows (the
+ *  platform genuinely failed), a later one just stops paging and keeps what was already collected. */
+private suspend fun fetchPageWithRetry(
+    page: Int,
+    isFirstPage: Boolean,
+    fetchPage: suspend (page: Int) -> List<Listing>,
+): List<Listing>? {
+    try {
+        return fetchPage(page)
+    } catch (e: CrawlerBlockedException) {
+        // A hard block (captcha / IP ban) is not transient; escalating fetch tiers already ran.
+        // Retrying would only deepen the block, so surface it immediately.
+        if (isFirstPage) throw e
+        return null
+    } catch (_: Exception) {
+        // A transient network/HTTP error: back off and try once more.
+    }
+    delay(700L + fetchJitterMs())
+    return try {
+        fetchPage(page)
+    } catch (e: Exception) {
+        if (isFirstPage) throw e
+        null
+    }
+}
+
 internal suspend fun paginate(
     query: SearchQuery,
     fetchPage: suspend (page: Int) -> List<Listing>,
@@ -71,12 +101,8 @@ internal suspend fun paginate(
     val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
     val seen = LinkedHashMap<String, Listing>()
     for (offset in 0 until maxPages) {
-        val listings = try {
-            fetchPage(query.startPage + offset)
-        } catch (e: CrawlerBlockedException) {
-            if (offset == 0) throw e
-            break
-        }
+        val listings = fetchPageWithRetry(query.startPage + offset, isFirstPage = offset == 0, fetchPage)
+            ?: break
         if (listings.isEmpty()) break
         emitPartialResults(listings)
         val newIds = listings.count { it.externalId !in seen }

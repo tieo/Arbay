@@ -93,7 +93,7 @@ class RicardoParserTest {
             {"id":"4","title":"VW Crafter 2.0 TDI","buyNowPrice":15000,"productTypeKey":"commercial_vehicle"}
         ]}""".trimIndent().replace("\n", "")
 
-        val listings = crawler.parse(rscHtml(payload))
+        val listings = crawler.parse(rscHtml(payload), vehiclesOnly = true)
         assertEquals(1, listings.size)
         assertEquals("VW Crafter 2.0 TDI", listings.single().title)
     }
@@ -104,7 +104,14 @@ class RicardoParserTest {
             {"id":"1","title":"VW Crafter Campervan","buyNowPrice":40000,"productTypeKey":"caravan"},
             {"id":"2","title":"VW Crafter Kipper","buyNowPrice":22000,"productTypeKey":"truck"}
         ]}""".trimIndent().replace("\n", "")
-        assertEquals(2, crawler.parse(rscHtml(payload)).size)
+        assertEquals(2, crawler.parse(rscHtml(payload), vehiclesOnly = true).size)
+    }
+
+    @Test
+    fun `a product search keeps non-vehicle product types`() {
+        // "Parkettschleifmaschine" is not a car query, so the grinding machine must survive.
+        val payload = """3:{"articles":[{"id":"1","title":"Parkettschleifmaschine Laegler","buyNowPrice":1200,"productTypeKey":"grinding_machine"}]}"""
+        assertEquals(1, crawler.parse(rscHtml(payload)).size)
     }
 
     @Test
