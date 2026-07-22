@@ -62,6 +62,10 @@ fun MainScreen(
     client: ArbayClient,
 ) {
     val products by productViewModel.products.collectAsState()
+    // The saved bookmark whose search text matches a query, if any — drives the header bookmark
+    // toggle so a fresh search can be saved and an already-saved one removed, from the same place.
+    fun savedFor(query: String): TrackedProduct? =
+        products.firstOrNull { it.searchQuery.text.trim().equals(query.trim(), ignoreCase = true) }
     val loading by productViewModel.loading.collectAsState()
     val error by productViewModel.error.collectAsState()
     val freeItemProfile by freeItemViewModel.profile.collectAsState()
@@ -558,6 +562,12 @@ fun MainScreen(
                 listingsBlockedTerms = updated
                 listingsProduct?.let { productViewModel.setBlockedKeywords(it, updated) }
             },
+            isBookmarked = true,
+            onToggleBookmark = {
+                productViewModel.deleteProduct(openListingsProduct.id)
+                showListings = false
+                listingsProduct = null
+            },
             onDismiss = {
                 showListings = false
                 listingsProduct = null
@@ -601,16 +611,17 @@ fun MainScreen(
                     showDiscovery = true
                 }
             } else null,
-            onBookmark = {
-                val bName = previewProduct?.displayName ?: previewSearchName.ifBlank { previewSearchQuery }
-                val bQuery = previewProduct?.searchQuery ?: previewSearchQuery
-                val bPlatforms = previewProduct?.effectivePlatforms ?: PlatformId.entries
-                productViewModel.createProduct(
-                    name = bName,
-                    searchText = bQuery,
-                    platforms = bPlatforms,
-                )
-                closePreview()
+            isBookmarked = savedFor(query) != null,
+            onToggleBookmark = {
+                val existing = savedFor(query)
+                if (existing != null) {
+                    productViewModel.deleteProduct(existing.id)
+                } else {
+                    val bName = previewProduct?.displayName ?: previewSearchName.ifBlank { previewSearchQuery }
+                    val bQuery = previewProduct?.searchQuery ?: previewSearchQuery
+                    val bPlatforms = previewProduct?.effectivePlatforms ?: PlatformId.entries
+                    productViewModel.createProduct(name = bName, searchText = bQuery, platforms = bPlatforms)
+                }
             },
         )
     }

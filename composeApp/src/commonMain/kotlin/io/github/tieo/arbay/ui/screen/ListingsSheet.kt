@@ -218,6 +218,10 @@ fun ListingsSheet(
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
     onBookmark: (() -> Unit)? = null,
+    // Header bookmark toggle: filled when this search is already a saved bookmark, outline when not.
+    // Tapping saves or removes it. Preferred over the bottom "Save search" FAB where wired.
+    isBookmarked: Boolean = false,
+    onToggleBookmark: (() -> Unit)? = null,
     platforms: List<PlatformId>? = null,
     carFilters: CarFilters? = null,
     onEditFilters: (() -> Unit)? = null,
@@ -393,7 +397,7 @@ fun ListingsSheet(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    bottom = if (onBookmark != null) 60.dp else 16.dp,
+                    bottom = if (onBookmark != null && onToggleBookmark == null) 60.dp else 16.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
@@ -503,6 +507,16 @@ fun ListingsSheet(
                                     confirmButton = {
                                         TextButton(onClick = { translationsExpanded = false }) { Text("Close") }
                                     },
+                                )
+                            }
+                        }
+                        onToggleBookmark?.let { toggle ->
+                            IconButton(onClick = toggle) {
+                                Icon(
+                                    if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                                    if (isBookmarked) "Remove bookmark" else "Save as bookmark",
+                                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -917,7 +931,7 @@ fun ListingsSheet(
                 }
             }
 
-            if (onBookmark != null) {
+            if (onBookmark != null && onToggleBookmark == null) {
                 ExtendedFloatingActionButton(
                     onClick = onBookmark,
                     modifier = Modifier
