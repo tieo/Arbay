@@ -294,12 +294,29 @@ object RelevanceFilter {
         return headWords.none { q.contains(it) }
     }
 
+    // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
+    // sandpaper, sanding belts, dust bags and filters far cheaper than any machine, which then poses
+    // as the "best price". Dropped only when the query itself does not ask for the consumable.
+    private val consumableNoun = Regex(
+        """\b(schleifpapier|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
+            """schleifmittel|staubbeutel|staubfangsack|staubsack|filterbeutel|filtersack|""" +
+            """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isConsumableFor(listing: Listing, queryText: String): Boolean {
+        // The query is really after the consumable itself ("schleifpapier ...") — keep those.
+        if (consumableNoun.containsMatchIn(queryText)) return false
+        return consumableNoun.containsMatchIn(listing.title)
+    }
+
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
         val parsed = parseQuery(query.text)
         val listings = listings
             .filter(::hasSanePrice)
             .filterNot { isRentalOffer(it, query.text) }
             .filterNot { isAccessoryFor(it, parsed, query.text) }
+            .filterNot { isConsumableFor(it, query.text) }
         val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
         // Single-token queries ("laptop", "monitor"): the platform's own search already filtered
         // results. A product called "Lenovo ThinkPad X1" IS a laptop even without the word —

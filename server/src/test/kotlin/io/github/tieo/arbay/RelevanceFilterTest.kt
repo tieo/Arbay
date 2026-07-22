@@ -221,4 +221,18 @@ class RelevanceFilterTest {
         )
         assertEquals(2, search("laptop", listings).size, "generic category words must not stem-match")
     }
+
+    @Test
+    fun `consumables and spares for the machine are dropped, unless the query asks for them`() {
+        val listings = listOf(
+            listing("Schleifpapier / Schleifband Parkettschleifmaschine (Boels)", price = 600),
+            listing("TM Rent 5 Beutel Staubfangsack Parkettschleifmaschine", price = 994),
+            listing("Schleifscheiben für Parkettschleifmaschine 150mm", price = 1200),
+            listing("Parkettschleifmaschine Laegler Hummel", price = 250000),
+        )
+        val kept = search("parkettschleifmaschine", listings).map { it.title }
+        assertEquals(listOf("Parkettschleifmaschine Laegler Hummel"), kept)
+        // A search for the consumable keeps it.
+        assertEquals(1, search("schleifpapier parkett", listOf(listings[0])).size)
+    }
 }
