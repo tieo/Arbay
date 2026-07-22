@@ -327,104 +327,62 @@ internal fun CategoryGrid(
                 }
             }
 
-            // Custom search tile
+            // Custom search tile — neutral surface, accent icon (one accent app-wide).
             item {
-                Card(
+                DiscoveryTile(
+                    icon = Icons.Default.Edit,
+                    title = "Custom search",
+                    subtitle = "Your own query",
                     onClick = onCustomSearch,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            Icons.Default.Edit, null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Custom search",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Text(
-                            "Your own query",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        )
-                    }
-                }
+                )
             }
 
-            // Special tracking tile
+            // Free items tile
             item {
-                Card(
+                DiscoveryTile(
+                    icon = Icons.Default.AutoAwesome,
+                    title = "Free Items",
+                    subtitle = "Zu verschenken + AI",
                     onClick = onSpecialTracking,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome, null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Free Items",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        )
-                        Text(
-                            "Zu verschenken + AI",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
-                        )
-                    }
-                }
+                )
             }
 
             // Category tiles — Cars handled by the hero tile above when car search is wired
             items(ProductCategory.entries.filter { onCarSearch == null || it != ProductCategory.CARS }) { category ->
-                Card(
+                DiscoveryTile(
+                    icon = category.icon,
+                    title = category.displayName,
+                    subtitle = "${ProductCatalog.productsFor(category).size} presets",
                     onClick = { onCategorySelected(category) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            category.icon, null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            category.displayName,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            "${ProductCatalog.productsFor(category).size} presets",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                )
             }
+        }
+    }
+}
+
+/** One square entry tile in the discovery grid: neutral surface, accent-tinted icon, title and a
+ *  muted subtitle. Every tile shares this so the grid reads as one coordinated set, distinguished
+ *  by icon and label rather than by competing background colours. */
+@Composable
+private fun DiscoveryTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(icon, null, modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(8.dp))
+            Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -438,7 +396,7 @@ private fun CarSearchHeroTile(onClick: () -> Unit) {
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
         ),
     ) {
         Row(
@@ -448,24 +406,24 @@ private fun CarSearchHeroTile(onClick: () -> Unit) {
             Icon(
                 Icons.Default.DirectionsCar, null,
                 modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Car search",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
                     "Make, year, mileage, price, power, gearbox across EU markets",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 )
             }
             Icon(
                 Icons.Default.ChevronRight, null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
     }

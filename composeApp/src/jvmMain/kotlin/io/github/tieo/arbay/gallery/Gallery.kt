@@ -63,7 +63,24 @@ private val PHONE_H = 1600
 
 /** Every top-level view rendered inline (the sheets normally wrap in a Dialog, which an off-screen
  *  scene cannot capture; LocalRenderInline makes them paint in place). */
+private fun inline(content: @Composable () -> Unit): @Composable () -> Unit = {
+    androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true, content = content)
+}
+
 private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
+    "home" to {
+        io.github.tieo.arbay.ui.screen.MainScreen(
+            productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(),
+            listingViewModel = io.github.tieo.arbay.ui.viewmodel.ListingViewModel(),
+            freeItemViewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(),
+            client = io.github.tieo.arbay.api.ArbayClient(),
+        )
+    },
+    "free-items" to inline {
+        io.github.tieo.arbay.ui.screen.FreeItemsSheet(
+            viewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(), onDismiss = {},
+        )
+    },
     "results" to { ResultsBody() },
     "search" to {
         androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true) {

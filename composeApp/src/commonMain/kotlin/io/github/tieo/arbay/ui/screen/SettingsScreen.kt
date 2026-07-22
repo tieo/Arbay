@@ -157,6 +157,10 @@ fun SettingsSheet(
                     currencies.forEach { cur ->
                         FilterChip(
                             selected = displayCurrency == cur,
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            ),
                             onClick = {
                                 displayCurrency = cur
                                 DisplayCurrency.current = cur
@@ -231,6 +235,10 @@ fun SettingsSheet(
                     intervalOptions.forEach { (mins, label) ->
                         FilterChip(
                             selected = notifSettings.pollIntervalMinutes == mins,
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            ),
                             onClick = { notifSettings = notifSettings.copy(pollIntervalMinutes = mins) },
                             label = { Text(label) },
                         )
@@ -275,6 +283,10 @@ fun SettingsSheet(
                         digestOptions.forEach { (hours, label) ->
                             FilterChip(
                                 selected = notifSettings.digestIntervalHours == hours,
+                                colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    selectedLabelColor = MaterialTheme.colorScheme.primary,
+                                ),
                                 onClick = { notifSettings = notifSettings.copy(digestIntervalHours = hours) },
                                 label = { Text(label) },
                             )
