@@ -28,7 +28,7 @@ private val generalPlatforms = listOf(
     BACKMARKET_DE, REBUY, REFURBED, VINTED_DE, WILLHABEN, MARKTPLAATS,
     // Cross-border sourcing: each is crawled in its own language (the query is translated),
     // so a German product term still reaches the Italian/French/Spanish/Dutch/Swiss listings.
-    EBAY_IT, EBAY_FR, EBAY_ES, TWEEDEHANDS, RICARDO,
+    EBAY_IT, EBAY_FR, EBAY_ES, TWEEDEHANDS, RICARDO, SUBITO,
 )
 
 private val carPlatforms = listOf(

@@ -28,9 +28,12 @@ class SubitoCrawler(private val client: HttpClient) : Crawler {
             query.positiveText
         }
 
+        // A car query scopes to the whole-vehicle category; anything else searches the general
+        // used-goods category. Searching "levigatrice per parquet" under /auto/ returns nothing;
+        // the same query under /usato/ returns the machines.
+        val category = if (car != null) "auto" else "usato"
         return paginate(query) { page ->
-            // The vendita/auto category scopes the search to whole vehicles; `o` is the page.
-            val base = "https://www.subito.it/annunci-italia/vendita/auto/?q=${text.encodeUrl()}"
+            val base = "https://www.subito.it/annunci-italia/vendita/$category/?q=${text.encodeUrl()}"
             val url = if (page <= 1) base else "$base&o=$page"
             parse(fetchWithFallback(client, url, "Subito"))
         }
