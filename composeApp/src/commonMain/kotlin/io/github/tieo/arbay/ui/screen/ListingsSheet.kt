@@ -1732,22 +1732,24 @@ internal fun PriceDistributionChart(
                 )
             }
 
-            // Legend
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (newListings.isNotEmpty() && medianNewPrice != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Canvas(Modifier.size(10.dp, 10.dp)) { drawRect(primary, size = size) }
+            // Legend: one swatch + count per series, and the dashed marker explained once.
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (newListings.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Canvas(Modifier.size(9.dp, 9.dp)) { drawRoundRect(primary, cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)) }
                         Text("New (${newListings.size})", style = MaterialTheme.typography.labelSmall, color = onSurface.copy(alpha = 0.7f))
-                        Canvas(Modifier.size(12.dp, 2.dp)) { drawLine(primary, Offset.Zero, Offset(size.width, 0f), strokeWidth = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 2f))) }
-                        Text("median", style = MaterialTheme.typography.labelSmall, color = onSurface.copy(alpha = 0.5f))
                     }
                 }
-                if (usedListings.isNotEmpty() && medianUsedPrice != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Canvas(Modifier.size(10.dp, 10.dp)) { drawRect(tertiary, size = size) }
+                if (usedListings.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Canvas(Modifier.size(9.dp, 9.dp)) { drawRoundRect(tertiary, cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)) }
                         Text("Used (${usedListings.size})", style = MaterialTheme.typography.labelSmall, color = onSurface.copy(alpha = 0.7f))
-                        Canvas(Modifier.size(12.dp, 2.dp)) { drawLine(tertiary, Offset.Zero, Offset(size.width, 0f), strokeWidth = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 2f))) }
+                    }
+                }
+                if (medianNewPrice != null || medianUsedPrice != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Canvas(Modifier.size(14.dp, 2.dp)) { drawLine(onSurface.copy(alpha = 0.5f), Offset.Zero, Offset(size.width, 0f), strokeWidth = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 2f))) }
                         Text("median", style = MaterialTheme.typography.labelSmall, color = onSurface.copy(alpha = 0.5f))
                     }
                 }
