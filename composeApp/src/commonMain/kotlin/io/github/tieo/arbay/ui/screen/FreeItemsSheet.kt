@@ -247,10 +247,7 @@ fun FreeItemsSheet(
             if (showSavedSheet) {
                 Dialog(
                     onDismissRequest = { showSavedSheet = false },
-                    properties = androidx.compose.ui.window.DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        decorFitsSystemWindows = false,
-                    ),
+                    properties = io.github.tieo.arbay.ui.fullBleedDialogProperties(),
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),

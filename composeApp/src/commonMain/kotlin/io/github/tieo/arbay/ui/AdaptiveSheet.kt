@@ -26,10 +26,7 @@ fun AdaptiveSheet(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
+        properties = fullBleedDialogProperties(),
     ) {
         Surface(
             modifier = if (LocalDesktopMode.current) {
@@ -62,10 +59,7 @@ fun AdaptiveFormSheet(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
+        properties = fullBleedDialogProperties(),
     ) {
         Surface(
             modifier = if (LocalDesktopMode.current) {

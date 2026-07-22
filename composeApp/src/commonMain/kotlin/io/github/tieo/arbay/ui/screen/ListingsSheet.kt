@@ -327,6 +327,14 @@ fun ListingsSheet(
     val minPrice = remember(activeListings) {
         activeListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
+    // Upper reference for the summary — the 95th percentile, so one outlier doesn't inflate it.
+    val maxPrice = remember(allPrices) {
+        if (allPrices.isEmpty()) null
+        else {
+            val i = if (allPrices.size >= 12) (allPrices.size - 1 - (allPrices.size * 0.05f).toInt()).coerceIn(0, allPrices.size - 1) else allPrices.size - 1
+            Money(allPrices[i], displayCur)
+        }
+    }
 
     val usedListings = remember(activeListings) {
         activeListings.filter { it.condition != null && it.condition != Condition.NEW }
@@ -711,6 +719,7 @@ fun ListingsSheet(
                         PriceOverview(
                             minPrice = minPrice,
                             medianPrice = medianPrice,
+                            maxPrice = maxPrice,
                             minNewPrice = minNewPrice,
                             medianNewPrice = medianNewPrice,
                             newCount = newListings.size,
@@ -937,7 +946,7 @@ private data class PlatformOffer(
 // === Price overview (Idealo-style) ===
 
 @Composable
-private fun PriceOverview(
+internal fun PriceOverview(
     minPrice: Money?,
     medianPrice: Money?,
     minNewPrice: Money?,
@@ -946,16 +955,19 @@ private fun PriceOverview(
     minUsedPrice: Money?,
     medianUsedPrice: Money?,
     usedCount: Int,
+    maxPrice: Money? = null,
     conditionFilter: String?,
     onConditionFilterChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Main price hero
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // One restrained summary: the best price is the single loud number (accent); the median and
+        // upper bound sit beside it as quiet reference. No competing colour blocks, one statistic
+        // per figure (median only — never a mean next to it).
         if (minPrice != null) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
@@ -963,115 +975,96 @@ private fun PriceOverview(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             "Best price",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             minPrice.format(),
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                     if (medianPrice != null) {
-                        Column(horizontalAlignment = Alignment.End) {
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                "Median",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                            )
-                            Text(
-                                medianPrice.format(),
+                                "Median ${medianPrice.format()}",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
+                            if (maxPrice != null) {
+                                Text(
+                                    "up to ${maxPrice.format()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Condition breakdown row; tap a card to filter by that condition. Only the conditions a
-        // listing can currently be in — sold is history, not stock, so it lives on the price chart.
+        // New / Used as compact, neutral filter stats — tap to narrow the list to that condition.
+        // Sold is not a stock condition, so it lives on the price chart, not here.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (minNewPrice != null) {
-                ConditionPriceCard(
-                    label = "New",
-                    minPrice = minNewPrice,
-                    medianPrice = medianNewPrice,
-                    count = newCount,
-                    isSelected = conditionFilter == "NEW",
-                    onClick = { onConditionFilterChange("NEW") },
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    onColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
+                ConditionStat("New", minNewPrice, newCount, conditionFilter == "NEW",
+                    { onConditionFilterChange("NEW") }, Modifier.weight(1f))
             }
             if (minUsedPrice != null) {
-                ConditionPriceCard(
-                    label = "Used",
-                    minPrice = minUsedPrice,
-                    medianPrice = medianUsedPrice,
-                    count = usedCount,
-                    isSelected = conditionFilter == "USED",
-                    onClick = { onConditionFilterChange("USED") },
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    onColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
+                ConditionStat("Used", minUsedPrice, usedCount, conditionFilter == "USED",
+                    { onConditionFilterChange("USED") }, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun ConditionPriceCard(
+private fun ConditionStat(
     label: String,
-    minPrice: Money?,
-    medianPrice: Money?,
+    from: Money,
     count: Int,
-    color: Color,
-    onColor: Color,
-    isSelected: Boolean = false,
-    onClick: (() -> Unit)? = null,
+    selected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val accent = MaterialTheme.colorScheme.primary
     Surface(
-        onClick = onClick ?: {},
-        enabled = onClick != null,
+        onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = color,
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, onColor) else null,
+        color = if (selected) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, accent) else null,
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (isSelected) Icon(Icons.Default.Check, null, modifier = Modifier.size(10.dp), tint = onColor)
-                Text(
-                    "$label ($count)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = onColor.copy(alpha = 0.7f),
-                )
-            }
-            if (minPrice != null) {
-                Text(
-                    "from ${minPrice.format()}",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = onColor,
-                )
-            }
-            if (medianPrice != null) {
-                Text(
-                    "\u00F8 ${medianPrice.format()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = onColor.copy(alpha = 0.7f),
-                )
-            }
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) accent else MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "from ${from.format()}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1134,14 +1127,16 @@ internal fun ListingCard(
 ) {
     var showBlockDialog by remember { mutableStateOf(false) }
 
-    Card(
+    // A flat, tappable row on the sheet surface, separated by a hairline divider — not a filled card
+    // per item, which reads as clutter across a long list. The price is the strongest element.
+    Surface(
         onClick = { openBrowser(listing.url) },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        color = Color.Transparent,
         modifier = modifier.fillMaxWidth(),
     ) {
+      Column {
         Row(
-            modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            modifier = Modifier.padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Thumbnail
@@ -1160,58 +1155,28 @@ internal fun ListingCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // One neutral source tag (platform + optional origin flag). Condition and location
+                // are quiet metadata below the title, not more coloured pills.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val origin = originCountry(listing)
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     ) {
                         Text(
-                            listing.platformId.displayName,
+                            if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
+                            else listing.platformId.displayName,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
-                    // Origin badge: the listing's own country when known (multi-country platforms
-                    // like AutoScout24 mix markets), else the platform's home country. Home (DE) = none.
-                    originCountry(listing)?.let { cc ->
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                        ) {
-                            Text(
-                                "${flagEmoji(cc)} $cc",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                    listing.condition?.let {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        ) {
-                            Text(
-                                it.name.lowercase().replaceFirstChar { c -> c.uppercase() },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
                     if (listing.sold) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.errorContainer,
-                        ) {
-                            Text(
-                                "Sold",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
+                        Text(
+                            "Sold",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -1222,6 +1187,14 @@ internal fun ListingCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Condition as quiet metadata, not a coloured pill.
+                listing.condition?.takeIf { !listing.sold }?.let {
+                    Text(
+                        it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 listing.vehicle?.let { VehicleSpecsRow(it) }
 
@@ -1348,6 +1321,11 @@ internal fun ListingCard(
                 }
             }
         }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            thickness = 1.dp,
+        )
+      }
     }
 
     if (showBlockDialog && onBlockWord != null) {
@@ -1478,7 +1456,7 @@ private fun BlockTermDialog(
 // === Price distribution histogram (active listings, New vs Used bars) ===
 
 @Composable
-private fun PriceDistributionChart(
+internal fun PriceDistributionChart(
     newListings: List<Listing>,
     usedListings: List<Listing>,
     soldListings: List<Listing> = emptyList(),
@@ -1768,7 +1746,7 @@ private fun PriceDistributionChart(
 // === Price History Chart (sold price over time) ===
 
 @Composable
-private fun PriceHistoryChart(
+internal fun PriceHistoryChart(
     soldListings: List<Listing>,
     onBan: ((Listing) -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,
