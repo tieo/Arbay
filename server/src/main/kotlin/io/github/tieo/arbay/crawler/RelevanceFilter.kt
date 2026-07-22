@@ -300,14 +300,23 @@ object RelevanceFilter {
     private val consumableNoun = Regex(
         """\b(schleifpapier|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
             """schleifmittel|staubbeutel|staubfangsack|staubsack|filterbeutel|filtersack|""" +
-            """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?)\b""",
+            """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
+            // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
+            // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.
+            """papel\s+de\s+lija|banda\s+de\s+revestimiento|bandas?\s+abrasivas?|""" +
+            """carta\s+abrasiva|nastr[oi]\s+abrasiv[oi]|disc[oh]i?\s+abrasiv[oi]|""" +
+            """bande\s+abrasive|papier\s+de\s+verre|schuurpapier|schuurband)\b""",
         RegexOption.IGNORE_CASE,
     )
 
+    // An abrasive grit code ("P240", "P100 grain") is a consumable's spec, never a machine's — a
+    // language-agnostic tell that catches a sanding belt/sheet whatever tongue names it.
+    private val abrasiveGrit = Regex("""\bP(?:40|60|80|100|120|150|180|220|240|320|400)\b""")
+
     private fun isConsumableFor(listing: Listing, queryText: String): Boolean {
         // The query is really after the consumable itself ("schleifpapier ...") — keep those.
-        if (consumableNoun.containsMatchIn(queryText)) return false
-        return consumableNoun.containsMatchIn(listing.title)
+        if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
+        return consumableNoun.containsMatchIn(listing.title) || abrasiveGrit.containsMatchIn(listing.title)
     }
 
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {

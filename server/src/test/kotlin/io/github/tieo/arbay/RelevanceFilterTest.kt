@@ -228,6 +228,7 @@ class RelevanceFilterTest {
             listing("Schleifpapier / Schleifband Parkettschleifmaschine (Boels)", price = 600),
             listing("TM Rent 5 Beutel Staubfangsack Parkettschleifmaschine", price = 994),
             listing("Schleifscheiben für Parkettschleifmaschine 150mm", price = 1200),
+            listing("Lijadora de banda de revestimiento 75x610 mm P240 SIA WOOD", price = 1325),
             listing("Parkettschleifmaschine Laegler Hummel", price = 250000),
         )
         val kept = search("parkettschleifmaschine", listings).map { it.title }
