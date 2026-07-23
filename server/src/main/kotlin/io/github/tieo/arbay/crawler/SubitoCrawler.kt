@@ -81,8 +81,11 @@ class SubitoCrawler(private val client: HttpClient) : Crawler {
         val euros = featureKey("/price")?.toLongOrNull()?.takeIf { it > 0 } ?: return null
         val price = Money(euros * 100, Currency.EUR)
 
+        // cdnBaseUrl is a bare base that 400s on its own; subito serves the image only with a size
+        // rule appended, so request a card-sized render.
         val imageUrl = obj["images"]?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("cdnBaseUrl")?.jsonPrimitive?.contentOrNull
+            ?.let { "$it?rule=vertical-mini-card-2x-auto" }
 
         // geo.city is the province and geo.town the municipality where present.
         val geo = obj["geo"]?.jsonObject
