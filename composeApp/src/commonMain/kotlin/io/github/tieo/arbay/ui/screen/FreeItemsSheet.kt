@@ -304,7 +304,7 @@ private fun SwipeHeader(
             Icon(
                 Icons.Default.CardGiftcard, null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.tertiary,
+                tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -347,16 +347,16 @@ private fun SwipeHeader(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 2.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Icon(Icons.Outlined.Explore, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+                Icon(Icons.Outlined.Explore, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(
                     "Expanded to $radius km",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1433,7 +1433,7 @@ private fun ProfileEditor(
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(16.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1497,6 +1497,11 @@ private fun ProfileEditor(
                     valueRange = 5f..500f,
                     steps = 0,
                     modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
                 )
             }
 
