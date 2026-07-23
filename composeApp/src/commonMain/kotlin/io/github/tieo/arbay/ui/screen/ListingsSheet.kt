@@ -99,53 +99,6 @@ private val DIM_LABELS = mapOf(
     "description" to "In description",
 )
 
-/** Per active filter, which result platforms enforce it at the source vs which Arbay post-filters
- *  locally, so a platform is never silently hidden for lacking a native filter. */
-@Composable
-private fun CoverageNote(activeDims: List<String>, platforms: List<PlatformId>) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable { expanded = !expanded },
-        ) {
-            Icon(Icons.Outlined.Info, null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "How filters were applied",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (expanded) {
-            Spacer(Modifier.height(3.dp))
-            // Collapse the dim×platform matrix into two lines: filters every market applies itself,
-            // vs filters we apply as a best-effort post-filter where a market can't.
-            val atSource = activeDims.filter { dim -> platforms.all { CarFilterCapability.isNative(it, dim) } }
-            val bestEffort = activeDims.filter { dim -> platforms.any { !CarFilterCapability.isNative(it, dim) } }
-            fun labels(dims: List<String>) = dims.joinToString(", ") { DIM_LABELS[it] ?: it }
-            if (atSource.isNotEmpty()) {
-                Text(
-                    "At the marketplace: ${labels(atSource)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                )
-            }
-            if (bestEffort.isNotEmpty()) {
-                Text(
-                    "Best-effort by us: ${labels(bestEffort)} — filtered on each site's verified specs; listings missing that spec are kept, not hidden.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-    }
-}
 
 /** Human age of a listing from its posting date ("today", "3 days ago", …); null if in the future
  *  or the date is implausible. */
@@ -535,75 +488,10 @@ fun ListingsSheet(
                             Icon(Icons.Default.Close, "Close")
                         }
                     }
-                    // Active car filters as editable chips + an "Edit" entry to reopen the form.
-                    // "−N" = cars this filter removes (known only after the broad fetch, since counts
-                    // come from the local cache of relaxed results).
-                    if (carFilters != null && onEditFilters != null) {
-                        val chips = carFilterChips(carFilters)
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            item {
-                                AssistChip(
-                                    onClick = onEditFilters,
-                                    label = { Text("Filters", style = MaterialTheme.typography.labelMedium) },
-                                    leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
-                                )
-                            }
-                            items(chips) { (label, key) ->
-                                val hidden = facets[key] ?: 0
-                                AssistChip(
-                                    onClick = onEditFilters,
-                                    label = {
-                                        Text(
-                                            if (hidden > 0) "$label  −$hidden" else label,
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    },
-                                )
-                            }
-                        }
-                        val activeDims = remember(carFilters) { carFilterChips(carFilters).map { it.second }.distinct() }
-                        val resultPlatforms = remember(platformStatuses) {
-                            platformStatuses.mapNotNull { runCatching { PlatformId.valueOf(it.platformId) }.getOrNull() }
-                        }
-                        if (activeDims.isNotEmpty() && resultPlatforms.isNotEmpty()) {
-                            CoverageNote(activeDims, resultPlatforms)
-                        }
-                    }
-                    // Currently blocked words as removable chips. New ones are added from a
-                    // listing's Block button (per item), not a free-text field.
-                    if (activeBlockedTerms.isNotEmpty()) {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            item {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Outlined.Block, null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                }
-                            }
-                            items(activeBlockedTerms.sorted()) { term ->
-                                InputChip(
-                                    selected = false,
-                                    onClick = { unblockWord(term) },
-                                    label = { Text(term, style = MaterialTheme.typography.labelSmall) },
-                                    trailingIcon = { Icon(Icons.Default.Close, "Unblock", modifier = Modifier.size(14.dp)) },
-                                )
-                            }
-                        }
-                    }
                 }
 
-                // === Sticky filters (platform chips + blocked terms) ===
+                // === Sticky filters: platform chips, the car filter chips, and the blocked words —
+                // these stay pinned while the results scroll. Price is NOT here; it scrolls away below.
                 if (platformStatuses.isNotEmpty() || platformOffers.isNotEmpty()) {
                     stickyHeader("filters") {
                         Surface(
@@ -621,6 +509,74 @@ fun ListingsSheet(
                                         modifier = Modifier.padding(horizontal = 20.dp),
                                     )
                                 }
+                                // Active car filters as editable chips + an "Edit" entry to reopen the
+                                // form. "−N" = cars this filter removes (known after the broad fetch).
+                                if (carFilters != null && onEditFilters != null) {
+                                    val chips = carFilterChips(carFilters)
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                        contentPadding = PaddingValues(horizontal = 20.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        item {
+                                            AssistChip(
+                                                onClick = onEditFilters,
+                                                label = { Text("Filters", style = MaterialTheme.typography.labelMedium) },
+                                                leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
+                                            )
+                                        }
+                                        items(chips) { (label, key) ->
+                                            val hidden = facets[key] ?: 0
+                                            AssistChip(
+                                                onClick = onEditFilters,
+                                                label = {
+                                                    Text(
+                                                        if (hidden > 0) "$label  −$hidden" else label,
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                // Currently blocked words as removable chips (added from a listing's
+                                // Block button, per item).
+                                if (activeBlockedTerms.isNotEmpty()) {
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                        contentPadding = PaddingValues(horizontal = 20.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        item {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Outlined.Block, null,
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                            }
+                                        }
+                                        items(activeBlockedTerms.sorted()) { term ->
+                                            InputChip(
+                                                selected = false,
+                                                onClick = { unblockWord(term) },
+                                                label = { Text(term, style = MaterialTheme.typography.labelSmall) },
+                                                trailingIcon = { Icon(Icons.Default.Close, "Unblock", modifier = Modifier.size(14.dp)) },
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                    }
+                }
+
+                // === Price filter — scrolls with the content, not pinned. ===
+                item("price") {
+                    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+                            Column {
                                 // Price range: a LOG-scale slider (so a cheap sub-range like 300 to
                                 // 700 euro is not a hair-thin sliver of a 0 to 10k track) plus exact
                                 // numeric fields. Value shown live while dragging.
@@ -685,7 +641,6 @@ fun ListingsSheet(
                                 Spacer(Modifier.height(8.dp))
                             }
                         }
-                    }
                 }
 
                 // === Loading (only when zero results yet) ===

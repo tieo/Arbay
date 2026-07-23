@@ -127,12 +127,18 @@ class ArbayClient(
         }
     }
 
-    suspend fun crawlerSearch(query: String, platform: PlatformId? = null, limit: Int = 50, sold: Boolean = false): List<Listing> =
+    suspend fun crawlerSearch(
+        query: String, platform: PlatformId? = null, limit: Int = 50, sold: Boolean = false,
+        carFilters: io.github.tieo.arbay.model.CarFilters? = null,
+    ): List<Listing> =
         client.get("$baseUrl/api/crawler/search") {
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             parameter("limit", limit)
             if (sold) parameter("sold", "true")
+            carFilters?.takeUnless { it.isEmpty }?.let {
+                parameter("carFilters", streamJson.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), it))
+            }
         }.body()
 
     // ── Free Items ────────────────────────────────────────────────────────────

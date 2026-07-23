@@ -143,9 +143,16 @@ class ListingViewModel(
             _soldLoading.value = true
             try {
                 val history = try { client.getPriceHistory(query) } catch (_: Exception) { emptyList() }
-                val ebayPlatforms = listOf(PlatformId.EBAY_DE, PlatformId.EBAY_COM)
+                // Sold data is an eBay capability (LH_Sold): query every eBay locale, not just DE/COM,
+                // for more completed listings. The active car filters are applied server-side so the
+                // sold history matches the same year/mileage/power constraints as the live results.
+                val ebayPlatforms = listOf(
+                    PlatformId.EBAY_DE, PlatformId.EBAY_COM,
+                    PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES,
+                )
+                val filters = carFilters
                 val freshSold = ebayPlatforms.flatMap { platform ->
-                    try { client.crawlerSearch(query, platform, limit = 500, sold = true) } catch (_: Exception) { emptyList() }
+                    try { client.crawlerSearch(query, platform, limit = 500, sold = true, carFilters = filters) } catch (_: Exception) { emptyList() }
                 }
                 val seen = mutableSetOf<String>()
                 _priceHistory.value = (freshSold + history + _priceHistory.value)
