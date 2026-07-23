@@ -176,6 +176,11 @@ class MarktplaatsCrawler(
                 }
             }
 
+            // Seller town (hashed class, so match the stable "sellerLocation" fragment), so the card
+            // shows where the item is, not just on a distance sort.
+            val locationText = item.selectFirst("[class*=sellerLocation], [class*=location]")?.text()?.trim()
+            val location = locationText?.takeIf { it.isNotBlank() }?.let { Location.parse(it) }
+
             Listing(
                 id = "${platformId.name}:$externalId",
                 platformId = platformId,
@@ -185,6 +190,7 @@ class MarktplaatsCrawler(
                 price = price,
                 imageUrls = listOfNotNull(imageUrl),
                 description = descriptionText,
+                location = location,
                 shipping = shipping,
                 vehicle = vehicle,
                 scrapedAt = now,
