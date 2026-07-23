@@ -178,6 +178,13 @@ fun ListingsSheet(
     platforms: List<PlatformId>? = null,
     carFilters: CarFilters? = null,
     onEditFilters: (() -> Unit)? = null,
+    // The saved price bound from the bookmark's filter (display currency), so the results slider
+    // starts where the user last left it instead of resetting to the full range on reopen.
+    savedMinPrice: Float? = null,
+    savedMaxPrice: Float? = null,
+    // Persist the slider's price range back onto the bookmark. Store-only — must NOT trigger a
+    // re-crawl; the slider filters locally, this only remembers the choice.
+    onPriceRangePersist: ((minEur: Int, maxEur: Int) -> Unit)? = null,
     blockedTerms: List<String> = emptyList(),
     onBlockedTermsChange: ((List<String>) -> Unit)? = null,
 ) {
@@ -234,7 +241,12 @@ fun ListingsSheet(
             (allActivePrices[i] / 100f).coerceAtLeast(priceMin + 1f)
         }
     }
-    var priceRange by remember(priceMin, priceMax) { mutableStateOf(priceMin..priceMax) }
+    // Seed from the saved bound (clamped into the current data range), else the full range.
+    var priceRange by remember(priceMin, priceMax) {
+        val lo = savedMinPrice?.coerceIn(priceMin, priceMax) ?: priceMin
+        val hi = savedMaxPrice?.coerceIn(priceMin, priceMax)?.coerceAtLeast(lo) ?: priceMax
+        mutableStateOf(lo..hi)
+    }
     var conditionFilter by remember { mutableStateOf<String?>(null) }
     var showSold by remember { mutableStateOf(true) }
     var hideUnknownDates by remember { mutableStateOf(false) }
@@ -599,6 +611,11 @@ fun ListingsSheet(
                                                 val lo = posToPrice(pos.start)
                                                 val hi = posToPrice(pos.endInclusive)
                                                 priceRange = lo..hi.coerceAtLeast(lo)
+                                            },
+                                            // Persist the chosen range onto the bookmark when the drag
+                                            // ends — store-only, no re-crawl.
+                                            onValueChangeFinished = {
+                                                onPriceRangePersist?.invoke(priceRange.start.toInt(), priceRange.endInclusive.toInt())
                                             },
                                             valueRange = 0f..1f,
                                             modifier = Modifier.fillMaxWidth(),

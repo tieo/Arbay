@@ -540,6 +540,20 @@ fun MainScreen(
             carFilters = if (listingsMake != null)
                 (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
             else null,
+            // Seed the results price slider from the saved filter and write changes back onto the
+            // bookmark (car bookmarks only, where the filter lives). Store-only: updateProduct saves
+            // the value but the crawl is keyed on the query text, so nothing re-fetches.
+            savedMinPrice = if (listingsMake != null) openListingsProduct.searchQuery.toCarFilters()?.minPriceEur?.toFloat() else null,
+            savedMaxPrice = if (listingsMake != null) openListingsProduct.searchQuery.toCarFilters()?.maxPriceEur?.toFloat() else null,
+            onPriceRangePersist = if (listingsMake != null) { minEur, maxEur ->
+                val cf = (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
+                    .copy(minPriceEur = minEur, maxPriceEur = maxEur)
+                productViewModel.updateProduct(
+                    openListingsProduct.copy(
+                        searchQuery = openListingsProduct.searchQuery.copy(carFilters = cf.takeUnless { it.isEmpty }),
+                    ),
+                )
+            } else null,
             // Any car bookmark is editable, even one saved with no filters yet, so the user can
             // add them. Gate on the query being a car, not on filters already existing.
             onEditFilters = if (listingsMake != null) {
