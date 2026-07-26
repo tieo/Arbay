@@ -11,7 +11,7 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler {
     override suspend fun search(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val maxPages = CrawlerConfig.current.maxPages.coerceAtMost(3) // Amazon blocks after ~3
+        val maxPages = query.pageLimit(cap = 3) // Amazon blocks after ~3
 
         for (page in 1..maxPages) {
             val url = buildSearchUrl(query, page)

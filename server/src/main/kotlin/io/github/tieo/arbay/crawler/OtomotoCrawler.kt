@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -90,9 +91,9 @@ class OtomotoCrawler(
             append("=").append(value)
         }
 
-        query.firstRegFromYear?.let { enc("search[filter_float_year:from]", it.toString()) }
-        query.firstRegToYear?.let { enc("search[filter_float_year:to]", it.toString()) }
-        query.maxMileageKm?.let { enc("search[filter_float_mileage:to]", it.toString()) }
+        query.carCriteria.firstRegFromYear?.let { enc("search[filter_float_year:from]", it.toString()) }
+        query.carCriteria.firstRegToYear?.let { enc("search[filter_float_year:to]", it.toString()) }
+        query.carCriteria.maxMileageKm?.let { enc("search[filter_float_mileage:to]", it.toString()) }
 
         query.minPrice?.let { min ->
             val cents = if (min.currency == siteCurrency) min.amount
@@ -105,13 +106,13 @@ class OtomotoCrawler(
             enc("search[filter_float_price:to]", (cents / 100).toString())
         }
 
-        query.minPowerKw?.let { kw ->
+        query.carCriteria.minPowerKw?.let { kw ->
             // otomoto engine_power is in KM (metric horsepower): 1 kW = 1.35962 KM
             val km = (kw * 1.35962).toLong()
             enc("search[filter_float_engine_power:from]", km.toString())
         }
 
-        when (query.transmission) {
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> enc("search[filter_enum_gearbox][0]", "automatic")
             Transmission.MANUAL -> enc("search[filter_enum_gearbox][0]", "manual")
             null -> {}

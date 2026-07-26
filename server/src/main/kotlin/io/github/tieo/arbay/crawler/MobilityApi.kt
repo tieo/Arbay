@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
@@ -20,13 +21,13 @@ object MobilityApi {
     fun searchUrl(host: String, text: String, query: SearchQuery, page: Int, priceCurrency: Currency): String = buildString {
         append("https://$host/mobility/search/api/search/SEARCH_ID_CAR_USED")
         append("?q=").append(text.encodeUrl())
-        query.firstRegFromYear?.let { append("&year_from=$it") }
-        query.firstRegToYear?.let { append("&year_to=$it") }
-        query.maxMileageKm?.let { append("&mileage_to=$it") }
-        query.minPowerKw?.let { append("&engine_effect_from=${kwToHp(it)}") }
+        query.carCriteria.firstRegFromYear?.let { append("&year_from=$it") }
+        query.carCriteria.firstRegToYear?.let { append("&year_to=$it") }
+        query.carCriteria.maxMileageKm?.let { append("&mileage_to=$it") }
+        query.carCriteria.minPowerKw?.let { append("&engine_effect_from=${kwToHp(it)}") }
         query.maxPrice?.let { append("&price_to=${inCurrency(it, priceCurrency)}") }
         query.minPrice?.let { append("&price_from=${inCurrency(it, priceCurrency)}") }
-        when (query.transmission) {
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&transmission=2")
             Transmission.MANUAL -> append("&transmission=1")
             null -> {}

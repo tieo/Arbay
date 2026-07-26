@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -46,9 +47,9 @@ class AutoScout24Crawler(
     /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
      *  only matching cars and far less needs scraping. Parameter names verified live. */
     private fun filterParams(query: SearchQuery): String = buildString {
-        query.firstRegFromYear?.let { append("&fregfrom=$it") }
-        query.firstRegToYear?.let { append("&fregto=$it") }
-        query.maxMileageKm?.let { append("&kmto=$it") }
+        query.carCriteria.firstRegFromYear?.let { append("&fregfrom=$it") }
+        query.carCriteria.firstRegToYear?.let { append("&fregto=$it") }
+        query.carCriteria.maxMileageKm?.let { append("&kmto=$it") }
         query.maxPrice?.let { max ->
             val eur = if (max.currency == Currency.EUR) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
@@ -59,8 +60,8 @@ class AutoScout24Crawler(
             else ExchangeRates.convert(min.amount, min.currency.name, "EUR") / 100
             append("&pricefrom=$eur")
         }
-        query.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
-        when (query.transmission) {
+        query.carCriteria.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&gear=A")
             Transmission.MANUAL -> append("&gear=M")
             null -> {}

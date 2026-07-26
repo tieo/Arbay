@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -61,9 +62,9 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
      * All params reduce the server-side result set — no client-side post-filtering needed.
      */
     private fun filterParams(query: SearchQuery): String = buildString {
-        query.firstRegFromYear?.let { append("&ModelYearRange.From=$it") }
-        query.firstRegToYear?.let { append("&ModelYearRange.To=$it") }
-        query.maxMileageKm?.let { append("&MilageRange.To=${kmToMil(it)}") }
+        query.carCriteria.firstRegFromYear?.let { append("&ModelYearRange.From=$it") }
+        query.carCriteria.firstRegToYear?.let { append("&ModelYearRange.To=$it") }
+        query.carCriteria.maxMileageKm?.let { append("&MilageRange.To=${kmToMil(it)}") }
         query.maxPrice?.let { max ->
             val sek = if (max.currency == Currency.SEK) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "SEK") / 100
@@ -74,8 +75,8 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
             else ExchangeRates.convert(min.amount, min.currency.name, "SEK") / 100
             append("&PriceRange.From=$sek")
         }
-        query.minPowerKw?.let { append("&EnginePowerRange.From=${kwToHp(it)}") }
-        when (query.transmission) {
+        query.carCriteria.minPowerKw?.let { append("&EnginePowerRange.From=${kwToHp(it)}") }
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&Gearboxes=Automatisk")
             Transmission.MANUAL -> append("&Gearboxes=Manuell")
             null -> {}

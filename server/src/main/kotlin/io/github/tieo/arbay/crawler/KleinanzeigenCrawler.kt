@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import io.ktor.client.request.*
@@ -149,7 +150,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
         val cf = query.carFilters
         val attrFilters = KleinanzeigenUrlBuilder.carAttrFilters(
             fuel = cf?.fuels?.singleOrNull()?.let { kleinanzeigenFuel(it) },
-            gearbox = query.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
+            gearbox = query.carCriteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
         )
 
         val endPage = query.startPage + maxPages - 1

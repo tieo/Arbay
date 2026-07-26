@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -57,11 +58,11 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
     }
 
     private fun hasFilters(query: SearchQuery) =
-        query.firstRegFromYear != null ||
-            query.firstRegToYear != null ||
-            query.maxMileageKm != null ||
-            query.minPowerKw != null ||
-            query.transmission != null ||
+        query.carCriteria.firstRegFromYear != null ||
+            query.carCriteria.firstRegToYear != null ||
+            query.carCriteria.maxMileageKm != null ||
+            query.carCriteria.minPowerKw != null ||
+            query.carCriteria.transmission != null ||
             query.maxPrice != null ||
             query.minPrice != null
 

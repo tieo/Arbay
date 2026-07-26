@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -84,10 +85,10 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
      *   MANUAL            -> gearbox_seo=manualni
      */
     private fun filterParams(query: SearchQuery): String = buildString {
-        query.firstRegFromYear?.let { append("&vehicle_age_from=$it") }
-        query.firstRegToYear?.let { append("&vehicle_age_to=$it") }
-        query.maxMileageKm?.let { append("&tachometer_to=$it") }
-        query.minPowerKw?.let { append("&engine_power_from=$it") }
+        query.carCriteria.firstRegFromYear?.let { append("&vehicle_age_from=$it") }
+        query.carCriteria.firstRegToYear?.let { append("&vehicle_age_to=$it") }
+        query.carCriteria.maxMileageKm?.let { append("&tachometer_to=$it") }
+        query.carCriteria.minPowerKw?.let { append("&engine_power_from=$it") }
         query.maxPrice?.let { max ->
             val czk = if (max.currency == Currency.CZK) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "CZK") / 100
@@ -98,7 +99,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
             else ExchangeRates.convert(min.amount, min.currency.name, "CZK") / 100
             append("&price_from=$czk")
         }
-        when (query.transmission) {
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&gearbox_seo=automaticka")
             Transmission.MANUAL -> append("&gearbox_seo=manualni")
             null -> {}

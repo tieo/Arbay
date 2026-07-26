@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -47,14 +48,14 @@ class BilbasenCrawler(private val client: HttpClient) : Crawler {
      * ExchangeRates. Power is always horsepower; 1 kW ≈ 1.341 hp so minPowerKw is multiplied.
      */
     private fun filterParams(query: SearchQuery): String = buildString {
-        when (query.transmission) {
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&gear=automatic")
             Transmission.MANUAL -> append("&gear=manual")
             null -> {}
         }
-        query.firstRegFromYear?.let { append("&regfrom=${it}-01") }
-        query.firstRegToYear?.let { append("&regto=${it}-12") }
-        query.maxMileageKm?.let { append("&mileageto=$it") }
+        query.carCriteria.firstRegFromYear?.let { append("&regfrom=${it}-01") }
+        query.carCriteria.firstRegToYear?.let { append("&regto=${it}-12") }
+        query.carCriteria.maxMileageKm?.let { append("&mileageto=$it") }
         query.maxPrice?.let { max ->
             val dkk = if (max.currency == Currency.DKK) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "DKK") / 100
@@ -67,7 +68,7 @@ class BilbasenCrawler(private val client: HttpClient) : Crawler {
         }
         // Bilbasen filters by horsepower (hk), not kW. 1 kW = ~1.341 hp; round down to keep
         // the filter inclusive so cars at the boundary are not accidentally excluded.
-        query.minPowerKw?.let { kw -> append("&hpfrom=${(kw * 1.341).toInt()}") }
+        query.carCriteria.minPowerKw?.let { kw -> append("&hpfrom=${(kw * 1.341).toInt()}") }
     }
 
     internal fun parse(html: String): List<Listing> {

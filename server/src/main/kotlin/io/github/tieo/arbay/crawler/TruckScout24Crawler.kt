@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
@@ -60,8 +61,8 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
      * when any filter is present.
      */
     private fun filterParams(query: SearchQuery): String = buildString {
-        query.firstRegFromYear?.let { append("&manufacturedFrom=$it") }
-        query.firstRegToYear?.let { append("&manufacturedTo=$it") }
+        query.carCriteria.firstRegFromYear?.let { append("&manufacturedFrom=$it") }
+        query.carCriteria.firstRegToYear?.let { append("&manufacturedTo=$it") }
         query.maxPrice?.let { max ->
             val eur = if (max.currency == Currency.EUR) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
@@ -74,9 +75,9 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler {
         }
         // PHP bracket notation: properties[mileage][value to] and properties[power][value from].
         // Spaces in param names are encoded as + by standard form encoding.
-        query.maxMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+to%5D=$it") }
-        query.minPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+from%5D=$it") }
-        when (query.transmission) {
+        query.carCriteria.maxMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+to%5D=$it") }
+        query.carCriteria.minPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+from%5D=$it") }
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&properties%5Bgearing+type%5D%5Bvalue%5D=automatic")
             Transmission.MANUAL -> append("&properties%5Bgearing+type%5D%5Bvalue%5D=mechanical")
             null -> {}

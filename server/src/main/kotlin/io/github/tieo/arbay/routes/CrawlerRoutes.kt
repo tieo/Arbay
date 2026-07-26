@@ -74,6 +74,32 @@ private val GENERAL_PLATFORMS = listOf(
     PlatformId.RICARDO, PlatformId.SUBITO,
 )
 
+/** Whether a query names a vehicle, which decides both the markets searched and whether the car
+ *  post-filter runs. Resolved once per request and passed on, not re-derived at each use. */
+private fun isCarQuery(query: String): Boolean = CarQueryResolver.resolve(query) != null
+
+/** The markets a query is searched on when the request names none: the vehicle sites for a car,
+ *  the general marketplaces otherwise, minus any without a crawler. */
+private fun defaultPlatforms(isCar: Boolean): List<PlatformId> =
+    (if (isCar) CAR_PLATFORMS else GENERAL_PLATFORMS).filter { CrawlerRegistry.crawlerFor(it) != null }
+
+/** A platform's finished result set: the car post-filter over the raw relevance-filtered crawl,
+ *  with every listing measured against the searcher, plus the facet counts. The same step whether
+ *  the crawl was fresh or served from cache. */
+private suspend fun finishedResults(
+    raw: List<Listing>,
+    query: SearchQuery,
+    isCarQuery: Boolean,
+    crawler: Crawler,
+    listingRepo: ListingRepo,
+): Pair<List<Listing>, Map<String, Int>> {
+    val listings = annotateDistance(carPostFilter(raw, query, isCarQuery, crawler), query)
+    listings.forEach { listingRepo.upsert(it) }
+    val facets = if (isCarQuery)
+        CarFilterEngine.facetCounts(raw, query.toCarFilters() ?: CarFilters()) else emptyMap()
+    return listings to facets
+}
+
 /** Reads the optional car-search filters from the request and applies them to a
  *  SearchQuery. Crawlers that support source-side filtering (AutoScout24, Otomoto,
  *  Sauto, DBA, Bytbil, TruckScout24, Bilbasen) turn these into site URL parameters. */
@@ -90,21 +116,24 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
             else -> null
         }
     }
-    // Mirror the fields crawlers turn into native URL params (year/mileage/price/power/gearbox);
-    // the rest of cf is enforced by post-filtering.
-    return base.copy(
-        carFilters = cf,
+    // Fold the per-field parameters into the same filter set, so a request arrives as one thing
+    // whichever app version sent it and crawlers read their native parameters from one place.
+    val filters = (cf ?: CarFilters()).let { f ->
+        f.copy(
+            firstRegFromYear = f.firstRegFromYear ?: p["fregFrom"]?.toIntOrNull(),
+            firstRegToYear = f.firstRegToYear ?: p["fregTo"]?.toIntOrNull(),
+            maxMileageKm = f.maxMileageKm ?: p["kmTo"]?.toIntOrNull(),
+            minPowerKw = f.minPowerKw ?: p["powerKw"]?.toIntOrNull(),
+            minPriceEur = f.minPriceEur ?: base.minPrice?.let { (it.amount / 100).toInt() },
+            maxPriceEur = f.maxPriceEur ?: priceToEur?.toInt()
+                ?: base.maxPrice?.let { (it.amount / 100).toInt() },
+            transmission = f.transmission ?: legacyGear,
+            descriptionContains = f.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
+        )
+    }
+    return base.withCarFilters(filters.takeUnless { it.isEmpty }).copy(
         userLat = p["lat"]?.toDoubleOrNull(),
         userLon = p["lon"]?.toDoubleOrNull(),
-        firstRegFromYear = cf?.firstRegFromYear ?: p["fregFrom"]?.toIntOrNull(),
-        firstRegToYear = cf?.firstRegToYear ?: p["fregTo"]?.toIntOrNull(),
-        maxMileageKm = cf?.maxMileageKm ?: p["kmTo"]?.toIntOrNull(),
-        minPowerKw = cf?.minPowerKw ?: p["powerKw"]?.toIntOrNull(),
-        minPrice = cf?.minPriceEur?.let { Money(it * 100L, Currency.EUR) } ?: base.minPrice,
-        maxPrice = cf?.maxPriceEur?.let { Money(it * 100L, Currency.EUR) }
-            ?: priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
-        transmission = cf?.transmission ?: legacyGear,
-        descriptionContains = cf?.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -289,8 +318,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     ?: throw BadRequestException("Unknown platform: $platformName")
                 listOf(platform)
             } else {
-                (if (CarQueryResolver.resolve(query) != null) CAR_PLATFORMS else GENERAL_PLATFORMS)
-                    .filter { CrawlerRegistry.crawlerFor(it) != null }
+                defaultPlatforms(isCarQuery(query))
             }
 
             val soldOnly = call.queryParameters["sold"]?.toBooleanStrictOrNull() ?: false
@@ -298,7 +326,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try {
-                val isCarQuery = CarQueryResolver.resolve(query) != null
+                val isCarQuery = isCarQuery(query)
                 val perPlatform = platforms.map { platformId ->
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
                     // Cross-border markets are searched in their own language.
@@ -315,7 +343,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                         QueryResultCache.put(platformId, pq, filtered)
                         filtered
                     }
-                    val result = carPostFilter(classified, pq, isCarQuery, crawler)
+                    val result = annotateDistance(carPostFilter(classified, pq, isCarQuery, crawler), pq)
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }
@@ -345,14 +373,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             } else if (platformNames != null) {
                 platformNames.split(",").mapNotNull { runCatching { PlatformId.valueOf(it.trim()) }.getOrNull() }
             } else {
-                // Default: general product platforms (exclude car/house sites)
-                (if (CarQueryResolver.resolve(query) != null) CAR_PLATFORMS else GENERAL_PLATFORMS)
-                    .filter { CrawlerRegistry.crawlerFor(it) != null }
+                defaultPlatforms(isCarQuery(query))
             }
 
             val searchQuery = call.applyCarFilters(SearchQuery(text = query))
             val parsedQuery = RelevanceFilter.parseQuery(query)
-            val isCarQuery = CarQueryResolver.resolve(query) != null
+            val isCarQuery = isCarQuery(query)
 
             val permit = call.acquireScrapeSlot() ?: return@get
             try {
@@ -413,11 +439,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // Car post-filtering still runs on the cached set so the new filters apply.
                             val cached = QueryResultCache.get(platformId, pq)
                             if (cached != null) {
-                                val filtered = annotateDistance(carPostFilter(cached, pq, isCarQuery, crawler), pq)
-                                filtered.forEach { listingRepo.upsert(it) }
-                                val facets = if (isCarQuery)
-                                    CarFilterEngine.facetCounts(cached, pq.toCarFilters() ?: CarFilters())
-                                else emptyMap()
+                                val (filtered, facets) =
+                                    finishedResults(cached, pq, isCarQuery, crawler, listingRepo)
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
@@ -528,11 +551,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // filter → detail-verify → final filter) runs after, so a later
                                 // filter tweak re-filters from cache without re-crawling.
                                 QueryResultCache.put(platformId, pq, classified)
-                                val results = annotateDistance(carPostFilter(classified, pq, isCarQuery, crawler), pq)
-                                results.forEach { listingRepo.upsert(it) }
-                                val facets = if (isCarQuery)
-                                    CarFilterEngine.facetCounts(classified, pq.toCarFilters() ?: CarFilters())
-                                else emptyMap()
+                                val (results, facets) =
+                                    finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
 
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,

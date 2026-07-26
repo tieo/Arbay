@@ -80,23 +80,18 @@ data class CarFilters(
  *  on the query's own minPrice/maxPrice and is overlaid here. Read through this and the filter view
  *  is complete; write through [withCarFilters] and there is still only one copy to disagree with. */
 fun SearchQuery.toCarFilters(): CarFilters? {
-    // The full carFilters wins; fall back to the legacy individual fields for older saved
-    // searches that predate it.
-    val stored = carFilters?.takeUnless { it.isEmpty }
-        ?: CarFilters(
-            firstRegFromYear = firstRegFromYear,
-            firstRegToYear = firstRegToYear,
-            maxMileageKm = maxMileageKm,
-            minPowerKw = minPowerKw,
-            transmission = transmission,
-            descriptionContains = descriptionContains,
-        )
-    val complete = stored.copy(
+    val complete = (carFilters ?: CarFilters()).copy(
         minPriceEur = minPrice?.let { (it.amount / 100).toInt() },
         maxPriceEur = maxPrice?.let { (it.amount / 100).toInt() },
     )
     return if (complete.isEmpty) null else complete
 }
+
+/** The vehicle criteria of a search, empty when it carries none. Every crawler reads its native
+ *  filter parameters from here, so a criterion cannot reach one site and be silently dropped on
+ *  another for want of a field on the query. The price band is not among them: it is not
+ *  car-specific and lives on minPrice/maxPrice, where a non-car crawler can reach it too. */
+val SearchQuery.carCriteria: CarFilters get() = toCarFilters() ?: CarFilters()
 
 /** Store a filter set on the query, lifting its price bound out to minPrice/maxPrice — the one
  *  place a price is kept, whether or not the search is for a car. */
@@ -131,15 +126,8 @@ data class SearchQuery(
     val userLon: Double? = null,
     val maxPages: Int? = null,      // override crawler's default page limit (null = use CrawlerConfig)
     val startPage: Int = 1,         // start from this page (for paginated batches)
-    // Vehicle filters — applied at the source by crawlers that support them (e.g. AutoScout24).
-    val firstRegFromYear: Int? = null,  // earliest first-registration year
-    val firstRegToYear: Int? = null,    // latest first-registration year
-    val maxMileageKm: Int? = null,      // mileage ceiling
-    val minPowerKw: Int? = null,        // minimum engine power in kW
-    val transmission: Transmission? = null,
-    val descriptionContains: String? = null,  // free text required in title/description
-    // The full filter set, enforced by post-filtering. The individual fields above stay for
-    // the crawlers that turn them into native URL params; everything else lives here.
+    // Vehicle criteria, read through carCriteria: crawlers turn what their site supports into
+    // native URL parameters, and post-filtering enforces the rest.
     val carFilters: CarFilters? = null,
 ) {
     /** Search text with negative keywords and OR logic resolved — for platforms that don't support exclusion/OR syntax.

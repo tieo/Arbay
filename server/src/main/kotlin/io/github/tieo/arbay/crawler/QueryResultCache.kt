@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
@@ -27,8 +28,8 @@ object QueryResultCache {
         platformId.name,
         query.positiveText.lowercase().trim(),
         query.minPrice?.amount, query.maxPrice?.amount,
-        query.firstRegFromYear, query.firstRegToYear,
-        query.maxMileageKm, query.minPowerKw, query.transmission,
+        query.carCriteria.firstRegFromYear, query.carCriteria.firstRegToYear,
+        query.carCriteria.maxMileageKm, query.carCriteria.minPowerKw, query.carCriteria.transmission,
         query.location?.lowercase()?.trim(), query.radiusKm,
         // Fuel is baked into some crawlers' fetch URL (Kleinanzeigen native filter), so it
         // changes what is fetched and must key the entry. Post-filter-only dims (body, colour,

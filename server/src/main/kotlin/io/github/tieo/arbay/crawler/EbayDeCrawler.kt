@@ -62,7 +62,7 @@ class EbayDeCrawler(
         if (curlFirstPage != null && curlFirstPage.isNotEmpty()) {
             val firstPage = curlFirstPage
             allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
-            val maxPages = CrawlerConfig.current.maxPages
+            val maxPages = query.pageLimit()
             if (firstPage.size >= 20) {
                 for (page in 2..maxPages) {
                     val html = try {
@@ -130,7 +130,7 @@ class EbayDeCrawler(
     ): List<Listing> {
         val firstPage = parseSearchResults(firstHtml)
         allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
-        val maxPages = CrawlerConfig.current.maxPages
+        val maxPages = query.pageLimit()
         if (firstPage.size >= 20) {
             for (page in 2..maxPages) {
                 val html = try {

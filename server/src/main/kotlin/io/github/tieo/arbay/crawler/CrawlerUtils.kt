@@ -94,11 +94,16 @@ private suspend fun fetchPageWithRetry(
     }
 }
 
+/** How many pages this search may fetch: the search's own limit when it set one, else the
+ *  configured search depth, never more than [cap] for a site that blocks past a few pages. */
+internal fun SearchQuery.pageLimit(cap: Int = Int.MAX_VALUE): Int =
+    (maxPages ?: CrawlerConfig.current.maxPages).coerceAtMost(cap)
+
 internal suspend fun paginate(
     query: SearchQuery,
     fetchPage: suspend (page: Int) -> List<Listing>,
 ): List<Listing> {
-    val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+    val maxPages = query.pageLimit()
     val seen = LinkedHashMap<String, Listing>()
     for (offset in 0 until maxPages) {
         val listings = fetchPageWithRetry(query.startPage + offset, isFirstPage = offset == 0, fetchPage)
