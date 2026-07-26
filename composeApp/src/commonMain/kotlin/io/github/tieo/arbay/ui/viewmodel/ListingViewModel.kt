@@ -86,14 +86,21 @@ class ListingViewModel(
     private val _blockedTerms = MutableStateFlow<List<String>>(emptyList())
     val blockedTerms: StateFlow<List<String>> = _blockedTerms
 
+    /** Text reduced to its words, lowercase and single-spaced, so a match does not depend on the
+     *  punctuation a seller happened to type. */
+    private fun wordsOnly(text: String): String =
+        text.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
     // Derived: listings filtered by selected platform, not banned, not matching a blocked keyword.
     val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds, _blockedTerms) { all, platform, banned, blocked ->
         val platformFiltered = if (platform == null) all else all.filter { it.platformId == platform }
         platformFiltered.filter { l ->
             l.id !in banned && run {
                 if (blocked.isEmpty()) return@run true
-                val hay = "${l.title} ${l.description ?: ""}".lowercase()
-                blocked.none { it.isNotBlank() && hay.contains(it.lowercase()) }
+                // Punctuation collapsed to single spaces on both sides, so a blocked word still
+                // matches "OVP!Lagerverkauf" and a blocked phrase still matches "NEU ! Lagerverkauf".
+                val hay = wordsOnly("${l.title} ${l.description ?: ""}")
+                blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

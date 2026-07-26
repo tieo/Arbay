@@ -1367,8 +1367,9 @@ private fun BlockTermDialog(
             .toSet()
     }
     val candidateWords = remember(listingTitle, queryWords) {
-        listingTitle.split(Regex("[\\s\\-/|,()\\[\\]]+"))
-            .map { it.trim().replace(Regex("[^\\p{L}\\p{N}]"), "") }
+        // Split on every run of non-letters, so punctuation separates words instead of vanishing
+        // between them: "OVP!Lagerverkauf" is two words, not one unblockable "ovplagerverkauf".
+        listingTitle.split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.length >= 2 }
             .map { it.lowercase() }
             .distinct()
