@@ -262,6 +262,12 @@ fun ListingsSheet(
         listingViewModel.setSortByDistance(lat != null)
     }
 
+    // Remember the band on the saved search, whether it was set by dragging the slider or typed
+    // into the fields — they edit one value, so they save it the same way.
+    fun persistPriceRange() {
+        onPriceRangePersist?.invoke(priceRange.start.toInt(), priceRange.endInclusive.toInt())
+    }
+
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
     val priceFiltered = priceRange.start > priceMin || priceRange.endInclusive < priceMax
     // Bounds compare in whole currency units, and a thumb resting on the track's end means
@@ -620,9 +626,7 @@ fun ListingsSheet(
                                             },
                                             // Persist the chosen range onto the bookmark when the drag
                                             // ends — store-only, no re-crawl.
-                                            onValueChangeFinished = {
-                                                onPriceRangePersist?.invoke(priceRange.start.toInt(), priceRange.endInclusive.toInt())
-                                            },
+                                            onValueChangeFinished = { persistPriceRange() },
                                             valueRange = 0f..1f,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
@@ -636,6 +640,7 @@ fun ListingsSheet(
                                                     minText = s.filter { it.isDigit() }
                                                     minText.toFloatOrNull()?.let { v ->
                                                         priceRange = v.coerceIn(priceMin, priceRange.endInclusive)..priceRange.endInclusive
+                                                        persistPriceRange()
                                                     }
                                                 },
                                                 label = { Text("min ${cur.name}", style = MaterialTheme.typography.labelSmall) },
@@ -650,6 +655,7 @@ fun ListingsSheet(
                                                     maxText = s.filter { it.isDigit() }
                                                     maxText.toFloatOrNull()?.let { v ->
                                                         priceRange = priceRange.start..v.coerceIn(priceRange.start, priceMax)
+                                                        persistPriceRange()
                                                     }
                                                 },
                                                 label = { Text("max ${cur.name}", style = MaterialTheme.typography.labelSmall) },
