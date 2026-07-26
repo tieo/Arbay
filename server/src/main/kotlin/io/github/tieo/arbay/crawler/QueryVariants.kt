@@ -45,7 +45,7 @@ object QueryVariants {
     private val TOOL_NOUNS = listOf(
         "säge", "saege", "fräse", "fraese", "presse", "pumpe", "bohrer", "mühle", "muehle",
         "hammer", "schere", "messer", "hobel", "drehbank", "brenner", "sauger", "bläser",
-        "blaeser", "kabine", "ofen",
+        "blaeser", "kabine", "ofen", "aggregat", "bock", "drucker",
     )
 
     /** A job too short to identify anything. */
