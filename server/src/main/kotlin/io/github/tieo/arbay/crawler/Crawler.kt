@@ -17,11 +17,27 @@ interface Crawler {
     suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = null
 }
 
+/**
+ * Search the query and its interchangeable spellings, merged. A marketplace matches the query as a
+ * literal word, so a compound noun asked for one way misses everything titled the other
+ * ("Parkettschleifer" for "Parkettschleifmaschine"); see [QueryVariants].
+ *
+ * The query itself decides the platform's health, so its failure propagates while a variant that
+ * fails is simply dropped.
+ */
+suspend fun Crawler.searchAllSpellings(query: SearchQuery): List<Listing> {
+    val primary = search(query)
+    val extra = QueryVariants.of(query.text).flatMap { spelling ->
+        runCatching { search(query.copy(text = spelling)) }.getOrDefault(emptyList())
+    }
+    return (primary + extra).distinctBy { it.id }
+}
+
 suspend fun Crawler.trackedSearch(query: SearchQuery): List<Listing> {
     val log = LoggerFactory.getLogger("Crawler[${platformId.displayName}]")
     CrawlerStatusTracker.recordAttempt(platformId)
     return try {
-        val results = search(query)
+        val results = searchAllSpellings(query)
         if (results.isEmpty()) {
             CrawlerStatusTracker.recordError(platformId, "Search returned 0 results", ErrorType.EMPTY_RESULTS)
             log.warn("{}: 0 results for '{}'", platformId.displayName, query.text)

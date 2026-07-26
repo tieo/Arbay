@@ -319,10 +319,27 @@ object RelevanceFilter {
         return consumableNoun.containsMatchIn(listing.title) || abrasiveGrit.containsMatchIn(listing.title)
     }
 
+    // An ad seeking the thing, or seeking a person to do it, rather than offering one for sale. The
+    // agent noun a compound search also looks under ("Parkettschleifer") is both a machine and the
+    // tradesman who works it, so a job posting reads as a match on words alone.
+    private val wantedOrJobAd = Regex(
+        """(^|\s)(suche|suchen|gesucht|gesuchte?r?)\b|\bwerde\s+teil\b|""" +
+            """\(?\s*[mwd]\s*[/|]\s*[mwd]\s*[/|]\s*[mwd]\s*\)?|""" +
+            """\b(stellenangebot|stellenanzeige|minijob|aushilfe|festanstellung|""" +
+            """wanted|looking\s+for|gezocht|cercasi|se\s+busca|recherche\s+un)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isWantedOrJobAd(listing: Listing, queryText: String): Boolean {
+        if (wantedOrJobAd.containsMatchIn(queryText)) return false
+        return wantedOrJobAd.containsMatchIn(listing.title)
+    }
+
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
         val parsed = parseQuery(query.text)
         val listings = listings
             .filter(::hasSanePrice)
+            .filterNot { isWantedOrJobAd(it, query.text) }
             .filterNot { isRentalOffer(it, query.text) }
             .filterNot { isAccessoryFor(it, parsed, query.text) }
             .filterNot { isConsumableFor(it, query.text) }

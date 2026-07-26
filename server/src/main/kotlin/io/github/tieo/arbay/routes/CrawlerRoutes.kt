@@ -24,7 +24,7 @@ import io.github.tieo.arbay.crawler.RequestMonitor
 import io.github.tieo.arbay.crawler.Translator
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
-import io.github.tieo.arbay.crawler.QueryVariants
+import io.github.tieo.arbay.crawler.searchAllSpellings
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.classifyException
@@ -521,16 +521,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
                                     kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) {
-                                        // A site matches the query as a literal word, so a compound
-                                        // noun is also searched under its interchangeable spellings
-                                        // ("Parkettschleifer" for "Parkettschleifmaschine"). The
-                                        // query itself decides the platform's health; a variant that
-                                        // fails is simply dropped.
-                                        val primary = crawler.search(pq)
-                                        val extra = QueryVariants.of(pq.text).flatMap { v ->
-                                            runCatching { crawler.search(pq.copy(text = v)) }.getOrDefault(emptyList())
-                                        }
-                                        (primary + extra).distinctBy { it.id }
+                                        crawler.searchAllSpellings(pq)
                                     }
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
