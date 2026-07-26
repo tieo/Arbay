@@ -73,6 +73,11 @@ object QueryVariants {
     private fun namesADevice(word: String): Boolean =
         !namesAnAction(word) && PART_HEADS.none { word.endsWith(it) }
 
+    /** How many different searches may offer a term before it is taken for a make or a category
+     *  rather than a name for this thing. Measured over 32 niche products: every term seen under
+     *  three or more searches was one of those, while the real synonyms sat at one or two. */
+    private const val MAX_SEARCHES_OFFERING_IT = 2
+
     /** A term worth a search, and whether it is close enough to the query's own spelling to be
      *  trusted on that alone. */
     data class Candidate(val term: String, val sharesStem: Boolean)
@@ -87,8 +92,16 @@ object QueryVariants {
      * Those sharing the query's stem come first and need no further evidence: over 32 products that
      * kept 17 terms, every one another name for the thing. The rest are worth trying only if the
      * market names the query back from their own page — see [namesBack].
+     *
+     * [offeredUnder] tells how many different searches have been offered a term, which is what
+     * separates a make (einhell, stihl) or a category that sits beside everything (rasenmäher) from
+     * a name for this particular thing.
      */
-    fun candidates(suggestions: List<String>, queryText: String): List<Candidate> {
+    fun candidates(
+        suggestions: List<String>,
+        queryText: String,
+        offeredUnder: (String) -> Int = { 0 },
+    ): List<Candidate> {
         val query = queryText.trim().lowercase()
         if (query.length < MIN_QUERY_LENGTH) return emptyList()
         val kept = suggestions
@@ -97,6 +110,9 @@ object QueryVariants {
             .filterNot { it.contains(' ') }
             .filterNot { it.contains(query) || query.contains(it) }
             .filter { namesADevice(it) }
+            // A term the market offers under many unrelated searches is a make or a category that
+            // sits beside everything, not a name for this thing.
+            .filterNot { offeredUnder(it) > MAX_SEARCHES_OFFERING_IT }
             .distinct()
         // A plural of a term already kept is the same search.
         val singulars = kept.filterNot { w -> kept.any { it != w && (w == it + "n" || w == it + "en") } }

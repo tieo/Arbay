@@ -9,8 +9,8 @@ import kotlin.test.assertTrue
 /** Every fixture here is what Kleinanzeigen actually returned, measured over 32 niche products. */
 class QueryVariantsTest {
 
-    private fun terms(suggestions: List<String>, query: String) =
-        QueryVariants.candidates(suggestions, query).map { it.term }
+    private fun terms(suggestions: List<String>, query: String, offeredUnder: (String) -> Int = { 0 }) =
+        QueryVariants.candidates(suggestions, query, offeredUnder).map { it.term }
 
     // ── What the market prints ────────────────────────────────────────────────
 
@@ -82,6 +82,18 @@ class QueryVariantsTest {
     @Test
     fun `leaves a short category query alone`() {
         assertEquals(emptyList(), terms(listOf("thinkpad", "notebook"), "laptop"))
+    }
+
+    @Test
+    fun `drops a make and a category the market offers beside everything`() {
+        // Counts measured across 32 niche products: einhell under five searches, stihl three,
+        // rasenmäher six, while the real synonym freischneider was seen under two.
+        val offeredUnder = mapOf("einhell" to 5, "stihl" to 3, "rasenmäher" to 6, "freischneider" to 2)
+        val kept = terms(
+            listOf("rasenmäher", "einhell", "stihl", "freischneider"),
+            "motorsense",
+        ) { offeredUnder[it] ?: 0 }
+        assertEquals(listOf("freischneider"), kept)
     }
 
     // ── Trusting a word that is built differently ─────────────────────────────

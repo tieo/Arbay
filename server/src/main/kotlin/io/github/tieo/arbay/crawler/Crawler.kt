@@ -47,7 +47,8 @@ suspend fun Crawler.searchAllSpellings(
 
     // The market's own related searches beat anything inferred from its results; inference is the
     // fallback for the markets that print none.
-    val fromMarket = QueryVariants.candidates(suggested, query.text)
+    SuggestionStats.record(query.text, suggested)
+    val fromMarket = QueryVariants.candidates(suggested, query.text, SuggestionStats::searchesOfferingIt)
     val terms = fromMarket.ifEmpty {
         QueryVariants.candidatesFrom(primary, query.text, background)
             .map { QueryVariants.Candidate(it, sharesStem = true) }
