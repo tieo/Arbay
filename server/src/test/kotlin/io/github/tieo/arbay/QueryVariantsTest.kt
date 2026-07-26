@@ -119,8 +119,24 @@ class QueryVariantsTest {
     // ── Trusting a word that is built differently ─────────────────────────────
 
     @Test
-    fun `a word built like the query is trusted on that alone`() {
+    fun `a word naming the same job is trusted on that alone`() {
+        // Both reduce to the job "parkettschleif" once the word for machine comes off.
         assertTrue(QueryVariants.candidates(listOf("parkettschleifer"), "Parkettschleifmaschine").single().sharesStem)
+        assertTrue(QueryVariants.candidates(listOf("kernbohrgerät"), "kernbohrmaschine").single().sharesStem)
+        assertTrue(QueryVariants.candidates(listOf("drechselmaschine"), "drechselbank").single().sharesStem)
+    }
+
+    @Test
+    fun `sharing only the thing worked on is not the same machine`() {
+        // A Kartoffellegemaschine plants, a Kartoffelroder lifts: the jobs "kartoffellege" and
+        // "kartoffelrod" share only the crop.
+        assertFalse(QueryVariants.candidates(listOf("kartoffellegemaschine"), "kartoffelroder").single().sharesStem)
+    }
+
+    @Test
+    fun `naming a different tool is not the same machine`() {
+        // A Furnierpresse presses veneer, a Furniersäge cuts it.
+        assertFalse(QueryVariants.candidates(listOf("furniersäge"), "furnierpresse").single().sharesStem)
     }
 
     @Test

@@ -32,9 +32,24 @@ object QueryVariants {
      *  it are other products, not other names for it. Ten keeps "Kettensäge" in. */
     private const val MIN_QUERY_LENGTH = 10
 
-    /** Sharing this much of the query's spelling makes a word another name for the same thing
-     *  rather than a different product: "parkettschleif|er" against "parkettschleif|maschine". */
-    private const val SAME_THING_PREFIX = 8
+    /** What a compound is left with once the word for "machine" is taken off it: the job it does.
+     *  Two words naming the same job are two names for the same machine — Parkettschleif|maschine
+     *  and Parkettschleif|er both reduce to "parkettschleif". */
+    private val DEVICE_HEADS = listOf(
+        "maschine", "maschiene", "maschinen", "gerät", "geraet", "anlage", "automat", "bank",
+        "presse", "werk", "er", "or",
+    )
+
+    /** Nouns saying which tool it is. Two compounds sharing a modifier but differing here are
+     *  different machines: a Furnierpresse presses veneer, a Furniersäge cuts it. */
+    private val TOOL_NOUNS = listOf(
+        "säge", "saege", "fräse", "fraese", "presse", "pumpe", "bohrer", "mühle", "muehle",
+        "hammer", "schere", "messer", "hobel", "drehbank", "brenner", "sauger", "bläser",
+        "blaeser", "kabine", "ofen",
+    )
+
+    /** A job too short to identify anything. */
+    private const val MIN_JOB_LENGTH = 6
 
     /** At most two follow-up searches per platform, so a search costs three crawls, not a fan-out. */
     private const val MAX_VARIANTS = 2
@@ -134,7 +149,7 @@ object QueryVariants {
         // A plural of a term already kept is the same search.
         val singulars = kept.filterNot { w -> kept.any { it != w && (w == it + "n" || w == it + "en") } }
         return singulars
-            .map { Candidate(it, sharedPrefix(it, query) >= SAME_THING_PREFIX) }
+            .map { Candidate(it, namesSameThing(query, it)) }
             .sortedByDescending { it.sharesStem }
             .take(MAX_VARIANTS)
     }
@@ -154,12 +169,34 @@ object QueryVariants {
         .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
         .replace(" ", "").replace("-", "")
 
-    private fun sharedPrefix(a: String, b: String): Int {
-        val x = normalise(a)
-        val y = normalise(b)
-        var i = 0
-        while (i < x.length && i < y.length && x[i] == y[i]) i++
-        return i
+    /** The compound with its "machine" word taken off, leaving the job it does. */
+    private fun job(word: String): String {
+        val w = normalise(word)
+        val head = DEVICE_HEADS.map { normalise(it) }
+            .filter { w.endsWith(it) && w.length - it.length >= 5 }
+            .maxByOrNull { it.length }
+        return if (head != null) w.dropLast(head.length) else w
+    }
+
+    /**
+     * Whether two words name the same job, and so the same machine. Equal jobs settle it; one job
+     * extending the other is still the same machine when the extra part only says more about it
+     * ("einscheiben" against "einscheibenschleif"), but not when it names a different tool
+     * ("furnier" against "furniersäge") — which is what separates a planter from a lifter:
+     * "kartoffelrod" and "kartoffellege" share only the crop.
+     */
+    private fun namesSameThing(query: String, candidate: String): Boolean {
+        val a = job(query)
+        val b = job(candidate)
+        if (a.length < MIN_JOB_LENGTH || b.length < MIN_JOB_LENGTH) return false
+        if (a == b) return true
+        val longer = if (a.length > b.length) a else b
+        val shorter = if (a.length > b.length) b else a
+        if (!longer.startsWith(shorter)) return false
+        val extra = longer.drop(shorter.length)
+        // German joins compounds with a linking s or e, which is not part of the next word.
+        val forms = setOf(extra, extra.drop(1).takeIf { extra.firstOrNull() in setOf('s', 'e') } ?: extra)
+        return TOOL_NOUNS.map { normalise(it) }.none { tool -> forms.any { it.startsWith(tool) } }
     }
 
     /**
