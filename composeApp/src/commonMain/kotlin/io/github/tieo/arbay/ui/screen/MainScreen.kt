@@ -55,6 +55,64 @@ private fun resolveCarNodes(query: String): Pair<CarMakeNode?, CarModelNode?> {
     return make to model
 }
 
+/**
+ * A search whose results are on screen. Every way in — opening a bookmark, previewing a product,
+ * running the car form — produces one of these, so the results sheet is wired once instead of
+ * three times with three different notions of what saving, editing and blocking mean.
+ *
+ * A non-null [filters] marks it a vehicle search and gives the sheet its car view; the bookmark
+ * behind it, if any, is looked up live from the saved searches by query text rather than carried
+ * here, so saving and removing take effect without rebuilding this.
+ */
+private data class ResultsView(
+    val name: String,
+    val query: String,
+    val platforms: List<PlatformId>?,
+    val make: CarMakeNode? = null,
+    val model: CarModelNode? = null,
+    val filters: CarFilters? = null,
+    /** Back leads to the car form it was run from, else to discovery, else nowhere. */
+    val fromCarForm: Boolean = false,
+    val fromDiscovery: Boolean = false,
+) {
+    val isCar: Boolean get() = filters != null
+
+    companion object {
+        /** The results of a saved search. A vehicle query gets the car view even with no filters
+         *  set yet, so the filters can be added from there. */
+        fun of(product: TrackedProduct): ResultsView {
+            val (make, model) = resolveCarNodes(product.searchQuery.text)
+            return ResultsView(
+                name = product.name,
+                query = product.searchQuery.text,
+                platforms = product.searchQuery.platforms,
+                make = make,
+                model = model,
+                filters = if (make != null) product.searchQuery.toCarFilters() ?: CarFilters() else null,
+            )
+        }
+
+        /** The results of a query that is not saved yet. */
+        fun of(
+            name: String,
+            query: String,
+            platforms: List<PlatformId>?,
+            fromDiscovery: Boolean = false,
+        ): ResultsView {
+            val (make, model) = resolveCarNodes(query)
+            return ResultsView(
+                name = name,
+                query = query,
+                platforms = platforms,
+                make = make,
+                model = model,
+                filters = if (make != null) CarFilters() else null,
+                fromDiscovery = fromDiscovery,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -78,15 +136,10 @@ fun MainScreen(
     var addSheetInitialQuery by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
     var showFreeItems by remember { mutableStateOf(false) }
-    var showListings by remember { mutableStateOf(false) }
-    var listingsProduct by remember { mutableStateOf<TrackedProduct?>(null) }
-    var previewProduct by remember { mutableStateOf<KnownProduct?>(null) }
-    var showPreview by remember { mutableStateOf(false) }
-    var previewSearchQuery by remember { mutableStateOf("") }
-    var previewSearchName by remember { mutableStateOf("") }
+    // The search whose results are on screen, whatever opened it. Null = no results sheet.
+    var results by remember { mutableStateOf<ResultsView?>(null) }
     var cameFromDiscovery by remember { mutableStateOf(false) }
     var showCarSearch by remember { mutableStateOf(false) }
-    var showCarResults by remember { mutableStateOf(false) }
     var carQuery by remember { mutableStateOf("") }
     var carName by remember { mutableStateOf("") }
     var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
@@ -99,16 +152,14 @@ fun MainScreen(
     // Non-null while editing an existing bookmark: the save action updates this one instead of
     // creating a new bookmark. Set from the card's Edit button (and the edit-filters path).
     var editingProduct by remember { mutableStateOf<TrackedProduct?>(null) }
-    // Blocked keywords for the bookmark whose listings are open, held locally so edits filter live.
-    var listingsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(listingsProduct?.id) {
-        listingsBlockedTerms = listingsProduct?.searchQuery?.excludeKeywords ?: emptyList()
-    }
-    // Same, for the car results sheet; seeded from the bookmark being edited (empty for a fresh
-    // search, where blocks still filter live and are saved into the bookmark on Save search).
-    var carBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(editingProduct?.id, showCarResults) {
-        if (showCarResults) carBlockedTerms = editingProduct?.searchQuery?.excludeKeywords ?: emptyList()
+    // The bookmark behind the open results, if the query is saved. Looked up live, so saving or
+    // removing one takes effect without rebuilding the view.
+    val resultsBookmark = results?.let { savedFor(it.query) }
+    // Blocked keywords for the open results, held locally so edits filter live before they are
+    // saved. Seeded from the bookmark; a search not saved yet starts with none.
+    var resultsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(results?.query, resultsBookmark?.id) {
+        resultsBlockedTerms = resultsBookmark?.searchQuery?.excludeKeywords ?: emptyList()
     }
 
     LaunchedEffect(Unit) {
@@ -124,18 +175,37 @@ fun MainScreen(
         showAddSheet = true
     }
 
-    fun openPreview(product: KnownProduct) {
+    fun openResults(view: ResultsView) {
         cameFromDiscovery = showDiscovery
         showDiscovery = false
-        previewProduct = product
-        showPreview = true
+        results = view.copy(fromDiscovery = view.fromDiscovery || cameFromDiscovery)
     }
 
-    fun closePreview() {
-        showPreview = false
-        previewProduct = null
-        previewSearchQuery = ""
-        previewSearchName = ""
+    fun openPreview(name: String, query: String, platforms: List<PlatformId>?) {
+        openResults(ResultsView.of(name, query, platforms))
+    }
+
+    fun openPreview(product: KnownProduct) {
+        openPreview(product.displayName, product.searchQuery, product.effectivePlatforms)
+    }
+
+    /** Open the car form on a search, prefilled. The one way in, from the bookmark card, from the
+     *  results sheet's Filters chip, and from discovery. */
+    fun openCarEditor(view: ResultsView, bookmark: TrackedProduct?) {
+        editingProduct = bookmark
+        carName = view.name
+        carQuery = view.query
+        // Load the saved markets only when switching to a different bookmark, so a deselection
+        // survives re-opening this one's edit.
+        if (bookmark == null || carPlatformsLoadedFor != bookmark.id) {
+            carPlatforms = view.platforms
+            carPlatformsLoadedFor = bookmark?.id
+        }
+        carFilters = view.filters ?: CarFilters()
+        carMake = view.make
+        carModel = view.model
+        results = null
+        showCarSearch = true
     }
 
     val isDesktop = LocalDesktopMode.current
@@ -157,8 +227,7 @@ fun MainScreen(
                         showAddSheet -> { showAddSheet = false; true }
                         showSettings -> { showSettings = false; true }
                         showFreeItems -> { showFreeItems = false; true }
-                        showListings -> { showListings = false; true }
-                        showPreview -> { showPreview = false; true }
+                        results != null -> { results = null; true }
                         else -> false
                     }
                 } else false
@@ -272,31 +341,13 @@ fun MainScreen(
                         ProductCard(
                             product = product,
                             onDelete = { productViewModel.deleteProduct(product.id) },
-                            onViewListings = {
-                                listingsProduct = product
-                                showListings = true
-                            },
+                            onViewListings = { results = ResultsView.of(product) },
                             onEdit = {
                                 editingProduct = product
-                                val (m, mo) = resolveCarNodes(product.searchQuery.text)
-                                if (m != null) {
-                                    // Car bookmark: open the structured car form, prefilled.
-                                    carName = product.name
-                                    carQuery = product.searchQuery.text
-                                    // Load the saved markets only when switching to a different
-                                    // bookmark, so a deselection survives re-opening this one's edit.
-                                    if (carPlatformsLoadedFor != product.id) {
-                                        carPlatforms = product.searchQuery.platforms
-                                        carPlatformsLoadedFor = product.id
-                                    }
-                                    carFilters = product.searchQuery.toCarFilters() ?: CarFilters()
-                                    carMake = m
-                                    carModel = mo
-                                    showCarSearch = true
-                                } else {
-                                    // Generic bookmark: open the add/edit sheet, prefilled.
-                                    showAddSheet = true
-                                }
+                                val view = ResultsView.of(product)
+                                // A vehicle bookmark edits in the structured car form, anything
+                                // else in the add/edit sheet.
+                                if (view.isCar) openCarEditor(view, product) else showAddSheet = true
                             },
                         )
                     }
@@ -353,15 +404,7 @@ fun MainScreen(
             onDismiss = { showDiscovery = false },
             onProductSelected = { product -> openPreview(product) },
             onCustomSearch = { query -> openAddSheet(initialQuery = query) },
-            onLiveSearch = { query ->
-                cameFromDiscovery = true
-                showDiscovery = false
-                previewProduct = null
-                showPreview = true
-                listingsProduct = null
-                previewSearchQuery = query
-                previewSearchName = query
-            },
+            onLiveSearch = { query -> openPreview(query, query, null) },
             onFreeItems = { showFreeItems = true },
             onCarSearch = {
                 // Fresh car search: clear any state left from a previous edit so the form
@@ -414,7 +457,29 @@ fun MainScreen(
                 carMake = make
                 carModel = model
                 showCarSearch = false
-                showCarResults = true
+                // Running the form on a bookmark edits that bookmark, the same way narrowing the
+                // price band or blocking a word from its results does. A search with no bookmark
+                // behind it keeps its filters in the view until it is saved.
+                editingProduct?.let { saved ->
+                    productViewModel.updateProduct(
+                        saved.copy(
+                            name = name,
+                            searchQuery = saved.searchQuery.withCarFilters(filters).copy(
+                                text = query,
+                                platforms = platforms ?: PlatformId.entries,
+                            ),
+                        ),
+                    )
+                }
+                results = ResultsView(
+                    name = name,
+                    query = query,
+                    platforms = platforms,
+                    make = make,
+                    model = model,
+                    filters = filters,
+                    fromCarForm = true,
+                )
             },
             initialMake = carMake,
             initialModel = carModel,
@@ -424,217 +489,71 @@ fun MainScreen(
         )
     }
 
-    // Car search results, reusing the listings view with the structured filters applied
-    if (showCarResults) {
+    // Results, for every way in: a saved bookmark, a preview of something not saved yet, or a
+    // fresh run of the car form. One sheet, wired once — saving, editing filters and blocking a
+    // word mean the same thing whichever door the user came through.
+    results?.let { view ->
+        val bookmark = resultsBookmark
         ListingsSheet(
-            productName = carName,
-            searchQuery = carQuery,
+            productName = view.name,
+            searchQuery = view.query,
             listingViewModel = listingViewModel,
-            platforms = carPlatforms,
-            carFilters = carFilters,
-            onEditFilters = {
-                showCarResults = false
-                showCarSearch = true
-            },
-            onDismiss = {
-                showCarResults = false
-                editingProduct = null
-            },
-            onBack = {
-                showCarResults = false
-                showCarSearch = true
-            },
-            blockedTerms = carBlockedTerms,
-            onBlockedTermsChange = { updated ->
-                carBlockedTerms = updated
-                editingProduct?.let { productViewModel.setBlockedKeywords(it, updated) }
-            },
-            onBookmark = {
-                val edited = editingProduct
-                if (edited != null) {
-                    // Editing an existing car bookmark: update in place, keep id + blocked keywords.
+            platforms = view.platforms,
+            carFilters = view.filters,
+            // A vehicle search can always reach the form, even with no filters set yet, so they
+            // can be added from the results.
+            onEditFilters = if (view.isCar) {
+                { openCarEditor(view, bookmark) }
+            } else null,
+            // The price band is part of the saved search, so it only persists once there is one.
+            savedMinPrice = bookmark?.searchQuery?.minPrice?.amount?.div(100)?.toFloat(),
+            savedMaxPrice = bookmark?.searchQuery?.maxPrice?.amount?.div(100)?.toFloat(),
+            onPriceRangePersist = bookmark?.let { saved ->
+                { minEur: Int, maxEur: Int ->
                     productViewModel.updateProduct(
-                        edited.copy(
-                            name = carName,
-                            searchQuery = edited.searchQuery.withCarFilters(carFilters).copy(
-                                text = carQuery,
-                                platforms = carPlatforms ?: PlatformId.entries,
-                                excludeKeywords = carBlockedTerms,
-                            ),
-                        ),
+                        saved.copy(searchQuery = saved.searchQuery.withPriceRangeEur(minEur, maxEur)),
                     )
-                } else {
-                    productViewModel.createProduct(carName, carQuery, carPlatforms ?: PlatformId.entries, carFilters = carFilters)
                 }
-                showCarResults = false
-                editingProduct = null
             },
-        )
-    }
-
-    // Add product sheet
-    if (showAddSheet) {
-        AddProductSheet(
-            prefill = addSheetPrefill,
-            editProduct = editingProduct,
-            initialQuery = addSheetInitialQuery,
-            onDismiss = {
-                showAddSheet = false
-                addSheetPrefill = null
-                editingProduct = null
-                cameFromDiscovery = false
-            },
-            onBack = if (cameFromDiscovery) {
-                {
-                    showAddSheet = false
-                    addSheetPrefill = null
-                    editingProduct = null
-                    cameFromDiscovery = false
-                    showDiscovery = true
-                }
-            } else null,
-            onConfirm = { name, query, platforms, identifiers ->
-                val edited = editingProduct
-                if (edited != null) {
-                    // Update in place: preserve id, blocked keywords, and any car filters.
-                    productViewModel.updateProduct(
-                        edited.copy(
-                            name = name,
-                            searchQuery = edited.searchQuery.copy(text = query, platforms = platforms),
-                            identifiers = identifiers,
-                        ),
-                    )
-                } else {
-                    productViewModel.createProduct(name, query, platforms, identifiers)
-                }
-                showAddSheet = false
-                addSheetPrefill = null
-                editingProduct = null
-                cameFromDiscovery = false
-            },
-        )
-    }
-
-    // Settings
-    if (showSettings) {
-        SettingsSheet(
-            client = client,
-            onDismiss = { showSettings = false },
-            onServerUrlChanged = {
-                productViewModel.loadProducts()
-                freeItemViewModel.loadProfile()
-            },
-        )
-    }
-
-    // Listings (for tracked products)
-    val openListingsProduct = listingsProduct
-    if (showListings && openListingsProduct != null) {
-        val (listingsMake, listingsModel) = resolveCarNodes(openListingsProduct.searchQuery.text)
-        ListingsSheet(
-            productName = openListingsProduct.name,
-            searchQuery = openListingsProduct.searchQuery.text,
-            listingViewModel = listingViewModel,
-            platforms = openListingsProduct.searchQuery.platforms,
-            // A car query always gets the car view (specs, filter chips, no hero carousel), even
-            // with no filters set yet: pass empty filters so the view renders, not the generic one.
-            carFilters = if (listingsMake != null)
-                (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
-            else null,
-            // Seed the results price slider from the bookmark and write changes back onto it. Every
-            // bookmark keeps its price band the same way, car or not. Store-only: the crawl is keyed
-            // on the query text, so persisting the band never re-fetches.
-            savedMinPrice = openListingsProduct.searchQuery.minPrice?.amount?.div(100)?.toFloat(),
-            savedMaxPrice = openListingsProduct.searchQuery.maxPrice?.amount?.div(100)?.toFloat(),
-            onPriceRangePersist = { minEur, maxEur ->
-                productViewModel.updateProduct(
-                    openListingsProduct.copy(
-                        searchQuery = openListingsProduct.searchQuery.withPriceRangeEur(minEur, maxEur),
-                    ),
-                )
-            },
-            // Any car bookmark is editable, even one saved with no filters yet, so the user can
-            // add them. Gate on the query being a car, not on filters already existing.
-            onEditFilters = if (listingsMake != null) {
-                {
-                    // Editing an existing bookmark's filters: the re-save updates it, not duplicates.
-                    editingProduct = openListingsProduct
-                    carName = openListingsProduct.name
-                    carQuery = openListingsProduct.searchQuery.text
-                    carPlatforms = openListingsProduct.searchQuery.platforms
-                    carFilters = openListingsProduct.searchQuery.toCarFilters() ?: CarFilters()
-                    carMake = listingsMake
-                    carModel = listingsModel
-                    showListings = false
-                    listingsProduct = null
-                    showCarSearch = true
-                }
-            } else null,
-            blockedTerms = listingsBlockedTerms,
+            blockedTerms = resultsBlockedTerms,
             onBlockedTermsChange = { updated ->
-                listingsBlockedTerms = updated
-                listingsProduct?.let { productViewModel.setBlockedKeywords(it, updated) }
+                resultsBlockedTerms = updated
+                bookmark?.let { productViewModel.setBlockedKeywords(it, updated) }
             },
-            isBookmarked = true,
+            isBookmarked = bookmark != null,
             onToggleBookmark = {
-                productViewModel.deleteProduct(openListingsProduct.id)
-                showListings = false
-                listingsProduct = null
-            },
-            onDismiss = {
-                showListings = false
-                listingsProduct = null
-            },
-        )
-    }
-
-    // Listings preview (before tracking)
-    if (showPreview) {
-        val name = previewProduct?.displayName ?: previewSearchName
-        val query = previewProduct?.searchQuery ?: previewSearchQuery
-        val previewIsCar = resolveCarNodes(query).first != null
-        ListingsSheet(
-            productName = name,
-            searchQuery = query,
-            listingViewModel = listingViewModel,
-            platforms = previewProduct?.effectivePlatforms,
-            // Car preview gets the car view too; empty filters just render it filter-free.
-            carFilters = if (previewIsCar) CarFilters() else null,
-            onEditFilters = if (previewIsCar) {
-                {
-                    val (m, mo) = resolveCarNodes(query)
-                    carName = name
-                    carQuery = query
-                    carPlatforms = previewProduct?.effectivePlatforms
-                    carFilters = CarFilters()
-                    carMake = m
-                    carModel = mo
-                    closePreview()
-                    showCarSearch = true
+                if (bookmark != null) {
+                    productViewModel.deleteProduct(bookmark.id)
+                } else {
+                    productViewModel.createProduct(
+                        name = view.name.ifBlank { view.query },
+                        searchText = view.query,
+                        platforms = view.platforms ?: PlatformId.entries,
+                        carFilters = view.filters,
+                        excludeKeywords = resultsBlockedTerms,
+                    )
                 }
-            } else null,
+            },
             onDismiss = {
-                closePreview()
+                results = null
+                editingProduct = null
                 cameFromDiscovery = false
             },
-            onBack = if (cameFromDiscovery) {
-                {
-                    closePreview()
-                    cameFromDiscovery = false
-                    showDiscovery = true
+            onBack = when {
+                view.fromCarForm -> {
+                    {
+                        results = null
+                        showCarSearch = true
+                    }
                 }
-            } else null,
-            isBookmarked = savedFor(query) != null,
-            onToggleBookmark = {
-                val existing = savedFor(query)
-                if (existing != null) {
-                    productViewModel.deleteProduct(existing.id)
-                } else {
-                    val bName = previewProduct?.displayName ?: previewSearchName.ifBlank { previewSearchQuery }
-                    val bQuery = previewProduct?.searchQuery ?: previewSearchQuery
-                    val bPlatforms = previewProduct?.effectivePlatforms ?: PlatformId.entries
-                    productViewModel.createProduct(name = bName, searchText = bQuery, platforms = bPlatforms)
+                view.fromDiscovery -> {
+                    {
+                        results = null
+                        cameFromDiscovery = false
+                        showDiscovery = true
+                    }
                 }
+                else -> null
             },
         )
     }
