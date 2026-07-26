@@ -570,16 +570,16 @@ fun ListingsSheet(
                                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                                         contentPadding = PaddingValues(horizontal = 20.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        // A row item is only as tall as itself, so the leading icon
+                                        // needs the row to centre it against the taller chips.
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         item {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    Icons.Outlined.Block, null,
-                                                    modifier = Modifier.size(14.dp),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                                Spacer(Modifier.width(4.dp))
-                                            }
+                                            Icon(
+                                                Icons.Outlined.Block, null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         }
                                         items(activeBlockedTerms.sorted()) { term ->
                                             InputChip(

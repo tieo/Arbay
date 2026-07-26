@@ -42,6 +42,21 @@ internal suspend fun emitPartialResults(listings: List<Listing>) {
     coroutineContext[PartialResultEmitter]?.emit(listings)
 }
 
+/** CoroutineContext element collecting the related search terms a marketplace prints on its own
+ *  results page ("Ähnliche Suchanfragen"). The market's own vocabulary for the thing searched for,
+ *  which is what [QueryVariants] would otherwise have to infer. */
+class SuggestedTermsEmitter(val emit: (terms: List<String>) -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<SuggestedTermsEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+/** Report the related search terms found on a results page, if anyone is collecting them. Crawlers
+ *  call this while parsing, so the terms cost no request of their own. */
+internal suspend fun emitSuggestedTerms(terms: List<String>) {
+    if (terms.isEmpty()) return
+    coroutineContext[SuggestedTermsEmitter]?.emit(terms)
+}
+
 /** CoroutineContext element notified when a stealth fetch exposes its live browser for a human to
  *  solve a captcha in place (same IP + fingerprint the token binds to), so the search route can push
  *  the solve link to the client. */

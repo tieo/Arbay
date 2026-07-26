@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
@@ -20,7 +21,10 @@ import java.io.File
  * per-platform pacing, block-cooldown and request budget as an interactive search (via
  * trackedSearch), and defaults to a long interval so it stays a background trickle, not a burst.
  */
-class SavedSearchMonitor(private val productRepo: ProductRepo) {
+class SavedSearchMonitor(
+    private val productRepo: ProductRepo,
+    private val listingRepo: ListingRepo,
+) {
 
     private val log = LoggerFactory.getLogger(SavedSearchMonitor::class.java)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -84,7 +88,7 @@ class SavedSearchMonitor(private val productRepo: ProductRepo) {
                 val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
                 val query = product.searchQuery.copy(platforms = listOf(platformId))
                 val results = try {
-                    withTimeout(120_000L) { crawler.trackedSearch(query) }
+                    withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
                 } catch (e: Exception) {
                     log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
                     continue

@@ -17,7 +17,7 @@ fun Application.configureRouting() {
 
     // Recurring saved-search updates. No-op unless ARBAY_SAVED_SEARCH_UPDATES=on, since periodic
     // crawls raise the flag risk the anti-block work manages.
-    SavedSearchMonitor(productRepo).start()
+    SavedSearchMonitor(productRepo, listingRepo).start()
 
     routing {
         productRoutes(productRepo)

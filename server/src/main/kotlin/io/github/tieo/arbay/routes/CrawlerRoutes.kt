@@ -24,6 +24,7 @@ import io.github.tieo.arbay.crawler.RequestMonitor
 import io.github.tieo.arbay.crawler.Translator
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
+import io.github.tieo.arbay.crawler.QueryVariants
 import io.github.tieo.arbay.crawler.searchAllSpellings
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
@@ -73,6 +74,11 @@ private val GENERAL_PLATFORMS = listOf(
     // Switzerland's largest general marketplace; German-language, so the query needs no translation.
     PlatformId.RICARDO, PlatformId.SUBITO,
 )
+
+/** How common a word is across every listing crawled so far, so a search's own results can be
+ *  judged against it when looking for the market's other names for the thing. */
+private fun corpusBackground(listingRepo: ListingRepo) =
+    QueryVariants.TermBackground { term -> listingRepo.titleShareOfCorpus(term) }
 
 /** Whether a query names a vehicle, which decides both the markets searched and whether the car
  *  post-filter runs. Resolved once per request and passed on, not re-derived at each use. */
@@ -338,7 +344,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val classified = QueryResultCache.get(platformId, pq)
                         ?: if (BlockCooldown.isCoolingDown(platformId)) emptyList()
                         else run {
-                        val raw = crawler.trackedSearch(pq)
+                        val raw = crawler.trackedSearch(pq, corpusBackground(listingRepo))
                         val filtered = RelevanceFilter.filter(raw, pq).map { SoldDetector.classify(it) }
                         QueryResultCache.put(platformId, pq, filtered)
                         filtered
@@ -521,7 +527,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
                                     kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) {
-                                        crawler.searchAllSpellings(pq)
+                                        crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                     }
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
@@ -650,7 +656,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val searchQuery = call.applyCarFilters(SearchQuery(text = query))
             val permit = call.acquireScrapeSlot() ?: return@get
-            val results = try { crawler.trackedSearch(searchQuery) } finally { permit.release() }
+            val results = try { crawler.trackedSearch(searchQuery, corpusBackground(listingRepo)) } finally { permit.release() }
 
             val status = CrawlerStatusTracker.getStatus(platform)
             call.respond(CrawlerTestResult(

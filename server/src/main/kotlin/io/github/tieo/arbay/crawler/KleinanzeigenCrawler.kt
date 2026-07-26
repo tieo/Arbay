@@ -187,6 +187,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
             val rawItemCount = doc.select("article.aditem").size
             if (rawItemCount == 0) break
 
+            if (page == query.startPage) emitSuggestedTerms(parseSuggestedTerms(doc))
             val pageResults = parseSearchResults(html, freeOnly = false)
             val newResults = pageResults.filter { seenIds.add(it.externalId) }
             allResults.addAll(newResults)
@@ -197,6 +198,14 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
 
         return allResults
     }
+
+    /** The related searches Kleinanzeigen prints under its own results ("Ähnliche Suchanfragen"):
+     *  the words its sellers and buyers actually use for the thing, on a page already fetched. */
+    internal fun parseSuggestedTerms(doc: org.jsoup.nodes.Document): List<String> =
+        doc.select("#srchrslt-shngls a, .srchresult-suggested-container a")
+            .map { it.text().trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
 
     internal fun parseSearchResults(html: String, freeOnly: Boolean = false): List<Listing> {
         val doc = Jsoup.parse(html)

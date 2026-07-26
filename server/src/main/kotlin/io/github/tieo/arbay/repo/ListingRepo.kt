@@ -63,6 +63,15 @@ class ListingRepo {
 
     fun getById(id: String): Listing? = listings[id]
 
+    /** Share of stored listings whose title contains [term], the background a search's own results
+     *  are judged against: a word this common everywhere says nothing about the thing searched for.
+     *  0 when nothing has been crawled yet, which leaves every word looking distinctive. */
+    fun titleShareOfCorpus(term: String): Double {
+        val all = listings.values
+        if (all.isEmpty()) return 0.0
+        return all.count { it.title.contains(term, ignoreCase = true) }.toDouble() / all.size
+    }
+
     fun getByExternalId(platformId: PlatformId, externalId: String): Listing? {
         return listings.values.find { it.platformId == platformId && it.externalId == externalId }
     }
