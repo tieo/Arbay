@@ -176,7 +176,21 @@ class ListingViewModel(
         .map { it == SortMode.NEAREST }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    fun setLocation(lat: Double?, lon: Double?) { userLat = lat; userLon = lon }
+    fun setLocation(lat: Double?, lon: Double?) {
+        userLat = lat
+        userLon = lon
+        // Measure the results already in hand against the new position. No crawl: the server
+        // resolved each listing's coordinates when it delivered them.
+        _allListings.value = sortListings(_allListings.value)
+    }
+
+    /** Distance from the device to each listing, computed locally from the coordinates the server
+     *  resolved. A listing whose location could not be geocoded keeps a null distance. */
+    private fun withDistances(list: List<Listing>): List<Listing> {
+        val lat = userLat ?: return list
+        val lon = userLon ?: return list
+        return list.map { l -> GeoDistance.to(l, lat, lon)?.let { l.copy(distanceKm = it) } ?: l }
+    }
 
     fun setSortByDistance(on: Boolean) {
         setSortMode(if (on) SortMode.NEAREST else SortMode.BEST_MATCH)
@@ -190,8 +204,10 @@ class ListingViewModel(
     private fun priceOf(listing: Listing): Long =
         DisplayCurrency.convert(listing.effectivePrice.amount, listing.effectivePrice.currency.name)
 
-    /** Order results by the mode the user picked from the sort menu. */
-    private fun sortListings(list: List<Listing>): List<Listing> = when (_sortMode.value) {
+    /** Order results by the mode the user picked from the sort menu, after measuring each one
+     *  against the device position. */
+    private fun sortListings(raw: List<Listing>): List<Listing> = withDistances(raw).let { list ->
+        when (_sortMode.value) {
         SortMode.NEAREST -> list.sortedWith(
             compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }.thenBy { priceOf(it) })
         SortMode.PRICE_ASC -> list.sortedBy { priceOf(it) }
@@ -200,6 +216,7 @@ class ListingViewModel(
         SortMode.BEST_MATCH -> list.sortedWith(
             compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
                 .thenBy { priceOf(it) })
+        }
     }
 
     fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {

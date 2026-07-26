@@ -24,6 +24,7 @@ import io.github.tieo.arbay.crawler.RequestMonitor
 import io.github.tieo.arbay.crawler.Translator
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
+import io.github.tieo.arbay.crawler.QueryVariants
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.classifyException
@@ -99,6 +100,7 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
         firstRegToYear = cf?.firstRegToYear ?: p["fregTo"]?.toIntOrNull(),
         maxMileageKm = cf?.maxMileageKm ?: p["kmTo"]?.toIntOrNull(),
         minPowerKw = cf?.minPowerKw ?: p["powerKw"]?.toIntOrNull(),
+        minPrice = cf?.minPriceEur?.let { Money(it * 100L, Currency.EUR) } ?: base.minPrice,
         maxPrice = cf?.maxPriceEur?.let { Money(it * 100L, Currency.EUR) }
             ?: priceToEur?.let { Money(it * 100, Currency.EUR) } ?: base.maxPrice,
         transmission = cf?.transmission ?: legacyGear,
@@ -150,19 +152,21 @@ private suspend fun carPostFilter(
         ?.let { CarCriteriaScorer.rank(filtered, it) } ?: filtered
 }
 
-/** Fill in each listing's distanceKm from the searcher's coordinates, geocoding the listing's
- *  location (zip/city + country) once. A no-op when the search carries no position or a listing has
- *  no resolvable location. */
+/** Resolve every listing's location (zip/city + country) to coordinates, and fill in distanceKm
+ *  when the search carries the searcher's position. Geocoding runs unconditionally so the client
+ *  can measure distances itself later — picking "nearest first" then costs no crawl. A listing
+ *  with no resolvable location is left as it is. */
 private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<Listing> {
-    val lat = query.userLat ?: return listings
-    val lon = query.userLon ?: return listings
+    val lat = query.userLat
+    val lon = query.userLon
     return listings.map { l ->
         val loc = l.location ?: return@map l
         val coords = if (loc.latitude != null && loc.longitude != null) loc.latitude!! to loc.longitude!!
             else Geocoder.resolve(loc.country, loc.zip, loc.city) ?: return@map l
         l.copy(
             location = loc.copy(latitude = coords.first, longitude = coords.second),
-            distanceKm = Geocoder.haversine(lat, lon, coords.first, coords.second),
+            distanceKm = if (lat != null && lon != null)
+                Geocoder.haversine(lat, lon, coords.first, coords.second) else l.distanceKm,
         )
     }
 }
@@ -493,7 +497,18 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) { crawler.search(pq) }
+                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) {
+                                        // A site matches the query as a literal word, so a compound
+                                        // noun is also searched under its interchangeable spellings
+                                        // ("Parkettschleifer" for "Parkettschleifmaschine"). The
+                                        // query itself decides the platform's health; a variant that
+                                        // fails is simply dropped.
+                                        val primary = crawler.search(pq)
+                                        val extra = QueryVariants.of(pq.text).flatMap { v ->
+                                            runCatching { crawler.search(pq.copy(text = v)) }.getOrDefault(emptyList())
+                                        }
+                                        (primary + extra).distinctBy { it.id }
+                                    }
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
                                 // yet wired) still surfaces its whole parsed set here, before the

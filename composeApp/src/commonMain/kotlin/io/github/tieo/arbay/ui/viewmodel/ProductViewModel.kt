@@ -51,9 +51,8 @@ class ProductViewModel(
                     searchQuery = SearchQuery(
                         text = searchText,
                         platforms = platforms,
-                        carFilters = carFilters?.takeUnless { it.isEmpty },
                         excludeKeywords = excludeKeywords,
-                    ),
+                    ).withCarFilters(carFilters),
                     identifiers = identifiers,
                     createdAt = Clock.System.now(),
                 )

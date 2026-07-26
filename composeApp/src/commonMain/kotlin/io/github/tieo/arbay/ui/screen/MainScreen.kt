@@ -36,6 +36,8 @@ import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.toCarFilters
+import io.github.tieo.arbay.model.withCarFilters
+import io.github.tieo.arbay.model.withPriceRangeEur
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
@@ -454,10 +456,9 @@ fun MainScreen(
                     productViewModel.updateProduct(
                         edited.copy(
                             name = carName,
-                            searchQuery = edited.searchQuery.copy(
+                            searchQuery = edited.searchQuery.withCarFilters(carFilters).copy(
                                 text = carQuery,
                                 platforms = carPlatforms ?: PlatformId.entries,
-                                carFilters = carFilters?.takeUnless { it.isEmpty },
                                 excludeKeywords = carBlockedTerms,
                             ),
                         ),
@@ -540,20 +541,18 @@ fun MainScreen(
             carFilters = if (listingsMake != null)
                 (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
             else null,
-            // Seed the results price slider from the saved filter and write changes back onto the
-            // bookmark (car bookmarks only, where the filter lives). Store-only: updateProduct saves
-            // the value but the crawl is keyed on the query text, so nothing re-fetches.
-            savedMinPrice = if (listingsMake != null) openListingsProduct.searchQuery.toCarFilters()?.minPriceEur?.toFloat() else null,
-            savedMaxPrice = if (listingsMake != null) openListingsProduct.searchQuery.toCarFilters()?.maxPriceEur?.toFloat() else null,
-            onPriceRangePersist = if (listingsMake != null) { minEur, maxEur ->
-                val cf = (openListingsProduct.searchQuery.toCarFilters() ?: CarFilters())
-                    .copy(minPriceEur = minEur, maxPriceEur = maxEur)
+            // Seed the results price slider from the bookmark and write changes back onto it. Every
+            // bookmark keeps its price band the same way, car or not. Store-only: the crawl is keyed
+            // on the query text, so persisting the band never re-fetches.
+            savedMinPrice = openListingsProduct.searchQuery.minPrice?.amount?.div(100)?.toFloat(),
+            savedMaxPrice = openListingsProduct.searchQuery.maxPrice?.amount?.div(100)?.toFloat(),
+            onPriceRangePersist = { minEur, maxEur ->
                 productViewModel.updateProduct(
                     openListingsProduct.copy(
-                        searchQuery = openListingsProduct.searchQuery.copy(carFilters = cf.takeUnless { it.isEmpty }),
+                        searchQuery = openListingsProduct.searchQuery.withPriceRangeEur(minEur, maxEur),
                     ),
                 )
-            } else null,
+            },
             // Any car bookmark is editable, even one saved with no filters yet, so the user can
             // add them. Gate on the query being a car, not on filters already existing.
             onEditFilters = if (listingsMake != null) {

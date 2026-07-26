@@ -74,22 +74,44 @@ data class CarFilters(
 }
 
 /** Car filters carried inside a saved search, so opening a bookmark reruns it with the
- *  same constraints instead of a bare text search. Null when the query has no car filter. */
+ *  same constraints instead of a bare text search. Null when the query has no car filter.
+ *
+ *  The price bound is not among the stored filters: every search has one, car or not, so it lives
+ *  on the query's own minPrice/maxPrice and is overlaid here. Read through this and the filter view
+ *  is complete; write through [withCarFilters] and there is still only one copy to disagree with. */
 fun SearchQuery.toCarFilters(): CarFilters? {
     // The full carFilters wins; fall back to the legacy individual fields for older saved
     // searches that predate it.
-    carFilters?.takeUnless { it.isEmpty }?.let { return it }
-    val filters = CarFilters(
-        firstRegFromYear = firstRegFromYear,
-        firstRegToYear = firstRegToYear,
-        maxMileageKm = maxMileageKm,
+    val stored = carFilters?.takeUnless { it.isEmpty }
+        ?: CarFilters(
+            firstRegFromYear = firstRegFromYear,
+            firstRegToYear = firstRegToYear,
+            maxMileageKm = maxMileageKm,
+            minPowerKw = minPowerKw,
+            transmission = transmission,
+            descriptionContains = descriptionContains,
+        )
+    val complete = stored.copy(
+        minPriceEur = minPrice?.let { (it.amount / 100).toInt() },
         maxPriceEur = maxPrice?.let { (it.amount / 100).toInt() },
-        minPowerKw = minPowerKw,
-        transmission = transmission,
-        descriptionContains = descriptionContains,
     )
-    return if (filters.isEmpty) null else filters
+    return if (complete.isEmpty) null else complete
 }
+
+/** Store a filter set on the query, lifting its price bound out to minPrice/maxPrice — the one
+ *  place a price is kept, whether or not the search is for a car. */
+fun SearchQuery.withCarFilters(filters: CarFilters?): SearchQuery = copy(
+    carFilters = filters?.copy(minPriceEur = null, maxPriceEur = null)?.takeUnless { it.isEmpty },
+    minPrice = filters?.minPriceEur?.let { Money(it * 100L, Currency.EUR) },
+    maxPrice = filters?.maxPriceEur?.let { Money(it * 100L, Currency.EUR) },
+)
+
+/** Narrow the search to a price band, in whole euro. Used by the results slider, which edits the
+ *  same bound the search form sets. */
+fun SearchQuery.withPriceRangeEur(minEur: Int?, maxEur: Int?): SearchQuery = copy(
+    minPrice = minEur?.let { Money(it * 100L, Currency.EUR) },
+    maxPrice = maxEur?.let { Money(it * 100L, Currency.EUR) },
+)
 
 @Serializable
 data class SearchQuery(

@@ -42,7 +42,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import kotlin.math.ceil
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
@@ -251,22 +253,26 @@ fun ListingsSheet(
     var showSold by remember { mutableStateOf(true) }
     var hideUnknownDates by remember { mutableStateOf(false) }
 
-    // Nearest-first: fetch the device position, re-run the search so the server fills in distances,
-    // and order by them. Toggling off restores the default (match/price) order.
+    // Nearest-first: fetch the device position and order by the distance measured from the
+    // coordinates the server already resolved for each listing. No re-crawl.
     val sortByDistance by listingViewModel.sortByDistance.collectAsState()
     val sortMode by listingViewModel.sortMode.collectAsState()
     val detectAndSortNearest = rememberCoordDetector { lat, lon ->
         listingViewModel.setLocation(lat, lon)
         listingViewModel.setSortByDistance(lat != null)
-        if (lat != null) listingViewModel.search(searchQuery, platforms, carFilters, force = true)
     }
 
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
     val priceFiltered = priceRange.start > priceMin || priceRange.endInclusive < priceMax
+    // Bounds compare in whole currency units, and a thumb resting on the track's end means
+    // "unbounded". The slider carries a Float of major units while a price is exact Long minor
+    // units, so comparing cent-for-cent would shave a cent off a boundary and drop the very
+    // listing the user narrowed onto.
     fun inPriceRange(amount: Long): Boolean {
-        val minCents = (priceRange.start * 100).toLong()
-        val maxCents = (priceRange.endInclusive * 100).toLong()
-        return amount in minCents..maxCents
+        val units = amount / 100.0
+        val minOk = priceRange.start <= priceMin || units >= floor(priceRange.start.toDouble())
+        val maxOk = priceRange.endInclusive >= priceMax || units <= ceil(priceRange.endInclusive.toDouble())
+        return minOk && maxOk
     }
 
     val activeListings = remember(allActiveListings, priceRange) {
@@ -592,7 +598,7 @@ fun ListingsSheet(
                                 // Price range: a LOG-scale slider (so a cheap sub-range like 300 to
                                 // 700 euro is not a hair-thin sliver of a 0 to 10k track) plus exact
                                 // numeric fields. Value shown live while dragging.
-                                if (activeListings.size >= 2 && priceMax > priceMin) {
+                                if (allActiveListings.size >= 2 && priceMax > priceMin) {
                                     val logLo = ln(priceMin.coerceAtLeast(1f).toDouble())
                                     val logHi = ln(priceMax.toDouble()).coerceAtLeast(logLo + 0.0001)
                                     fun priceToPos(p: Float): Float =
@@ -741,7 +747,10 @@ fun ListingsSheet(
                 }
 
                 // === All listings ===
-                if (activeListings.isNotEmpty()) {
+                // Rendered whenever there are results at all, even if the price range currently
+                // admits none: hiding the section would take the slider's own heading with it and
+                // leave no way back.
+                if (allActiveListings.isNotEmpty()) {
                     item("listings_header") {
                         Spacer(Modifier.height(16.dp))
                         val filterLabel = when {
@@ -793,6 +802,16 @@ fun ListingsSheet(
                         Spacer(Modifier.height(8.dp))
                     }
 
+                    if (displayedActiveListings.isEmpty()) {
+                        item("listings_none_in_range") {
+                            Text(
+                                "No listings in this price range — widen it above.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            )
+                        }
+                    }
                     items(displayedActiveListings, key = { "active-${it.id}" }) { listing ->
                         ListingCard(
                             listing = listing,
