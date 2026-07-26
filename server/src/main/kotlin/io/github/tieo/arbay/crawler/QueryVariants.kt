@@ -48,12 +48,18 @@ object QueryVariants {
     /** Long enough to be a product word, in any script. */
     private val WORD = Regex("""[\p{L}]{6,}""")
 
-    /** Heads that name a part, a material or a consumable rather than a device: a Drechseleisen is
-     *  the chisel a Drechselbank turns against, Drechselholz the wood it turns. */
-    private val PART_HEADS = listOf(
+    /** Heads that name something other than the machine asked for: what it works on or with (a
+     *  Drechseleisen is the chisel a Drechselbank turns against, Drechselholz the wood it turns),
+     *  what it stands on (Siebdrucktisch, Magnetbohrständer), or a different machine of the same
+     *  family (Espressomühle beside an Espressomaschine).
+     *
+     *  Rejected only when the query does not carry the same head: someone searching for a
+     *  Kaffeemühle should still be offered another mill. */
+    private val OTHER_KIND_HEADS = listOf(
         "holz", "eisen", "krone", "kronen", "papier", "blatt", "blätter", "band", "bänder",
         "scheibe", "scheiben", "werkzeug", "futter", "messer", "kette", "ketten", "zubehör",
         "zubehoer", "ersatzteil", "ersatzteile", "sack", "säcke", "beutel", "aufsatz", "halter",
+        "tisch", "ständer", "schrank", "karussell", "mühle",
     )
 
     /** Nominalised actions ("Kernbohrung" is the hole, not the machine) and infinitives
@@ -68,10 +74,19 @@ object QueryVariants {
         return infinitive && !plural
     }
 
-    /** Whether the word names a device at all, as against a part of one, the stuff it works on, or
-     *  the job it does. */
-    private fun namesADevice(word: String): Boolean =
-        !namesAnAction(word) && PART_HEADS.none { word.endsWith(it) }
+    /** Whether the word names the same kind of thing as the query, as against a part of it, the
+     *  stuff it works on, what it stands on, or the job it does. */
+    private fun namesSameKind(word: String, query: String): Boolean {
+        if (namesAnAction(word)) return false
+        // Folded, so a transliterated query ("kaffeemuehle") carries the same head as the word
+        // ("espressomühle") and is not treated as a different kind of thing.
+        val w = normalise(word)
+        val q = normalise(query)
+        return OTHER_KIND_HEADS.none { head ->
+            val h = normalise(head)
+            w.endsWith(h) && !q.endsWith(h)
+        }
+    }
 
     /** How many different searches may offer a term before it is taken for a make or a category
      *  rather than a name for this thing. Measured over 32 niche products: every term seen under
@@ -108,8 +123,10 @@ object QueryVariants {
             .map { it.trim().lowercase() }
             .filter { it.isNotBlank() && it != query }
             .filterNot { it.contains(' ') }
-            .filterNot { it.contains(query) || query.contains(it) }
-            .filter { namesADevice(it) }
+            // Compared with umlauts folded, so a truncated "oberfräs" is recognised as part of
+            // "oberfraese" rather than looking like a word of its own.
+            .filterNot { normalise(it).contains(normalise(query)) || normalise(query).contains(normalise(it)) }
+            .filter { namesSameKind(it, query) }
             // A term the market offers under many unrelated searches is a make or a category that
             // sits beside everything, not a name for this thing.
             .filterNot { offeredUnder(it) > MAX_SEARCHES_OFFERING_IT }
@@ -163,7 +180,7 @@ object QueryVariants {
             // Once per listing: a title repeating a word does not make it any more the market's.
             for (word in WORD.findAll(listing.title.lowercase()).map { it.value }.toSet()) {
                 if (word == query || query in word || word in query) continue
-                if (!namesADevice(word)) continue
+                if (!namesSameKind(word, query)) continue
                 counts[word] = (counts[word] ?: 0) + 1
             }
         }

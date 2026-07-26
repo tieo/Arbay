@@ -67,7 +67,27 @@ class QueryVariantsTest {
 
     @Test
     fun `a plural of a term already kept is the same search`() {
-        assertEquals(listOf("tischkreissäge"), terms(listOf("tischkreissäge", "tischkreissägen"), "tischkreissaege"))
+        assertEquals(
+            listOf("bandschleifer"),
+            terms(listOf("bandschleifer", "bandschleifern"), "bandschleifmaschine"),
+        )
+    }
+
+    @Test
+    fun `the query's own word spelled differently is the same search`() {
+        // Umlauts folded, so a transliterated query does not chase its own spelling, and a
+        // truncated form is recognised as part of the query rather than a word of its own.
+        assertEquals(emptyList(), terms(listOf("tischkreissäge"), "tischkreissaege"))
+        assertEquals(emptyList(), terms(listOf("oberfräs"), "oberfraese"))
+    }
+
+    @Test
+    fun `drops what the machine stands on or a different machine of its family`() {
+        assertFalse(terms(listOf("magnetbohrständer"), "magnetbohrmaschine").contains("magnetbohrständer"))
+        assertFalse(terms(listOf("siebdrucktisch"), "siebdruckmaschine").contains("siebdrucktisch"))
+        assertFalse(terms(listOf("espressomühle"), "espressomaschine").contains("espressomühle"))
+        // …unless the query asks for that kind itself.
+        assertTrue(terms(listOf("espressomühle"), "kaffeemuehle").contains("espressomühle"))
     }
 
     @Test
