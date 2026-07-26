@@ -116,6 +116,24 @@ class QueryVariantsTest {
         assertEquals(listOf("freischneider"), kept)
     }
 
+    @Test
+    fun `drops a make, which names who built it rather than what it is`() {
+        // Kleinanzeigen's real suggestions: the makes beside the machines.
+        val kept = terms(listOf("lescha", "atika", "zementmischer", "zwangsmischer"), "betonmischmaschine")
+        assertFalse(kept.contains("lescha"), "got $kept")
+        assertFalse(kept.contains("atika"), "got $kept")
+        assertTrue(kept.any { it == "zementmischer" || it == "zwangsmischer" }, "got $kept")
+    }
+
+    @Test
+    fun `keeps another name for the machine that shares no spelling`() {
+        // These are the ones the job test cannot see; they ride on the market naming the query
+        // back, so they must at least survive as candidates.
+        assertTrue(terms(listOf("motorsäge"), "kettensaege").contains("motorsäge"))
+        assertTrue(terms(listOf("freischneider"), "motorsense").contains("freischneider"))
+        assertTrue(terms(listOf("microbagger"), "minibagger").contains("microbagger"))
+    }
+
     // ── Trusting a word that is built differently ─────────────────────────────
 
     @Test

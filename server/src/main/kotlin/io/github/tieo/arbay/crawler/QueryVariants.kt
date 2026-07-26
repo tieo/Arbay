@@ -51,6 +51,24 @@ object QueryVariants {
     /** A job too short to identify anything. */
     private const val MIN_JOB_LENGTH = 6
 
+    /** German words for a machine. A suggestion naming another machine ends in one of these; a
+     *  make does not, which is what tells "zementmischer" from "lescha" and "microbagger" from
+     *  "kubota". Measured over 166 products, this rejected 279 of 595 otherwise-eligible
+     *  suggestions, nearly all of them makes. */
+    private val MACHINE_WORDS = DEVICE_HEADS + listOf(
+        "säge", "saege", "fräse", "fraese", "pumpe", "bohrer", "mühle", "muehle", "hammer",
+        "schere", "hobel", "sauger", "bläser", "blaeser", "brenner", "reiniger", "strahler",
+        "schleifer", "mischer", "spalter", "lader", "bagger", "traktor", "mäher", "maeher",
+        "schneider", "trimmer", "häcksler", "haecksler", "walze", "platte", "roder", "kran",
+        "stapler", "ofen", "kessel", "trockner", "sense", "bock", "kabine",
+    )
+
+    /** Whether the word names a machine at all. */
+    private fun namesAMachine(word: String): Boolean {
+        val w = normalise(word)
+        return MACHINE_WORDS.any { w.endsWith(normalise(it)) }
+    }
+
     /** At most two follow-up searches per platform, so a search costs three crawls, not a fan-out. */
     private const val MAX_VARIANTS = 2
 
@@ -142,6 +160,8 @@ object QueryVariants {
             // "oberfraese" rather than looking like a word of its own.
             .filterNot { normalise(it).contains(normalise(query)) || normalise(query).contains(normalise(it)) }
             .filter { namesSameKind(it, query) }
+            // A make is not another name for the thing: it names who built it.
+            .filter { namesAMachine(it) }
             // A term the market offers under many unrelated searches is a make or a category that
             // sits beside everything, not a name for this thing.
             .filterNot { offeredUnder(it) > MAX_SEARCHES_OFFERING_IT }
