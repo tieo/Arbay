@@ -4,37 +4,40 @@ import io.github.tieo.arbay.model.Listing
 import kotlin.math.ln
 
 /**
- * Other words a market uses for the thing being searched for, read out of the search's own results.
+ * Other words a market uses for the thing being searched for.
  *
- * A marketplace matches a query as a literal word, so a search misses everything the sellers named
- * differently: Kleinanzeigen answers "Parkettschleifmaschine" with machines titled exactly that and
- * never the ones titled "Parkettschleifer" or "Bodenschleifer", though they are the same tool. The
- * sellers who write two of the names in one title reveal the others, so the words worth trying are
- * already in the first page of results.
+ * A marketplace matches a query as a literal word, so a search misses everything its sellers named
+ * differently: Kleinanzeigen answers "Parkettschleifmaschine" only with titles containing that word,
+ * never the same machines titled "Parkettschleifer". Where a market prints its related searches it
+ * hands over its own vocabulary for free, on a page already fetched; [candidates] decides which of
+ * those are worth a search. [candidatesFrom] infers them from result titles for markets that print
+ * none.
  *
- * Two things it deliberately does not do. It does not derive words from how the language builds
- * them — a rule swapping "-maschine" for "-er" invents words nobody sells under and spends a crawl
- * on each. And it does not judge them by embedding distance: measured against the local model, the
- * true synonyms "Bodenschleifer" (0.53) and "Walzenschleifer" (0.50) sit *below* "Waschmaschine"
- * (0.69), because the vector follows the shared ending rather than the meaning; the literature
- * reports the same conflation of "related" with "the same thing".
+ * The hard part is that a related-search list mixes other names for the thing with brands (lägler,
+ * kärcher), adjacent products (rasenmäher under heckenschere), accessories (drechseleisen),
+ * materials (drechselholz), services (kernbohrung) and noise (zisterne). Measured over 32 niche
+ * product queries, four ways of telling them apart failed and are not worth retrying: deriving words
+ * from German morphology invents ones nobody sells under (kaffeemaschine → kaffeeer); embedding
+ * distance ranks the chisel "drechseleisen" (0.60) above the machine "drechselmaschine" (0.59); a
+ * follow-up search's overlap with the first is backwards, the true synonym overlapping 3.8% against
+ * a service search's 48%; and price ratio puts the true synonym "parkettschleifer" (0.16 of the
+ * query's median) below an actual chisel (0.24). The probes are kept as tests.
  *
- * Where a market prints its own related searches, [rank] picks from those: its vocabulary, at no
- * extra request. Where it prints none, [candidatesFrom] infers them from the result titles, ranked
- * by how much more common a word is here than across everything crawled rather than by raw count,
- * so a word frequent everywhere ("gebraucht") cannot win.
- *
- * A follow-up search is not checked against the first one's results. That was measured and is
- * backwards: searching the true synonym "Parkettschleifer" returned only 3.8% of the listings the
- * original search had found — precisely because it reaches the ones that never said
- * "Parkettschleifmaschine" — while the service search "parkett schleifen" overlapped 48%. Precision
- * is left to the relevance filter, which drops what these wider searches drag in.
+ * What does hold on that data is below: what a word is built from, and whether the market names the
+ * query back.
  */
 object QueryVariants {
 
-    /** A query shorter than this is a plain category word ("laptop"); the words beside it in the
-     *  results are other products, not other names for it. */
-    private const val MIN_QUERY_LENGTH = 12
+    /** A query shorter than this is a plain category word ("laptop", "monitor"); the words beside
+     *  it are other products, not other names for it. Ten keeps "Kettensäge" in. */
+    private const val MIN_QUERY_LENGTH = 10
+
+    /** Sharing this much of the query's spelling makes a word another name for the same thing
+     *  rather than a different product: "parkettschleif|er" against "parkettschleif|maschine". */
+    private const val SAME_THING_PREFIX = 8
+
+    /** At most two follow-up searches per platform, so a search costs three crawls, not a fan-out. */
+    private const val MAX_VARIANTS = 2
 
     /** Two sellers using the word makes it the market's term, not one seller's typo. */
     private const val MIN_OCCURRENCES = 2
@@ -42,58 +45,93 @@ object QueryVariants {
     /** A candidate must be several times more common here than in the corpus at large. */
     private const val MIN_LOG_ODDS = 2.0
 
-    /** At most two follow-up searches per platform, so a search costs three crawls, not a fan-out. */
-    private const val MAX_VARIANTS = 2
-
     /** Long enough to be a product word, in any script. */
     private val WORD = Regex("""[\p{L}]{6,}""")
 
-    /** How common a word is across everything crawled so far, as a share of listings in [0,1].
-     *  The background a feedback term is judged against. */
-    fun interface TermBackground {
-        fun shareOfCorpus(term: String): Double
+    /** Heads that name a part, a material or a consumable rather than a device: a Drechseleisen is
+     *  the chisel a Drechselbank turns against, Drechselholz the wood it turns. */
+    private val PART_HEADS = listOf(
+        "holz", "eisen", "krone", "kronen", "papier", "blatt", "blätter", "band", "bänder",
+        "scheibe", "scheiben", "werkzeug", "futter", "messer", "kette", "ketten", "zubehör",
+        "zubehoer", "ersatzteil", "ersatzteile", "sack", "säcke", "beutel", "aufsatz", "halter",
+    )
+
+    /** Nominalised actions ("Kernbohrung" is the hole, not the machine) and infinitives
+     *  ("drechseln", "vertikutieren") — the job someone offers, not a thing to buy. */
+    private fun namesAnAction(word: String): Boolean {
+        if (word.endsWith("ung") || word.endsWith("ungen")) return true
+        // -en/-ln/-rn is the German infinitive, but also many plurals; a device's plural keeps its
+        // own head ("…maschinen"), so those endings are spared.
+        val infinitive = word.endsWith("en") || word.endsWith("ln") || word.endsWith("rn")
+        val plural = word.endsWith("maschinen") || word.endsWith("schienen") ||
+            word.endsWith("gen") || word.endsWith("ien") || word.endsWith("nen")
+        return infinitive && !plural
     }
 
+    /** Whether the word names a device at all, as against a part of one, the stuff it works on, or
+     *  the job it does. */
+    private fun namesADevice(word: String): Boolean =
+        !namesAnAction(word) && PART_HEADS.none { word.endsWith(it) }
+
+    /** A term worth a search, and whether it is close enough to the query's own spelling to be
+     *  trusted on that alone. */
+    data class Candidate(val term: String, val sharesStem: Boolean)
+
     /**
-     * The related searches a marketplace printed on its own results page, narrowed to the ones
-     * worth spending a request on. A suggestion list mixes other names for the thing
-     * ("Parkettschleifer", "Bodenschleifmaschine") with narrower and adjacent searches ("lägler",
-     * "parkett", "parkettschleifmaschine mieten", "parkett schleifen"). The measured tells for each
-     * are in the filters below.
+     * The related searches a marketplace printed, narrowed to those worth spending a request on.
+     * Phrases go — every phrase measured was a rental ("… mieten") or a service ("parkett
+     * schleifen", which alone brought back 38 tradesmen offering to sand a floor). So do words the
+     * query already spells, which would only re-run the same search, and words naming a part or a
+     * job rather than a device.
+     *
+     * Those sharing the query's stem come first and need no further evidence: over 32 products that
+     * kept 17 terms, every one another name for the thing. The rest are worth trying only if the
+     * market names the query back from their own page — see [namesBack].
      */
-    fun rank(suggestions: List<String>, queryText: String, results: List<Listing>): List<String> {
+    fun candidates(suggestions: List<String>, queryText: String): List<Candidate> {
         val query = queryText.trim().lowercase()
         if (query.length < MIN_QUERY_LENGTH) return emptyList()
-        val titles = results.map { it.title.lowercase() }
-        return suggestions
+        val kept = suggestions
             .map { it.trim().lowercase() }
             .filter { it.isNotBlank() && it != query }
-            // One word only. A phrase is a different intent, not another name: measured against
-            // Kleinanzeigen's own suggestions for "Parkettschleifmaschine", every phrase was either
-            // a rental ("… mieten") or a service ("parkett schleifen", which alone brought in 38
-            // tradesmen offering to sand a floor), while every other name for the tool was a word.
             .filterNot { it.contains(' ') }
-            // A suggestion the query already spells is the same search ("schleifmaschine").
             .filterNot { it.contains(query) || query.contains(it) }
+            .filter { namesADevice(it) }
             .distinct()
-            // How often the suggestion shares a title with the query decides the order, and only
-            // sharing at all admits it. A word no result uses names something else ("pallmann",
-            // "einscheibenmaschine": 0 titles). A word nearly every result uses is an attribute of
-            // this market rather than a name for the thing ("lägler": 9 of 26, the make half these
-            // machines carry). The other names sit in between, used by the few sellers who wrote
-            // both ("parkettschleifer" and "bodenschleifmaschine": 1 each).
-            .map { it to titles.count { title -> title.contains(it) } }
-            .filter { it.second >= 1 }
-            .sortedBy { it.second }
+        // A plural of a term already kept is the same search.
+        val singulars = kept.filterNot { w -> kept.any { it != w && (w == it + "n" || w == it + "en") } }
+        return singulars
+            .map { Candidate(it, sharedPrefix(it, query) >= SAME_THING_PREFIX) }
+            .sortedByDescending { it.sharesStem }
             .take(MAX_VARIANTS)
-            .map { it.first }
     }
 
     /**
-     * Terms worth searching alongside [queryText], read out of [results] and ranked by how much
-     * more common they are here than in [background]. The fallback for a marketplace that prints
-     * no related searches of its own. Empty for a short category word, or when no word is both used
-     * by several sellers and distinctive.
+     * Whether the market, asked about a candidate, names [queryText] back. A word sharing none of
+     * the query's spelling can still be the same thing — "Motorsäge" for "Kettensäge" — and the
+     * market saying so in both directions is the evidence for it. Alone this shows only relatedness
+     * (a chisel names its machine back too), so it is used on top of the device test, never instead.
+     */
+    fun namesBack(queryText: String, termSuggestions: List<String>): Boolean {
+        val query = normalise(queryText)
+        return termSuggestions.any { normalise(it).contains(query) }
+    }
+
+    private fun normalise(text: String): String = text.trim().lowercase()
+        .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+        .replace(" ", "").replace("-", "")
+
+    private fun sharedPrefix(a: String, b: String): Int {
+        val x = normalise(a)
+        val y = normalise(b)
+        var i = 0
+        while (i < x.length && i < y.length && x[i] == y[i]) i++
+        return i
+    }
+
+    /**
+     * Terms read out of the result titles instead, ranked by how much more common they are here than
+     * in [background]. The fallback for a marketplace that prints no related searches of its own.
      */
     fun candidatesFrom(
         results: List<Listing>,
@@ -109,6 +147,7 @@ object QueryVariants {
             // Once per listing: a title repeating a word does not make it any more the market's.
             for (word in WORD.findAll(listing.title.lowercase()).map { it.value }.toSet()) {
                 if (word == query || query in word || word in query) continue
+                if (!namesADevice(word)) continue
                 counts[word] = (counts[word] ?: 0) + 1
             }
         }
@@ -125,5 +164,11 @@ object QueryVariants {
             .sortedByDescending { it.second }
             .take(MAX_VARIANTS)
             .map { it.first }
+    }
+
+    /** How common a word is across everything crawled so far, as a share of listings in [0,1].
+     *  The background a feedback term is judged against. */
+    fun interface TermBackground {
+        fun shareOfCorpus(term: String): Double
     }
 }

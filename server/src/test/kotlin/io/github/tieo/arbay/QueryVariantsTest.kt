@@ -1,145 +1,105 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.QueryVariants
-import io.github.tieo.arbay.model.Currency
-import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.Money
-import io.github.tieo.arbay.model.PlatformId
 import kotlin.test.Test
-import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.datetime.Clock
 
+/** Every fixture here is what Kleinanzeigen actually returned, measured over 32 niche products. */
 class QueryVariantsTest {
 
-    private fun listings(vararg titles: String) = titles.mapIndexed { i, t -> listing(i, t) }
+    private fun terms(suggestions: List<String>, query: String) =
+        QueryVariants.candidates(suggestions, query).map { it.term }
 
-    private fun listing(i: Int, title: String) = Listing(
-        id = "KLEINANZEIGEN:$i",
-        platformId = PlatformId.KLEINANZEIGEN,
-        externalId = i.toString(),
-        url = "https://example.invalid/$i",
-        title = title,
-        price = Money(50_000, Currency.EUR),
-        scrapedAt = Clock.System.now(),
-    )
+    // ── What the market prints ────────────────────────────────────────────────
 
-    /** Nothing crawled yet: every word looks distinctive. */
-    private val noBackground = QueryVariants.TermBackground { 0.0 }
+    @Test
+    fun `keeps the other name for the thing`() {
+        val suggestions = listOf(
+            "lägler", "parkettschleifmaschine mieten", "lägler hummel", "parkett schleifen",
+            "parkettschleifer", "bodenschleifmaschine", "parkettschleifmaschine lägler",
+            "einscheibenmaschine", "parkett", "schleifmaschine", "pallmann", "randschleifer",
+        )
+        val kept = terms(suggestions, "Parkettschleifmaschine")
+        assertTrue(kept.contains("parkettschleifer"), "got $kept")
+    }
 
-    /** The words a marketplace corpus is full of. */
-    private val commonWords = QueryVariants.TermBackground { term ->
-        when (term) {
-            "gebraucht", "abholung", "versand", "neuwertig" -> 0.4
-            else -> 0.0
+    @Test
+    fun `drops rentals and services, which are always phrases`() {
+        val kept = terms(
+            listOf("parkettschleifmaschine mieten", "parkett schleifen", "parkettschleifer"),
+            "Parkettschleifmaschine",
+        )
+        assertEquals(listOf("parkettschleifer"), kept)
+    }
+
+    @Test
+    fun `drops the parts and materials a machine works with`() {
+        // Kleinanzeigen's real suggestions for "drechselbank".
+        val kept = terms(
+            listOf("drechselmaschine", "drechseleisen", "drechselholz", "drechselwerkzeug",
+                "drechseln", "drechselfutter"),
+            "drechselbank",
+        )
+        assertTrue(kept.contains("drechselmaschine"), "got $kept")
+        listOf("drechseleisen", "drechselholz", "drechselwerkzeug", "drechselfutter").forEach {
+            assertFalse(kept.contains(it), "$it is a part or a material; got $kept")
         }
     }
 
-    /** The related searches Kleinanzeigen actually prints for "parkettschleifmaschine". */
-    private val realSuggestions = listOf(
-        "lägler", "parkettschleifmaschine mieten", "lägler hummel", "parkett schleifen",
-        "parkettschleifer", "bodenschleifmaschine", "parkettschleifmaschine lägler",
-        "einscheibenmaschine", "parkett", "schleifmaschine", "pallmann", "randschleifer",
-    )
-
-    /** What that search actually returned, in the proportions measured live: the make in a third of
-     *  the titles, each other name for the tool in exactly one, the adjacent tool in a few. */
-    private val realResults = listings(
-        "Lägler Hummel Parkettschleifmaschine",
-        "lägler Parkettschleifmaschine künzle und Tasin pegasus",
-        "Lägler Elan Parkettschleifmaschine",
-        "Lagler Flip Parkettschleifmaschine Wie neu",
-        "Frank Cobra Parkettschleifmaschine Parkettschleifer FBS",
-        "Profi Bodenschleifmaschine Parkettschleifmaschine Künzle",
-        "Randschleifer Parkettschleifmaschine im Systainer",
-        "Künzle & Tasin Parkettschleifmaschine Randschleifer",
-        "Künzle & Tasin Scorpion Parkettschleifmaschine",
-    )
-
     @Test
-    fun `takes the market's own words over anything inferred`() {
-        val ranked = QueryVariants.rank(realSuggestions, "Parkettschleifmaschine", realResults)
-        assertTrue(ranked.size <= 2, "got $ranked")
-        // "lägler" is in half the results already, so searching it would only fetch them again.
-        assertFalse(ranked.contains("lägler"), "got $ranked")
-        assertContains(ranked, "bodenschleifmaschine")
-    }
-
-    @Test
-    fun `skips suggestions that only re-run the same search`() {
-        val ranked = QueryVariants.rank(realSuggestions, "Parkettschleifmaschine", realResults)
-        // These merely narrow the query, so they find nothing it did not already.
-        assertFalse(ranked.contains("parkettschleifmaschine mieten"))
-        assertFalse(ranked.contains("parkettschleifmaschine lägler"))
-        assertFalse(ranked.contains("parkett"))
-    }
-
-    @Test
-    fun `picks up the market's other word for the same thing`() {
-        val results = listings(
-            "Künzle Tasin Scorpion Parkettschleifer Parkettschleifmaschine",
-            "Frank Cobra Parkettschleifmaschine Parkettschleifer FBS",
-            "Lägler Hummel Parkettschleifmaschine",
+    fun `drops the job as opposed to the machine that does it`() {
+        val kept = terms(
+            listOf("kernbohrgerät", "kernbohrer", "kernbohrung", "kernbohrkrone"),
+            "kernbohrmaschine",
         )
-        assertContains(QueryVariants.candidatesFrom(results, "Parkettschleifmaschine", noBackground), "parkettschleifer")
+        assertTrue(kept.contains("kernbohrgerät") || kept.contains("kernbohrer"), "got $kept")
+        assertFalse(kept.contains("kernbohrung"), "a Kernbohrung is the hole; got $kept")
+        assertFalse(kept.contains("kernbohrkrone"), "a Kernbohrkrone is the bit; got $kept")
     }
 
     @Test
-    fun `a word common across the whole corpus cannot win`() {
-        val results = listings(
-            "Parkettschleifmaschine gebraucht abholung",
-            "Parkettschleifmaschine gebraucht abholung",
-            "Parkettschleifmaschine gebraucht abholung",
-        )
-        assertEquals(emptyList(), QueryVariants.candidatesFrom(results, "Parkettschleifmaschine", commonWords))
+    fun `drops an infinitive built on the same stem`() {
+        assertFalse(terms(listOf("vertikutieren", "rasenlüfter"), "vertikutierer").contains("vertikutieren"))
+        assertFalse(terms(listOf("drechseln", "drechselmaschine"), "drechselbank").contains("drechseln"))
     }
 
     @Test
-    fun `one seller's word is not the market's`() {
-        val results = listings(
-            "Künzle Tasin Scorpion Parkettschleifer Parkettschleifmaschine",
-            "Lägler Hummel Parkettschleifmaschine",
-        )
-        assertEquals(emptyList(), QueryVariants.candidatesFrom(results, "Parkettschleifmaschine", noBackground))
-    }
-
-    @Test
-    fun `ignores the query's own plural and stem`() {
-        val results = listings(
-            "Parkett Parkettschleifmaschinen Parkettschleifmaschine",
-            "Parkett Parkettschleifmaschinen Parkettschleifmaschine gebraucht",
-        )
-        assertEquals(emptyList(), QueryVariants.candidatesFrom(results, "Parkettschleifmaschine", noBackground))
-    }
-
-    @Test
-    fun `leaves short and multi-word queries alone`() {
-        val results = listings("Laptop Lenovo ThinkPad Business", "Laptop Lenovo ThinkPad Business")
-        assertEquals(emptyList(), QueryVariants.candidatesFrom(results, "laptop", noBackground))
-        assertEquals(emptyList(), QueryVariants.candidatesFrom(results, "volkswagen crafter", noBackground))
+    fun `a plural of a term already kept is the same search`() {
+        assertEquals(listOf("tischkreissäge"), terms(listOf("tischkreissäge", "tischkreissägen"), "tischkreissaege"))
     }
 
     @Test
     fun `caps the fan-out at two follow-up searches`() {
-        val results = listings(
-            "Parkettschleifer Bodenschleifer Walzenschleifer Parkettschleifmaschine",
-            "Parkettschleifer Bodenschleifer Walzenschleifer Parkettschleifmaschine",
+        val kept = terms(
+            listOf("betonmischer", "betonmaschine", "zementmischer", "zwangsmischer", "mischer"),
+            "betonmischmaschine",
         )
-        assertTrue(QueryVariants.candidatesFrom(results, "Parkettschleifmaschine", noBackground).size <= 2)
+        assertTrue(kept.size <= 2, "got $kept")
     }
 
     @Test
-    fun `a service or rental phrase is not another name for the thing`() {
-        val ranked = QueryVariants.rank(realSuggestions, "Parkettschleifmaschine", realResults)
-        assertFalse(ranked.contains("parkett schleifen"), "got $ranked")
+    fun `leaves a short category query alone`() {
+        assertEquals(emptyList(), terms(listOf("thinkpad", "notebook"), "laptop"))
+    }
+
+    // ── Trusting a word that is built differently ─────────────────────────────
+
+    @Test
+    fun `a word built like the query is trusted on that alone`() {
+        assertTrue(QueryVariants.candidates(listOf("parkettschleifer"), "Parkettschleifmaschine").single().sharesStem)
     }
 
     @Test
-    fun `a word no result uses names something else`() {
-        val ranked = QueryVariants.rank(realSuggestions, "Parkettschleifmaschine", realResults)
-        // Neither appears in a single result title, so neither is this market's word for the tool.
-        assertFalse(ranked.contains("pallmann"), "got $ranked")
+    fun `a word built differently needs the market to name the query back`() {
+        val candidate = QueryVariants.candidates(listOf("motorsäge"), "kettensaege").single()
+        assertFalse(candidate.sharesStem, "shares no stem with the query")
+        // Kleinanzeigen's real suggestions for "motorsäge" name the query back; the adjacent
+        // "hochentaster" only names other tools.
+        assertTrue(QueryVariants.namesBack("kettensaege",
+            listOf("motorsäge", "stihl motorsäge", "kettensäge", "stihl")))
+        assertFalse(QueryVariants.namesBack("kettensaege",
+            listOf("heckenschere", "stihl hochentaster", "hochentaster akku", "astsäge")))
     }
 }

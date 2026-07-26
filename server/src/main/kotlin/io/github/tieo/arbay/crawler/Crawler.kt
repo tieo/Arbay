@@ -41,23 +41,37 @@ suspend fun Crawler.searchAllSpellings(
     val suggested = mutableListOf<String>()
     val primary = withContext(SuggestedTermsEmitter { suggested += it }) { search(query) }
 
-    // Off unless ARBAY_QUERY_EXPANSION=on. Widening a search reaches listings the query's own
-    // wording never could, but which of a market's related searches names the same thing and which
-    // names the tool beside it cannot be told apart before issuing them: measured on Kleinanzeigen,
-    // the true synonym and the adjacent machine are indistinguishable by frequency, by overlap with
-    // the first result set, and by embedding distance. Until that is settled it stays a choice.
+    // Off unless ARBAY_QUERY_EXPANSION=on. Widening finds listings the query's own wording cannot
+    // reach, at the cost of extra requests and of occasionally reaching the machine beside it.
     if (!queryExpansionEnabled) return primary
 
-    // What the market itself calls the thing beats anything inferred from its results: those terms
-    // are its own vocabulary, and on the sites that print them they cost no request. Inference is
-    // the fallback for the sites that print nothing.
-    val terms = QueryVariants.rank(suggested, query.text, primary)
-        .ifEmpty { QueryVariants.candidatesFrom(primary, query.text, background) }
+    // The market's own related searches beat anything inferred from its results; inference is the
+    // fallback for the markets that print none.
+    val fromMarket = QueryVariants.candidates(suggested, query.text)
+    val terms = fromMarket.ifEmpty {
+        QueryVariants.candidatesFrom(primary, query.text, background)
+            .map { QueryVariants.Candidate(it, sharesStem = true) }
+    }
 
-    val extra = terms.flatMap { term ->
-        val followUp = runCatching { search(query.copy(text = term)) }.getOrDefault(emptyList())
+    val extra = terms.flatMap { candidate ->
+        // The follow-up carries its own related searches, so whether the market names this query
+        // back is answered by the page we are already fetching.
+        val back = mutableListOf<String>()
+        val followUp = runCatching {
+            withContext(SuggestedTermsEmitter { back += it }) { search(query.copy(text = candidate.term)) }
+        }.getOrDefault(emptyList())
+
+        // A word built like the query is trusted on that alone. One built differently could still
+        // be the same thing ("Motorsäge" for "Kettensäge"), but only the market saying so both ways
+        // makes it worth keeping.
+        val trusted = candidate.sharesStem || QueryVariants.namesBack(query.text, back)
+        if (!trusted) {
+            log.debug("{}: dropped '{}' for '{}' — the market does not name it back",
+                platformId.displayName, candidate.term, query.text)
+            return@flatMap emptyList()
+        }
         log.info("{}: '{}' also searched as '{}' (+{} listings)",
-            platformId.displayName, query.text, term,
+            platformId.displayName, query.text, candidate.term,
             followUp.count { l -> primary.none { it.id == l.id } })
         followUp
     }
