@@ -18,11 +18,11 @@ import socketserver
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 # Boards are listed in the order someone walks the app, under the name the view carries.
-ORDER = ["00-flow", "01-markets", "home", "discovery", "car-search", "results",
+ORDER = ["00-views", "01-markets", "home", "discovery", "car-search", "results",
          "filters", "market-detail", "price-detail", "free-items", "settings"]
 
 TITLES = {
-    "00-flow": "How you move through it",
+    "00-views": "The views",
     "01-markets": "The markets",
     "discovery": "Search",
     "car-search": "Vehicle search",

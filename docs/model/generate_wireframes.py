@@ -202,19 +202,19 @@ def png_size(data):
     return width, height
 
 
-def load_screenshots():
+def load_screenshots(folder="small", prefix="shot"):
     """The renders of the real screens, embedded so a board is one self-contained file."""
     shots = {}
-    for path in sorted((HERE / "img" / "small").glob("*.png")):
+    for path in sorted((HERE / "img" / folder).glob("*.png")):
         raw = path.read_bytes()
         width, height = png_size(raw)
         shots[path.name] = {
-            "id": f"shot-{path.stem}",
+            "id": f"{prefix}-{path.stem}",
             "width": width,
             "height": height,
             "file": {
                 "mimeType": "image/png",
-                "id": f"shot-{path.stem}",
+                "id": f"{prefix}-{path.stem}",
                 "dataURL": "data:image/png;base64," + base64.b64encode(raw).decode(),
                 "created": 1,
                 "lastRetrieved": 1,
@@ -224,6 +224,9 @@ def load_screenshots():
 
 
 SHOTS = load_screenshots()
+# The same screens cropped to their top, for the index: a whole scroll shrunk into a card is a
+# sliver nobody can recognise.
+CARDS = load_screenshots("card", "card")
 
 
 def slug(uid):
@@ -310,73 +313,55 @@ def view_board(view, states, requirements, stories):
     return board
 
 
-BOX_W, BOX_H = 280, 110
-GUTTER = 150
-ROW = 170
+CARD_W, CARD_H = 300, 460
+CARD_GAP = 28
 
 
-def flow_board(views):
-    """How the views connect. Laid out in layers so every arrow points forward, and routed through
-    the gap between layers so no line crosses a box."""
-    board = Board("00-flow")
-    board.text(40, 30, "How you move through the app", size=36)
-    board.text(40, 84, "Amber and dashed: does not exist yet.", size=14, colour=GREY)
+def index_board(views):
+    """The way in: every view as its own thumbnail, linking to that view's board.
 
-    reached_from = {v["uid"]: [r["to"] for r in v["relations"] if r["role"] == "Reached from"]
-                    for v in views}
-    by_uid = {v["uid"]: v for v in views}
+    A flow diagram said how the views connect, which is worth one line of prose and not a page. What
+    is worth a page is seeing all nine screens at once as they render today, and getting to any of
+    them in one click.
+    """
+    board = Board("00-views")
+    board.files = {}
+    board.text(40, 30, "The views", size=36)
+    board.text(
+        40, 84,
+        "Every screen of the app as it renders today. Click a card to open that view's board.",
+        size=15, colour=GREY,
+    )
 
-    # A view sits one layer past the furthest view that leads to it, so an arrow never points back.
-    layer = {}
-    while len(layer) < len(views):
-        for uid, parents in reached_from.items():
-            if uid not in layer and all(p in layer for p in parents):
-                layer[uid] = max((layer[p] + 1 for p in parents), default=0)
+    for index, view in enumerate(views):
+        column, row = index % 4, index // 4
+        x = 40 + column * (CARD_W + CARD_GAP)
+        y = 150 + row * (CARD_H + CARD_GAP + 40)
+        missing = view["status"] == "Missing"
+        link = f"#{slug(view['uid'])}"
 
-    layers = {}
-    for uid, depth in layer.items():
-        layers.setdefault(depth, []).append(uid)
+        card = board.box(
+            x, y, CARD_W, CARD_H,
+            stroke=MISSING if missing else INK,
+            fill=FILL["Missing"] if missing else "transparent",
+            dashed=missing,
+        )
+        card["link"] = link
 
-    # Within a layer, sit each view level with the views it comes from, which is what removes most
-    # of the crossings.
-    order = {uid: index for depth in sorted(layers) for index, uid in enumerate(layers[depth])}
-    for _ in range(4):
-        for depth in sorted(layers)[1:]:
-            layers[depth].sort(key=lambda uid: sum(order[p] for p in reached_from[uid]) /
-                               max(1, len(reached_from[uid])))
-            order.update({uid: index for index, uid in enumerate(layers[depth])})
+        board.text(x + 20, y + 16, view["title"], size=22)
+        board.text(x + 20, y + 46, wrap(view["statement"].split(".")[0], 36), size=11, colour=GREY)
 
-    placed = {}
-    for depth in sorted(layers):
-        for index, uid in enumerate(layers[depth]):
-            x, y = 40 + depth * (BOX_W + GUTTER), 150 + index * ROW
-            placed[uid] = (x, y)
-            view = by_uid[uid]
-            missing = view["status"] == "Missing"
-            board.box(x, y, BOX_W, BOX_H,
-                      stroke=MISSING if missing else INK,
-                      fill=FILL["Missing"] if missing else "transparent",
-                      dashed=missing)
-            board.text(x + 20, y + 18, view["title"], size=20)
-            board.text(x + 20, y + 52, wrap(view["statement"].split(".")[0], 36), size=11, colour=GREY)
+        shot = view.get("screenshot")
+        image = CARDS.get(shot) if shot else None
+        top = y + 92
+        if image:
+            scale = min((CARD_W - 32) / image["width"], (CARD_H - 104) / image["height"])
+            width, height = int(image["width"] * scale), int(image["height"] * scale)
+            board.image(x + (CARD_W - width) / 2, top, width, height, image["id"])
+            board.files[image["id"]] = image["file"]
+        else:
+            board.text(x + 70, top + 120, "nothing renders\nthis yet", size=14, colour=GREY)
 
-    # Each arrow leaves the right edge, turns in the gap, and arrives at the left edge. Arrows
-    # sharing a gap get their own lane so two of them never lie on top of each other.
-    floor = 110 + max(len(m) for m in layers.values()) * ROW
-    lanes, below = {}, 0
-    for uid, parents in reached_from.items():
-        for parent in parents:
-            x1, y1 = placed[parent]
-            x2, y2 = placed[uid]
-            gap = x1 + BOX_W
-            if layer[uid] - layer[parent] > 1:
-                # Skipping a column: go under everything rather than through whatever stands there.
-                below += 1
-                board.under(gap, y1 + BOX_H / 2, floor + below * 26, x2, y2 + BOX_H / 2)
-            else:
-                lane = lanes.setdefault(gap, 0)
-                lanes[gap] = lane + 1
-                board.elbow(gap, y1 + BOX_H / 2, gap + 30 + lane * 22, x2, y2 + BOX_H / 2)
     return board
 
 
@@ -433,7 +418,8 @@ def markets_board():
 def main():
     views = MODEL["views"]
     stories = {s["uid"]: s for s in MODEL["stories"]}
-    written = [flow_board(views).write(), markets_board().write()]
+    index = index_board(views)
+    written = [index.write(files=index.files), markets_board().write()]
     for view in views:
         states = [s for s in MODEL["states"]
                   if any(r["to"] == view["uid"] and r["role"] == "State of" for r in s["relations"])]

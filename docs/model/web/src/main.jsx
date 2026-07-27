@@ -29,6 +29,16 @@ function Model() {
     });
   }, []);
 
+  // A card on the index board links to the board it depicts, which arrives as a hash change.
+  useEffect(() => {
+    const follow = () => {
+      const wanted = decodeURIComponent(location.hash.slice(1));
+      if (wanted) setCurrent((now) => (wanted === now ? now : wanted));
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
+
   useEffect(() => {
     if (!current) return;
     setScene(null);
