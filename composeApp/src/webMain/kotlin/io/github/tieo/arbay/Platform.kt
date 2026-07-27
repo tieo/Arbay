@@ -4,6 +4,9 @@ actual fun openBrowser(url: String) {}
 actual fun loadBannedIds(): Set<String> = emptySet()
 actual fun saveBannedIds(ids: Set<String>) {}
 
+actual fun loadDeviceSettings(): Map<String, String> = emptyMap()
+actual fun saveDeviceSettings(settings: Map<String, String>) {}
+
 actual fun showMatchNotification(title: String, body: String) {}
 actual fun schedulePolling(intervalMinutes: Int) {}
 actual fun cancelPolling() {}

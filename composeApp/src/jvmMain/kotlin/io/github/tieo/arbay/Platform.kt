@@ -26,6 +26,22 @@ actual fun saveBannedIds(ids: Set<String>) {
     } catch (_: Exception) {}
 }
 
+private val settingsFile = File(System.getProperty("user.home"), ".arbay/settings.txt")
+
+actual fun loadDeviceSettings(): Map<String, String> = try {
+    if (!settingsFile.exists()) emptyMap()
+    else settingsFile.readLines().mapNotNull { line ->
+        line.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+    }.toMap()
+} catch (_: Exception) { emptyMap() }
+
+actual fun saveDeviceSettings(settings: Map<String, String>) {
+    try {
+        settingsFile.parentFile.mkdirs()
+        settingsFile.writeText(settings.entries.joinToString("\n") { "${it.key}=${it.value}" })
+    } catch (_: Exception) {}
+}
+
 actual fun showMatchNotification(title: String, body: String) {}
 actual fun schedulePolling(intervalMinutes: Int) {}
 actual fun cancelPolling() {}

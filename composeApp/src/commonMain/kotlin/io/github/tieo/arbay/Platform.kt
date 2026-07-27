@@ -17,6 +17,11 @@ expect fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Un
 expect fun loadBannedIds(): Set<String>
 expect fun saveBannedIds(ids: Set<String>)
 
+/** Settings that belong to this device rather than to the server it talks to: which server that is,
+ *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
+expect fun loadDeviceSettings(): Map<String, String>
+expect fun saveDeviceSettings(settings: Map<String, String>)
+
 /** Show a local notification for new free item matches. No-op on unsupported platforms. */
 expect fun showMatchNotification(title: String, body: String)
 
@@ -28,7 +33,7 @@ expect fun cancelPolling()
 
 /** Global display currency + exchange rates for the app */
 object DisplayCurrency {
-    var current: String = "EUR"
+    var current: String = loadDeviceSettings()["currency"] ?: "EUR"
     // Units per 1 EUR. Covers every currency the crawlers can return, so a listing from a
     // cross-border market converts sensibly even before the live rates load (or if that fetch
     // fails) — a missing rate would otherwise render, say, 169 900 PLN as "€169,900".

@@ -27,6 +27,21 @@ actual fun saveBannedIds(ids: Set<String>) {
 }
 
 
+actual fun loadDeviceSettings(): Map<String, String> {
+    val f = File(appDir() ?: return emptyMap(), "settings.txt")
+    return try {
+        if (!f.exists()) emptyMap()
+        else f.readLines().mapNotNull { line ->
+            line.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        }.toMap()
+    } catch (_: Exception) { emptyMap() }
+}
+
+actual fun saveDeviceSettings(settings: Map<String, String>) {
+    val f = File(appDir() ?: return, "settings.txt")
+    try { f.writeText(settings.entries.joinToString("\n") { "${it.key}=${it.value}" }) } catch (_: Exception) {}
+}
+
 actual fun showMatchNotification(title: String, body: String) {
     NotificationHelper.showNewMatchNotification(title, body)
 }

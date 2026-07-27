@@ -27,6 +27,7 @@ import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Transmission
@@ -36,33 +37,8 @@ import kotlin.math.roundToInt
 
 /** Car marketplaces, paired with the country whose stock they surface. Kept in the
  *  order a buyer scans: home market first, then the cross-border sourcing markets. */
-private val CAR_MARKETS: List<Pair<PlatformId, String>> = listOf(
-    PlatformId.AUTOSCOUT24 to "EU",
-    PlatformId.MOBILE_DE to "DE",
-    PlatformId.KLEINANZEIGEN to "DE",
-    PlatformId.EBAY_DE to "DE",
-    PlatformId.TRUCKSCOUT24 to "DE",
-    PlatformId.OTOMOTO to "PL",
-    PlatformId.SAUTO to "CZ",
-    PlatformId.DBA to "DK",
-    PlatformId.BILBASEN to "DK",
-    PlatformId.BYTBIL to "SE",
-    PlatformId.MARKTPLAATS to "NL",
-    PlatformId.WILLHABEN to "AT",
-    PlatformId.AUTOSCOUT24_IT to "IT",
-    PlatformId.AUTOSCOUT24_FR to "FR",
-    PlatformId.AUTOSCOUT24_ES to "ES",
-    PlatformId.AUTOSCOUT24_BE to "BE",
-    PlatformId.AUTOVIT to "RO",
-    PlatformId.RICARDO to "CH",
-    PlatformId.SUBITO to "IT",
-    PlatformId.TWEEDEHANDS to "BE",
-    PlatformId.AUTOPLIUS to "LT",
-    PlatformId.NETTIAUTO to "FI",
-    PlatformId.FINN to "NO",
-    PlatformId.OLX_PT to "PT",
-    PlatformId.KUPUJEM to "RS",
-)
+private val CAR_MARKETS: List<Pair<PlatformId, String>> =
+    MarketSets.vehicles.map { it to MarketSets.countryOf(it) }
 
 /** Common German exterior colours offered as multi-select chips. */
 private val CAR_COLORS = listOf(

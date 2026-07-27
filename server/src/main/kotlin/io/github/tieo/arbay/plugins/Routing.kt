@@ -17,10 +17,11 @@ fun Application.configureRouting() {
 
     // Recurring saved-search updates. No-op unless ARBAY_SAVED_SEARCH_UPDATES=on, since periodic
     // crawls raise the flag risk the anti-block work manages.
-    SavedSearchMonitor(productRepo, listingRepo).start()
+    val savedSearches = SavedSearchMonitor(productRepo, listingRepo)
+    savedSearches.start()
 
     routing {
-        productRoutes(productRepo)
+        productRoutes(productRepo, savedSearches)
         listingRoutes(listingRepo)
         crawlerRoutes(listingRepo)
         freeItemRoutes()

@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.repo.ListingRepo
@@ -44,6 +45,28 @@ class SavedSearchMonitor(
     private val seenFile = File(System.getProperty("user.home"), ".arbay/saved_search_seen.json")
     // Listing ids already reported, keyed by saved-search id, so only genuinely new stock alerts.
     private val seen: MutableMap<String, MutableSet<String>> = loadSeen()
+
+    // What each saved search has found since someone last opened it, and when it last ran. Held
+    // here because this is what knows; the app reads it so a bookmark can say what is waiting.
+    private val statusFile = File(System.getProperty("user.home"), ".arbay/saved_search_status.json")
+    private val unopened: MutableMap<String, MutableSet<String>> = loadStatus()
+    private val lastRun: MutableMap<String, Long> = mutableMapOf()
+
+    /** What every saved search has been doing, for the app's list of them. */
+    fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
+        SavedSearchStatus(
+            productId = product.id,
+            watched = enabled,
+            lastRunAtMillis = lastRun[product.id],
+            newSinceOpened = unopened[product.id]?.size ?: 0,
+        )
+    }
+
+    /** Called when a saved search is opened: what was waiting has now been seen. */
+    fun markOpened(productId: String) {
+        unopened.remove(productId)
+        saveStatus()
+    }
 
     fun start() {
         if (!enabled) {
@@ -99,6 +122,11 @@ class SavedSearchMonitor(
             val known = seen.getOrPut(product.id) { mutableSetOf() }
             val fresh = found.keys.filter { it !in known }
             known.addAll(found.keys)
+            lastRun[product.id] = System.currentTimeMillis()
+            if (fresh.isNotEmpty() && !silent) {
+                unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
+                saveStatus()
+            }
             if (fresh.isEmpty() || silent) { saveSeen(); continue }
 
             // Opportunistic buying: a fresh listing priced well below the search's typical price is a
@@ -143,6 +171,22 @@ class SavedSearchMonitor(
     private fun eurCents(money: Money): Long? =
         if (money.currency == Currency.EUR) money.amount
         else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
+
+    private fun loadStatus(): MutableMap<String, MutableSet<String>> = try {
+        if (statusFile.exists()) {
+            json.decodeFromString<Map<String, Set<String>>>(statusFile.readText())
+                .mapValuesTo(HashMap()) { it.value.toMutableSet() }
+        } else HashMap()
+    } catch (_: Exception) { HashMap() }
+
+    private fun saveStatus() {
+        try {
+            statusFile.parentFile.mkdirs()
+            statusFile.writeText(json.encodeToString(unopened.mapValues { it.value.toSet() }))
+        } catch (e: Exception) {
+            log.debug("could not write saved-search status: {}", e.message)
+        }
+    }
 
     private fun loadSeen(): MutableMap<String, MutableSet<String>> = try {
         if (seenFile.exists()) {

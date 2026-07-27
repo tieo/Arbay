@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.loadDeviceSettings
+import io.github.tieo.arbay.saveDeviceSettings
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.defaultServerUrl
@@ -68,6 +70,8 @@ fun SettingsSheet(
             Spacer(Modifier.height(12.dp))
 
             // ── Server ──────────────────────────────────────────
+            SettingSectionHeading("This device")
+
             SettingSection(
                 icon = Icons.Outlined.Dns,
                 title = "Server",
@@ -164,6 +168,7 @@ fun SettingsSheet(
                             onClick = {
                                 displayCurrency = cur
                                 DisplayCurrency.current = cur
+                                saveDeviceSettings(loadDeviceSettings() + ("currency" to cur))
                                 scope.launch { try { client.getExchangeRates() } catch (_: Exception) {} }
                             },
                             label = { Text(cur) },
@@ -171,6 +176,11 @@ fun SettingsSheet(
                     }
                 }
             }
+
+            SettingSectionHeading(
+                "This server",
+                "Shared with every device that uses it. Changing these changes them for all of them.",
+            )
 
             // ── Crawler ─────────────────────────────────────────
             SettingSection(
@@ -341,6 +351,25 @@ fun SettingsSheet(
 }
 
 /** A titled, bordered group with a one-line plain-language explanation of what it controls. */
+/** Names who a group of settings belongs to: this device, or the server every device shares. */
+@Composable
+private fun SettingSectionHeading(title: String, detail: String? = null) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        detail?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 private fun SettingSection(
     icon: ImageVector,

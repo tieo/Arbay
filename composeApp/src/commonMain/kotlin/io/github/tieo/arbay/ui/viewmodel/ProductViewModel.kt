@@ -14,6 +14,7 @@ class ProductViewModel(
     // The gallery renders the views with no server to ask, and a Home with nothing saved shows an
     // empty screen that says nothing about what Home looks like in use.
     saved: List<TrackedProduct> = emptyList(),
+    savedStatus: List<SavedSearchStatus> = emptyList(),
 ) : ViewModel() {
 
     private val _products = MutableStateFlow(saved)
@@ -25,12 +26,22 @@ class ProductViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    // Keyed by saved-search id: what it has found since it was last opened, and whether the server
+    // is re-running it at all.
+    private val _status = MutableStateFlow(savedStatus.associateBy { it.productId })
+    val status: StateFlow<Map<String, SavedSearchStatus>> = _status
+
     fun loadProducts() {
         viewModelScope.launch {
             _loading.value = true
             _error.value = null
             try {
                 _products.value = client.getProducts()
+                _status.value = try {
+                    client.getSavedSearchStatus().associateBy { it.productId }
+                } catch (_: Exception) {
+                    emptyMap()
+                }
             } catch (e: Exception) {
                 _error.value = e.message
             }
@@ -100,5 +111,13 @@ class ProductViewModel(
     private fun generateId(): String {
         val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
         return (1..12).map { chars.random() }.joinToString("")
+    }
+
+    /** A saved search was opened: what was waiting in it has been seen. */
+    fun markOpened(productId: String) {
+        _status.value = _status.value[productId]?.let { current ->
+            _status.value + (productId to current.copy(newSinceOpened = 0))
+        } ?: _status.value
+        viewModelScope.launch { runCatching { client.markSavedSearchOpened(productId) } }
     }
 }

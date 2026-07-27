@@ -43,6 +43,13 @@ object SampleData {
         l("s4", PlatformId.EBAY_DE, "Parkettschleifmaschine mit Absaugung", 700_00, sold = true, soldDate = Instant.parse("2026-06-30T09:00:00Z")),
     )
 
+    /** What the watched searches have found since they were last opened. */
+    val savedStatus: List<io.github.tieo.arbay.model.SavedSearchStatus> = listOf(
+        io.github.tieo.arbay.model.SavedSearchStatus("sample-0", watched = true, lastRunAtMillis = null, newSinceOpened = 6),
+        io.github.tieo.arbay.model.SavedSearchStatus("sample-1", watched = true, lastRunAtMillis = null, newSinceOpened = 0),
+        io.github.tieo.arbay.model.SavedSearchStatus("sample-2", watched = false),
+    )
+
     /** Saved searches, so Home renders what it looks like once it is used. */
     val saved: List<io.github.tieo.arbay.model.TrackedProduct> = listOf(
         "Parkettschleifmaschine" to listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS),

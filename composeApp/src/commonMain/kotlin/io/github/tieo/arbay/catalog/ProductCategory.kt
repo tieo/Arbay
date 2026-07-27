@@ -4,7 +4,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import io.github.tieo.arbay.model.PlatformId
-import io.github.tieo.arbay.model.PlatformId.*
+import io.github.tieo.arbay.model.MarketSets
+
+// One list per kind of search, shared with the forms that start one, so a search from a tile
+// covers exactly what the same search typed covers.
+private val generalPlatforms = MarketSets.general
+private val carPlatforms = MarketSets.vehicles
 
 enum class ProductCategory(
     val displayName: String,
@@ -23,14 +28,4 @@ enum class ProductCategory(
     CARS("Cars", Icons.Default.DirectionsCar, carPlatforms),
 }
 
-private val generalPlatforms = listOf(
-    EBAY_DE, EBAY_COM, KLEINANZEIGEN, AMAZON_DE, IDEALO, GEIZHALS,
-    BACKMARKET_DE, REBUY, REFURBED, VINTED_DE, WILLHABEN, MARKTPLAATS,
-    // Cross-border sourcing: each is crawled in its own language (the query is translated),
-    // so a German product term still reaches the Italian/French/Spanish/Dutch/Swiss listings.
-    EBAY_IT, EBAY_FR, EBAY_ES, TWEEDEHANDS, RICARDO, SUBITO,
-)
 
-private val carPlatforms = listOf(
-    MOBILE_DE, AUTOSCOUT24, KLEINANZEIGEN, EBAY_DE, WILLHABEN,
-)

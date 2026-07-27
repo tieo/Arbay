@@ -29,6 +29,7 @@ import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.CarTaxonomyStore
@@ -123,6 +124,7 @@ fun MainScreen(
     client: ArbayClient,
 ) {
     val products by productViewModel.products.collectAsState()
+    val productStatus by productViewModel.status.collectAsState()
     // The saved bookmark whose search text matches a query, if any — drives the header bookmark
     // toggle so a fresh search can be saved and an already-saved one removed, from the same place.
     fun savedFor(query: String): TrackedProduct? =
@@ -342,7 +344,11 @@ fun MainScreen(
                         ProductCard(
                             product = product,
                             onDelete = { productViewModel.deleteProduct(product.id) },
-                            onViewListings = { results = ResultsView.of(product) },
+                            status = productStatus[product.id],
+                            onViewListings = {
+                                results = ResultsView.of(product)
+                                productViewModel.markOpened(product.id)
+                            },
                             onEdit = {
                                 editingProduct = product
                                 val view = ResultsView.of(product)
@@ -555,6 +561,18 @@ fun MainScreen(
     }
 }
 
+/** How long ago something happened, in the coarsest unit that still says it. */
+private fun ago(millis: Long): String {
+    val minutes = ((kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - millis) / 60_000L)
+        .coerceAtLeast(0L)
+    return when {
+        minutes < 2 -> "just now"
+        minutes < 60 -> "$minutes min ago"
+        minutes < 60 * 24 -> "${minutes / 60} h ago"
+        else -> "${minutes / (60 * 24)} d ago"
+    }
+}
+
 // ── Product Card ─────────────────────────────────────────────
 
 @Composable
@@ -563,6 +581,8 @@ internal fun ProductCard(
     onDelete: () -> Unit,
     onViewListings: () -> Unit,
     onEdit: () -> Unit,
+    // What this search has found since it was last opened, when the server is watching it.
+    status: SavedSearchStatus? = null,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     if (confirmDelete) {
@@ -598,7 +618,8 @@ internal fun ProductCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (status?.watched == true) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant,
                     modifier = Modifier.size(10.dp),
                 ) {}
 
@@ -621,6 +642,35 @@ internal fun ProductCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
+                    // When the search last ran, so an empty result reads as "nothing new" rather
+                    // than as a search that never happened.
+                    status?.let { s ->
+                        val ran = s.lastRunAtMillis?.let { ago(it) }
+                        Text(
+                            when {
+                                !s.watched -> "not watched"
+                                ran != null -> "checked $ran"
+                                else -> "watched, not run yet"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                if ((status?.newSinceOpened ?: 0) > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary,
+                    ) {
+                        Text(
+                            "${status!!.newSinceOpened} new",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
                 }
 
                 Spacer(Modifier.width(4.dp))

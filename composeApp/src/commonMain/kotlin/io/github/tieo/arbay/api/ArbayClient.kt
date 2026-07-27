@@ -2,6 +2,8 @@ package io.github.tieo.arbay.api
 
 import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.defaultServerUrl
+import io.github.tieo.arbay.loadDeviceSettings
+import io.github.tieo.arbay.saveDeviceSettings
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -22,7 +24,9 @@ import kotlinx.serialization.json.Json
 class ArbayApiException(message: String) : Exception(message)
 
 class ArbayClient(
-    baseUrl: String = appSecrets().serverUrl ?: defaultServerUrl(),
+    // The address this device was last pointed at, else the configured one. A server chosen in
+    // Settings is a property of the device, so it outlives the process that chose it.
+    baseUrl: String = loadDeviceSettings()["serverUrl"] ?: appSecrets().serverUrl ?: defaultServerUrl(),
 ) {
     var baseUrl: String = baseUrl.trimEnd('/')
         private set
@@ -43,10 +47,20 @@ class ArbayClient(
 
     fun updateBaseUrl(newUrl: String) {
         baseUrl = newUrl.trimEnd('/')
+        saveDeviceSettings(loadDeviceSettings() + ("serverUrl" to baseUrl))
     }
 
     suspend fun getProducts(): List<TrackedProduct> =
         client.get("$baseUrl/api/products").body()
+
+    /** What each saved search has found since it was last opened, and whether it is watched. */
+    suspend fun getSavedSearchStatus(): List<SavedSearchStatus> =
+        client.get("$baseUrl/api/products/status").body()
+
+    /** Tell the server a saved search was opened, so what was waiting counts as seen. */
+    suspend fun markSavedSearchOpened(id: String) {
+        client.post("$baseUrl/api/products/$id/opened")
+    }
 
     suspend fun getProduct(id: String): TrackedProduct =
         client.get("$baseUrl/api/products/$id").body()
