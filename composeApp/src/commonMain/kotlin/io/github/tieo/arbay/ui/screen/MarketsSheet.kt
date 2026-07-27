@@ -18,6 +18,7 @@ import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
+import io.github.tieo.arbay.ui.READABLE_WIDTH
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 
 /**
@@ -64,7 +65,7 @@ fun MarketsSheet(
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
         }
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.widthIn(max = READABLE_WIDTH).fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

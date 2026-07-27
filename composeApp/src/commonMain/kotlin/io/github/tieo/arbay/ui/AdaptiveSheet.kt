@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 
+/** The widest a column of text and cards may get before it stops being readable. */
+val READABLE_WIDTH = 760.dp
+
 val LocalDesktopMode = compositionLocalOf { false }
 
 // When true (set only by the off-screen gallery renderer), the adaptive sheets paint their content

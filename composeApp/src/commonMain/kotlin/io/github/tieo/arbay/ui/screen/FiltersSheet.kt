@@ -18,6 +18,7 @@ import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.ui.AdaptiveSheet
+import io.github.tieo.arbay.ui.READABLE_WIDTH
 import kotlin.math.ln
 import kotlin.math.exp
 
@@ -74,8 +75,8 @@ fun FiltersSheet(
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
         }
         Column(
-            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+            modifier = Modifier.widthIn(max = READABLE_WIDTH).fillMaxWidth().weight(1f)
+                .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(

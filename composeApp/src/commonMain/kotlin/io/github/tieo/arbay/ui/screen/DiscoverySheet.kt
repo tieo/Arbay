@@ -342,7 +342,7 @@ internal fun CategoryGrid(
                 DiscoveryTile(
                     icon = Icons.Default.AutoAwesome,
                     title = "Free Items",
-                    subtitle = "Zu verschenken + AI",
+                    subtitle = "Given away nearby",
                     onClick = onSpecialTracking,
                 )
             }

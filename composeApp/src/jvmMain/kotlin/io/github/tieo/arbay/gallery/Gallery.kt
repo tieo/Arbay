@@ -16,6 +16,8 @@ import java.io.File
 
 /** A gallery of the app's result-view building blocks rendered with sample data, so the design can
  *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
+private val TABLET_W = 1100
+private val TABLET_H = 1400
 private val PHONE_W = 390
 private val PHONE_H = 1600
 
@@ -134,6 +136,11 @@ fun main() {
                 renderToPng("$name-$suffix", PHONE_W, PHONE_H, dark = dark, outDir = outDir, content = view)
             }.onFailure { println("FAILED $name-$suffix: ${it.message}") }
         }
+        // The same view at a tablet width: the sheets are laid out for a phone and nothing has
+        // ever checked what they do with the space.
+        runCatching {
+            renderToPng("$name-wide", TABLET_W, TABLET_H, dark = false, outDir = outDir, content = view)
+        }.onFailure { println("FAILED $name-wide: ${it.message}") }
     }
     println("gallery written to ${outDir.absolutePath}")
 }

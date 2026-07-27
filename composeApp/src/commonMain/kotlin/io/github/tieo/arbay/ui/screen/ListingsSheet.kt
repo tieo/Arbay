@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,6 +56,7 @@ import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
+import io.github.tieo.arbay.ui.READABLE_WIDTH
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 import io.github.tieo.arbay.model.SortMode
@@ -386,7 +388,7 @@ fun ListingsSheet(
                 .weight(1f),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.widthIn(max = READABLE_WIDTH).fillMaxHeight().align(Alignment.TopCenter),
                 contentPadding = PaddingValues(
                     bottom = if (onBookmark != null && onToggleBookmark == null) 60.dp else 16.dp,
                 ),
@@ -618,7 +620,18 @@ fun ListingsSheet(
                             )
                         }
                     }
-                    items(displayedActiveListings, key = { "active-${it.id}" }) { listing ->
+                    val undatedFrom = if (sortMode != SortMode.NEWEST) -1
+                    else displayedActiveListings.indexOfFirst { it.listingDate == null }
+                    itemsIndexed(displayedActiveListings, key = { _, l -> "active-${l.id}" }) { index, listing ->
+                        if (index == undatedFrom && undatedFrom > 0) {
+                            Text(
+                                "Below: offers from markets that do not publish a date, so they " +
+                                    "cannot be ordered by age.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                            )
+                        }
                         ListingCard(
                             listing = listing,
                             onBan = { listingViewModel.ban(listing) },

@@ -832,7 +832,7 @@
       ],
       "uid": "REQ-HOME-WATCHING",
       "title": "Show that background watching is on",
-      "statement": "Saved searches are re-crawled on a schedule and alerts fire when something new appears or a listing\nprices well under the median. No screen says whether this is on, how often it runs, when it last\nran, or what it found.",
+      "statement": "Saved searches are re-run every six hours and alert on new stock or a price well under the median; Home shows whether a search is watched, when it last ran and what it found.",
       "status": "Built",
       "tier": "2 one tap away"
     },
@@ -912,8 +912,8 @@
       ],
       "uid": "REQ-SEARCH-EXPANSION",
       "title": "Search the market's own words for the thing",
-      "statement": "A search also covers what the market itself calls the thing, taken from the related searches\nKleinanzeigen prints and confirmed against what those searches return, rather than from a word list.\nIt exists on the server behind ARBAY_QUERY_EXPANSION and is off.",
-      "status": "Missing",
+      "statement": "A search also covers what the market itself calls the thing, taken from the related searches Kleinanzeigen prints and confirmed against what those searches return. On, on the server.",
+      "status": "Built",
       "tier": "1 canvas"
     },
     {
@@ -1028,8 +1028,8 @@
       ],
       "uid": "REQ-RESULTS-AGE",
       "title": "Show how long the ad has been up",
-      "statement": "Two markets of thirty-seven publish when an ad was posted. The Markets view now names which cannot, and the card itself still leaves the field blank without saying so.",
-      "status": "Broken",
+      "statement": "Two markets of thirty-seven publish when an ad was posted. Newest-first orders by that date rather than by when this app fetched it, the offers no market dated are marked as such where the dated ones stop, and the Markets view names which cannot say.",
+      "status": "Built",
       "tier": "1 canvas"
     },
     {

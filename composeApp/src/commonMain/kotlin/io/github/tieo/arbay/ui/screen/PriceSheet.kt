@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.ui.AdaptiveSheet
+import io.github.tieo.arbay.ui.READABLE_WIDTH
 
 /**
  * Whether a price is good.
@@ -67,7 +68,8 @@ fun PriceSheet(
             IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
         }
         Column(
-            modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+            modifier = Modifier.widthIn(max = READABLE_WIDTH).fillMaxWidth().weight(1f)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PriceOverview(

@@ -254,7 +254,12 @@ class ListingViewModel(
             compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }.thenBy { priceOf(it) })
         SortMode.PRICE_ASC -> list.sortedBy { priceOf(it) }
         SortMode.PRICE_DESC -> list.sortedByDescending { priceOf(it) }
-        SortMode.NEWEST -> list.sortedByDescending { it.soldDate ?: it.scrapedAt }
+        // Newest means when the ad was posted, not when this app happened to fetch it — which is
+        // roughly now for everything and made this sort do nothing. A market that publishes no
+        // date cannot be ordered, so those keep their order and go last.
+        SortMode.NEWEST -> list.sortedWith(
+            compareByDescending<Listing> { it.listingDate ?: it.soldDate }
+                .thenByDescending { it.listingDate != null || it.soldDate != null })
         SortMode.BEST_MATCH -> list.sortedWith(
             compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
                 .thenBy { priceOf(it) })
