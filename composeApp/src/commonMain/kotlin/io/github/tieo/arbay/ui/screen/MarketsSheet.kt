@@ -97,12 +97,24 @@ private fun PlatformStatus.saidWhat(kept: Int): String = when (status) {
     PlatformSearchStatus.TIMEOUT -> "took too long and was given up on"
     PlatformSearchStatus.IP_BLOCKED -> "refused this machine — 403"
     PlatformSearchStatus.BLOCKED -> "rate limited, and is cooling down"
-    PlatformSearchStatus.ERROR -> error ?: "failed for a reason it did not give"
+    PlatformSearchStatus.ERROR -> shortError(error) ?: "failed for a reason it did not give"
     PlatformSearchStatus.DONE -> when {
         rawCount == 0 -> "had nothing for this search"
         kept == rawCount -> "$rawCount, all of them kept"
         else -> "$rawCount found, $kept kept after filtering"
     }
+}
+
+/**
+ * The first line of a failure, in a length someone can read.
+ *
+ * A crawler failure arrives as whatever the underlying library threw, which for the browser-driven
+ * markets is a stack trace hundreds of lines long. The row says what happened; the whole thing is
+ * one tap away for when it needs reporting.
+ */
+private fun shortError(error: String?): String? {
+    val first = error?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() } ?: return null
+    return if (first.length <= 120) first else first.take(117) + "…"
 }
 
 private fun PlatformStatus.tint(): Color? = when (status) {
@@ -140,6 +152,21 @@ private fun MarketRow(status: PlatformStatus, kept: Int, onShowOnly: () -> Unit)
                 style = MaterialTheme.typography.bodySmall,
                 color = accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val detail = status.error
+            if (detail != null && detail.length > 120) {
+                var expanded by remember { mutableStateOf(false) }
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    contentPadding = PaddingValues(0.dp),
+                ) { Text(if (expanded) "Hide the detail" else "What it said in full") }
+                if (expanded) {
+                    Text(
+                        detail.take(4000),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             status.queryUsed?.takeIf { it.isNotBlank() }?.let { term ->
                 Text(
                     "asked for “$term”",
