@@ -13,6 +13,7 @@ val arbaySecrets = Properties().apply {
 fun arbaySecret(key: String): String = arbaySecrets.getProperty(key).orEmpty()
 
 plugins {
+    alias(libs.plugins.roborazzi)
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
@@ -82,6 +83,17 @@ kotlin {
             implementation(libs.coil.network.ktor3)
             implementation(projects.shared)
         }
+        // The other way of drawing a screen without a device: Robolectric renders the @Preview
+        // functions in androidMain. Kept beside the off-screen renderer so the two can be timed.
+        androidUnitTest.dependencies {
+            implementation(libs.junit)
+            implementation(libs.robolectric)
+            implementation(libs.roborazzi)
+            implementation(libs.roborazzi.compose)
+            implementation(libs.roborazzi.previewScannerSupport)
+            implementation(libs.previewScanner.android)
+        }
+
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
@@ -109,6 +121,10 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    testOptions.unitTests {
+        isIncludeAndroidResources = true
+        all { it.systemProperty("robolectric.graphicsMode", "NATIVE") }
     }
     packaging {
         resources {
