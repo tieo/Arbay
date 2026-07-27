@@ -47,6 +47,13 @@ fun PriceSheet(
     onBan: ((Listing) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
+    // A sold listing without a date says only that it sold, not when, which is no use for a price
+    // history — but it is still a price that was paid, so it is hidden rather than dropped.
+    var hideUndated by remember { mutableStateOf(false) }
+    val shownSold = remember(soldListings, hideUndated) {
+        if (hideUndated) soldListings.filter { it.soldDate != null } else soldListings
+    }
+    val undated = soldListings.count { it.soldDate == null }
     AdaptiveSheet(onDismiss = onDismiss) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp),
@@ -123,18 +130,25 @@ fun PriceSheet(
                         )
                         OutlinedButton(onClick = onSearchSold) { Text("Load what sold") }
                     }
-                    else -> {
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         medianSoldPrice?.let {
                             Text(
-                                "${soldListings.size} sold · median ${it.format()}",
+                                "${shownSold.size} sold · median ${it.format()}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (undated > 0) {
+                            FilterChip(
+                                selected = hideUndated,
+                                onClick = { hideUndated = !hideUndated },
+                                label = { Text("Hide the $undated without a date") },
                             )
                         }
                     }
                 }
             }
-            soldListings.take(40).forEach { listing ->
+            shownSold.take(40).forEach { listing ->
                 SoldHistoryRow(
                     listing = listing,
                     onBan = onBan?.let { ban -> { ban(listing) } },

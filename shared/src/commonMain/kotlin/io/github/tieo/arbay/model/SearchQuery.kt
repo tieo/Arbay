@@ -118,6 +118,11 @@ data class SearchQuery(
     // How the results are ordered. Part of the search rather than of the screen showing it, so
     // reopening a saved search restores the order it was left in.
     val sort: SortMode? = null,
+    // Which of the fetched markets the results are narrowed to, and which countries. Empty means
+    // every market that answered. These filter what was already fetched; they do not change which
+    // markets are asked, which is `platforms`.
+    val showOnlyMarkets: Set<PlatformId> = emptySet(),
+    val showOnlyCountries: Set<String> = emptySet(),
     val soldOnly: Boolean = false,
     val freeOnly: Boolean = false,
     val excludeKeywords: List<String> = emptyList(),

@@ -66,33 +66,6 @@ import kotlinx.datetime.toLocalDateTime
 
 /** Active car filters as (label, facet-dimension key) pairs for the editable chip row. The key
  *  matches the server's facet map so each chip can show how many results dropping it would add. */
-private fun carFilterChips(f: CarFilters): List<Pair<String, String>> = buildList {
-    when {
-        f.firstRegFromYear != null && f.firstRegToYear != null -> add("${f.firstRegFromYear}–${f.firstRegToYear}" to "year")
-        f.firstRegFromYear != null -> add("from ${f.firstRegFromYear}" to "year")
-        f.firstRegToYear != null -> add("to ${f.firstRegToYear}" to "year")
-    }
-    f.maxMileageKm?.let { add("≤${it / 1000}k km" to "mileage") }
-    f.minMileageKm?.let { add("≥${it / 1000}k km" to "mileage") }
-    f.minPowerKw?.let { add("≥$it kW" to "power") }
-    f.maxPowerKw?.let { add("≤$it kW" to "power") }
-    f.maxPriceEur?.let { add("≤€${it / 1000}k" to "price") }
-    f.minPriceEur?.let { add("≥€${it / 1000}k" to "price") }
-    f.transmission?.let { add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to "transmission") }
-    if (f.fuels.isNotEmpty()) add(f.fuels.joinToString("/") { it.name.lowercase().replaceFirstChar(Char::uppercase) } to "fuel")
-    if (f.bodyTypes.isNotEmpty()) add(f.bodyTypes.joinToString("/") { it.name.lowercase() } to "bodyType")
-    if (f.conditions.isNotEmpty()) add(f.conditions.joinToString("/") { it.name.lowercase() } to "condition")
-    if (f.colors.isNotEmpty()) add(f.colors.joinToString("/") to "color")
-    f.drivetrain?.let { add(it.name to "drivetrain") }
-    f.minDoors?.let { add("≥$it doors" to "doors") }
-    f.minSeats?.let { add("≥$it seats" to "seats") }
-    f.minEmissionEuro?.let { add("≥Euro $it" to "emission") }
-    f.sellerType?.let { add((if (it == SellerType.PRIVATE) "Private" else "Dealer") to "seller") }
-    if (f.vanLengths.isNotEmpty()) add(f.vanLengths.sorted().joinToString("/") { "L$it" } to "vanLength")
-    if (f.vanHeights.isNotEmpty()) add(f.vanHeights.sorted().joinToString("/") { "H$it" } to "vanHeight")
-    f.descriptionContains?.takeIf { it.isNotBlank() }?.let { add("“$it”" to "description") }
-}
-
 private val DIM_LABELS = mapOf(
     "year" to "Year", "mileage" to "Mileage", "price" to "Price", "power" to "Power",
     "transmission" to "Gearbox", "fuel" to "Fuel", "bodyType" to "Body", "condition" to "Condition",
@@ -207,7 +180,15 @@ fun ListingsSheet(
         val updated = listingViewModel.unblockTerm(t)
         onBlockedTermsChange?.invoke(updated)
     }
-    val selectedPlatform by listingViewModel.selectedPlatform.collectAsState()
+    val shownMarkets by listingViewModel.shownMarkets.collectAsState()
+    val shownCountries by listingViewModel.shownCountries.collectAsState()
+    // The market and country narrowing is part of the saved search, like the price band.
+    LaunchedEffect(savedFilters) {
+        savedFilters?.let {
+            listingViewModel.showMarkets(it.showOnlyMarkets)
+            listingViewModel.showCountries(it.showOnlyCountries)
+        }
+    }
     val platformStatuses by listingViewModel.platformStatuses.collectAsState()
     val totalPlatforms by listingViewModel.totalPlatforms.collectAsState()
     val completedPlatforms by listingViewModel.completedPlatforms.collectAsState()
@@ -372,7 +353,7 @@ fun ListingsSheet(
         priceFiltered,
         conditionFilter != null,
         sortMode != SortMode.BEST_MATCH,
-        selectedPlatform != null,
+        shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
     ).count { it }
     val marketChoices = remember(platformOffers) {
@@ -380,7 +361,7 @@ fun ListingsSheet(
             MarketChoice(
                 platform = offer.platform,
                 name = offer.platform.displayName,
-                country = offer.platform.country,
+                country = MarketSets.countryOf(offer.platform),
                 count = offer.count,
             )
         }
@@ -691,8 +672,16 @@ fun ListingsSheet(
                     persistFilters { it.copy(sort = mode) }
                 },
                 markets = marketChoices,
-                selectedMarket = selectedPlatform,
-                onSelectMarket = { listingViewModel.selectPlatform(it) },
+                shownMarkets = shownMarkets,
+                onShowMarkets = { chosen ->
+                    listingViewModel.showMarkets(chosen)
+                    persistFilters { it.copy(showOnlyMarkets = chosen) }
+                },
+                shownCountries = shownCountries,
+                onShowCountries = { chosen ->
+                    listingViewModel.showCountries(chosen)
+                    persistFilters { it.copy(showOnlyCountries = chosen) }
+                },
                 blockedTerms = activeBlockedTerms,
                 onUnblock = unblockWord,
                 onBlock = blockWord,
@@ -700,10 +689,16 @@ fun ListingsSheet(
                 onClearAll = {
                     priceRange = priceMin..priceMax
                     conditionFilter = null
-                    listingViewModel.selectPlatform(null)
+                    listingViewModel.showMarkets(emptySet())
+                    listingViewModel.showCountries(emptySet())
                     listingViewModel.setSortMode(SortMode.BEST_MATCH)
                     activeBlockedTerms.forEach(unblockWord)
-                    persistFilters { it.withPriceRangeEur(null, null).copy(condition = null, sort = null) }
+                    persistFilters {
+                        it.withPriceRangeEur(null, null).copy(
+                            condition = null, sort = null,
+                            showOnlyMarkets = emptySet(), showOnlyCountries = emptySet(),
+                        )
+                    }
                 },
                 hasCarCriteria = carFilters != null,
                 onEditCarCriteria = onEditFilters,
@@ -740,7 +735,10 @@ fun ListingsSheet(
             MarketsSheet(
                 statuses = platformStatuses,
                 offers = platformOffers.associate { it.platform to it.count },
-                onSelectMarket = { listingViewModel.selectPlatform(it) },
+                onSelectMarket = { market ->
+                    listingViewModel.showOnly(market)
+                    persistFilters { it.copy(showOnlyMarkets = setOf(market), showOnlyCountries = emptySet()) }
+                },
                 onDismiss = { showMarkets = false },
             )
         }
@@ -1887,226 +1885,6 @@ internal fun SoldHistoryRow(
  * search state, then acts as a filter when done. Tapping a chip with results filters to that
  * platform; tapping a failed chip shows its error detail below. The "All" chip is always first.
  */
-@Composable
-private fun UnifiedPlatformChips(
-    statuses: List<PlatformStatus>,
-    offers: List<PlatformOffer>,
-    selectedPlatform: PlatformId?,
-    onSelectPlatform: (PlatformId?) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expandedError by remember { mutableStateOf<String?>(null) }
-    val offerMap = remember(offers) { offers.associateBy { it.platform } }
-
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // "All" chip, shown only once there are results.
-            val totalResults = offers.sumOf { it.count }
-            if (totalResults > 0) {
-                FilterChip(
-                    selected = selectedPlatform == null,
-                    onClick = { onSelectPlatform(null); expandedError = null },
-                    label = { Text("All ($totalResults)") },
-                    leadingIcon = {
-                        if (selectedPlatform == null) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
-                    },
-                    shape = RoundedCornerShape(20.dp),
-                )
-            }
-
-            // One chip per platform, sorted: results by price first, then loading, then errors.
-            val sortedStatuses = remember(statuses, offerMap) {
-                statuses.sortedWith(compareBy<PlatformStatus> { s ->
-                    val pid = try { PlatformId.valueOf(s.platformId) } catch (_: Exception) { null }
-                    val offer = pid?.let { offerMap[it] }
-                    when {
-                        offer != null && offer.count > 0 -> 0
-                        s.status == PlatformSearchStatus.SEARCHING -> 1
-                        else -> 2
-                    }
-                }.thenBy { s ->
-                    val pid = try { PlatformId.valueOf(s.platformId) } catch (_: Exception) { null }
-                    pid?.let { offerMap[it] }?.minPrice?.amount ?: Long.MAX_VALUE
-                })
-            }
-            sortedStatuses.forEach { status ->
-                val platformId = try { PlatformId.valueOf(status.platformId) } catch (_: Exception) { null }
-                val offer = platformId?.let { offerMap[it] }
-                val hasResults = (offer?.count ?: 0) > 0
-                val isSelected = platformId != null && selectedPlatform == platformId
-                val isCaptcha = status.status == PlatformSearchStatus.CAPTCHA
-                val isTimeout = status.status == PlatformSearchStatus.TIMEOUT
-                val isIpBlocked = status.status == PlatformSearchStatus.IP_BLOCKED
-                val isError = status.status == PlatformSearchStatus.ERROR || status.status == PlatformSearchStatus.BLOCKED || isTimeout || isIpBlocked || isCaptcha
-
-                val chipColors = when {
-                    isSelected -> FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    isCaptcha -> FilterChipDefaults.filterChipColors(
-                        containerColor = Color(0xFFFFF3E0), // warm orange bg
-                        labelColor = Color(0xFFE65100),
-                        iconColor = Color(0xFFE65100),
-                    )
-                    isTimeout -> FilterChipDefaults.filterChipColors(
-                        containerColor = Color(0xFFFFF8E1), // yellow bg
-                        labelColor = Color(0xFFF57F17),
-                        iconColor = Color(0xFFF57F17),
-                    )
-                    isIpBlocked -> FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        labelColor = MaterialTheme.colorScheme.onErrorContainer,
-                        iconColor = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    isError -> FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        labelColor = MaterialTheme.colorScheme.onErrorContainer,
-                        iconColor = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    status.status == PlatformSearchStatus.SEARCHING -> FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    )
-                    hasResults -> FilterChipDefaults.filterChipColors()
-                    else -> FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        when {
-                            isError -> {
-                                expandedError = if (expandedError == status.platformId) null else status.platformId
-                            }
-                            hasResults && platformId != null -> {
-                                onSelectPlatform(if (isSelected) null else platformId)
-                                expandedError = null
-                            }
-                        }
-                    },
-                    label = {
-                        val name = status.platformName.ifEmpty { status.platformId }
-                        when {
-                            hasResults && offer != null -> {
-                                Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                                    Text(name, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
-                                    Text(
-                                        "${offer.minPrice?.format() ?: ""} · ${offer.count}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
-                            status.status == PlatformSearchStatus.DONE -> Text("$name (0)")
-                            else -> Text(name)
-                        }
-                    },
-                    leadingIcon = {
-                        when {
-                            status.status == PlatformSearchStatus.SEARCHING -> {
-                                Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 1.5.dp)
-                                    val stageChar = when (status.fetchStage) {
-                                        "HTTP" -> "H"
-                                        "CurlCffi" -> "C"
-                                        "Chromium" -> "B"
-                                        "Firefox" -> "F"
-                                        else -> ""
-                                    }
-                                    if (stageChar.isNotEmpty()) {
-                                        Text(
-                                            stageChar,
-                                            style = TextStyle(fontSize = 7.sp, fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-                            isSelected -> Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
-                            isCaptcha -> Icon(Icons.Default.Lock, null, modifier = Modifier.size(14.dp))
-                            isTimeout -> Icon(Icons.Default.Schedule, null, modifier = Modifier.size(14.dp))
-                            isIpBlocked -> Icon(Icons.Default.Block, null, modifier = Modifier.size(14.dp))
-                            isError -> Icon(Icons.Default.Warning, null, modifier = Modifier.size(14.dp))
-                            hasResults -> Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
-                            status.status == PlatformSearchStatus.DONE -> Icon(Icons.Outlined.RemoveCircleOutline, null, modifier = Modifier.size(14.dp))
-                        }
-                    },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = chipColors,
-                )
-            }
-        }
-
-        // Error detail, shown when a failed chip is tapped; tap the panel to copy the message.
-        val expandedStatus = statuses.find { it.platformId == expandedError }
-        if (expandedStatus?.error != null) {
-            val clipboardManager = LocalClipboardManager.current
-            val errorText = buildString {
-                append(expandedStatus.platformName)
-                expandedStatus.errorType?.let { append(" $it") }
-                expandedStatus.fetchStage?.let { append(" (stage: $it)") }
-                append("\n\n")
-                append(expandedStatus.error ?: "Unknown error")
-            }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = when (expandedStatus.status) {
-                    PlatformSearchStatus.CAPTCHA -> Color(0xFFFFF3E0)
-                    PlatformSearchStatus.TIMEOUT -> Color(0xFFFFF8E1)
-                    else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                },
-                modifier = Modifier.clickable {
-                    clipboardManager.setText(AnnotatedString(errorText))
-                },
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val errorIcon = when (expandedStatus.status) {
-                        PlatformSearchStatus.CAPTCHA -> Icons.Default.Lock
-                        PlatformSearchStatus.TIMEOUT -> Icons.Default.Schedule
-                        PlatformSearchStatus.IP_BLOCKED -> Icons.Default.Block
-                        else -> Icons.Default.Warning
-                    }
-                    Icon(errorIcon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            buildString {
-                                append(expandedStatus.platformName)
-                                expandedStatus.errorType?.let { append(" · $it") }
-                                expandedStatus.fetchStage?.let { append(" (stage: $it)") }
-                            },
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            expandedStatus.error ?: "Unknown error",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (expandedStatus.captchaUrl != null) {
-                        TextButton(
-                            onClick = { openBrowser(expandedStatus.captchaUrl!!) },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        ) {
-                            Text("Solve", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 internal fun Money.format(): String {
     // Show the native currency when we can't convert (unknown rate) rather than mislabelling the
     // raw amount as the display currency \u2014 a 169 900 PLN van must not read as "\u20AC169,900".

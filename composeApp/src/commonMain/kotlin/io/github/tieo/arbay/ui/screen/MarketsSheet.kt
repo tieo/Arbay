@@ -32,7 +32,7 @@ import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 fun MarketsSheet(
     statuses: List<PlatformStatus>,
     offers: Map<PlatformId, Int>,
-    onSelectMarket: (PlatformId?) -> Unit,
+    onSelectMarket: (PlatformId) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val answered = statuses.count { it.status == PlatformSearchStatus.DONE }

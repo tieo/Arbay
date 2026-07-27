@@ -44,8 +44,11 @@ fun FiltersSheet(
     sort: SortMode,
     onSort: (SortMode) -> Unit,
     markets: List<MarketChoice>,
-    selectedMarket: PlatformId?,
-    onSelectMarket: (PlatformId?) -> Unit,
+    // Empty means every market that answered, which is what "no filter" is.
+    shownMarkets: Set<PlatformId>,
+    onShowMarkets: (Set<PlatformId>) -> Unit,
+    shownCountries: Set<String>,
+    onShowCountries: (Set<String>) -> Unit,
     blockedTerms: List<String>,
     onUnblock: (String) -> Unit,
     onBlock: (String) -> Unit,
@@ -127,29 +130,46 @@ fun FiltersSheet(
             }
 
             if (markets.isNotEmpty()) {
-                FilterSection("Markets") {
+                FilterSection("Markets and countries") {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val narrowed = shownMarkets.isNotEmpty() || shownCountries.isNotEmpty()
                         MarketRow(
                             label = "Every market",
                             count = markets.sumOf { it.count },
-                            selected = selectedMarket == null,
-                            onClick = { onSelectMarket(null) },
+                            selected = !narrowed,
+                            onClick = {
+                                onShowMarkets(emptySet())
+                                onShowCountries(emptySet())
+                            },
                         )
                         // Grouped by the country the listings are in, because "which markets" and
-                        // "which countries" are the same question asked at two grains.
-                        markets.groupBy { it.country }.forEach { (country, group) ->
-                            Text(
-                                country ?: "Home",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                        // "which countries" are one question asked at two grains: tapping the
+                        // country takes all of it, tapping a market takes that one.
+                        markets.groupBy { it.country ?: "Home" }.toSortedMap().forEach { (country, group) ->
+                            CountryRow(
+                                country = country,
+                                count = group.sumOf { it.count },
+                                markets = group.size,
+                                selected = country in shownCountries,
+                                onClick = {
+                                    onShowCountries(
+                                        if (country in shownCountries) shownCountries - country
+                                        else shownCountries + country,
+                                    )
+                                },
                             )
                             group.forEach { market ->
                                 MarketRow(
                                     label = market.name,
                                     count = market.count,
-                                    selected = selectedMarket == market.platform,
-                                    onClick = { onSelectMarket(market.platform) },
+                                    selected = market.platform in shownMarkets,
+                                    onClick = {
+                                        onShowMarkets(
+                                            if (market.platform in shownMarkets) shownMarkets - market.platform
+                                            else shownMarkets + market.platform,
+                                        )
+                                    },
+                                    indented = true,
                                 )
                             }
                         }
@@ -241,13 +261,52 @@ private fun FilterSection(title: String, content: @Composable () -> Unit) {
     }
 }
 
+/** A country, holding every market whose listings are in it. */
 @Composable
-private fun MarketRow(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+private fun CountryRow(
+    country: String,
+    count: Int,
+    markets: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                country,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${if (markets == 1) "1 market" else "$markets markets"} · $count",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarketRow(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    indented: Boolean = false,
+) {
     Surface(
         onClick = onClick,
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),

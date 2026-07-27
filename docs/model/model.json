@@ -1132,8 +1132,8 @@
       ],
       "uid": "REQ-FILTERS-COUNTRY",
       "title": "Filter by country",
-      "statement": "Every market carries the country its listings are in and nothing can be filtered by it.",
-      "status": "Missing",
+      "statement": "Markets are grouped under the country their listings are in, and the country selects every market in it. Both are kept with the search.",
+      "status": "Built",
       "tier": "2 one tap away"
     },
     {
@@ -1482,7 +1482,7 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-FILTERS-EVERYTHING-KEPT",
       "title": "Every filter survives the view closing",
-      "statement": "Price band, condition, sort order, market choice and blocked words are all kept with the search, for every kind of search, not only vehicles.",
+      "statement": "Price band, condition, sort order, the chosen markets and countries, and the blocked words are all kept with the search, for every kind of search, not only vehicles.",
       "status": "Built",
       "tier": "2 one tap away",
       "relations": [

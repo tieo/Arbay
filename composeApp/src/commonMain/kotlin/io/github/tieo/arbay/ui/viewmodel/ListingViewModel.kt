@@ -58,8 +58,14 @@ class ListingViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
-    private val _selectedPlatform = MutableStateFlow<PlatformId?>(null)
-    val selectedPlatform: StateFlow<PlatformId?> = _selectedPlatform
+    // Which markets the results are narrowed to, and which countries. Empty means every market
+    // that answered. A country selects every market whose listings are in it, so the two grains of
+    // the same question stay one filter rather than two that can contradict each other.
+    private val _shownMarkets = MutableStateFlow<Set<PlatformId>>(emptySet())
+    val shownMarkets: StateFlow<Set<PlatformId>> = _shownMarkets
+
+    private val _shownCountries = MutableStateFlow<Set<String>>(emptySet())
+    val shownCountries: StateFlow<Set<String>> = _shownCountries
 
     private val _platformStatuses = MutableStateFlow(sampleStatuses)
     val platformStatuses: StateFlow<List<PlatformStatus>> = _platformStatuses
@@ -94,8 +100,16 @@ class ListingViewModel(
         text.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
     // Derived: listings filtered by selected platform, not banned, not matching a blocked keyword.
-    val listings: StateFlow<List<Listing>> = combine(_allListings, _selectedPlatform, _bannedIds, _blockedTerms) { all, platform, banned, blocked ->
-        val platformFiltered = if (platform == null) all else all.filter { it.platformId == platform }
+    private val _marketFilter = combine(_shownMarkets, _shownCountries) { markets, countries ->
+        markets to countries
+    }
+
+    val listings: StateFlow<List<Listing>> = combine(_allListings, _marketFilter, _bannedIds, _blockedTerms) { all, filter, banned, blocked ->
+        val (markets, countries) = filter
+        val platformFiltered = all.filter { listing ->
+            (markets.isEmpty() || listing.platformId in markets) &&
+                (countries.isEmpty() || MarketSets.countryOf(listing.platformId) in countries)
+        }
         platformFiltered.filter { l ->
             l.id !in banned && run {
                 if (blocked.isEmpty()) return@run true
@@ -134,8 +148,16 @@ class ListingViewModel(
     private var searchJob: Job? = null
     private var carFilters: CarFilters? = null
 
-    fun selectPlatform(platform: PlatformId?) {
-        _selectedPlatform.value = platform
+    /** Show only these markets; empty shows every market that answered. */
+    fun showMarkets(markets: Set<PlatformId>) { _shownMarkets.value = markets }
+
+    /** Show only markets whose listings are in these countries; empty shows every country. */
+    fun showCountries(countries: Set<String>) { _shownCountries.value = countries }
+
+    /** Narrow to one market, from the Markets view's "show only this one". */
+    fun showOnly(market: PlatformId) {
+        _shownMarkets.value = setOf(market)
+        _shownCountries.value = emptySet()
     }
 
     fun refresh(platforms: List<PlatformId>? = null) {

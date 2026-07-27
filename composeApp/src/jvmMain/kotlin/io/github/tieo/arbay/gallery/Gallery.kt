@@ -16,48 +16,6 @@ import java.io.File
 
 /** A gallery of the app's result-view building blocks rendered with sample data, so the design can
  *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
-private fun median(values: List<Long>): Money? =
-    values.sorted().let { if (it.isEmpty()) null else Money(it[it.size / 2], Currency.EUR) }
-
-@Composable
-private fun ResultsBody() {
-    val active = SampleData.active
-    val newL = active.filter { it.condition?.name == "NEW" }
-    val usedL = active.filter { it.condition?.name != "NEW" }
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            PriceOverview(
-                minPrice = Money(active.minOf { it.price.amount }, Currency.EUR),
-                medianPrice = median(active.map { it.price.amount }),
-                maxPrice = Money(active.maxOf { it.price.amount }, Currency.EUR),
-                minNewPrice = newL.minOfOrNull { it.price.amount }?.let { Money(it, Currency.EUR) },
-                medianNewPrice = median(newL.map { it.price.amount }),
-                newCount = newL.size,
-                minUsedPrice = usedL.minOfOrNull { it.price.amount }?.let { Money(it, Currency.EUR) },
-                medianUsedPrice = median(usedL.map { it.price.amount }),
-                usedCount = usedL.size,
-                conditionFilter = null,
-                onConditionFilterChange = {},
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            PriceDistributionChart(
-                newListings = newL,
-                usedListings = usedL,
-                soldListings = SampleData.sold,
-                medianNewPrice = median(newL.map { it.price.amount })?.amount,
-                medianUsedPrice = median(usedL.map { it.price.amount })?.amount,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            active.take(6).forEach { listing: Listing ->
-                ListingCard(listing = listing, modifier = Modifier.padding(horizontal = 20.dp))
-            }
-        }
-    }
-}
-
 private val PHONE_W = 390
 private val PHONE_H = 1600
 
@@ -106,10 +64,12 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
             markets = SampleData.active.groupBy { it.platformId }.map { (platform, items) ->
                 io.github.tieo.arbay.ui.screen.MarketChoice(
                     platform = platform, name = platform.displayName,
-                    country = platform.country, count = items.size,
+                    country = io.github.tieo.arbay.model.MarketSets.countryOf(platform),
+                    count = items.size,
                 )
             },
-            selectedMarket = null, onSelectMarket = {},
+            shownMarkets = setOf(io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN), onShowMarkets = {},
+            shownCountries = emptySet(), onShowCountries = {},
             blockedTerms = listOf("defekt", "bastler"), onUnblock = {}, onBlock = {},
             activeCount = 3, onClearAll = {},
             hasCarCriteria = false, onEditCarCriteria = null,
