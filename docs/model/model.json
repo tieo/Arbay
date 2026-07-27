@@ -843,225 +843,748 @@
       "tier": "2 one tap away",
       "title": "Editing a search that is not a vehicle does something",
       "uid": "REQ-ADD-SHEET-RENDERS"
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-LOADING-SAYS-SOMETHING",
+      "title": "Waiting looks like waiting",
+      "statement": "While markets are answering and nothing has arrived, the screen is blank below the doors: no progress line, no skeleton, nothing but a small count in the header. The render of the loading state shows it.",
+      "status": "Broken",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-ONE-SEARCH",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-FAILED-IS-NOT-EMPTY",
+      "title": "A failed search does not read as an empty one",
+      "statement": "Every market blocked and every market empty draw the same screen: \\u201cNo listings found\\u201d. The only difference is the Markets door reading \\u201c0 ok, 4 not\\u201d in small text. Put the reason on the canvas where the absence is.",
+      "status": "Broken",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-WHO-ANSWERED",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ]
     }
   ],
   "states": [
     {
+      "tag": "STATE",
+      "uid": "STATE-HOME-LOADING",
+      "title": "Loading",
+      "statement": "The saved searches have been asked for and have not arrived.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-HOME"
+          "to": "VIEW-HOME",
+          "role": "State of"
         }
       ],
-      "statement": "No search has been saved, so the view carries only the way into a new one.",
-      "tag": "STATE",
-      "title": "Nothing saved yet",
-      "uid": "STATE-HOME-EMPTY"
+      "renders": [
+        {
+          "file": "home-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "home-loading-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-HOME-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing has been saved yet, so the view carries only the way into a new search.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-HOME"
+          "to": "VIEW-HOME",
+          "role": "State of"
         }
       ],
-      "statement": "Each saved search, with how many markets it covers, and the Free Items summary when a profile\nexists.",
-      "tag": "STATE",
-      "title": "Saved searches",
-      "uid": "STATE-HOME-SAVED"
+      "renders": [
+        {
+          "file": "home-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "home-empty-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-HOME-FAILED",
+      "title": "Failed",
+      "statement": "The server could not be reached, so what is saved cannot be shown.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-DISCOVERY"
+          "to": "VIEW-HOME",
+          "role": "State of"
         }
       ],
-      "statement": "Nothing typed: category tiles, vehicle search first.",
-      "tag": "STATE",
-      "title": "Browsing",
-      "uid": "STATE-DISCOVERY-BROWSING"
+      "renders": [
+        {
+          "file": "home-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "home-failed-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-SEARCH-LOADING",
+      "title": "Loading",
+      "statement": "The catalogue is being read; the tiles are what stands there meanwhile.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-DISCOVERY"
+          "to": "VIEW-DISCOVERY",
+          "role": "State of"
         }
       ],
-      "statement": "Matches from the product catalogue appear under what is being typed, so a known product can be\npicked rather than spelled.",
-      "tag": "STATE",
-      "title": "Typing",
-      "uid": "STATE-DISCOVERY-TYPING"
+      "renders": [
+        {
+          "file": "search-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "search-loading-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-SEARCH-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing has been typed, so the categories are the whole of it.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
+          "to": "VIEW-DISCOVERY",
+          "role": "State of"
         }
       ],
-      "shown": "What has arrived so far, under a thin progress line that removes itself when the last market\nanswers.",
-      "statement": "Some markets have not answered yet.",
-      "tag": "STATE",
-      "title": "Still asking",
-      "uid": "STATE-RESULTS-SEARCHING"
+      "renders": [
+        {
+          "file": "search-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "search-empty-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-SEARCH-FAILED",
+      "title": "Failed",
+      "statement": "The catalogue could not be read, and the tiles are all that is left.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
+          "to": "VIEW-DISCOVERY",
+          "role": "State of"
         }
       ],
-      "statement": "The search is complete and the list is final until a filter changes.",
-      "tag": "STATE",
-      "title": "Every market answered",
-      "uid": "STATE-RESULTS-DONE"
+      "renders": [
+        {
+          "file": "search-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "search-failed-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-LOADING",
+      "title": "Loading",
+      "statement": "Some markets have not answered yet, and what has arrived is shown under a progress line.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
+          "to": "VIEW-RESULTS",
+          "role": "State of"
         }
       ],
-      "statement": "A market timed out, was blocked, hit a captcha, or errored. The list is simply shorter, and nothing\non screen says a market is absent or why.",
-      "tag": "STATE",
-      "title": "Some markets failed",
-      "uid": "STATE-RESULTS-PARTIAL"
+      "renders": [
+        {
+          "file": "results-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-loading-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
-      "relations": [
-        {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
-        }
-      ],
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-EMPTY",
+      "title": "Empty",
       "statement": "Every market answered and none of them carried the thing.",
-      "tag": "STATE",
-      "title": "Nobody had anything",
-      "uid": "STATE-RESULTS-EMPTY"
-    },
-    {
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
+          "to": "VIEW-RESULTS",
+          "role": "State of"
         }
       ],
-      "statement": "Results exist and the active filters hide all of them, which must read differently from having found\nnothing.",
-      "tag": "STATE",
-      "title": "The filters admit none",
-      "uid": "STATE-RESULTS-EMPTY-FILTERED"
+      "renders": [
+        {
+          "file": "results-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-empty-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-FAILED",
+      "title": "Failed",
+      "statement": "No market could answer: blocked, timed out, rate limited or erroring.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-RESULTS"
+          "to": "VIEW-RESULTS",
+          "role": "State of"
         }
       ],
-      "statement": "A market answered with a challenge rather than results, and it can be solved in the crawler's own\nbrowser session.",
+      "renders": [
+        {
+          "file": "results-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "tag": "STATE",
+      "uid": "STATE-RESULTS-EVERYMARKETANSWERED",
+      "title": "Every market answered",
+      "statement": "The search is complete and the list is final until a filter changes.",
+      "relations": [
+        {
+          "to": "VIEW-RESULTS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "results-every-market-answered-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-every-market-answered-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-SOMEMARKETSFAILED",
+      "title": "Some markets failed",
+      "statement": "A market timed out, was blocked or hit a captcha, so the list is shorter than it should be.",
+      "relations": [
+        {
+          "to": "VIEW-RESULTS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "results-some-markets-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-some-markets-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-AMARKETOFFERSITSCAPTCHA",
       "title": "A market offers its captcha",
-      "uid": "STATE-RESULTS-CAPTCHA"
-    },
-    {
+      "statement": "A market answered with a challenge, which can be solved in the crawler's own browser.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-MARKET-DETAIL"
+          "to": "VIEW-RESULTS",
+          "role": "State of"
         }
       ],
-      "statement": "The request is out and no answer has come back.",
-      "tag": "STATE",
-      "title": "Asked",
-      "uid": "STATE-MARKET-ASKED"
+      "renders": [
+        {
+          "file": "results-a-market-offers-its-captcha-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-a-market-offers-its-captcha-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-THEFILTERSADMITNONE",
+      "title": "The filters admit none",
+      "statement": "Results exist and the active filters hide all of them, which must read differently from having found nothing.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-MARKET-DETAIL"
+          "to": "VIEW-RESULTS",
+          "role": "State of"
         }
       ],
-      "statement": "Results came back, in some count before filtering and some count after.",
-      "tag": "STATE",
-      "title": "Answered",
-      "uid": "STATE-MARKET-ANSWERED"
+      "renders": [
+        {
+          "file": "results-the-filters-admit-none-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-the-filters-admit-none-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-FILTERS-LOADING",
+      "title": "Loading",
+      "statement": "The results are still arriving, so there is little yet to narrow.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-MARKET-DETAIL"
+          "to": "VIEW-FILTERS",
+          "role": "State of"
         }
       ],
-      "statement": "The market answered with a 403, a captcha, or a rate limit rather than listings.",
-      "tag": "STATE",
-      "title": "Blocked",
-      "uid": "STATE-MARKET-BLOCKED"
+      "renders": [
+        {
+          "file": "filters-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "filters-loading-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-FILTERS-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing has been found, so there is nothing to filter and the controls say so.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-MARKET-DETAIL"
+          "to": "VIEW-FILTERS",
+          "role": "State of"
         }
       ],
-      "statement": "The market is not asked again for a while after a block, so a search that excludes it is not a\nsearch that failed.",
+      "renders": [
+        {
+          "file": "filters-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "filters-empty-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "tag": "STATE",
+      "uid": "STATE-FILTERS-FAILED",
+      "title": "Failed",
+      "statement": "No market answered, so no filter can be built from what came back.",
+      "relations": [
+        {
+          "to": "VIEW-FILTERS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "filters-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "filters-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-MARKETS-LOADING",
+      "title": "Loading",
+      "statement": "Markets have been asked and some have not replied.",
+      "relations": [
+        {
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "markets-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "markets-loading-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-MARKETS-EMPTY",
+      "title": "Empty",
+      "statement": "Every market answered and every one of them was empty.",
+      "relations": [
+        {
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "markets-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "markets-empty-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-MARKETS-FAILED",
+      "title": "Failed",
+      "statement": "Every market failed, each in its own way.",
+      "relations": [
+        {
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "markets-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "markets-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-MARKETS-COOLINGDOWN",
       "title": "Cooling down",
-      "uid": "STATE-MARKET-COOLING"
-    },
-    {
+      "statement": "A market is not asked again for a while after a block, so a search that excludes it is not a search that failed.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-CAR-SEARCH"
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "State of"
         }
       ],
-      "statement": "Make and model are chosen from a catalogue synced from the sites themselves, so the term matches\nwhat each market calls it.",
-      "tag": "STATE",
-      "title": "Picking a vehicle",
-      "uid": "STATE-CAR-PICKING"
+      "renders": [
+        {
+          "file": "markets-cooling-down-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "markets-cooling-down-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-PRICE-LOADING",
+      "title": "Loading",
+      "statement": "Sold listings are being fetched, which is the only part of this that waits.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-CAR-SEARCH"
+          "to": "VIEW-PRICE-DETAIL",
+          "role": "State of"
         }
       ],
-      "statement": "Year, mileage, price, power, gearbox, fuel, body, condition, drivetrain, doors, seats, emission\nclass, seller, van length and height, colour — plus a free-text description that ranks rather than\nfilters.",
-      "tag": "STATE",
-      "title": "Narrowing",
-      "uid": "STATE-CAR-NARROWING"
+      "renders": [
+        {
+          "file": "price-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "price-loading-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-PRICE-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing sold has been loaded yet, so there is nothing to compare against.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-FREE-ITEMS"
+          "to": "VIEW-PRICE-DETAIL",
+          "role": "State of"
         }
       ],
-      "statement": "One item at a time with how well it fits, swiped love, like or pass.",
-      "tag": "STATE",
-      "title": "Judging",
-      "uid": "STATE-FREE-JUDGING"
+      "renders": [
+        {
+          "file": "price-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "price-empty-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
+      "tag": "STATE",
+      "uid": "STATE-PRICE-FAILED",
+      "title": "Failed",
+      "statement": "No market in this search publishes what sold, so the question cannot be answered here.",
       "relations": [
         {
-          "role": "State of",
-          "to": "VIEW-FREE-ITEMS"
+          "to": "VIEW-PRICE-DETAIL",
+          "role": "State of"
         }
       ],
-      "statement": "The area, what interests you, and whether to watch in the background.",
+      "renders": [
+        {
+          "file": "price-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "price-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "tag": "STATE",
-      "title": "Setting the profile",
-      "uid": "STATE-FREE-PROFILE"
+      "uid": "STATE-CARSEARCH-LOADING",
+      "title": "Loading",
+      "statement": "The make and model catalogue is being read from the markets themselves.",
+      "relations": [
+        {
+          "to": "VIEW-CAR-SEARCH",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "car-search-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "car-search-loading-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-CARSEARCH-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing has been chosen yet: the form as it opens.",
+      "relations": [
+        {
+          "to": "VIEW-CAR-SEARCH",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "car-search-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "car-search-empty-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-CARSEARCH-FAILED",
+      "title": "Failed",
+      "statement": "The catalogue could not be read, so make and model fall back to what is bundled.",
+      "relations": [
+        {
+          "to": "VIEW-CAR-SEARCH",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "car-search-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "car-search-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-FREEITEMS-LOADING",
+      "title": "Loading",
+      "statement": "Items are being fetched for the area that was set.",
+      "relations": [
+        {
+          "to": "VIEW-FREE-ITEMS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "free-items-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "free-items-loading-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-FREEITEMS-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing is being given away nearby that has not already been judged.",
+      "relations": [
+        {
+          "to": "VIEW-FREE-ITEMS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "free-items-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "free-items-empty-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-FREEITEMS-FAILED",
+      "title": "Failed",
+      "statement": "The server could not be reached, so there is nothing to judge.",
+      "relations": [
+        {
+          "to": "VIEW-FREE-ITEMS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "free-items-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "free-items-failed-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-SETTINGS-LOADING",
+      "title": "Loading",
+      "statement": "The server's own settings are being read.",
+      "relations": [
+        {
+          "to": "VIEW-SETTINGS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "settings-loading-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "settings-loading-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-SETTINGS-EMPTY",
+      "title": "Empty",
+      "statement": "Nothing is configured beyond the defaults.",
+      "relations": [
+        {
+          "to": "VIEW-SETTINGS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "settings-empty-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "settings-empty-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-SETTINGS-FAILED",
+      "title": "Failed",
+      "statement": "The server could not be reached, so its shared settings cannot be shown or changed.",
+      "relations": [
+        {
+          "to": "VIEW-SETTINGS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "settings-failed-phone.png",
+          "label": "phone"
+        },
+        {
+          "file": "settings-failed-wide.png",
+          "label": "wide"
+        }
+      ]
     }
   ],
   "stories": [
@@ -1392,7 +1915,7 @@
       "uid": "VIEW-HOME",
       "renders": [
         {
-          "file": "home-light.png",
+          "file": "home-phone.png",
           "label": "phone"
         },
         {
@@ -1422,7 +1945,7 @@
       "uid": "VIEW-DISCOVERY",
       "renders": [
         {
-          "file": "search-light.png",
+          "file": "search-phone.png",
           "label": "phone"
         },
         {
@@ -1472,7 +1995,7 @@
       "uid": "VIEW-RESULTS",
       "renders": [
         {
-          "file": "results-light.png",
+          "file": "results-phone.png",
           "label": "phone"
         },
         {
@@ -1509,7 +2032,7 @@
       "uid": "VIEW-FILTERS",
       "renders": [
         {
-          "file": "filters-light.png",
+          "file": "filters-phone.png",
           "label": "phone"
         },
         {
@@ -1544,7 +2067,7 @@
       "uid": "VIEW-MARKET-DETAIL",
       "renders": [
         {
-          "file": "markets-light.png",
+          "file": "markets-phone.png",
           "label": "phone"
         },
         {
@@ -1578,7 +2101,7 @@
       "uid": "VIEW-PRICE-DETAIL",
       "renders": [
         {
-          "file": "price-light.png",
+          "file": "price-phone.png",
           "label": "phone"
         },
         {
@@ -1614,7 +2137,7 @@
       "uid": "VIEW-CAR-SEARCH",
       "renders": [
         {
-          "file": "car-search-light.png",
+          "file": "car-search-phone.png",
           "label": "phone"
         },
         {
@@ -1650,7 +2173,7 @@
       "uid": "VIEW-FREE-ITEMS",
       "renders": [
         {
-          "file": "free-items-light.png",
+          "file": "free-items-phone.png",
           "label": "phone"
         },
         {
@@ -1681,7 +2204,7 @@
       "uid": "VIEW-SETTINGS",
       "renders": [
         {
-          "file": "settings-light.png",
+          "file": "settings-phone.png",
           "label": "phone"
         },
         {

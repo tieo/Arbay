@@ -42,14 +42,19 @@ class ListingViewModel(
     // no server to ask. Empty everywhere except the gallery renderer.
     sample: List<Listing> = emptyList(),
     sampleStatuses: List<PlatformStatus> = emptyList(),
+    // A search that has not finished, so the view can be drawn while it waits.
+    sampleLoading: Boolean = false,
+    // Markets asked but not yet answered, for the same reason.
+    sampleTotal: Int = 0,
+    sampleCompleted: Int = 0,
 ) : ViewModel() {
 
-    private val rendersASample = sample.isNotEmpty()
+    private val rendersASample = sample.isNotEmpty() || sampleStatuses.isNotEmpty() || sampleLoading
 
     // All results from the search (unfiltered by platform)
     private val _allListings = MutableStateFlow(sample)
 
-    private val _loading = MutableStateFlow(false)
+    private val _loading = MutableStateFlow(sampleLoading)
     val loading: StateFlow<Boolean> = _loading
 
     private val _error = MutableStateFlow<String?>(null)
@@ -81,10 +86,10 @@ class ListingViewModel(
     private val _platformStatuses = MutableStateFlow(sampleStatuses)
     val platformStatuses: StateFlow<List<PlatformStatus>> = _platformStatuses
 
-    private val _totalPlatforms = MutableStateFlow(0)
+    private val _totalPlatforms = MutableStateFlow(sampleTotal)
     val totalPlatforms: StateFlow<Int> = _totalPlatforms
 
-    private val _completedPlatforms = MutableStateFlow(0)
+    private val _completedPlatforms = MutableStateFlow(sampleCompleted)
     val completedPlatforms: StateFlow<Int> = _completedPlatforms
 
     private val _bannedIds = MutableStateFlow<Set<String>>(loadBannedIds())

@@ -25,13 +25,13 @@ fi
 
 mkdir -p "$model/card"
 count=0
-for source in "$gallery"/*-light.png "$gallery"/*-wide.png "$gallery"/*-card.png; do
+for source in "$gallery"/*-phone.png "$gallery"/*-wide.png "$gallery"/*-card.png; do
   [ -e "$source" ] || continue
   name="$(basename "$source")"
   case "$name" in
     # The index wants the top of a screen at a readable size; the renderer draws
     # that itself, so nothing outside this toolchain is needed to make one.
-    *-card.png) cp "$source" "$model/card/${name%-card.png}-light.png" ;;
+    *-card.png) cp "$source" "$model/card/${name%-card.png}-phone.png" ;;
     *) cp "$source" "$model/$name"; count=$((count + 1)) ;;
   esac
 done

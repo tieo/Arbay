@@ -138,4 +138,47 @@ object PreviewData {
                 count = items.size,
             )
         }
+
+    // ── The states a search can be in ────────────────────────────────────────
+    //
+    // A screen is not one picture. These are the answers a set of markets can
+    // give: still working, all in, some unable, none of them holding anything.
+
+    /** Two markets still out, the rest in. */
+    val stillAsking: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = marketAnswers.take(4) +
+        listOf(
+            answer(PlatformId.MARKTPLAATS, PlatformSearchStatus.SEARCHING, raw = 0, kept = 0),
+            answer(PlatformId.EBAY_IT, PlatformSearchStatus.SEARCHING, raw = 0, kept = 0),
+        )
+
+    /** Every market answered, none of them badly. */
+    val allAnswered: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+        answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
+        answer(PlatformId.EBAY_DE, PlatformSearchStatus.DONE, raw = 18, kept = 12, hasMore = true),
+        answer(PlatformId.SUBITO, PlatformSearchStatus.DONE, raw = 7, kept = 5, term = "levigatrice per parquet"),
+        answer(PlatformId.MARKTPLAATS, PlatformSearchStatus.DONE, raw = 11, kept = 6, term = "parketschuurmachine"),
+    )
+
+    /** Nobody had anything: everyone answered, everyone empty. */
+    val nobodyHadAnything: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> =
+        allAnswered.map { it.copy(resultCount = 0, rawCount = 0, hasMore = false) }
+
+    /** A market holding a captcha open, which is neither an answer nor a failure. */
+    val captchaHeld: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+        answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
+        answer(PlatformId.MOBILE_DE, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0)
+            .copy(captchaUrl = "https://arbay.example/captcha/mobile-de"),
+        answer(PlatformId.BILBASEN, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0)
+            .copy(captchaUrl = "https://arbay.example/captcha/bilbasen"),
+    )
+
+    /** Every market failed, in each of the ways they fail. */
+    val everyoneFailed: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+        answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.IP_BLOCKED, raw = 0, kept = 0, error = "403"),
+        answer(PlatformId.EBAY_DE, PlatformSearchStatus.TIMEOUT, raw = 0, kept = 0),
+        answer(PlatformId.RICARDO, PlatformSearchStatus.BLOCKED, raw = 0, kept = 0,
+            error = "Cooling down after a block (~17 min left)"),
+        answer(PlatformId.IDEALO, PlatformSearchStatus.ERROR, raw = 0, kept = 0,
+            error = "idealo:parkettschleifmaschine: HTTP 503"),
+    )
 }

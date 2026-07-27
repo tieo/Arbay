@@ -16,18 +16,22 @@ class FreeItemViewModel(
     // A profile handed in rather than fetched, so the renderer draws Home as it
     // looks in use: with the Free Items card the real app pins at the top.
     sampleProfile: FreeItemProfile? = null,
+    sampleItems: List<Listing> = emptyList(),
+    sampleLoading: Boolean = false,
+    sampleError: String? = null,
 ) : ViewModel() {
 
-    private val rendersASample = sampleProfile != null
+    private val rendersASample =
+        sampleProfile != null || sampleItems.isNotEmpty() || sampleLoading || sampleError != null
 
     // ── Discover tab ──────────────────────────────────────────────────────────
-    private val _listings = MutableStateFlow<List<Listing>>(emptyList())
+    private val _listings = MutableStateFlow(sampleItems)
     val listings: StateFlow<List<Listing>> = _listings
 
-    private val _loading = MutableStateFlow(false)
+    private val _loading = MutableStateFlow(sampleLoading)
     val loading: StateFlow<Boolean> = _loading
 
-    private val _error = MutableStateFlow<String?>(null)
+    private val _error = MutableStateFlow(sampleError)
     val error: StateFlow<String?> = _error
 
     private val _platformStatus = MutableStateFlow<PlatformStatus?>(null)

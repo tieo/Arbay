@@ -15,15 +15,19 @@ class ProductViewModel(
     // empty screen that says nothing about what Home looks like in use.
     saved: List<TrackedProduct> = emptyList(),
     savedStatus: List<SavedSearchStatus> = emptyList(),
+    // The states Home can be in while it has nothing to show: still asking the
+    // server, and unable to reach it.
+    sampleLoading: Boolean = false,
+    sampleError: String? = null,
 ) : ViewModel() {
 
     private val _products = MutableStateFlow(saved)
     val products: StateFlow<List<TrackedProduct>> = _products
 
-    private val _loading = MutableStateFlow(false)
+    private val _loading = MutableStateFlow(sampleLoading)
     val loading: StateFlow<Boolean> = _loading
 
-    private val _error = MutableStateFlow<String?>(null)
+    private val _error = MutableStateFlow(sampleError)
     val error: StateFlow<String?> = _error
 
     // Keyed by saved-search id: what it has found since it was last opened, and whether the server
@@ -31,7 +35,7 @@ class ProductViewModel(
     private val _status = MutableStateFlow(savedStatus.associateBy { it.productId })
     val status: StateFlow<Map<String, SavedSearchStatus>> = _status
 
-    private val rendersASample = saved.isNotEmpty()
+    private val rendersASample = saved.isNotEmpty() || sampleLoading || sampleError != null
 
     fun loadProducts() {
         if (rendersASample) return
