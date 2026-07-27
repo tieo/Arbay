@@ -13,7 +13,12 @@ import kotlinx.coroutines.launch
 
 class FreeItemViewModel(
     private val client: ArbayClient = ArbayClient(),
+    // A profile handed in rather than fetched, so the renderer draws Home as it
+    // looks in use: with the Free Items card the real app pins at the top.
+    sampleProfile: FreeItemProfile? = null,
 ) : ViewModel() {
+
+    private val rendersASample = sampleProfile != null
 
     // ── Discover tab ──────────────────────────────────────────────────────────
     private val _listings = MutableStateFlow<List<Listing>>(emptyList())
@@ -58,7 +63,7 @@ class FreeItemViewModel(
     val telemetry: StateFlow<List<TelemetryEvent>> = _telemetry
 
     // ── Profile & insights ────────────────────────────────────────────────────
-    private val _profile = MutableStateFlow<FreeItemProfile?>(null)
+    private val _profile = MutableStateFlow(sampleProfile)
     val profile: StateFlow<FreeItemProfile?> = _profile
 
     private val _insights = MutableStateFlow<FreeItemInsights?>(null)
@@ -104,6 +109,7 @@ class FreeItemViewModel(
     }
 
     fun loadProfile() {
+        if (rendersASample) return
         viewModelScope.launch {
             try {
                 _profile.value = client.getFreeItemProfile()

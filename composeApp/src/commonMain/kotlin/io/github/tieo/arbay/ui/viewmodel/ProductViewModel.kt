@@ -31,7 +31,10 @@ class ProductViewModel(
     private val _status = MutableStateFlow(savedStatus.associateBy { it.productId })
     val status: StateFlow<Map<String, SavedSearchStatus>> = _status
 
+    private val rendersASample = saved.isNotEmpty()
+
     fun loadProducts() {
+        if (rendersASample) return
         viewModelScope.launch {
             _loading.value = true
             _error.value = null

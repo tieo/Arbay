@@ -1,75 +1,1448 @@
 {
+  "requirements": [
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-SAVE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "Home shows every saved search with how many markets it covers, and opens it on a tap.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "List the saved searches",
+      "uid": "REQ-HOME-LIST"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-SAVE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "A saved search can be edited — vehicle searches in the vehicle form, others in the add sheet — or\ndeleted.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Edit or delete a saved search",
+      "uid": "REQ-HOME-EDIT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHATS-NEW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "A saved search shows when it last found something new, and how much of it, so opening it is a choice\nrather than a check.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Say what a saved search has found since last time",
+      "uid": "REQ-HOME-NEW-SINCE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ALERT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "Saved searches are re-run every six hours and alert on new stock or a price well under the median; Home shows whether a search is watched, when it last ran and what it found.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Show that background watching is on",
+      "uid": "REQ-HOME-WATCHING"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Fulfils",
+          "to": "STORY-CROSS-BORDER"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "Typing a term and confirming asks every market the search covers, translated per country where the\nmarket's own language differs.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Search every market for what was typed",
+      "uid": "REQ-SEARCH-TYPE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CATALOGUE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "Products from the catalogue appear under what is being typed and can be searched directly.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Offer catalogue matches while typing",
+      "uid": "REQ-SEARCH-CATALOGUE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "A search started from a category tile covers 5 vehicle markets; the same search typed as text covers\n25. Both are called every market and nothing says the tile is narrower.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "One notion of every market",
+      "uid": "REQ-SEARCH-SAME-MARKETS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-OWN-WORDS"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-DISCOVERY"
+        },
+        {
+          "role": "Needs market",
+          "to": "CAP-RELATED"
+        }
+      ],
+      "statement": "A search also covers what the market itself calls the thing, taken from the related searches Kleinanzeigen prints and confirmed against what those searches return. On, on the server.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Search the market's own words for the thing",
+      "uid": "REQ-SEARCH-EXPANSION"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Photo, title, price, market, place and age of the ad — enough to judge an offer without opening it.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Show each offer with what decides it",
+      "uid": "REQ-RESULTS-OFFERS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "While markets are still answering, a thin line says so and removes itself. Results appear as they\narrive rather than at the end.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Show progress without holding the screen",
+      "uid": "REQ-RESULTS-PROGRESS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CHEAPEST"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "The canvas carries the cheapest and nothing else; median, spread, distribution and the New/Used\nsplit move behind a tap, because three summaries of one question is three answers.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "One price figure on the canvas",
+      "uid": "REQ-RESULTS-ONE-PRICE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-COUNT-MEANS-SOMETHING"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "The count on screen counts what is on screen. Where the filters hide something, that is said in words beside the list rather than as a second number that disagrees with the first.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "One count, meaning one thing",
+      "uid": "REQ-RESULTS-COUNT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-DISTANCE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        },
+        {
+          "role": "Needs market",
+          "to": "CAP-PLACE"
+        }
+      ],
+      "statement": "Each offer that carries a place shows how far it is, measured on the device from the search's own\nlocation, and nearest-first sorts what is already fetched rather than searching again.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Show distance and sort by it",
+      "uid": "REQ-RESULTS-DISTANCE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-AGE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        },
+        {
+          "role": "Needs market",
+          "to": "CAP-AGE"
+        }
+      ],
+      "statement": "Two markets of thirty-seven publish when an ad was posted. Newest-first orders by that date rather than by when this app fetched it, the offers no market dated are marked as such where the dated ones stop, and the Markets view names which cannot say.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Show how long the ad has been up",
+      "uid": "REQ-RESULTS-AGE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-BLOCK-WORD"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Blocking a word hides every offer whose title carries it, matching whole words regardless of\npunctuation, and the block is kept with the saved search.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Block a word for good",
+      "uid": "REQ-RESULTS-BLOCK-WORD"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-HIDE-ONE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "An offer can be hidden for good, kept on this device.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Dismiss a single offer",
+      "uid": "REQ-RESULTS-HIDE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-FILTERS-KEPT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "The price band set on the results survives closing the view, for every kind of search rather than\nonly vehicles.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Keep the price band",
+      "uid": "REQ-RESULTS-PRICE-KEPT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-FILTERS-KEPT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Sort order and the New/Used choice are forgotten as soon as the view closes.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Keep the sort order and the condition",
+      "uid": "REQ-RESULTS-SORT-KEPT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-NARROW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Results hidden by the filters must read differently from a search that found nothing, and offer the\nway back out.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Distinguish nothing found from nothing admitted",
+      "uid": "REQ-RESULTS-EMPTY-DIFFERENT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-NARROW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "Price band, markets, countries, blocked words and sort order are set in one place that is opened\nfrom the results and closed back onto them, instead of being laid out across the canvas and the\nsearch form.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Filters live in their own sheet",
+      "uid": "REQ-FILTERS-SHEET"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-COUNTRY"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "Markets are grouped under the country their listings are in, and the country selects every market in it. Both are kept with the search.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Filter by country",
+      "uid": "REQ-FILTERS-COUNTRY"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-NARROW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "Market chips filter what was already fetched and the search form re-runs the search. Both are called\nfiltering and nothing on screen distinguishes them.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Say whether a filter re-asks the markets",
+      "uid": "REQ-FILTERS-LOCAL-OR-REFETCH"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHAT-WAS-SENT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "Per market: the term sent, how many results came back before filtering, how many survived, and what\nwent wrong. The server holds all of it and the app shows none of it.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Say what each market answered",
+      "uid": "REQ-MARKETS-WHAT-HAPPENED"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The server tells the app twelve kinds of failure and the app shows four, so blocked, rate limited\nand simply empty all look the same.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Distinguish the kinds of failure",
+      "uid": "REQ-MARKETS-FAILURE-KINDS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "A market cooling down after a block says so, with how long is left, so a search that excludes it does not look complete.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Say which markets are cooling down",
+      "uid": "REQ-MARKETS-COOLDOWN"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-WHERE-APPLIED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        },
+        {
+          "role": "Needs market",
+          "to": "CAP-NATIVE"
+        }
+      ],
+      "statement": "Eleven markets of thirty-seven turn criteria into their own URL; the rest are filtered over what the\nfetched pages happened to contain, which is a weaker guarantee and reads identically.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Say which filters the market itself applied",
+      "uid": "REQ-MARKETS-NATIVE-OR-NOT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The app offers only markets a crawler exists for, taken from the server rather than from a list held here that can fall out of step.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Do not offer a market that cannot be searched",
+      "uid": "REQ-MARKETS-NO-CRAWLER"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "Every market with a working crawler is offered, including Geizhals and ImmoScout24, because the list comes from the crawlers themselves.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Offer every market that works",
+      "uid": "REQ-MARKETS-HIDDEN-CRAWLERS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-IS-IT-GOOD"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-PRICE-DETAIL"
+        }
+      ],
+      "statement": "Median, spread and distribution, on their own screen rather than on the results canvas.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Show where a price sits",
+      "uid": "REQ-PRICE-SPREAD"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-IS-IT-GOOD"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-PRICE-DETAIL"
+        },
+        {
+          "role": "Needs market",
+          "to": "CAP-SOLD"
+        }
+      ],
+      "statement": "Sold listings are what make a price history real, and only the five eBay markets publish them, so\nthis is thin or empty everywhere else and must say so.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Show what actually sold",
+      "uid": "REQ-PRICE-SOLD"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-CRITERIA"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Make and model come from a catalogue synced from the sites themselves, so each market is asked in\nthe token it recognises.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Pick make and model from the sites' own catalogue",
+      "uid": "REQ-CAR-CATALOGUE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-CRITERIA"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Year, mileage, price, power, gearbox, fuel, body, condition, drivetrain, doors, seats, emission\nclass, seller, van length and height, and colour.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Take the criteria a vehicle search needs",
+      "uid": "REQ-CAR-CRITERIA"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-IDEAL"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "A free-text description of the ideal vehicle orders the results instead of excluding any, since a\nsentence is not a criterion.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Rank by a description rather than filter by it",
+      "uid": "REQ-CAR-IDEAL"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-FREE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FREE-ITEMS"
+        }
+      ],
+      "statement": "Items given away near the set area are shown one at a time with how well they fit, and swiping\nteaches the model.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "One item at a time, scored",
+      "uid": "REQ-FREE-JUDGE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-SETTINGS"
+        }
+      ],
+      "statement": "The server address is set here and can be tested from here.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Point the app at a server",
+      "uid": "REQ-SETTINGS-SERVER"
+    },
+    {
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-SETTINGS"
+        }
+      ],
+      "statement": "The display currency is held in memory and never written, so it is forgotten on restart.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Keep the chosen currency",
+      "uid": "REQ-SETTINGS-CURRENCY"
+    },
+    {
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-SETTINGS"
+        }
+      ],
+      "statement": "Settings are grouped into this device and this server, and the shared group says it is shared, because search depth and the alert settings change them for every client of that server.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Device settings must not be server settings",
+      "uid": "REQ-SETTINGS-SCOPE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-ONE-SEARCH"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Nothing but one title line, one progress line and one row of three controls stands between opening the view and the first offer.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "The first screen is offers",
+      "uid": "REQ-RESULTS-OFFERS-FIRST"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-NARROW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Filters, Price and Markets each carry their own summary — how many filters are active, the best price, how many markets answered — and each opens the view that owns it.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "One row of three doors",
+      "uid": "REQ-RESULTS-THREE-DOORS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-FILTERS-KEPT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "Price band, condition, sort order, the chosen markets and countries, and the blocked words are all kept with the search, for every kind of search, not only vehicles.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Every filter survives the view closing",
+      "uid": "REQ-FILTERS-EVERYTHING-KEPT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-NARROW"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "Changing a filter re-reads what was already fetched. Only a change that no fetched result can answer says so, and asks.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Narrowing does not re-ask the markets",
+      "uid": "REQ-FILTERS-NO-REFETCH"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "Each of the server's failure kinds reaches the app as itself, and a market that was blocked, rate limited or timed out is named as such.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "A blocked market never reads as an empty one",
+      "uid": "REQ-MARKETS-BLOCKED-IS-NOT-EMPTY"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-WHO-ANSWERED"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The server already reports that a market had further pages and whether the answer came from cache. Neither reaches the app, so a truncated answer looks complete.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "3 on request",
+      "title": "Say when a market held more",
+      "uid": "REQ-MARKETS-MORE-PAGES"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-CRITERIA"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Make, model, year, price, mileage and power are on the canvas. Everything else is in a named group that says how many of its criteria are set, so a form of forty controls reads as six decisions.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "The criteria that decide come first",
+      "uid": "REQ-CAR-TIERED"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-CAR-CRITERIA"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Each collapsed group carries the number of criteria set within it, so nothing is filtering invisibly.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "A closed group says what is inside it",
+      "uid": "REQ-CAR-GROUP-COUNTS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-SAVE"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "The add-and-edit sheet was written and never rendered, so Custom search and the Edit button on a non-vehicle bookmark both did nothing at all.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "2 one tap away",
+      "title": "Editing a search that is not a vehicle does something",
+      "uid": "REQ-ADD-SHEET-RENDERS"
+    }
+  ],
+  "states": [
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "No search has been saved, so the view carries only the way into a new one.",
+      "tag": "STATE",
+      "title": "Nothing saved yet",
+      "uid": "STATE-HOME-EMPTY"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "Each saved search, with how many markets it covers, and the Free Items summary when a profile\nexists.",
+      "tag": "STATE",
+      "title": "Saved searches",
+      "uid": "STATE-HOME-SAVED"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "Nothing typed: category tiles, vehicle search first.",
+      "tag": "STATE",
+      "title": "Browsing",
+      "uid": "STATE-DISCOVERY-BROWSING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "Matches from the product catalogue appear under what is being typed, so a known product can be\npicked rather than spelled.",
+      "tag": "STATE",
+      "title": "Typing",
+      "uid": "STATE-DISCOVERY-TYPING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "shown": "What has arrived so far, under a thin progress line that removes itself when the last market\nanswers.",
+      "statement": "Some markets have not answered yet.",
+      "tag": "STATE",
+      "title": "Still asking",
+      "uid": "STATE-RESULTS-SEARCHING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "The search is complete and the list is final until a filter changes.",
+      "tag": "STATE",
+      "title": "Every market answered",
+      "uid": "STATE-RESULTS-DONE"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "A market timed out, was blocked, hit a captcha, or errored. The list is simply shorter, and nothing\non screen says a market is absent or why.",
+      "tag": "STATE",
+      "title": "Some markets failed",
+      "uid": "STATE-RESULTS-PARTIAL"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Every market answered and none of them carried the thing.",
+      "tag": "STATE",
+      "title": "Nobody had anything",
+      "uid": "STATE-RESULTS-EMPTY"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "Results exist and the active filters hide all of them, which must read differently from having found\nnothing.",
+      "tag": "STATE",
+      "title": "The filters admit none",
+      "uid": "STATE-RESULTS-EMPTY-FILTERED"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "A market answered with a challenge rather than results, and it can be solved in the crawler's own\nbrowser session.",
+      "tag": "STATE",
+      "title": "A market offers its captcha",
+      "uid": "STATE-RESULTS-CAPTCHA"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The request is out and no answer has come back.",
+      "tag": "STATE",
+      "title": "Asked",
+      "uid": "STATE-MARKET-ASKED"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "Results came back, in some count before filtering and some count after.",
+      "tag": "STATE",
+      "title": "Answered",
+      "uid": "STATE-MARKET-ANSWERED"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The market answered with a 403, a captcha, or a rate limit rather than listings.",
+      "tag": "STATE",
+      "title": "Blocked",
+      "uid": "STATE-MARKET-BLOCKED"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "The market is not asked again for a while after a block, so a search that excludes it is not a\nsearch that failed.",
+      "tag": "STATE",
+      "title": "Cooling down",
+      "uid": "STATE-MARKET-COOLING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Make and model are chosen from a catalogue synced from the sites themselves, so the term matches\nwhat each market calls it.",
+      "tag": "STATE",
+      "title": "Picking a vehicle",
+      "uid": "STATE-CAR-PICKING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "Year, mileage, price, power, gearbox, fuel, body, condition, drivetrain, doors, seats, emission\nclass, seller, van length and height, colour — plus a free-text description that ranks rather than\nfilters.",
+      "tag": "STATE",
+      "title": "Narrowing",
+      "uid": "STATE-CAR-NARROWING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-FREE-ITEMS"
+        }
+      ],
+      "statement": "One item at a time with how well it fits, swiped love, like or pass.",
+      "tag": "STATE",
+      "title": "Judging",
+      "uid": "STATE-FREE-JUDGING"
+    },
+    {
+      "relations": [
+        {
+          "role": "State of",
+          "to": "VIEW-FREE-ITEMS"
+        }
+      ],
+      "statement": "The area, what interests you, and whether to watch in the background.",
+      "tag": "STATE",
+      "title": "Setting the profile",
+      "uid": "STATE-FREE-PROFILE"
+    }
+  ],
+  "stories": [
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-DISCOVERY"
+        },
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want to type what I am after once and have every second-hand market asked, instead of opening\neight sites and searching each of them.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Ask every market once",
+      "uid": "STORY-ONE-SEARCH"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want the search to also cover what the market itself calls the thing, because a floor sander is\nsold as Parkettschleifmaschine, Parkettschleifer and Parkettschleifgerät and I only thought of one\nof them.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Find it under a name I did not think of",
+      "uid": "STORY-OWN-WORDS"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want markets in other countries searched in their own language, because the thing I want is\ncheaper in Italy and nobody there advertises it in German.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Find it where it is cheap",
+      "uid": "STORY-CROSS-BORDER"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "I want to pick the exact product from a catalogue when I know it, so the search is not at the mercy\nof my spelling.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Pick a known product rather than spell it",
+      "uid": "STORY-CATALOGUE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        },
+        {
+          "role": "Served by",
+          "to": "VIEW-PRICE-DETAIL"
+        }
+      ],
+      "statement": "I want one figure for what the thing goes for, not three competing summaries above the first offer.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "See what the thing costs",
+      "uid": "STORY-CHEAPEST"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-PRICE-DETAIL"
+        }
+      ],
+      "statement": "I want to know where an offer sits against the rest — the median, the spread, and what actually sold\n— so I can tell a bargain from a hopeful asking price.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Know whether a price is good",
+      "uid": "STORY-IS-IT-GOOD"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want to see how far away a thing is and sort by it, because a cheap thing four hundred kilometres\naway is not cheap.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Know how far it is",
+      "uid": "STORY-DISTANCE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want to see when an ad was posted, because a thing that has sat for three weeks is negotiable.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Know how long it has been for sale",
+      "uid": "STORY-AGE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want to block a word and have every offer carrying it disappear, for this search, for good.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Never see a word again",
+      "uid": "STORY-BLOCK-WORD"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want an offer I have already judged to stop coming back every time I open the search.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Dismiss one offer",
+      "uid": "STORY-HIDE-ONE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "I want to change the price band, the markets or the sort order over the results I already have,\nwithout waiting for every market to be asked again.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Narrow without starting over",
+      "uid": "STORY-NARROW"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-FILTERS"
+        }
+      ],
+      "statement": "I want to see only what is in the countries I would actually travel to or have shipped.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "Narrow by country",
+      "uid": "STORY-COUNTRY"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want the price band, the sort order and the condition I chose to still be there when I come back\nto the search.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Keep what I set",
+      "uid": "STORY-FILTERS-KEPT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "I want to save a search I care about and reopen it, rather than rebuilding it each time.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Keep a search",
+      "uid": "STORY-SAVE"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "I want to open a saved search and see what appeared since I last looked, without rereading the whole\nlist.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "See what is new since last time",
+      "uid": "STORY-WHATS-NEW"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-HOME"
+        }
+      ],
+      "statement": "I want the app to watch a saved search and tell me when something new turns up or something is\npriced well under the median.",
+      "status": "Partly served",
+      "tag": "STORY",
+      "title": "Be told rather than check",
+      "uid": "STORY-ALERT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "I want to know that a market was blocked rather than empty, because those two look identical today\nand one of them means the answer is wrong.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "Know which markets actually answered",
+      "uid": "STORY-WHO-ANSWERED"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "I want to see the term actually sent to each market, since it is translated per country, and correct\nit when the translation is wrong.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "See what each market was asked",
+      "uid": "STORY-WHAT-WAS-SENT"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-RESULTS"
+        }
+      ],
+      "statement": "I want the number of results on screen to mean one thing, not a pre-filter count in the header\ndisagreeing with a post-filter count on a chip.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "Trust the count",
+      "uid": "STORY-COUNT-MEANS-SOMETHING"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "I want to say year, mileage, power, gearbox, fuel and body and have each market asked in its own\nterms, because a car search on words alone is useless.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Describe a vehicle properly",
+      "uid": "STORY-CAR-CRITERIA"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ],
+      "statement": "I want to know that a criterion was applied by the market itself rather than over the first two\npages it happened to return, because only one of those is a real filter.",
+      "status": "Unserved",
+      "tag": "STORY",
+      "title": "Know which market applied which filter",
+      "uid": "STORY-CAR-WHERE-APPLIED"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-CAR-SEARCH"
+        }
+      ],
+      "statement": "I want to describe the ideal vehicle in a sentence and have the list ranked by how well it fits,\nbeyond what a filter can express.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Say what I actually want in words",
+      "uid": "STORY-CAR-IDEAL"
+    },
+    {
+      "relations": [
+        {
+          "role": "Served by",
+          "to": "VIEW-FREE-ITEMS"
+        }
+      ],
+      "statement": "I want to be shown things going for nothing near me, one at a time, and have the app learn what I\nkeep saying yes to.",
+      "status": "Served",
+      "tag": "STORY",
+      "title": "Sift what is given away",
+      "uid": "STORY-FREE"
+    }
+  ],
   "views": [
     {
-      "tag": "VIEW",
-      "relations": [],
-      "uid": "VIEW-HOME",
-      "title": "Home",
-      "statement": "Show the searches worth coming back to, and start a new one.",
-      "status": "Built",
-      "screenshot": "home-light.png",
+      "notes": "",
       "plan": {
+        "behind": [],
         "canvas": [
           "Each saved search with what is new since it was last opened",
           "Whether it is watched, when it last ran, and what that run found"
         ],
-        "behind": [],
         "gone": []
-      }
+      },
+      "relations": [],
+      "statement": "Show the searches worth coming back to, and start a new one.",
+      "status": "Built",
+      "tag": "VIEW",
+      "title": "Home",
+      "uid": "VIEW-HOME",
+      "renders": [
+        {
+          "file": "home-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "home-wide.png",
+          "label": "wide"
+        }
+      ]
     },
     {
-      "tag": "VIEW",
-      "relations": [
-        {
-          "to": "VIEW-HOME",
-          "role": "Reached from"
-        }
-      ],
-      "uid": "VIEW-DISCOVERY",
-      "title": "Search",
-      "statement": "Get from an idea to a search, by typing or by browsing categories.",
-      "status": "Built",
-      "screenshot": "search-light.png",
       "plan": {
+        "behind": [],
         "canvas": [
           "One notion of every market: a tile searches what typing the same words searches"
         ],
-        "behind": [],
         "gone": []
-      }
-    },
-    {
-      "tag": "VIEW",
+      },
       "relations": [
         {
-          "to": "VIEW-HOME",
-          "role": "Reached from"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Reached from"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-HOME"
         }
       ],
-      "uid": "VIEW-RESULTS",
-      "title": "Results",
-      "statement": "Show what is for sale, cheapest and most relevant first, from every market at once.\n\nThis is the view the app exists for. Anything that is not an offer competes with the offers for the\nfirst screen.",
+      "statement": "Get from an idea to a search, by typing or by browsing categories.",
       "status": "Built",
-      "screenshot": "results-light.png",
+      "tag": "VIEW",
+      "title": "Search",
+      "uid": "VIEW-DISCOVERY",
+      "renders": [
+        {
+          "file": "search-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "search-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
+        "behind": [
+          "Price band, markets, countries, condition, sort, blocked words → Filters",
+          "Median, spread, distribution, New/Used split, sold history → Price",
+          "Per-market term, counts, failures, cooldown → Markets"
+        ],
         "canvas": [
           "The offers, from the first screen down",
           "One line: what it is, how many offers, and one count that means one thing",
           "A thin progress line while markets answer, which removes itself",
           "One row of three: Filters (n), Price (best), Markets (n answered)"
-        ],
-        "behind": [
-          "Price band, markets, countries, condition, sort, blocked words → Filters",
-          "Median, spread, distribution, New/Used split, sold history → Price",
-          "Per-market term, counts, failures, cooldown → Markets"
         ],
         "gone": [
           "The price overview card above the offers",
@@ -77,21 +1450,40 @@
           "The market chip row, the car-filter chip row and the blocked-word chip row, all three",
           "Two of the three result counts"
         ]
-      }
-    },
-    {
-      "tag": "VIEW",
+      },
       "relations": [
         {
-          "to": "VIEW-RESULTS",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-HOME"
+        },
+        {
+          "role": "Reached from",
+          "to": "VIEW-DISCOVERY"
+        },
+        {
+          "role": "Reached from",
+          "to": "VIEW-CAR-SEARCH"
         }
       ],
-      "uid": "VIEW-FILTERS",
-      "title": "Filters",
-      "statement": "Narrow the search without losing your place in the results.\n\nToday the price band, the market chips and the blocked words are laid out on the results canvas, and\nthe vehicle filters live in the search form, which re-runs the whole search.",
+      "statement": "Show what is for sale, cheapest and most relevant first, from every market at once.\n\nThis is the view the app exists for. Anything that is not an offer competes with the offers for the\nfirst screen.",
       "status": "Built",
+      "tag": "VIEW",
+      "title": "Results",
+      "uid": "VIEW-RESULTS",
+      "renders": [
+        {
+          "file": "results-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "results-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
+        "behind": [],
         "canvas": [
           "Price band",
           "Condition: any, new, used",
@@ -100,1511 +1492,201 @@
           "Blocked words, added and removed here",
           "For a vehicle search, the criteria that today re-run the whole search"
         ],
-        "behind": [],
         "gone": [
           "Every filter that today sits on the results canvas"
         ]
       },
-      "screenshot": "filters-light.png"
-    },
-    {
-      "tag": "VIEW",
       "relations": [
         {
-          "to": "VIEW-RESULTS",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-RESULTS"
         }
       ],
-      "uid": "VIEW-MARKET-DETAIL",
-      "title": "Markets",
-      "statement": "Say what actually happened at each market: the term it was sent, what it answered, and what went\nwrong.\n\nEverything this needs is already collected on the server and none of it reaches the app.",
+      "statement": "Narrow the search without losing your place in the results.\n\nToday the price band, the market chips and the blocked words are laid out on the results canvas, and\nthe vehicle filters live in the search form, which re-runs the whole search.",
       "status": "Built",
+      "tag": "VIEW",
+      "title": "Filters",
+      "uid": "VIEW-FILTERS",
+      "renders": [
+        {
+          "file": "filters-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "filters-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
+        "behind": [],
         "canvas": [
           "One row per market: the term it was sent, how many it returned, how many survived filtering",
           "Why a market is absent, in its own words: blocked, rate limited, timed out, captcha, nothing found",
           "Which markets are cooling down, and until when",
           "A way into a captcha the crawler is holding open"
         ],
-        "behind": [],
         "gone": [
           "The chip row on the results canvas that stood in for this"
         ]
       },
-      "screenshot": "markets-light.png"
-    },
-    {
-      "tag": "VIEW",
       "relations": [
         {
-          "to": "VIEW-RESULTS",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-RESULTS"
         }
       ],
-      "uid": "VIEW-PRICE-DETAIL",
-      "title": "Price",
-      "statement": "Say whether a price is good.\n\nThe median, the spread, the New/Used split and the chart all sit on the results canvas today, which\nis how one question came to have three competing answers above the fold.",
+      "statement": "Say what actually happened at each market: the term it was sent, what it answered, and what went\nwrong.\n\nEverything this needs is already collected on the server and none of it reaches the app.",
       "status": "Built",
+      "tag": "VIEW",
+      "title": "Markets",
+      "uid": "VIEW-MARKET-DETAIL",
+      "renders": [
+        {
+          "file": "markets-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "markets-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
+        "behind": [],
         "canvas": [
           "The distribution, with New and Used separable",
           "Median and spread",
           "Sold history where the market publishes it, and a plain sentence where it does not"
         ],
-        "behind": [],
         "gone": [
           "The price card and the chart that today push the first offer off the screen"
         ]
       },
-      "screenshot": "price-light.png"
-    },
-    {
-      "tag": "VIEW",
       "relations": [
         {
-          "to": "VIEW-DISCOVERY",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-RESULTS"
         }
       ],
-      "uid": "VIEW-CAR-SEARCH",
-      "title": "Vehicle search",
-      "statement": "Describe a vehicle precisely enough that the markets can be asked properly.",
+      "statement": "Say whether a price is good.\n\nThe median, the spread, the New/Used split and the chart all sit on the results canvas today, which\nis how one question came to have three competing answers above the fold.",
       "status": "Built",
-      "screenshot": "car-search-light.png",
+      "tag": "VIEW",
+      "title": "Price",
+      "uid": "VIEW-PRICE-DETAIL",
+      "renders": [
+        {
+          "file": "price-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "price-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
-        "canvas": [
-          "Make and model, then the four criteria that decide a vehicle: year, price, mileage, power",
-          "One line saying how many markets will be asked"
-        ],
         "behind": [
           "Drivetrain and body, condition and seller, van size, colour, description → named groups, each saying how many of its criteria are set",
           "Markets, as a group of its own"
         ],
+        "canvas": [
+          "Make and model, then the four criteria that decide a vehicle: year, price, mileage, power",
+          "One line saying how many markets will be asked"
+        ],
         "gone": [
           "One More-filters toggle opening a wall of sixteen controls with no grouping"
         ]
-      }
-    },
-    {
-      "tag": "VIEW",
+      },
       "relations": [
         {
-          "to": "VIEW-HOME",
-          "role": "Reached from"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-DISCOVERY"
         }
       ],
-      "uid": "VIEW-FREE-ITEMS",
-      "title": "Free items",
-      "statement": "Sift what is being given away, learning what is worth a detour.",
+      "statement": "Describe a vehicle precisely enough that the markets can be asked properly.",
       "status": "Built",
-      "screenshot": "free-items-light.png",
+      "tag": "VIEW",
+      "title": "Vehicle search",
+      "uid": "VIEW-CAR-SEARCH",
+      "renders": [
+        {
+          "file": "car-search-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "car-search-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
-        "canvas": [
-          "The item, its score, and the three judgements"
-        ],
         "behind": [
           "Saved, history, the profile and how the model is doing"
         ],
+        "canvas": [
+          "The item, its score, and the three judgements"
+        ],
         "gone": []
-      }
-    },
-    {
-      "tag": "VIEW",
+      },
       "relations": [
         {
-          "to": "VIEW-HOME",
-          "role": "Reached from"
+          "role": "Reached from",
+          "to": "VIEW-HOME"
+        },
+        {
+          "role": "Reached from",
+          "to": "VIEW-DISCOVERY"
         }
       ],
-      "uid": "VIEW-SETTINGS",
-      "title": "Settings",
-      "statement": "Point the app at its server and say how deeply it searches.",
+      "statement": "Sift what is being given away, learning what is worth a detour.",
       "status": "Built",
-      "screenshot": "settings-light.png",
+      "tag": "VIEW",
+      "title": "Free items",
+      "uid": "VIEW-FREE-ITEMS",
+      "renders": [
+        {
+          "file": "free-items-light.png",
+          "label": "phone"
+        },
+        {
+          "file": "free-items-wide.png",
+          "label": "wide"
+        }
+      ]
+    },
+    {
       "plan": {
+        "behind": [],
         "canvas": [
           "This device: server address, display currency, both surviving a restart",
           "This server, marked as shared: search depth and alerts"
         ],
-        "behind": [],
         "gone": []
-      }
-    }
-  ],
-  "states": [
-    {
-      "tag": "STATE",
+      },
       "relations": [
         {
-          "to": "VIEW-HOME",
-          "role": "State of"
+          "role": "Reached from",
+          "to": "VIEW-HOME"
         }
       ],
-      "uid": "STATE-HOME-EMPTY",
-      "title": "Nothing saved yet",
-      "statement": "No search has been saved, so the view carries only the way into a new one."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-HOME",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-HOME-SAVED",
-      "title": "Saved searches",
-      "statement": "Each saved search, with how many markets it covers, and the Free Items summary when a profile\nexists."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-DISCOVERY-BROWSING",
-      "title": "Browsing",
-      "statement": "Nothing typed: category tiles, vehicle search first."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-DISCOVERY-TYPING",
-      "title": "Typing",
-      "statement": "Matches from the product catalogue appear under what is being typed, so a known product can be\npicked rather than spelled."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-SEARCHING",
-      "title": "Still asking",
-      "statement": "Some markets have not answered yet.",
-      "shown": "What has arrived so far, under a thin progress line that removes itself when the last market\nanswers."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-DONE",
-      "title": "Every market answered",
-      "statement": "The search is complete and the list is final until a filter changes."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-PARTIAL",
-      "title": "Some markets failed",
-      "statement": "A market timed out, was blocked, hit a captcha, or errored. The list is simply shorter, and nothing\non screen says a market is absent or why."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-EMPTY",
-      "title": "Nobody had anything",
-      "statement": "Every market answered and none of them carried the thing."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-EMPTY-FILTERED",
-      "title": "The filters admit none",
-      "statement": "Results exist and the active filters hide all of them, which must read differently from having found\nnothing."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-RESULTS-CAPTCHA",
-      "title": "A market offers its captcha",
-      "statement": "A market answered with a challenge rather than results, and it can be solved in the crawler's own\nbrowser session."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-MARKET-ASKED",
-      "title": "Asked",
-      "statement": "The request is out and no answer has come back."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-MARKET-ANSWERED",
-      "title": "Answered",
-      "statement": "Results came back, in some count before filtering and some count after."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-MARKET-BLOCKED",
-      "title": "Blocked",
-      "statement": "The market answered with a 403, a captcha, or a rate limit rather than listings."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-MARKET-COOLING",
-      "title": "Cooling down",
-      "statement": "The market is not asked again for a while after a block, so a search that excludes it is not a\nsearch that failed."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-CAR-PICKING",
-      "title": "Picking a vehicle",
-      "statement": "Make and model are chosen from a catalogue synced from the sites themselves, so the term matches\nwhat each market calls it."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-CAR-NARROWING",
-      "title": "Narrowing",
-      "statement": "Year, mileage, price, power, gearbox, fuel, body, condition, drivetrain, doors, seats, emission\nclass, seller, van length and height, colour — plus a free-text description that ranks rather than\nfilters."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-FREE-ITEMS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-FREE-JUDGING",
-      "title": "Judging",
-      "statement": "One item at a time with how well it fits, swiped love, like or pass."
-    },
-    {
-      "tag": "STATE",
-      "relations": [
-        {
-          "to": "VIEW-FREE-ITEMS",
-          "role": "State of"
-        }
-      ],
-      "uid": "STATE-FREE-PROFILE",
-      "title": "Setting the profile",
-      "statement": "The area, what interests you, and whether to watch in the background."
-    }
-  ],
-  "stories": [
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Served by"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-ONE-SEARCH",
-      "title": "Ask every market once",
-      "statement": "I want to type what I am after once and have every second-hand market asked, instead of opening\neight sites and searching each of them.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-OWN-WORDS",
-      "title": "Find it under a name I did not think of",
-      "statement": "I want the search to also cover what the market itself calls the thing, because a floor sander is\nsold as Parkettschleifmaschine, Parkettschleifer and Parkettschleifgerät and I only thought of one\nof them.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CROSS-BORDER",
-      "title": "Find it where it is cheap",
-      "statement": "I want markets in other countries searched in their own language, because the thing I want is\ncheaper in Italy and nobody there advertises it in German.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CATALOGUE",
-      "title": "Pick a known product rather than spell it",
-      "statement": "I want to pick the exact product from a catalogue when I know it, so the search is not at the mercy\nof my spelling.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        },
-        {
-          "to": "VIEW-PRICE-DETAIL",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CHEAPEST",
-      "title": "See what the thing costs",
-      "statement": "I want one figure for what the thing goes for, not three competing summaries above the first offer.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-PRICE-DETAIL",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-IS-IT-GOOD",
-      "title": "Know whether a price is good",
-      "statement": "I want to know where an offer sits against the rest — the median, the spread, and what actually sold\n— so I can tell a bargain from a hopeful asking price.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-DISTANCE",
-      "title": "Know how far it is",
-      "statement": "I want to see how far away a thing is and sort by it, because a cheap thing four hundred kilometres\naway is not cheap.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-AGE",
-      "title": "Know how long it has been for sale",
-      "statement": "I want to see when an ad was posted, because a thing that has sat for three weeks is negotiable.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-BLOCK-WORD",
-      "title": "Never see a word again",
-      "statement": "I want to block a word and have every offer carrying it disappear, for this search, for good.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-HIDE-ONE",
-      "title": "Dismiss one offer",
-      "statement": "I want an offer I have already judged to stop coming back every time I open the search.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-NARROW",
-      "title": "Narrow without starting over",
-      "statement": "I want to change the price band, the markets or the sort order over the results I already have,\nwithout waiting for every market to be asked again.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-COUNTRY",
-      "title": "Narrow by country",
-      "statement": "I want to see only what is in the countries I would actually travel to or have shipped.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-FILTERS-KEPT",
-      "title": "Keep what I set",
-      "statement": "I want the price band, the sort order and the condition I chose to still be there when I come back\nto the search.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-HOME",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-SAVE",
-      "title": "Keep a search",
-      "statement": "I want to save a search I care about and reopen it, rather than rebuilding it each time.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-HOME",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-WHATS-NEW",
-      "title": "See what is new since last time",
-      "statement": "I want to open a saved search and see what appeared since I last looked, without rereading the whole\nlist.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-HOME",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-ALERT",
-      "title": "Be told rather than check",
-      "statement": "I want the app to watch a saved search and tell me when something new turns up or something is\npriced well under the median.",
-      "status": "Partly served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-WHO-ANSWERED",
-      "title": "Know which markets actually answered",
-      "statement": "I want to know that a market was blocked rather than empty, because those two look identical today\nand one of them means the answer is wrong.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-WHAT-WAS-SENT",
-      "title": "See what each market was asked",
-      "statement": "I want to see the term actually sent to each market, since it is translated per country, and correct\nit when the translation is wrong.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-COUNT-MEANS-SOMETHING",
-      "title": "Trust the count",
-      "statement": "I want the number of results on screen to mean one thing, not a pre-filter count in the header\ndisagreeing with a post-filter count on a chip.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CAR-CRITERIA",
-      "title": "Describe a vehicle properly",
-      "statement": "I want to say year, mileage, power, gearbox, fuel and body and have each market asked in its own\nterms, because a car search on words alone is useless.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CAR-WHERE-APPLIED",
-      "title": "Know which market applied which filter",
-      "statement": "I want to know that a criterion was applied by the market itself rather than over the first two\npages it happened to return, because only one of those is a real filter.",
-      "status": "Unserved"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-CAR-IDEAL",
-      "title": "Say what I actually want in words",
-      "statement": "I want to describe the ideal vehicle in a sentence and have the list ranked by how well it fits,\nbeyond what a filter can express.",
-      "status": "Served"
-    },
-    {
-      "tag": "STORY",
-      "relations": [
-        {
-          "to": "VIEW-FREE-ITEMS",
-          "role": "Served by"
-        }
-      ],
-      "uid": "STORY-FREE",
-      "title": "Sift what is given away",
-      "statement": "I want to be shown things going for nothing near me, one at a time, and have the app learn what I\nkeep saying yes to.",
-      "status": "Served"
-    }
-  ],
-  "requirements": [
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-SAVE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-HOME",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-HOME-LIST",
-      "title": "List the saved searches",
-      "statement": "Home shows every saved search with how many markets it covers, and opens it on a tap.",
+      "statement": "Point the app at its server and say how deeply it searches.",
       "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
+      "tag": "VIEW",
+      "title": "Settings",
+      "uid": "VIEW-SETTINGS",
+      "renders": [
         {
-          "to": "STORY-SAVE",
-          "role": "Fulfils"
+          "file": "settings-light.png",
+          "label": "phone"
         },
         {
-          "to": "VIEW-HOME",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-HOME-EDIT",
-      "title": "Edit or delete a saved search",
-      "statement": "A saved search can be edited — vehicle searches in the vehicle form, others in the add sheet — or\ndeleted.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-WHATS-NEW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-HOME",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-HOME-NEW-SINCE",
-      "title": "Say what a saved search has found since last time",
-      "statement": "A saved search shows when it last found something new, and how much of it, so opening it is a choice\nrather than a check.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ALERT",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-HOME",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-HOME-WATCHING",
-      "title": "Show that background watching is on",
-      "statement": "Saved searches are re-run every six hours and alert on new stock or a price well under the median; Home shows whether a search is watched, when it last ran and what it found.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "STORY-CROSS-BORDER",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SEARCH-TYPE",
-      "title": "Search every market for what was typed",
-      "statement": "Typing a term and confirming asks every market the search covers, translated per country where the\nmarket's own language differs.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CATALOGUE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SEARCH-CATALOGUE",
-      "title": "Offer catalogue matches while typing",
-      "statement": "Products from the catalogue appear under what is being typed and can be searched directly.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SEARCH-SAME-MARKETS",
-      "title": "One notion of every market",
-      "statement": "A search started from a category tile covers 5 vehicle markets; the same search typed as text covers\n25. Both are called every market and nothing says the tile is narrower.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-OWN-WORDS",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "Lives in"
-        },
-        {
-          "to": "CAP-RELATED",
-          "role": "Needs market"
-        }
-      ],
-      "uid": "REQ-SEARCH-EXPANSION",
-      "title": "Search the market's own words for the thing",
-      "statement": "A search also covers what the market itself calls the thing, taken from the related searches Kleinanzeigen prints and confirmed against what those searches return. On, on the server.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-OFFERS",
-      "title": "Show each offer with what decides it",
-      "statement": "Photo, title, price, market, place and age of the ad — enough to judge an offer without opening it.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-PROGRESS",
-      "title": "Show progress without holding the screen",
-      "statement": "While markets are still answering, a thin line says so and removes itself. Results appear as they\narrive rather than at the end.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CHEAPEST",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-ONE-PRICE",
-      "title": "One price figure on the canvas",
-      "statement": "The canvas carries the cheapest and nothing else; median, spread, distribution and the New/Used\nsplit move behind a tap, because three summaries of one question is three answers.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-COUNT-MEANS-SOMETHING",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-COUNT",
-      "title": "One count, meaning one thing",
-      "statement": "The count on screen counts what is on screen. Where the filters hide something, that is said in words beside the list rather than as a second number that disagrees with the first.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-DISTANCE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        },
-        {
-          "to": "CAP-PLACE",
-          "role": "Needs market"
-        }
-      ],
-      "uid": "REQ-RESULTS-DISTANCE",
-      "title": "Show distance and sort by it",
-      "statement": "Each offer that carries a place shows how far it is, measured on the device from the search's own\nlocation, and nearest-first sorts what is already fetched rather than searching again.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-AGE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        },
-        {
-          "to": "CAP-AGE",
-          "role": "Needs market"
-        }
-      ],
-      "uid": "REQ-RESULTS-AGE",
-      "title": "Show how long the ad has been up",
-      "statement": "Two markets of thirty-seven publish when an ad was posted. Newest-first orders by that date rather than by when this app fetched it, the offers no market dated are marked as such where the dated ones stop, and the Markets view names which cannot say.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-BLOCK-WORD",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-BLOCK-WORD",
-      "title": "Block a word for good",
-      "statement": "Blocking a word hides every offer whose title carries it, matching whole words regardless of\npunctuation, and the block is kept with the saved search.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-HIDE-ONE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-HIDE",
-      "title": "Dismiss a single offer",
-      "statement": "An offer can be hidden for good, kept on this device.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-FILTERS-KEPT",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-PRICE-KEPT",
-      "title": "Keep the price band",
-      "statement": "The price band set on the results survives closing the view, for every kind of search rather than\nonly vehicles.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-FILTERS-KEPT",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-SORT-KEPT",
-      "title": "Keep the sort order and the condition",
-      "statement": "Sort order and the New/Used choice are forgotten as soon as the view closes.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-RESULTS-EMPTY-DIFFERENT",
-      "title": "Distinguish nothing found from nothing admitted",
-      "statement": "Results hidden by the filters must read differently from a search that found nothing, and offer the\nway back out.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-FILTERS-SHEET",
-      "title": "Filters live in their own sheet",
-      "statement": "Price band, markets, countries, blocked words and sort order are set in one place that is opened\nfrom the results and closed back onto them, instead of being laid out across the canvas and the\nsearch form.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-COUNTRY",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-FILTERS-COUNTRY",
-      "title": "Filter by country",
-      "statement": "Markets are grouped under the country their listings are in, and the country selects every market in it. Both are kept with the search.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-FILTERS-LOCAL-OR-REFETCH",
-      "title": "Say whether a filter re-asks the markets",
-      "statement": "Market chips filter what was already fetched and the search form re-runs the search. Both are called\nfiltering and nothing on screen distinguishes them.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "STORY-WHAT-WAS-SENT",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-MARKETS-WHAT-HAPPENED",
-      "title": "Say what each market answered",
-      "statement": "Per market: the term sent, how many results came back before filtering, how many survived, and what\nwent wrong. The server holds all of it and the app shows none of it.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-MARKETS-FAILURE-KINDS",
-      "title": "Distinguish the kinds of failure",
-      "statement": "The server tells the app twelve kinds of failure and the app shows four, so blocked, rate limited\nand simply empty all look the same.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-MARKETS-COOLDOWN",
-      "title": "Say which markets are cooling down",
-      "statement": "A market cooling down after a block says so, with how long is left, so a search that excludes it does not look complete.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CAR-WHERE-APPLIED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        },
-        {
-          "to": "CAP-NATIVE",
-          "role": "Needs market"
-        }
-      ],
-      "uid": "REQ-MARKETS-NATIVE-OR-NOT",
-      "title": "Say which filters the market itself applied",
-      "statement": "Eleven markets of thirty-seven turn criteria into their own URL; the rest are filtered over what the\nfetched pages happened to contain, which is a weaker guarantee and reads identically.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-MARKETS-NO-CRAWLER",
-      "title": "Do not offer a market that cannot be searched",
-      "statement": "The app offers only markets a crawler exists for, taken from the server rather than from a list held here that can fall out of step.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-MARKETS-HIDDEN-CRAWLERS",
-      "title": "Offer every market that works",
-      "statement": "Every market with a working crawler is offered, including Geizhals and ImmoScout24, because the list comes from the crawlers themselves.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-IS-IT-GOOD",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-PRICE-DETAIL",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-PRICE-SPREAD",
-      "title": "Show where a price sits",
-      "statement": "Median, spread and distribution, on their own screen rather than on the results canvas.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-IS-IT-GOOD",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-PRICE-DETAIL",
-          "role": "Lives in"
-        },
-        {
-          "to": "CAP-SOLD",
-          "role": "Needs market"
-        }
-      ],
-      "uid": "REQ-PRICE-SOLD",
-      "title": "Show what actually sold",
-      "statement": "Sold listings are what make a price history real, and only the five eBay markets publish them, so\nthis is thin or empty everywhere else and must say so.",
-      "status": "Built",
-      "tier": "3 on request"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CAR-CRITERIA",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-CAR-CATALOGUE",
-      "title": "Pick make and model from the sites' own catalogue",
-      "statement": "Make and model come from a catalogue synced from the sites themselves, so each market is asked in\nthe token it recognises.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CAR-CRITERIA",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-CAR-CRITERIA",
-      "title": "Take the criteria a vehicle search needs",
-      "statement": "Year, mileage, price, power, gearbox, fuel, body, condition, drivetrain, doors, seats, emission\nclass, seller, van length and height, and colour.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-CAR-IDEAL",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-CAR-IDEAL",
-      "title": "Rank by a description rather than filter by it",
-      "statement": "A free-text description of the ideal vehicle orders the results instead of excluding any, since a\nsentence is not a criterion.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "STORY-FREE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FREE-ITEMS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-FREE-JUDGE",
-      "title": "One item at a time, scored",
-      "statement": "Items given away near the set area are shown one at a time with how well they fit, and swiping\nteaches the model.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SETTINGS-SERVER",
-      "title": "Point the app at a server",
-      "statement": "The server address is set here and can be tested from here.",
-      "status": "Built",
-      "tier": "1 canvas"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SETTINGS-CURRENCY",
-      "title": "Keep the chosen currency",
-      "statement": "The display currency is held in memory and never written, so it is forgotten on restart.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
-          "role": "Lives in"
-        }
-      ],
-      "uid": "REQ-SETTINGS-SCOPE",
-      "title": "Device settings must not be server settings",
-      "statement": "Settings are grouped into this device and this server, and the shared group says it is shared, because search depth and the alert settings change them for every client of that server.",
-      "status": "Built",
-      "tier": "2 one tap away"
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-RESULTS-OFFERS-FIRST",
-      "title": "The first screen is offers",
-      "statement": "Nothing but one title line, one progress line and one row of three controls stands between opening the view and the first offer.",
-      "status": "Built",
-      "tier": "1 canvas",
-      "relations": [
-        {
-          "to": "STORY-ONE-SEARCH",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-RESULTS-THREE-DOORS",
-      "title": "One row of three doors",
-      "statement": "Filters, Price and Markets each carry their own summary — how many filters are active, the best price, how many markets answered — and each opens the view that owns it.",
-      "status": "Built",
-      "tier": "1 canvas",
-      "relations": [
-        {
-          "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-FILTERS-EVERYTHING-KEPT",
-      "title": "Every filter survives the view closing",
-      "statement": "Price band, condition, sort order, the chosen markets and countries, and the blocked words are all kept with the search, for every kind of search, not only vehicles.",
-      "status": "Built",
-      "tier": "2 one tap away",
-      "relations": [
-        {
-          "to": "STORY-FILTERS-KEPT",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-FILTERS-NO-REFETCH",
-      "title": "Narrowing does not re-ask the markets",
-      "statement": "Changing a filter re-reads what was already fetched. Only a change that no fetched result can answer says so, and asks.",
-      "status": "Built",
-      "tier": "2 one tap away",
-      "relations": [
-        {
-          "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-FILTERS",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-MARKETS-BLOCKED-IS-NOT-EMPTY",
-      "title": "A blocked market never reads as an empty one",
-      "statement": "Each of the server's failure kinds reaches the app as itself, and a market that was blocked, rate limited or timed out is named as such.",
-      "status": "Built",
-      "tier": "3 on request",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-MARKETS-MORE-PAGES",
-      "title": "Say when a market held more",
-      "statement": "The server already reports that a market had further pages and whether the answer came from cache. Neither reaches the app, so a truncated answer looks complete.",
-      "status": "Built",
-      "tier": "3 on request",
-      "relations": [
-        {
-          "to": "STORY-WHO-ANSWERED",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-CAR-TIERED",
-      "title": "The criteria that decide come first",
-      "statement": "Make, model, year, price, mileage and power are on the canvas. Everything else is in a named group that says how many of its criteria are set, so a form of forty controls reads as six decisions.",
-      "status": "Built",
-      "tier": "1 canvas",
-      "relations": [
-        {
-          "to": "STORY-CAR-CRITERIA",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-CAR-GROUP-COUNTS",
-      "title": "A closed group says what is inside it",
-      "statement": "Each collapsed group carries the number of criteria set within it, so nothing is filtering invisibly.",
-      "status": "Built",
-      "tier": "2 one tap away",
-      "relations": [
-        {
-          "to": "STORY-CAR-CRITERIA",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-ADD-SHEET-RENDERS",
-      "title": "Editing a search that is not a vehicle does something",
-      "statement": "The add-and-edit sheet was written and never rendered, so Custom search and the Edit button on a non-vehicle bookmark both did nothing at all.",
-      "status": "Built",
-      "tier": "2 one tap away",
-      "relations": [
-        {
-          "to": "STORY-SAVE",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-HOME",
-          "role": "Lives in"
+          "file": "settings-wide.png",
+          "label": "wide"
         }
       ]
     }

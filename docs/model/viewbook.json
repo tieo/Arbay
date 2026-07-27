@@ -10,15 +10,49 @@
       "sortBy": "name",
       "statement": "Every market that carries a crawler. What each can do is declared in the crawler and read from there, so this table cannot quietly stop being true.",
       "columns": [
-        { "field": "name", "title": "Market" },
-        { "field": "country", "title": "Country", "empty": "DE" },
-        { "field": "paginates", "title": "Pages", "yes": "every page", "no": "first only" },
-        { "field": "nativeCriteria", "title": "Filters at the source" },
-        { "field": "soldListings", "title": "Sold" },
-        { "field": "listingAge", "title": "Age" },
-        { "field": "location", "title": "Place" },
-        { "field": "crawler", "title": "Crawler" }
+        {
+          "field": "name",
+          "title": "Market"
+        },
+        {
+          "field": "country",
+          "title": "Country",
+          "empty": "DE"
+        },
+        {
+          "field": "paginates",
+          "title": "Pages",
+          "yes": "every page",
+          "no": "first only"
+        },
+        {
+          "field": "nativeCriteria",
+          "title": "Filters at the source"
+        },
+        {
+          "field": "soldListings",
+          "title": "Sold"
+        },
+        {
+          "field": "listingAge",
+          "title": "Age"
+        },
+        {
+          "field": "location",
+          "title": "Place"
+        },
+        {
+          "field": "crawler",
+          "title": "Crawler"
+        }
       ]
     }
-  ]
+  ],
+  "renders": {
+    "command": [
+      "./make-renders.sh"
+    ],
+    "dir": "../..",
+    "statement": "Draws every view off-screen with sample data, on the JVM, from the same composables the app runs. No device, no emulator, no @Preview functions to keep in step with the real screens."
+  }
 }

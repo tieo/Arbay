@@ -18,6 +18,7 @@ import java.io.File
  *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
 private val TABLET_W = 1100
 private val TABLET_H = 1400
+private val CARD_H = 585
 private val PHONE_W = 390
 private val PHONE_H = 1600
 
@@ -32,7 +33,9 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
         io.github.tieo.arbay.ui.screen.MainScreen(
             productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(saved = SampleData.saved, savedStatus = SampleData.savedStatus),
             listingViewModel = io.github.tieo.arbay.ui.viewmodel.ListingViewModel(),
-            freeItemViewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(),
+            freeItemViewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(
+                sampleProfile = SampleData.freeItemProfile,
+            ),
             client = io.github.tieo.arbay.api.ArbayClient(),
         )
     },
@@ -141,6 +144,11 @@ fun main() {
         runCatching {
             renderToPng("$name-wide", TABLET_W, TABLET_H, dark = false, outDir = outDir, content = view)
         }.onFailure { println("FAILED $name-wide: ${it.message}") }
+        // A card for the model's index: the top of the screen at a size where it is recognisable,
+        // drawn rather than cropped, so nothing outside this toolchain is needed to produce it.
+        runCatching {
+            renderToPng("$name-card", PHONE_W, CARD_H, dark = false, outDir = outDir, content = view)
+        }.onFailure { println("FAILED $name-card: ${it.message}") }
     }
     println("gallery written to ${outDir.absolutePath}")
 }
