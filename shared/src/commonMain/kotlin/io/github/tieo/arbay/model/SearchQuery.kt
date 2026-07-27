@@ -115,6 +115,9 @@ data class SearchQuery(
     val minPrice: Money? = null,
     val maxPrice: Money? = null,
     val condition: List<Condition>? = null,
+    // How the results are ordered. Part of the search rather than of the screen showing it, so
+    // reopening a saved search restores the order it was left in.
+    val sort: SortMode? = null,
     val soldOnly: Boolean = false,
     val freeOnly: Boolean = false,
     val excludeKeywords: List<String> = emptyList(),

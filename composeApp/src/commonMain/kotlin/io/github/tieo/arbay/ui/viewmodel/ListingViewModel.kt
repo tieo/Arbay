@@ -15,16 +15,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import io.github.tieo.arbay.model.SortMode
 import kotlinx.coroutines.withTimeoutOrNull
-
-/** How the results list is ordered; chosen by the user from the sort menu. */
-enum class SortMode(val label: String) {
-    BEST_MATCH("Best match"),
-    PRICE_ASC("Price: low to high"),
-    PRICE_DESC("Price: high to low"),
-    NEAREST("Nearest first"),
-    NEWEST("Newest first"),
-}
 
 data class PlatformStatus(
     val platformId: String,
@@ -38,14 +30,24 @@ data class PlatformStatus(
     val fetchStage: String? = null,
     // The translated term a cross-border market was searched with, when it differs from the query.
     val queryUsed: String? = null,
+    // The market had further pages that this search did not fetch, so its answer is a sample.
+    val hasMore: Boolean = false,
+    // The answer came from a stored crawl rather than a fresh one.
+    val fromCache: Boolean = false,
 )
 
 class ListingViewModel(
     private val client: ArbayClient = ArbayClient(),
+    // Results and market answers handed in rather than crawled, so the views can be rendered with
+    // no server to ask. Empty everywhere except the gallery renderer.
+    sample: List<Listing> = emptyList(),
+    sampleStatuses: List<PlatformStatus> = emptyList(),
 ) : ViewModel() {
 
+    private val rendersASample = sample.isNotEmpty()
+
     // All results from the search (unfiltered by platform)
-    private val _allListings = MutableStateFlow<List<Listing>>(emptyList())
+    private val _allListings = MutableStateFlow(sample)
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
@@ -59,7 +61,7 @@ class ListingViewModel(
     private val _selectedPlatform = MutableStateFlow<PlatformId?>(null)
     val selectedPlatform: StateFlow<PlatformId?> = _selectedPlatform
 
-    private val _platformStatuses = MutableStateFlow<List<PlatformStatus>>(emptyList())
+    private val _platformStatuses = MutableStateFlow(sampleStatuses)
     val platformStatuses: StateFlow<List<PlatformStatus>> = _platformStatuses
 
     private val _totalPlatforms = MutableStateFlow(0)
@@ -103,7 +105,7 @@ class ListingViewModel(
                 blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), sample)
 
     /** Set the active blocked-keyword list (from the bookmark being viewed). */
     fun setBlockedTerms(terms: List<String>) { _blockedTerms.value = terms }
@@ -227,7 +229,7 @@ class ListingViewModel(
     }
 
     fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
-        if (query.isBlank()) return
+        if (query.isBlank() || rendersASample) return
         if (!force && query == _searchQuery.value && filters == carFilters && (_allListings.value.isNotEmpty() || _loading.value)) return
         _searchQuery.value = query
         carFilters = filters
@@ -266,6 +268,8 @@ class ListingViewModel(
                                     status = PlatformSearchStatus.DONE,
                                     resultCount = event.resultCount,
                                     rawCount = event.rawCount,
+                                    hasMore = event.hasMore,
+                                    fromCache = event.fromCache,
                                     captchaUrl = null, // solved (or never needed) — drop the link
                                 ) else it
                             }

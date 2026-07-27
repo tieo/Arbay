@@ -29,6 +29,7 @@ import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.ProductIdentifier
 import io.github.tieo.arbay.CarTaxonomyStore
 import io.github.tieo.arbay.model.CarFilters
@@ -505,15 +506,10 @@ fun MainScreen(
             onEditFilters = if (view.isCar) {
                 { openCarEditor(view, bookmark) }
             } else null,
-            // The price band is part of the saved search, so it only persists once there is one.
-            savedMinPrice = bookmark?.searchQuery?.minPrice?.amount?.div(100)?.toFloat(),
-            savedMaxPrice = bookmark?.searchQuery?.maxPrice?.amount?.div(100)?.toFloat(),
-            onPriceRangePersist = bookmark?.let { saved ->
-                { minEur: Int, maxEur: Int ->
-                    productViewModel.updateProduct(
-                        saved.copy(searchQuery = saved.searchQuery.withPriceRangeEur(minEur, maxEur)),
-                    )
-                }
+            // Filters are part of the saved search, so they only persist once there is one.
+            savedFilters = bookmark?.searchQuery,
+            onFiltersPersist = bookmark?.let { saved ->
+                { query: SearchQuery -> productViewModel.updateProduct(saved.copy(searchQuery = query)) }
             },
             blockedTerms = resultsBlockedTerms,
             onBlockedTermsChange = { updated ->

@@ -57,7 +57,7 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
-import io.github.tieo.arbay.ui.viewmodel.SortMode
+import io.github.tieo.arbay.model.SortMode
 import androidx.compose.ui.geometry.Size
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -182,11 +182,11 @@ fun ListingsSheet(
     onEditFilters: (() -> Unit)? = null,
     // The saved price bound from the bookmark's filter (display currency), so the results slider
     // starts where the user last left it instead of resetting to the full range on reopen.
-    savedMinPrice: Float? = null,
-    savedMaxPrice: Float? = null,
-    // Persist the slider's price range back onto the bookmark. Store-only — must NOT trigger a
-    // re-crawl; the slider filters locally, this only remembers the choice.
-    onPriceRangePersist: ((minEur: Int, maxEur: Int) -> Unit)? = null,
+    // The saved search this view is showing, when there is one. Every filter choice made here is
+    // written back onto it, so price band, condition and order survive the view closing.
+    savedFilters: SearchQuery? = null,
+    // Store-only — must NOT trigger a re-crawl. These filters read what was already fetched.
+    onFiltersPersist: ((SearchQuery) -> Unit)? = null,
     blockedTerms: List<String> = emptyList(),
     onBlockedTermsChange: ((List<String>) -> Unit)? = null,
 ) {
@@ -245,18 +245,33 @@ fun ListingsSheet(
     }
     // Seed from the saved bound (clamped into the current data range), else the full range.
     var priceRange by remember(priceMin, priceMax) {
-        val lo = savedMinPrice?.coerceIn(priceMin, priceMax) ?: priceMin
-        val hi = savedMaxPrice?.coerceIn(priceMin, priceMax)?.coerceAtLeast(lo) ?: priceMax
+        val savedLow = savedFilters?.minPrice?.amount?.div(100)?.toFloat()
+        val savedHigh = savedFilters?.maxPrice?.amount?.div(100)?.toFloat()
+        val lo = savedLow?.coerceIn(priceMin, priceMax) ?: priceMin
+        val hi = savedHigh?.coerceIn(priceMin, priceMax)?.coerceAtLeast(lo) ?: priceMax
         mutableStateOf(lo..hi)
     }
-    var conditionFilter by remember { mutableStateOf<String?>(null) }
-    var showSold by remember { mutableStateOf(true) }
-    var hideUnknownDates by remember { mutableStateOf(false) }
+    // The condition and the order are part of the saved search, so they open where they were left.
+    var conditionFilter by remember(savedFilters) {
+        mutableStateOf(
+            when {
+                savedFilters?.condition?.contains(Condition.NEW) == true -> "NEW"
+                savedFilters?.condition?.any { it != Condition.NEW } == true -> "USED"
+                else -> null
+            },
+        )
+    }
+    var showFilters by remember { mutableStateOf(false) }
+    var showPrice by remember { mutableStateOf(false) }
+    var showMarkets by remember { mutableStateOf(false) }
 
     // Nearest-first: fetch the device position and order by the distance measured from the
     // coordinates the server already resolved for each listing. No re-crawl.
     val sortByDistance by listingViewModel.sortByDistance.collectAsState()
     val sortMode by listingViewModel.sortMode.collectAsState()
+    LaunchedEffect(savedFilters?.sort) {
+        savedFilters?.sort?.let { listingViewModel.setSortMode(it) }
+    }
     val detectAndSortNearest = rememberCoordDetector { lat, lon ->
         listingViewModel.setLocation(lat, lon)
         listingViewModel.setSortByDistance(lat != null)
@@ -264,8 +279,13 @@ fun ListingsSheet(
 
     // Remember the band on the saved search, whether it was set by dragging the slider or typed
     // into the fields — they edit one value, so they save it the same way.
+    fun persistFilters(edit: (SearchQuery) -> SearchQuery) {
+        val base = savedFilters ?: return
+        onFiltersPersist?.invoke(edit(base))
+    }
+
     fun persistPriceRange() {
-        onPriceRangePersist?.invoke(priceRange.start.toInt(), priceRange.endInclusive.toInt())
+        persistFilters { it.withPriceRangeEur(priceRange.start.toInt(), priceRange.endInclusive.toInt()) }
     }
 
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
@@ -286,18 +306,11 @@ fun ListingsSheet(
         else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
     }
     val displayedActiveListings = remember(activeListings, conditionFilter) {
-        activeListings.filter { listing ->
-            when (conditionFilter) {
-                "NEW" -> listing.condition == Condition.NEW
-                "USED" -> listing.condition != null && listing.condition != Condition.NEW
-                else -> true
-            }
-        }
+        activeListings.filter { conditionMatches(conditionFilter, it.condition) }
     }
-    val soldListings = remember(allSoldListings, priceRange, hideUnknownDates) {
+    val soldListings = remember(allSoldListings, priceRange) {
         allSoldListings
             .let { if (priceFiltered) it.filter { l -> inPriceRange(DisplayCurrency.convert(l.effectivePrice.amount, l.effectivePrice.currency.name)) } else it }
-            .let { if (hideUnknownDates) it.filter { l -> l.soldDate != null } else it }
     }
 
     // All stats computed from FILTERED data; converted prices make cross-currency listings comparable.
@@ -348,6 +361,35 @@ fun ListingsSheet(
             .sortedBy { it.minPrice?.amount ?: Long.MAX_VALUE }
     }
 
+    val answeredMarkets = platformStatuses.count { it.status == PlatformSearchStatus.DONE }
+    val failedMarkets = platformStatuses.count {
+        it.status in setOf(
+            PlatformSearchStatus.ERROR, PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED,
+            PlatformSearchStatus.TIMEOUT, PlatformSearchStatus.CAPTCHA,
+        )
+    }
+    val activeFilterCount = listOf(
+        priceFiltered,
+        conditionFilter != null,
+        sortMode != SortMode.BEST_MATCH,
+        selectedPlatform != null,
+        activeBlockedTerms.isNotEmpty(),
+    ).count { it }
+    val marketChoices = remember(platformOffers) {
+        platformOffers.map { offer ->
+            MarketChoice(
+                platform = offer.platform,
+                name = offer.platform.displayName,
+                country = offer.platform.country,
+                count = offer.count,
+            )
+        }
+    }
+    // Only a market that publishes what sold can answer the sold question at all.
+    val soldPossible = remember(platforms) {
+        (platforms ?: PlatformId.entries).any { it.name.startsWith("EBAY") }
+    }
+
     LaunchedEffect(searchQuery, carFilters) {
         listingViewModel.search(searchQuery, platforms, carFilters)
     }
@@ -377,8 +419,10 @@ fun ListingsSheet(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 productName,
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Spacer(Modifier.height(2.dp))
                             if (loading && totalPlatforms > 0) {
@@ -389,7 +433,7 @@ fun ListingsSheet(
                                 )
                             } else if (listings.isNotEmpty()) {
                                 Text(
-                                    "${activeListings.size} offers across ${platformOffers.size} platforms",
+                                    "${displayedActiveListings.size} offers across ${platformOffers.size} markets",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -478,162 +522,47 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Sticky filters: platform chips, the car filter chips, and the blocked words —
-                // these stay pinned while the results scroll. Price is NOT here; it scrolls away below.
-                if (platformStatuses.isNotEmpty() || platformOffers.isNotEmpty()) {
-                    stickyHeader("filters") {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+                // === One row of three doors: everything that is not an offer lives behind one
+                // of them, so the offers start at the top of the screen. ===
+                if (platformStatuses.isNotEmpty() || allActiveListings.isNotEmpty()) {
+                    stickyHeader("doors") {
+                        Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
                             Column {
-                                if (platformStatuses.isNotEmpty() || platformOffers.isNotEmpty()) {
-                                    Spacer(Modifier.height(4.dp))
-                                    UnifiedPlatformChips(
-                                        statuses = platformStatuses,
-                                        offers = platformOffers,
-                                        selectedPlatform = selectedPlatform,
-                                        onSelectPlatform = { listingViewModel.selectPlatform(it) },
-                                        modifier = Modifier.padding(horizontal = 20.dp),
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    ResultsDoor(
+                                        icon = Icons.Outlined.Tune,
+                                        label = "Filters",
+                                        detail = if (activeFilterCount > 0) "$activeFilterCount active" else "none",
+                                        highlighted = activeFilterCount > 0,
+                                        onClick = { showFilters = true },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    ResultsDoor(
+                                        icon = Icons.Outlined.Sell,
+                                        label = "Price",
+                                        detail = minPrice?.let { "from ${it.format()}" } ?: "\u2013",
+                                        onClick = { showPrice = true },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    ResultsDoor(
+                                        icon = Icons.Outlined.Storefront,
+                                        label = "Markets",
+                                        detail = when {
+                                            failedMarkets > 0 -> "$answeredMarkets ok, $failedMarkets not"
+                                            else -> "$answeredMarkets answered"
+                                        },
+                                        highlighted = failedMarkets > 0,
+                                        onClick = { showMarkets = true },
+                                        modifier = Modifier.weight(1f),
                                     )
                                 }
-                                // Active car filters as editable chips + an "Edit" entry to reopen the
-                                // form. "−N" = cars this filter removes (known after the broad fetch).
-                                if (carFilters != null && onEditFilters != null) {
-                                    val chips = carFilterChips(carFilters)
-                                    LazyRow(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                        contentPadding = PaddingValues(horizontal = 20.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        item {
-                                            AssistChip(
-                                                onClick = onEditFilters,
-                                                label = { Text("Filters", style = MaterialTheme.typography.labelMedium) },
-                                                leadingIcon = { Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(16.dp)) },
-                                            )
-                                        }
-                                        items(chips) { (label, key) ->
-                                            val hidden = facets[key] ?: 0
-                                            AssistChip(
-                                                onClick = onEditFilters,
-                                                label = {
-                                                    Text(
-                                                        if (hidden > 0) "$label  −$hidden" else label,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                    )
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                                // Currently blocked words as removable chips (added from a listing's
-                                // Block button, per item).
-                                if (activeBlockedTerms.isNotEmpty()) {
-                                    LazyRow(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                        contentPadding = PaddingValues(horizontal = 20.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        // A row item is only as tall as itself, so the leading icon
-                                        // needs the row to centre it against the taller chips.
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        item {
-                                            Icon(
-                                                Icons.Outlined.Block, null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        items(activeBlockedTerms.sorted()) { term ->
-                                            InputChip(
-                                                selected = false,
-                                                onClick = { unblockWord(term) },
-                                                label = { Text(term, style = MaterialTheme.typography.labelSmall) },
-                                                trailingIcon = { Icon(Icons.Default.Close, "Unblock", modifier = Modifier.size(14.dp)) },
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                             }
                         }
                     }
-                }
-
-                // === Price filter — scrolls with the content, not pinned. ===
-                item("price") {
-                    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-                            Column {
-                                // Price range: a LOG-scale slider (so a cheap sub-range like 300 to
-                                // 700 euro is not a hair-thin sliver of a 0 to 10k track) plus exact
-                                // numeric fields. Value shown live while dragging.
-                                if (allActiveListings.size >= 2 && priceMax > priceMin) {
-                                    val logLo = ln(priceMin.coerceAtLeast(1f).toDouble())
-                                    val logHi = ln(priceMax.toDouble()).coerceAtLeast(logLo + 0.0001)
-                                    fun priceToPos(p: Float): Float =
-                                        ((ln(p.coerceIn(priceMin, priceMax).coerceAtLeast(1f).toDouble()) - logLo) / (logHi - logLo)).toFloat().coerceIn(0f, 1f)
-                                    fun posToPrice(pos: Float): Float =
-                                        exp(logLo + pos.coerceIn(0f, 1f) * (logHi - logLo)).toFloat().coerceIn(priceMin, priceMax)
-                                    var minText by remember(priceRange.start) { mutableStateOf(priceRange.start.toInt().toString()) }
-                                    var maxText by remember(priceRange.endInclusive) { mutableStateOf(priceRange.endInclusive.toInt().toString()) }
-                                    // Slider values are in the display currency (prices are converted),
-                                    // so label it that way, not with some listing's native currency.
-                                    val cur = displayCur
-                                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                                        RangeSlider(
-                                            value = priceToPos(priceRange.start)..priceToPos(priceRange.endInclusive),
-                                            onValueChange = { pos ->
-                                                val lo = posToPrice(pos.start)
-                                                val hi = posToPrice(pos.endInclusive)
-                                                priceRange = lo..hi.coerceAtLeast(lo)
-                                            },
-                                            // Persist the chosen range onto the bookmark when the drag
-                                            // ends — store-only, no re-crawl.
-                                            onValueChangeFinished = { persistPriceRange() },
-                                            valueRange = 0f..1f,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            OutlinedTextField(
-                                                value = minText,
-                                                onValueChange = { s ->
-                                                    minText = s.filter { it.isDigit() }
-                                                    minText.toFloatOrNull()?.let { v ->
-                                                        priceRange = v.coerceIn(priceMin, priceRange.endInclusive)..priceRange.endInclusive
-                                                        persistPriceRange()
-                                                    }
-                                                },
-                                                label = { Text("min ${cur.name}", style = MaterialTheme.typography.labelSmall) },
-                                                singleLine = true,
-                                                textStyle = MaterialTheme.typography.bodySmall,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            OutlinedTextField(
-                                                value = maxText,
-                                                onValueChange = { s ->
-                                                    maxText = s.filter { it.isDigit() }
-                                                    maxText.toFloatOrNull()?.let { v ->
-                                                        priceRange = priceRange.start..v.coerceIn(priceRange.start, priceMax)
-                                                        persistPriceRange()
-                                                    }
-                                                },
-                                                label = { Text("max ${cur.name}", style = MaterialTheme.typography.labelSmall) },
-                                                singleLine = true,
-                                                textStyle = MaterialTheme.typography.bodySmall,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                            }
-                        }
                 }
 
                 // === Loading (only when zero results yet) ===
@@ -674,48 +603,6 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Price overview (skipped for a car search with a single hit, the card says it) ===
-                if (listings.isNotEmpty() && !(carFilters != null && activeListings.size <= 1)) {
-                    item("prices") {
-                        Spacer(Modifier.height(16.dp))
-                        PriceOverview(
-                            minPrice = minPrice,
-                            medianPrice = medianPrice,
-                            maxPrice = maxPrice,
-                            minNewPrice = minNewPrice,
-                            medianNewPrice = medianNewPrice,
-                            newCount = newListings.size,
-                            minUsedPrice = minUsedPrice,
-                            medianUsedPrice = medianUsedPrice,
-                            usedCount = usedListings.size,
-                            conditionFilter = conditionFilter,
-                            onConditionFilterChange = { conditionFilter = if (conditionFilter == it) null else it },
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                    }
-                }
-
-                // === Price chart (distribution with optional sold history) ===
-                if (activeListings.size >= 3 || soldListings.isNotEmpty()) {
-                    item("price_chart") {
-                        Spacer(Modifier.height(12.dp))
-                        PriceDistributionChart(
-                            newListings = newListings,
-                            usedListings = usedListings,
-                            soldListings = soldListings,
-                            medianNewPrice = medianNewPrice?.amount,
-                            medianUsedPrice = medianUsedPrice?.amount,
-                            conditionFilter = conditionFilter,
-                            onSearchSold = { listingViewModel.searchSold() },
-                            soldLoading = soldLoadingState,
-                            onBan = { listingViewModel.ban(it) },
-                            onBlockWord = blockWord,
-                            searchQuery = searchQuery,
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                    }
-                }
-
                 // === All listings ===
                 // Rendered whenever there are results at all, even if the price range currently
                 // admits none: hiding the section would take the slider's own heading with it and
@@ -723,50 +610,17 @@ fun ListingsSheet(
                 if (allActiveListings.isNotEmpty()) {
                     item("listings_header") {
                         Spacer(Modifier.height(16.dp))
-                        val filterLabel = when {
-                            conditionFilter == "NEW" || priceFiltered -> "Filtered listings (${displayedActiveListings.size})"
-                            conditionFilter == "USED" -> "Used listings (${displayedActiveListings.size})"
-                            else -> "All listings (${activeListings.size})"
-                        }
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                filterLabel,
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                modifier = Modifier.weight(1f),
-                            )
-                            // Sort menu: the order is an explicit choice, not a single toggle.
-                            // Nearest needs the device position, so it routes through the detector.
-                            var sortMenuOpen by remember { mutableStateOf(false) }
-                            Box {
-                                FilterChip(
-                                    selected = sortMode != SortMode.BEST_MATCH,
-                                    onClick = { sortMenuOpen = true },
-                                    label = { Text(sortMode.label, style = MaterialTheme.typography.labelSmall) },
-                                    leadingIcon = { Icon(Icons.Outlined.SwapVert, null, Modifier.size(14.dp)) },
+                            val hidden = allActiveListings.size - displayedActiveListings.size
+                            if (hidden > 0) {
+                                Text(
+                                    "$hidden more hidden by the filters",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                DropdownMenu(
-                                    expanded = sortMenuOpen,
-                                    onDismissRequest = { sortMenuOpen = false },
-                                ) {
-                                    SortMode.entries.forEach { mode ->
-                                        DropdownMenuItem(
-                                            text = { Text(mode.label) },
-                                            onClick = {
-                                                sortMenuOpen = false
-                                                if (mode == SortMode.NEAREST) detectAndSortNearest()
-                                                else listingViewModel.setSortMode(mode)
-                                            },
-                                            leadingIcon = {
-                                                if (mode == sortMode) {
-                                                    Icon(Icons.Default.Check, null, Modifier.size(16.dp))
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -793,103 +647,6 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Price History ===
-                item("sold_header") {
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    "Sold (${soldListings.size})",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                )
-                                if (soldLoadingState) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp)
-                                } else {
-                                    TextButton(
-                                        onClick = { listingViewModel.searchSold() },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                    ) {
-                                        Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Load sold", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                            }
-                            if (medianSoldPrice != null) {
-                                Text(
-                                    "Median ${medianSoldPrice.format()}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            val unknownCount = allSoldListings.count { it.soldDate == null }
-                            if (unknownCount > 0) {
-                                FilterChip(
-                                    selected = hideUnknownDates,
-                                    onClick = { hideUnknownDates = !hideUnknownDates },
-                                    label = { Text("Hide unknown", style = MaterialTheme.typography.labelSmall) },
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.height(28.dp),
-                                )
-                            }
-                            if (soldListings.isNotEmpty()) {
-                                IconButton(onClick = { showSold = !showSold }, modifier = Modifier.size(28.dp)) {
-                                    Icon(
-                                        if (showSold) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        if (showSold) "Collapse sold list" else "Expand sold list",
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                if (soldListings.isEmpty()) {
-                    item("sold_empty") {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Outlined.History, null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.outlineVariant,
-                                )
-                                Text(
-                                    if (loading) "Loading sold history…" else "No sold history found",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    if (showSold) {
-                        items(soldListings, key = { "sold-${it.id}" }) { listing ->
-                            SoldHistoryRow(
-                                listing = listing,
-                                onBan = { listingViewModel.ban(listing) },
-                                onBlockWord = blockWord,
-                                searchQuery = searchQuery,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                }
             }
 
             if (onBookmark != null && onToggleBookmark == null) {
@@ -905,12 +662,138 @@ fun ListingsSheet(
                 )
             }
         }
+
+        if (showFilters) {
+            FiltersSheet(
+                priceMin = priceMin,
+                priceMax = priceMax,
+                priceRange = priceRange,
+                onPriceRange = { priceRange = it },
+                onPriceCommitted = { persistPriceRange() },
+                condition = conditionFilter,
+                onCondition = { chosen ->
+                    conditionFilter = chosen
+                    persistFilters { query ->
+                        query.copy(
+                            condition = when (chosen) {
+                                "NEW" -> listOf(Condition.NEW)
+                                "USED" -> listOf(Condition.USED, Condition.REFURBISHED)
+                                else -> null
+                            },
+                        )
+                    }
+                },
+                newCount = newListings.size,
+                usedCount = usedListings.size,
+                sort = sortMode,
+                onSort = { mode ->
+                    if (mode == SortMode.NEAREST) detectAndSortNearest() else listingViewModel.setSortMode(mode)
+                    persistFilters { it.copy(sort = mode) }
+                },
+                markets = marketChoices,
+                selectedMarket = selectedPlatform,
+                onSelectMarket = { listingViewModel.selectPlatform(it) },
+                blockedTerms = activeBlockedTerms,
+                onUnblock = unblockWord,
+                onBlock = blockWord,
+                activeCount = activeFilterCount,
+                onClearAll = {
+                    priceRange = priceMin..priceMax
+                    conditionFilter = null
+                    listingViewModel.selectPlatform(null)
+                    listingViewModel.setSortMode(SortMode.BEST_MATCH)
+                    activeBlockedTerms.forEach(unblockWord)
+                    persistFilters { it.withPriceRangeEur(null, null).copy(condition = null, sort = null) }
+                },
+                hasCarCriteria = carFilters != null,
+                onEditCarCriteria = onEditFilters,
+                onDismiss = { showFilters = false },
+            )
+        }
+
+        if (showPrice) {
+            PriceSheet(
+                minPrice = minPrice,
+                medianPrice = medianPrice,
+                maxPrice = maxPrice,
+                minNewPrice = minNewPrice,
+                medianNewPrice = medianNewPrice,
+                newCount = newListings.size,
+                minUsedPrice = minUsedPrice,
+                medianUsedPrice = medianUsedPrice,
+                usedCount = usedListings.size,
+                conditionFilter = conditionFilter,
+                onConditionFilterChange = { conditionFilter = if (conditionFilter == it) null else it },
+                newListings = newListings,
+                usedListings = usedListings,
+                soldListings = soldListings,
+                medianSoldPrice = medianSoldPrice,
+                soldLoading = soldLoadingState,
+                onSearchSold = { listingViewModel.searchSold() },
+                soldPossible = soldPossible,
+                onBan = { listingViewModel.ban(it) },
+                onDismiss = { showPrice = false },
+            )
+        }
+
+        if (showMarkets) {
+            MarketsSheet(
+                statuses = platformStatuses,
+                offers = platformOffers.associate { it.platform to it.count },
+                onSelectMarket = { listingViewModel.selectPlatform(it) },
+                onDismiss = { showMarkets = false },
+            )
+        }
+    }
+}
+
+/** One of the three ways off the results canvas, each carrying the summary of what it opens. */
+@Composable
+private fun ResultsDoor(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    detail: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (highlighted) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                detail,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 // === Data classes ===
 
-private data class PlatformOffer(
+internal data class PlatformOffer(
     val platform: PlatformId,
     val count: Int,
     val minPrice: Money?,
@@ -1894,7 +1777,7 @@ internal fun PriceHistoryChart(
 // === Sold history row (compact timeline entry) ===
 
 @Composable
-private fun SoldHistoryRow(
+internal fun SoldHistoryRow(
     listing: Listing,
     onBan: (() -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,

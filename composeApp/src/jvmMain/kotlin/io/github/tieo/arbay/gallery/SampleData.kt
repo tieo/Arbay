@@ -59,4 +59,33 @@ object SampleData {
             createdAt = now,
         )
     }
+
+    /** What each market answered, including the ways an answer can fail. */
+    val marketAnswers: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+        answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
+        answer(PlatformId.EBAY_DE, PlatformSearchStatus.DONE, raw = 18, kept = 12, hasMore = true),
+        answer(PlatformId.SUBITO, PlatformSearchStatus.DONE, raw = 7, kept = 5, term = "levigatrice per parquet"),
+        answer(PlatformId.MARKTPLAATS, PlatformSearchStatus.DONE, raw = 0, kept = 0, term = "parketschuurmachine"),
+        answer(PlatformId.RICARDO, PlatformSearchStatus.TIMEOUT, raw = 0, kept = 0),
+        answer(PlatformId.MOBILE_DE, PlatformSearchStatus.IP_BLOCKED, raw = 0, kept = 0, error = "403"),
+    )
+
+    private fun answer(
+        platform: PlatformId,
+        status: PlatformSearchStatus,
+        raw: Int,
+        kept: Int,
+        term: String? = null,
+        error: String? = null,
+        hasMore: Boolean = false,
+    ) = io.github.tieo.arbay.ui.viewmodel.PlatformStatus(
+        platformId = platform.name,
+        platformName = platform.displayName,
+        status = status,
+        resultCount = kept,
+        rawCount = raw,
+        error = error,
+        queryUsed = term,
+        hasMore = hasMore,
+    )
 }
