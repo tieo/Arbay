@@ -170,7 +170,20 @@
       "title": "Vehicle search",
       "statement": "Describe a vehicle precisely enough that the markets can be asked properly.",
       "status": "Built",
-      "screenshot": "car-search-light.png"
+      "screenshot": "car-search-light.png",
+      "plan": {
+        "canvas": [
+          "Make and model, then the four criteria that decide a vehicle: year, price, mileage, power",
+          "One line saying how many markets will be asked"
+        ],
+        "behind": [
+          "Drivetrain and body, condition and seller, van size, colour, description → named groups, each saying how many of its criteria are set",
+          "Markets, as a group of its own"
+        ],
+        "gone": [
+          "One More-filters toggle opening a wall of sixteen controls with no grouping"
+        ]
+      }
     },
     {
       "tag": "VIEW",
@@ -188,7 +201,16 @@
       "title": "Free items",
       "statement": "Sift what is being given away, learning what is worth a detour.",
       "status": "Built",
-      "screenshot": "free-items-light.png"
+      "screenshot": "free-items-light.png",
+      "plan": {
+        "canvas": [
+          "The item, its score, and the three judgements"
+        ],
+        "behind": [
+          "Saved, history, the profile and how the model is doing"
+        ],
+        "gone": []
+      }
     },
     {
       "tag": "VIEW",
@@ -1560,6 +1582,42 @@
       "relations": [
         {
           "to": "VIEW-SETTINGS",
+          "role": "Lives in"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-CAR-TIERED",
+      "title": "The criteria that decide come first",
+      "statement": "Make, model, year, price, mileage and power are on the canvas. Everything else is in a named group that says how many of its criteria are set, so a form of forty controls reads as six decisions.",
+      "status": "Built",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-CAR-CRITERIA",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-CAR-SEARCH",
+          "role": "Lives in"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-CAR-GROUP-COUNTS",
+      "title": "A closed group says what is inside it",
+      "statement": "Each collapsed group carries the number of criteria set within it, so nothing is filtering invisibly.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "STORY-CAR-CRITERIA",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-CAR-SEARCH",
           "role": "Lives in"
         }
       ]
