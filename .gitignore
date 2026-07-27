@@ -23,3 +23,7 @@ secret.properties
 hs_err_pid*.log
 replay_pid*.log
 core.*
+
+# The model editor is built by docs/model/sync.sh, not committed.
+docs/model/web/dist/
+docs/model/web/node_modules/
