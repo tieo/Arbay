@@ -1,0 +1,24 @@
+{
+  "title": "Arbay",
+  "subtitle": "the model",
+  "tables": [
+    {
+      "name": "markets",
+      "title": "Markets",
+      "source": "markets.json",
+      "rows": "markets",
+      "sortBy": "name",
+      "statement": "Every market that carries a crawler. What each can do is declared in the crawler and read from there, so this table cannot quietly stop being true.",
+      "columns": [
+        { "field": "name", "title": "Market" },
+        { "field": "country", "title": "Country", "empty": "DE" },
+        { "field": "paginates", "title": "Pages", "yes": "every page", "no": "first only" },
+        { "field": "nativeCriteria", "title": "Filters at the source" },
+        { "field": "soldListings", "title": "Sold" },
+        { "field": "listingAge", "title": "Age" },
+        { "field": "location", "title": "Place" },
+        { "field": "crawler", "title": "Crawler" }
+      ]
+    }
+  ]
+}

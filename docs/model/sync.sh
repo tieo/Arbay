@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Moves the model between this checkout and the machine serving it.
+# Moves this project's model, and the viewbook that serves it, to the machine hosting it.
+#
+# The tool itself lives in its own repository; ARBAY_VIEWBOOK points at that checkout.
 #
 #   ARBAY_MODEL_HOST=user@host docs/model/sync.sh pull    boards edited in the browser come back
 #   ARBAY_MODEL_HOST=user@host docs/model/sync.sh push    boards and a freshly built editor go up
@@ -8,6 +10,7 @@
 set -euo pipefail
 
 host="${ARBAY_MODEL_HOST:?set ARBAY_MODEL_HOST to the machine serving the model, as user@host}"
+tool="${ARBAY_VIEWBOOK:-$HOME/projects/code/viewbook}"
 remote=/var/lib/arbay-model
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -18,12 +21,13 @@ pull)
   git -C "$here" status --short -- "$here"
   ;;
 push)
-  (cd "$here/web" && pnpm install --silent && pnpm build >/dev/null)
-  rsync -a --delete "$here/web/dist/" "$host:$remote/site/"
+  (cd "$tool/web" && pnpm install --silent && pnpm build >/dev/null)
+  rsync -a --delete "$tool/web/dist/" "$host:$remote/site/"
+  rsync -a --delete "$tool/viewbook/" "$host:$remote/viewbook/"
   rsync -a --delete "$here/img/" "$host:$remote/img/"
   mkdir -p "$here/wireframes"
   rsync -a --delete "$here/wireframes/" "$host:$remote/wireframes/"
-  rsync -a "$here/server.py" "$here/model.json" "$here/markets.json" "$host:$remote/"
+  rsync -a "$here/model.json" "$here/markets.json" "$here/viewbook.json" "$host:$remote/"
   ssh "$host" "chown -R arbay:arbay $remote && systemctl restart arbay-model"
   ;;
 *)
