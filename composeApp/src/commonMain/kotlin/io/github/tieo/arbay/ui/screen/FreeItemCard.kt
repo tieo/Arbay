@@ -47,7 +47,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @Composable
-private fun SwipeHeader(
+internal fun SwipeHeader(
     profile: FreeItemProfile?,
     editingProfile: Boolean,
     loading: Boolean,
@@ -155,7 +155,7 @@ private fun SwipeHeader(
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SwipeCardStack(
+internal fun SwipeCardStack(
     listing: Listing,
     nextListing: Listing?,
     undoDirection: String?,
@@ -385,7 +385,7 @@ private fun SwipeCardStack(
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SwipeCard(
+internal fun SwipeCard(
     listing: Listing,
     onOpen: () -> Unit,
     onMoreLikeThis: () -> Unit,
@@ -564,7 +564,7 @@ private fun SwipeCard(
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SwipeBottomBar(
+internal fun SwipeBottomBar(
     lovedCount: Int,
     totalReviewed: Int,
     hasCurrentCard: Boolean,
@@ -676,7 +676,7 @@ private fun SwipeBottomBar(
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun LoadingState(platformStatus: PlatformStatus?) {
+internal fun LoadingState(platformStatus: PlatformStatus?) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
@@ -699,7 +699,7 @@ private fun LoadingState(platformStatus: PlatformStatus?) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun EmptyState(hasLocation: Boolean, onRetry: () -> Unit) {
+internal fun EmptyState(hasLocation: Boolean, onRetry: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
