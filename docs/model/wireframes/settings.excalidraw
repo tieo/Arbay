@@ -35,9 +35,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 352351738,
+      "versionNonce": 1813759583,
       "updated": 1,
-      "seed": 352351738
+      "seed": 1813759583
     },
     {
       "id": "settings-text-2",
@@ -71,9 +71,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2119228755,
+      "versionNonce": 1433152952,
       "updated": 1,
-      "seed": 2119228755
+      "seed": 1433152952
     },
     {
       "id": "settings-text-3",
@@ -107,9 +107,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1738622124,
+      "versionNonce": 1052546321,
       "updated": 1,
-      "seed": 1738622124
+      "seed": 1052546321
     },
     {
       "id": "settings-image-4",
@@ -140,9 +140,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1258676606,
+      "versionNonce": 572600803,
       "updated": 1,
-      "seed": 1258676606
+      "seed": 572600803
     },
     {
       "id": "settings-text-5",
@@ -176,9 +176,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 878069975,
+      "versionNonce": 191994172,
       "updated": 1,
-      "seed": 878069975
+      "seed": 191994172
     },
     {
       "id": "settings-text-6",
@@ -212,9 +212,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 398124457,
+      "versionNonce": 1859532302,
       "updated": 1,
-      "seed": 398124457
+      "seed": 1859532302
     },
     {
       "id": "settings-box-7",
@@ -241,9 +241,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 17517826,
+      "versionNonce": 1478925671,
       "updated": 1,
-      "seed": 17517826
+      "seed": 1478925671
     },
     {
       "id": "settings-text-8",
@@ -277,9 +277,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1685055956,
+      "versionNonce": 998980153,
       "updated": 1,
-      "seed": 1685055956
+      "seed": 998980153
     },
     {
       "id": "settings-text-9",
@@ -313,9 +313,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1304449325,
+      "versionNonce": 618373522,
       "updated": 1,
-      "seed": 1304449325
+      "seed": 618373522
     },
     {
       "id": "settings-box-10",
@@ -342,9 +342,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 923842694,
+      "versionNonce": 237766891,
       "updated": 1,
-      "seed": 923842694
+      "seed": 237766891
     },
     {
       "id": "settings-text-11",
@@ -378,9 +378,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 443897176,
+      "versionNonce": 1905305021,
       "updated": 1,
-      "seed": 443897176
+      "seed": 1905305021
     },
     {
       "id": "settings-text-12",
@@ -414,9 +414,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 63290545,
+      "versionNonce": 1524698390,
       "updated": 1,
-      "seed": 63290545
+      "seed": 1524698390
     },
     {
       "id": "settings-box-13",
@@ -443,9 +443,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1730828675,
+      "versionNonce": 1044752872,
       "updated": 1,
-      "seed": 1730828675
+      "seed": 1044752872
     },
     {
       "id": "settings-text-14",
@@ -479,9 +479,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1350222044,
+      "versionNonce": 664146241,
       "updated": 1,
-      "seed": 1350222044
+      "seed": 664146241
     },
     {
       "id": "settings-text-15",
@@ -515,9 +515,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 969615413,
+      "versionNonce": 283539610,
       "updated": 1,
-      "seed": 969615413
+      "seed": 283539610
     }
   ],
   "appState": {

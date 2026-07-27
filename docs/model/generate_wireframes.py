@@ -295,10 +295,50 @@ def flow_board(views):
     return board
 
 
+def markets_board():
+    """The markets as one board: what each can do, grouped by the capability, since a filter a
+    market applies itself and one applied over its first pages are not the same promise."""
+    markets = json.loads((HERE / "markets.json").read_text())
+    board = Board("01-markets")
+    board.text(40, 30, "The markets", size=36)
+    board.text(40, 80, wrap(
+        f"{len(markets['markets'])} markets carry a crawler. What each can do is declared in the "
+        "crawler and read from there, so this board cannot quietly stop being true.", 90),
+        size=16, colour=GREY)
+
+    flags = [
+        ("paginates", "fetches every page"),
+        ("nativeCriteria", "filters at the source"),
+        ("soldListings", "knows what sold"),
+        ("relatedSearches", "suggests related searches"),
+        ("listingAge", "knows an ad's age"),
+        ("location", "knows where the thing is"),
+        ("detailSpecs", "carries specs on the detail page"),
+    ]
+    x, y = 40, 200
+    for flag, title in flags:
+        holders = [m["name"] for m in markets["markets"] if m[flag]]
+        body = wrap(", ".join(holders) or "none", 52)
+        height = 44 + text_height(body, 12) + 16
+        board.box(x, y, 420, height, stroke=INK)
+        board.text(x + 16, y + 12, f"{title} — {len(holders)}", size=15)
+        board.text(x + 16, y + 40, body, size=12, colour=GREY)
+        y += height + 14
+
+    # A market offered without a crawler answers nothing, and the app says nothing about it.
+    y = 200
+    for platform in markets["withoutCrawler"]:
+        board.box(500, y, 380, 70, stroke=BROKEN, fill=FILL["Broken"])
+        board.text(516, y + 12, platform, size=15)
+        board.text(516, y + 40, "offered in the app, no crawler exists", size=11, colour=GREY)
+        y += 84
+    return board
+
+
 def main():
     views = MODEL["views"]
     stories = {s["uid"]: s for s in MODEL["stories"]}
-    written = [flow_board(views).write()]
+    written = [flow_board(views).write(), markets_board().write()]
     for view in views:
         states = [s for s in MODEL["states"]
                   if any(r["to"] == view["uid"] and r["role"] == "State of" for r in s["relations"])]

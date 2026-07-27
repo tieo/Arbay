@@ -35,9 +35,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1159263614,
+      "versionNonce": 2012895437,
       "updated": 1,
-      "seed": 1159263614
+      "seed": 2012895437
     },
     {
       "id": "price-detail-text-2",
@@ -71,9 +71,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 778656983,
+      "versionNonce": 1632288806,
       "updated": 1,
-      "seed": 778656983
+      "seed": 1632288806
     },
     {
       "id": "price-detail-box-3",
@@ -100,9 +100,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 298711465,
+      "versionNonce": 1152343288,
       "updated": 1,
-      "seed": 298711465
+      "seed": 1152343288
     },
     {
       "id": "price-detail-text-4",
@@ -136,9 +136,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2065588482,
+      "versionNonce": 771736657,
       "updated": 1,
-      "seed": 2065588482
+      "seed": 771736657
     },
     {
       "id": "price-detail-box-5",
@@ -165,9 +165,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1585642964,
+      "versionNonce": 291791139,
       "updated": 1,
-      "seed": 1585642964
+      "seed": 291791139
     },
     {
       "id": "price-detail-text-6",
@@ -201,9 +201,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1205036333,
+      "versionNonce": 2058668156,
       "updated": 1,
-      "seed": 1205036333
+      "seed": 2058668156
     },
     {
       "id": "price-detail-text-7",
@@ -237,9 +237,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 725090815,
+      "versionNonce": 1678061525,
       "updated": 1,
-      "seed": 725090815
+      "seed": 1678061525
     },
     {
       "id": "price-detail-text-8",
@@ -273,9 +273,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 344484184,
+      "versionNonce": 1198116007,
       "updated": 1,
-      "seed": 344484184
+      "seed": 1198116007
     },
     {
       "id": "price-detail-text-9",
@@ -309,9 +309,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2111361201,
+      "versionNonce": 817509376,
       "updated": 1,
-      "seed": 2111361201
+      "seed": 817509376
     },
     {
       "id": "price-detail-box-10",
@@ -338,9 +338,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1631415683,
+      "versionNonce": 337563858,
       "updated": 1,
-      "seed": 1631415683
+      "seed": 337563858
     },
     {
       "id": "price-detail-text-11",
@@ -374,9 +374,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1250809052,
+      "versionNonce": 2104440875,
       "updated": 1,
-      "seed": 1250809052
+      "seed": 2104440875
     },
     {
       "id": "price-detail-text-12",
@@ -410,9 +410,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 770863534,
+      "versionNonce": 1624495357,
       "updated": 1,
-      "seed": 770863534
+      "seed": 1624495357
     },
     {
       "id": "price-detail-box-13",
@@ -439,9 +439,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 390256903,
+      "versionNonce": 1243888726,
       "updated": 1,
-      "seed": 390256903
+      "seed": 1243888726
     },
     {
       "id": "price-detail-text-14",
@@ -475,9 +475,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2057795033,
+      "versionNonce": 863282095,
       "updated": 1,
-      "seed": 2057795033
+      "seed": 863282095
     },
     {
       "id": "price-detail-text-15",
@@ -511,9 +511,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1677188402,
+      "versionNonce": 383336577,
       "updated": 1,
-      "seed": 1677188402
+      "seed": 383336577
     }
   ],
   "appState": {

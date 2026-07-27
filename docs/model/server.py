@@ -17,7 +17,7 @@ import socketserver
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-TITLES = {"00-flow": "How you move through it"}
+TITLES = {"00-flow": "How you move through it", "01-markets": "The markets"}
 
 
 def title_of(name):
