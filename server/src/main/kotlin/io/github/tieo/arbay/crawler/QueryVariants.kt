@@ -92,7 +92,7 @@ object QueryVariants {
         "holz", "eisen", "krone", "kronen", "papier", "blatt", "blätter", "band", "bänder",
         "scheibe", "scheiben", "werkzeug", "futter", "messer", "kette", "ketten", "zubehör",
         "zubehoer", "ersatzteil", "ersatzteile", "sack", "säcke", "beutel", "aufsatz", "halter",
-        "tisch", "ständer", "schrank", "karussell", "mühle",
+        "tisch", "ständer", "schrank", "karussell", "mühle", "glas", "gläser", "glaeser",
     )
 
     /** Nominalised actions ("Kernbohrung" is the hole, not the machine) and infinitives
