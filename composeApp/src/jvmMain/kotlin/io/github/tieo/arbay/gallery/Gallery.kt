@@ -12,12 +12,22 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.ui.screen.*
+import io.github.tieo.arbay.sample.PreviewData
 import java.io.File
 
 /** A gallery of the app's result-view building blocks rendered with sample data, so the design can
  *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
 private val TABLET_W = 1100
 private val TABLET_H = 1400
+/** One picture to draw: its name, its size in dp, and how many pixels per dp. */
+private data class Render(
+    val suffix: String,
+    val width: Int,
+    val height: Int,
+    val dark: Boolean,
+    val scale: Float,
+)
+
 private val CARD_H = 585
 private val PHONE_W = 390
 private val PHONE_H = 1600
@@ -31,10 +41,10 @@ private fun inline(content: @Composable () -> Unit): @Composable () -> Unit = {
 private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
     "home" to {
         io.github.tieo.arbay.ui.screen.MainScreen(
-            productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(saved = SampleData.saved, savedStatus = SampleData.savedStatus),
+            productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(saved = PreviewData.saved, savedStatus = PreviewData.savedStatus),
             listingViewModel = io.github.tieo.arbay.ui.viewmodel.ListingViewModel(),
             freeItemViewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(
-                sampleProfile = SampleData.freeItemProfile,
+                sampleProfile = PreviewData.freeItemProfile,
             ),
             client = io.github.tieo.arbay.api.ArbayClient(),
         )
@@ -51,10 +61,10 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
             productName = "Parkettschleifmaschine",
             searchQuery = "parkettschleifmaschine",
             listingViewModel = io.github.tieo.arbay.ui.viewmodel.ListingViewModel(
-                sample = SampleData.active + SampleData.sold,
-                sampleStatuses = SampleData.marketAnswers,
+                sample = PreviewData.active + PreviewData.sold,
+                sampleStatuses = PreviewData.marketAnswers,
             ),
-            platforms = SampleData.active.map { it.platformId }.distinct(),
+            platforms = PreviewData.active.map { it.platformId }.distinct(),
             isBookmarked = true,
             onToggleBookmark = {},
             onDismiss = {},
@@ -66,7 +76,7 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
             onPriceRange = {}, onPriceCommitted = {},
             condition = "USED", onCondition = {}, newCount = 3, usedCount = 9,
             sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
-            markets = SampleData.active.groupBy { it.platformId }.map { (platform, items) ->
+            markets = PreviewData.active.groupBy { it.platformId }.map { (platform, items) ->
                 io.github.tieo.arbay.ui.screen.MarketChoice(
                     platform = platform, name = platform.displayName,
                     country = io.github.tieo.arbay.model.MarketSets.countryOf(platform),
@@ -83,15 +93,15 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
     },
     "markets" to inline {
         io.github.tieo.arbay.ui.screen.MarketsSheet(
-            statuses = SampleData.marketAnswers,
-            offers = SampleData.active.groupBy { it.platformId }.mapValues { it.value.size },
-            capabilities = SampleData.marketAbilities,
+            statuses = PreviewData.marketAnswers,
+            offers = PreviewData.active.groupBy { it.platformId }.mapValues { it.value.size },
+            capabilities = PreviewData.marketAbilities,
             onSelectMarket = {}, onDismiss = {},
         )
     },
     "price" to inline {
-        val newer = SampleData.active.filter { it.condition?.name == "NEW" }
-        val used = SampleData.active.filter { it.condition?.name != "NEW" }
+        val newer = PreviewData.active.filter { it.condition?.name == "NEW" }
+        val used = PreviewData.active.filter { it.condition?.name != "NEW" }
         io.github.tieo.arbay.ui.screen.PriceSheet(
             minPrice = Money(25000, Currency.EUR),
             medianPrice = Money(72000, Currency.EUR),
@@ -104,7 +114,7 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
             usedCount = used.size,
             conditionFilter = null, onConditionFilterChange = {},
             newListings = newer, usedListings = used,
-            soldListings = SampleData.sold,
+            soldListings = PreviewData.sold,
             medianSoldPrice = Money(61000, Currency.EUR),
             soldLoading = false, onSearchSold = {}, soldPossible = true,
             onDismiss = {},
@@ -132,23 +142,37 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
 
 fun main() {
     val outDir = File(System.getProperty("gallery.out") ?: "build/gallery")
-    for ((name, view) in VIEWS) {
-        for (dark in listOf(false, true)) {
-            val suffix = if (dark) "dark" else "light"
-            runCatching {
-                renderToPng("$name-$suffix", PHONE_W, PHONE_H, dark = dark, outDir = outDir, content = view)
-            }.onFailure { println("FAILED $name-$suffix: ${it.message}") }
-        }
-        // The same view at a tablet width: the sheets are laid out for a phone and nothing has
-        // ever checked what they do with the space.
-        runCatching {
-            renderToPng("$name-wide", TABLET_W, TABLET_H, dark = false, outDir = outDir, content = view)
-        }.onFailure { println("FAILED $name-wide: ${it.message}") }
-        // A card for the model's index: the top of the screen at a size where it is recognisable,
-        // drawn rather than cropped, so nothing outside this toolchain is needed to produce it.
-        runCatching {
-            renderToPng("$name-card", PHONE_W, CARD_H, dark = false, outDir = outDir, content = view)
-        }.onFailure { println("FAILED $name-card: ${it.message}") }
+    // Which views to draw, and which sizes: a change to one screen does not need
+    // the other eight redrawn, and the model shows light and wide, so dark is
+    // drawn only when asked for. Speed is the point of this task.
+    val only = System.getProperty("gallery.only")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    val sizes = (System.getProperty("gallery.sizes") ?: "light,wide,card").split(",").map { it.trim() }.toSet()
+    val started = System.currentTimeMillis()
+
+    val wanted = VIEWS.filter { (name, _) -> only == null || name in only }
+    if (wanted.isEmpty()) {
+        println("no view matches ${only?.joinToString(",")}; known: ${VIEWS.joinToString(",") { it.first }}")
+        return
     }
+
+    var drawn = 0
+    for ((name, view) in wanted) {
+        val jobs = buildList {
+            if ("light" in sizes) add(Render("light", PHONE_W, PHONE_H, dark = false, scale = 2f))
+            if ("dark" in sizes) add(Render("dark", PHONE_W, PHONE_H, dark = true, scale = 2f))
+            if ("wide" in sizes) add(Render("wide", TABLET_W, TABLET_H, dark = false, scale = 1f))
+            if ("card" in sizes) add(Render("card", PHONE_W, CARD_H, dark = false, scale = 2f))
+        }
+        for (job in jobs) {
+            runCatching {
+                renderToPng(
+                    "$name-${job.suffix}", job.width, job.height,
+                    dark = job.dark, outDir = outDir, scale = job.scale, content = view,
+                )
+                drawn++
+            }.onFailure { println("FAILED $name-${job.suffix}: ${it.message}") }
+        }
+    }
+    println("$drawn renders in ${(System.currentTimeMillis() - started) / 1000.0}s")
     println("gallery written to ${outDir.absolutePath}")
 }

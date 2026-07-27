@@ -13,8 +13,15 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 gallery="$here/composeApp/build/gallery"
 model="$here/docs/model/img"
 
-echo "Rendering every view…"
-"$here/gradlew" :composeApp:renderGallery -q --console=plain
+# Named a view, only that one is drawn, which is the difference between waiting
+# for one screen and waiting for nine.
+if [ $# -gt 0 ]; then
+  echo "Rendering $1…"
+  "$here/gradlew" :composeApp:renderGallery -q --console=plain "-Ponly=$1"
+else
+  echo "Rendering every view…"
+  "$here/gradlew" :composeApp:renderGallery -q --console=plain
+fi
 
 mkdir -p "$model/card"
 count=0

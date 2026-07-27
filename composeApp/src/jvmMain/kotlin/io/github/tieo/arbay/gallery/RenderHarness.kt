@@ -23,9 +23,14 @@ fun renderToPng(
     heightDp: Int,
     dark: Boolean = false,
     outDir: File,
+    // Pixels per dp. A phone render is read at its own size and wants two; a
+    // window-wide one is only ever looked at small, and at two it is five times
+    // the pixels of a phone screen and takes longer than every other render put
+    // together.
+    scale: Float = 2f,
     content: @Composable () -> Unit,
 ) {
-    val density = Density(2f)
+    val density = Density(scale)
     val scene = ImageComposeScene(
         width = (widthDp * density.density).toInt(),
         height = (heightDp * density.density).toInt(),

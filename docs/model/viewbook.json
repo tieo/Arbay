@@ -53,6 +53,6 @@
       "./make-renders.sh"
     ],
     "dir": "../..",
-    "statement": "Draws every view off-screen with sample data, on the JVM, from the same composables the app runs. No device, no emulator, no @Preview functions to keep in step with the real screens."
+    "statement": "Draws every view off-screen with sample data, on the JVM, from the same composables the app runs. No device, no emulator, no preview functions to keep in step with the real screens. About twelve seconds for twenty-seven pictures when nothing needs compiling; naming one view takes five."
   }
 }

@@ -155,6 +155,9 @@ tasks.register<JavaExec>("renderGallery") {
     classpath = jvmMain.output.allOutputs + configurations.getByName("jvmRuntimeClasspath")
     mainClass.set("io.github.tieo.arbay.gallery.GalleryKt")
     systemProperty("gallery.out", layout.buildDirectory.dir("gallery").get().asFile.absolutePath)
+    // Draw one view, or one size, while iterating on it: -Ponly=results -Psizes=light
+    (findProperty("only") as String?)?.let { systemProperty("gallery.only", it) }
+    (findProperty("sizes") as String?)?.let { systemProperty("gallery.sizes", it) }
     systemProperty("java.awt.headless", "true")
     systemProperty("skiko.renderApi", "SOFTWARE")
     environment("LD_LIBRARY_PATH", "/nix/store/fdqacryg2w9kiwb94c9rzfsyff4im8xj-libglvnd-1.7.0/lib:/nix/store/5m91jqg1526jzsahrgmd37k4ml3nc5l4-libx11-1.8.13/lib:/nix/store/fc1g44pg3i10wfzh3gb4m54pfgclsn76-libxcb-1.17.0/lib:/nix/store/2krkc90x3ch0mgkk48fxlglq14nqapdr-libxau-1.0.12/lib:/nix/store/yr83qw7bdfdxf5lb2xmfs70qb5hap0hj-libxdmcp-1.1.5/lib:/nix/store/bg6ms0vw071g1fdbx2my6bbzsk62p6vd-fontconfig-2.17.1-lib/lib:/nix/store/zr22ggqbv79yv4y4wv06r4grla9h59yx-freetype-2.14.2/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/nix/store/wrxyd3k2f4bmh52pr5rpdjxxsm5r2qxm-gcc-15.2.0-libgcc/lib")

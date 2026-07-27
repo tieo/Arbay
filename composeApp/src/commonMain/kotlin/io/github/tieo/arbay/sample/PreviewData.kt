@@ -1,11 +1,19 @@
-package io.github.tieo.arbay.gallery
+package io.github.tieo.arbay.sample
 
 import io.github.tieo.arbay.model.*
 import kotlinx.datetime.Instant
 
 /** Realistic sample listings for the gallery — a "parkettschleifmaschine" search: real machines,
  *  mixed platforms/countries, new and used, plus a few sold ones with dates for the history chart. */
-object SampleData {
+/**
+ * The screens' sample data, in one place.
+ *
+ * Both ways of drawing a screen without a server use this: the off-screen
+ * renderer that writes the model's pictures, and the @Preview functions the
+ * Android screenshot toolchain renders. Two copies would be two answers to what
+ * a screen looks like with data.
+ */
+object PreviewData {
     private val now = Instant.parse("2026-07-22T10:00:00Z")
 
     private fun l(
@@ -119,4 +127,15 @@ object SampleData {
         location = "Frankfurt (Oder)",
         radiusKm = 30,
     )
+
+    /** Markets as the filters list shows them, from the sample listings. */
+    val marketChoices: List<io.github.tieo.arbay.ui.screen.MarketChoice> =
+        active.groupBy { it.platformId }.map { (platform, items) ->
+            io.github.tieo.arbay.ui.screen.MarketChoice(
+                platform = platform,
+                name = platform.displayName,
+                country = io.github.tieo.arbay.model.MarketSets.countryOf(platform),
+                count = items.size,
+            )
+        }
 }
