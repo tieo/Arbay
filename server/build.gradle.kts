@@ -41,3 +41,11 @@ dependencies {
 tasks.withType<Test> {
     systemProperty("java.awt.headless", "true")
 }
+// Prints every market's declared capabilities as JSON, which the model site renders its market
+// objects from. Run: ./gradlew :server:dumpCapabilities -q
+tasks.register<JavaExec>("dumpCapabilities") {
+    group = "documentation"
+    description = "Print what each market can do, as its crawler declares it"
+    mainClass.set("io.github.tieo.arbay.tools.CapabilityDumpKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
