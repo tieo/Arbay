@@ -984,8 +984,8 @@
       ],
       "uid": "REQ-RESULTS-COUNT",
       "title": "One count, meaning one thing",
-      "statement": "The header count is taken before filtering and the chip count after, they disagree, and nothing says\nwhich is which.",
-      "status": "Broken",
+      "statement": "The count on screen counts what is on screen. Where the filters hide something, that is said in words beside the list rather than as a second number that disagrees with the first.",
+      "status": "Built",
       "tier": "1 canvas"
     },
     {
@@ -1230,8 +1230,8 @@
       ],
       "uid": "REQ-MARKETS-COOLDOWN",
       "title": "Say which markets are cooling down",
-      "statement": "A market that was blocked is not asked again for a while; a search that excludes it should say so\nrather than look complete.",
-      "status": "Missing",
+      "statement": "A market cooling down after a block says so, with how long is left, so a search that excludes it does not look complete.",
+      "status": "Built",
       "tier": "3 on request"
     },
     {
@@ -1442,8 +1442,8 @@
       ],
       "uid": "REQ-SETTINGS-SCOPE",
       "title": "Device settings must not be server settings",
-      "statement": "Search depth and the free-item alerts are one shared setting on the server, presented as this\ndevice's, so changing them changes them for every client of that server.",
-      "status": "Broken",
+      "statement": "Settings are grouped into this device and this server, and the shared group says it is shared, because search depth and the alert settings change them for every client of that server.",
+      "status": "Built",
       "tier": "2 one tap away"
     },
     {
@@ -1474,24 +1474,6 @@
       "relations": [
         {
           "to": "STORY-NARROW",
-          "role": "Fulfils"
-        },
-        {
-          "to": "VIEW-RESULTS",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-RESULTS-ONE-COUNT",
-      "title": "One count on screen",
-      "statement": "The count shown is the count of what is on screen. The pre-filter figure, when it differs, is said in words next to it rather than as a second number.",
-      "status": "Built",
-      "tier": "1 canvas",
-      "relations": [
-        {
-          "to": "STORY-COUNT-MEANS-SOMETHING",
           "role": "Fulfils"
         },
         {
@@ -1568,20 +1550,6 @@
         },
         {
           "to": "VIEW-MARKET-DETAIL",
-          "role": "Lives in"
-        }
-      ]
-    },
-    {
-      "tag": "REQUIREMENT",
-      "uid": "REQ-SETTINGS-DEVICE-OR-SERVER",
-      "title": "Say which settings are shared",
-      "statement": "Settings are grouped into this device and this server, because search depth and alerts change them for every client of that server.",
-      "status": "Built",
-      "tier": "2 one tap away",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
           "role": "Lives in"
         }
       ]

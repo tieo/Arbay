@@ -35,9 +35,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1651871365,
+      "versionNonce": 1534090414,
       "updated": 1,
-      "seed": 1651871365
+      "seed": 1534090414
     },
     {
       "id": "discovery-text-2",
@@ -71,9 +71,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1171925847,
+      "versionNonce": 1054144896,
       "updated": 1,
-      "seed": 1171925847
+      "seed": 1054144896
     },
     {
       "id": "discovery-text-3",
@@ -107,9 +107,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 791319216,
+      "versionNonce": 673538265,
       "updated": 1,
-      "seed": 791319216
+      "seed": 673538265
     },
     {
       "id": "discovery-image-4",
@@ -140,9 +140,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 311373698,
+      "versionNonce": 193592747,
       "updated": 1,
-      "seed": 311373698
+      "seed": 193592747
     },
     {
       "id": "discovery-box-5",
@@ -167,9 +167,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2078250715,
+      "versionNonce": 1960469764,
       "updated": 1,
-      "seed": 2078250715
+      "seed": 1960469764
     },
     {
       "id": "discovery-text-6",
@@ -203,9 +203,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1697644084,
+      "versionNonce": 1480524246,
       "updated": 1,
-      "seed": 1697644084
+      "seed": 1480524246
     },
     {
       "id": "discovery-box-7",
@@ -230,9 +230,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1217698566,
+      "versionNonce": 1099917615,
       "updated": 1,
-      "seed": 1217698566
+      "seed": 1099917615
     },
     {
       "id": "discovery-text-8",
@@ -266,9 +266,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 837091935,
+      "versionNonce": 719310984,
       "updated": 1,
-      "seed": 837091935
+      "seed": 719310984
     },
     {
       "id": "discovery-box-9",
@@ -293,9 +293,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 357146417,
+      "versionNonce": 239365466,
       "updated": 1,
-      "seed": 357146417
+      "seed": 239365466
     },
     {
       "id": "discovery-text-10",
@@ -329,9 +329,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2124023434,
+      "versionNonce": 2006242483,
       "updated": 1,
-      "seed": 2124023434
+      "seed": 2006242483
     },
     {
       "id": "discovery-text-11",
@@ -365,9 +365,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1743416803,
+      "versionNonce": 1526296965,
       "updated": 1,
-      "seed": 1743416803
+      "seed": 1526296965
     },
     {
       "id": "discovery-box-12",
@@ -394,9 +394,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1263471285,
+      "versionNonce": 1145690334,
       "updated": 1,
-      "seed": 1263471285
+      "seed": 1145690334
     },
     {
       "id": "discovery-text-13",
@@ -430,9 +430,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 882864654,
+      "versionNonce": 665744816,
       "updated": 1,
-      "seed": 882864654
+      "seed": 665744816
     },
     {
       "id": "discovery-text-14",
@@ -466,9 +466,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 402919136,
+      "versionNonce": 285138185,
       "updated": 1,
-      "seed": 402919136
+      "seed": 285138185
     },
     {
       "id": "discovery-box-15",
@@ -495,9 +495,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 22312505,
+      "versionNonce": 2052015202,
       "updated": 1,
-      "seed": 22312505
+      "seed": 2052015202
     },
     {
       "id": "discovery-text-16",
@@ -531,9 +531,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1689850635,
+      "versionNonce": 1572069684,
       "updated": 1,
-      "seed": 1689850635
+      "seed": 1572069684
     },
     {
       "id": "discovery-text-17",
@@ -567,9 +567,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1309244004,
+      "versionNonce": 1191463053,
       "updated": 1,
-      "seed": 1309244004
+      "seed": 1191463053
     },
     {
       "id": "discovery-text-18",
@@ -603,9 +603,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 928637373,
+      "versionNonce": 711517535,
       "updated": 1,
-      "seed": 928637373
+      "seed": 711517535
     },
     {
       "id": "discovery-box-19",
@@ -632,9 +632,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 448691855,
+      "versionNonce": 330910904,
       "updated": 1,
-      "seed": 448691855
+      "seed": 330910904
     },
     {
       "id": "discovery-text-20",
@@ -668,9 +668,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 68085224,
+      "versionNonce": 2097787921,
       "updated": 1,
-      "seed": 68085224
+      "seed": 2097787921
     },
     {
       "id": "discovery-text-21",
@@ -704,9 +704,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1735623354,
+      "versionNonce": 1617842403,
       "updated": 1,
-      "seed": 1735623354
+      "seed": 1617842403
     },
     {
       "id": "discovery-box-22",
@@ -733,9 +733,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1355016723,
+      "versionNonce": 1237235772,
       "updated": 1,
-      "seed": 1355016723
+      "seed": 1237235772
     },
     {
       "id": "discovery-text-23",
@@ -769,9 +769,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 875071205,
+      "versionNonce": 757290254,
       "updated": 1,
-      "seed": 875071205
+      "seed": 757290254
     },
     {
       "id": "discovery-text-24",
@@ -805,9 +805,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 494464574,
+      "versionNonce": 376683623,
       "updated": 1,
-      "seed": 494464574
+      "seed": 376683623
     },
     {
       "id": "discovery-box-25",
@@ -834,9 +834,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 113857943,
+      "versionNonce": 2044221753,
       "updated": 1,
-      "seed": 113857943
+      "seed": 2044221753
     },
     {
       "id": "discovery-text-26",
@@ -870,9 +870,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1781396073,
+      "versionNonce": 1663615122,
       "updated": 1,
-      "seed": 1781396073
+      "seed": 1663615122
     },
     {
       "id": "discovery-text-27",
@@ -906,9 +906,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1400789442,
+      "versionNonce": 1283008491,
       "updated": 1,
-      "seed": 1400789442
+      "seed": 1283008491
     },
     {
       "id": "discovery-box-28",
@@ -935,9 +935,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 920843924,
+      "versionNonce": 803062973,
       "updated": 1,
-      "seed": 920843924
+      "seed": 803062973
     },
     {
       "id": "discovery-text-29",
@@ -971,9 +971,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 540237293,
+      "versionNonce": 422456342,
       "updated": 1,
-      "seed": 540237293
+      "seed": 422456342
     },
     {
       "id": "discovery-text-30",
@@ -1007,9 +1007,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 60291775,
+      "versionNonce": 2089994472,
       "updated": 1,
-      "seed": 60291775
+      "seed": 2089994472
     },
     {
       "id": "discovery-text-31",
@@ -1043,9 +1043,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1827168792,
+      "versionNonce": 1709387841,
       "updated": 1,
-      "seed": 1827168792
+      "seed": 1709387841
     },
     {
       "id": "discovery-box-32",
@@ -1072,9 +1072,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1446562161,
+      "versionNonce": 1229442323,
       "updated": 1,
-      "seed": 1446562161
+      "seed": 1229442323
     },
     {
       "id": "discovery-text-33",
@@ -1108,9 +1108,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 966616643,
+      "versionNonce": 848835692,
       "updated": 1,
-      "seed": 966616643
+      "seed": 848835692
     },
     {
       "id": "discovery-text-34",
@@ -1144,9 +1144,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 586010012,
+      "versionNonce": 468229061,
       "updated": 1,
-      "seed": 586010012
+      "seed": 468229061
     }
   ],
   "appState": {

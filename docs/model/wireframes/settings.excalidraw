@@ -35,9 +35,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 110751588,
+      "versionNonce": 2125308232,
       "updated": 1,
-      "seed": 110751588
+      "seed": 2125308232
     },
     {
       "id": "settings-text-2",
@@ -71,9 +71,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1877628605,
+      "versionNonce": 1744701601,
       "updated": 1,
-      "seed": 1877628605
+      "seed": 1744701601
     },
     {
       "id": "settings-text-3",
@@ -107,9 +107,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1497021974,
+      "versionNonce": 1264756083,
       "updated": 1,
-      "seed": 1497021974
+      "seed": 1264756083
     },
     {
       "id": "settings-image-4",
@@ -140,9 +140,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1017076456,
+      "versionNonce": 884149452,
       "updated": 1,
-      "seed": 1017076456
+      "seed": 884149452
     },
     {
       "id": "settings-box-5",
@@ -167,9 +167,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 636469825,
+      "versionNonce": 404203934,
       "updated": 1,
-      "seed": 636469825
+      "seed": 404203934
     },
     {
       "id": "settings-text-6",
@@ -203,9 +203,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 156524307,
+      "versionNonce": 23597303,
       "updated": 1,
-      "seed": 156524307
+      "seed": 23597303
     },
     {
       "id": "settings-box-7",
@@ -230,9 +230,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1923401324,
+      "versionNonce": 1790474320,
       "updated": 1,
-      "seed": 1923401324
+      "seed": 1790474320
     },
     {
       "id": "settings-text-8",
@@ -266,9 +266,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1443455806,
+      "versionNonce": 1310528802,
       "updated": 1,
-      "seed": 1443455806
+      "seed": 1310528802
     },
     {
       "id": "settings-box-9",
@@ -293,9 +293,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1062849175,
+      "versionNonce": 929922171,
       "updated": 1,
-      "seed": 1062849175
+      "seed": 929922171
     },
     {
       "id": "settings-text-10",
@@ -329,9 +329,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 682242544,
+      "versionNonce": 449976653,
       "updated": 1,
-      "seed": 682242544
+      "seed": 449976653
     },
     {
       "id": "settings-text-11",
@@ -365,9 +365,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 202297026,
+      "versionNonce": 69370022,
       "updated": 1,
-      "seed": 202297026
+      "seed": 69370022
     },
     {
       "id": "settings-box-12",
@@ -394,9 +394,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1969174043,
+      "versionNonce": 1736908152,
       "updated": 1,
-      "seed": 1969174043
+      "seed": 1736908152
     },
     {
       "id": "settings-text-13",
@@ -430,9 +430,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1489228525,
+      "versionNonce": 1356301521,
       "updated": 1,
-      "seed": 1489228525
+      "seed": 1356301521
     },
     {
       "id": "settings-text-14",
@@ -466,9 +466,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1108621894,
+      "versionNonce": 975694890,
       "updated": 1,
-      "seed": 1108621894
+      "seed": 975694890
     },
     {
       "id": "settings-box-15",
@@ -495,9 +495,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 628676376,
+      "versionNonce": 495749372,
       "updated": 1,
-      "seed": 628676376
+      "seed": 495749372
     },
     {
       "id": "settings-text-16",
@@ -531,9 +531,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 248069745,
+      "versionNonce": 115142741,
       "updated": 1,
-      "seed": 248069745
+      "seed": 115142741
     },
     {
       "id": "settings-text-17",
@@ -567,9 +567,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2014946762,
+      "versionNonce": 1782680871,
       "updated": 1,
-      "seed": 2014946762
+      "seed": 1782680871
     },
     {
       "id": "settings-box-18",
@@ -578,8 +578,8 @@
       "y": 346,
       "width": 380,
       "height": 80,
-      "strokeColor": "#e03131",
-      "backgroundColor": "#ffc9c9",
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#b2f2bb",
       "strokeStyle": "solid",
       "roundness": {
         "type": 3
@@ -596,9 +596,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1535001244,
+      "versionNonce": 1402074240,
       "updated": 1,
-      "seed": 1535001244
+      "seed": 1402074240
     },
     {
       "id": "settings-text-19",
@@ -632,116 +632,15 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1154394613,
+      "versionNonce": 922128722,
       "updated": 1,
-      "seed": 1154394613
+      "seed": 922128722
     },
     {
       "id": "settings-text-20",
       "type": "text",
       "x": 776,
       "y": 401,
-      "width": 40,
-      "height": 13,
-      "strokeColor": "#868e96",
-      "backgroundColor": "transparent",
-      "text": "broken",
-      "originalText": "broken",
-      "fontSize": 11,
-      "fontFamily": 2,
-      "textAlign": "left",
-      "verticalAlign": "top",
-      "containerId": null,
-      "lineHeight": 1.25,
-      "baseline": 12,
-      "angle": 0,
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 1,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": null,
-      "isDeleted": false,
-      "boundElements": null,
-      "link": null,
-      "locked": false,
-      "version": 1,
-      "versionNonce": 674449095,
-      "updated": 1,
-      "seed": 674449095
-    },
-    {
-      "id": "settings-box-21",
-      "type": "rectangle",
-      "x": 760,
-      "y": 438,
-      "width": 380,
-      "height": 61,
-      "strokeColor": "#2f9e44",
-      "backgroundColor": "#b2f2bb",
-      "strokeStyle": "solid",
-      "roundness": {
-        "type": 3
-      },
-      "angle": 0,
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "roughness": 1,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "isDeleted": false,
-      "boundElements": null,
-      "link": null,
-      "locked": false,
-      "version": 1,
-      "versionNonce": 293842464,
-      "updated": 1,
-      "seed": 293842464
-    },
-    {
-      "id": "settings-text-22",
-      "type": "text",
-      "x": 776,
-      "y": 448,
-      "width": 269,
-      "height": 18,
-      "strokeColor": "#1e1e1e",
-      "backgroundColor": "transparent",
-      "text": "Say which settings are shared",
-      "originalText": "Say which settings are shared",
-      "fontSize": 15,
-      "fontFamily": 2,
-      "textAlign": "left",
-      "verticalAlign": "top",
-      "containerId": null,
-      "lineHeight": 1.25,
-      "baseline": 16,
-      "angle": 0,
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 1,
-      "opacity": 100,
-      "groupIds": [],
-      "frameId": null,
-      "roundness": null,
-      "isDeleted": false,
-      "boundElements": null,
-      "link": null,
-      "locked": false,
-      "version": 1,
-      "versionNonce": 2060719481,
-      "updated": 1,
-      "seed": 2060719481
-    },
-    {
-      "id": "settings-text-23",
-      "type": "text",
-      "x": 776,
-      "y": 474,
       "width": 34,
       "height": 13,
       "strokeColor": "#868e96",
@@ -769,12 +668,12 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1580773963,
+      "versionNonce": 541522091,
       "updated": 1,
-      "seed": 1580773963
+      "seed": 541522091
     },
     {
-      "id": "settings-text-24",
+      "id": "settings-text-21",
       "type": "text",
       "x": 1200,
       "y": 172,
@@ -805,12 +704,12 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 1200167332,
+      "versionNonce": 160915460,
       "updated": 1,
-      "seed": 1200167332
+      "seed": 160915460
     },
     {
-      "id": "settings-box-25",
+      "id": "settings-box-22",
       "type": "rectangle",
       "x": 1200,
       "y": 200,
@@ -834,12 +733,12 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 720221814,
+      "versionNonce": 1828453590,
       "updated": 1,
-      "seed": 720221814
+      "seed": 1828453590
     },
     {
-      "id": "settings-text-26",
+      "id": "settings-text-23",
       "type": "text",
       "x": 1216,
       "y": 212,
@@ -870,12 +769,12 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 339615183,
+      "versionNonce": 1447846959,
       "updated": 1,
-      "seed": 339615183
+      "seed": 1447846959
     },
     {
-      "id": "settings-text-27",
+      "id": "settings-text-24",
       "type": "text",
       "x": 1216,
       "y": 238,
@@ -906,9 +805,9 @@
       "link": null,
       "locked": false,
       "version": 1,
-      "versionNonce": 2007153313,
+      "versionNonce": 967901441,
       "updated": 1,
-      "seed": 2007153313
+      "seed": 967901441
     }
   ],
   "appState": {
