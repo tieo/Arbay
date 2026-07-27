@@ -184,7 +184,31 @@ object QueryVariants {
         return x.intersect(y).size.toDouble() / x.union(y).size
     }
 
-    private const val MIN_LIST_OVERLAP = 0.10
+    /** Lists this alike settle it on their own: measured over 74 labelled pairs, several real
+     *  synonyms (Kolbenkompressor, Drechselmaschine, Tischdrehbank) are never named back yet share
+     *  a fifth of their company. */
+    private const val OVERLAP_ALONE = 0.18
+
+    /** With the market also naming the query back, less alikeness is needed. */
+    private const val OVERLAP_WITH_NAMING = 0.10
+
+    /** Edits apart at which two words are the same word misspelled ("funierpresse"). */
+    private const val TYPO_DISTANCE = 2
+
+    /** Edit distance, for catching a word that is the query with a letter dropped or doubled. */
+    private fun edits(a: String, b: String): Int {
+        if (a == b) return 0
+        var prev = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            val cur = IntArray(b.length + 1)
+            cur[0] = i
+            for (j in 1..b.length) {
+                cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+            }
+            prev = cur
+        }
+        return prev[b.length]
+    }
 
     /**
      * Whether the market's own answers say a candidate is another name for the thing, without
@@ -193,18 +217,24 @@ object QueryVariants {
      * asked about the candidate, and the two related-search lists share enough terms.
      *
      * This is what reaches the synonyms no spelling rule can — Motorsäge for Kettensäge,
-     * Zementmischer for Betonmischmaschine, Freischneider for Motorsense. Measured over 74 labelled
-     * pairs it recovers 79% of them where the spelling test finds 31%, and combining the two
-     * carries 81% at 79% precision.
+     * Zementmischer for Betonmischmaschine, Freischneider for Motorsense. Naming back is not
+     * required when the lists are alike enough on their own: a Kolbenkompressor is never named back
+     * by a Druckluftkompressor yet shares a third of its company. Measured over 74 labelled pairs,
+     * together with the spelling test this carries 93% of the real synonyms at 78% precision.
      */
     fun marketConfirms(
         queryText: String,
+        candidate: String,
         querySuggestions: List<String>,
         termSuggestions: List<String>,
     ): Boolean {
         val query = normalise(queryText)
+        // The same word misspelled is the same word.
+        if (edits(query, normalise(candidate)) <= TYPO_DISTANCE) return true
+        val overlap = listOverlap(querySuggestions, termSuggestions)
+        if (overlap >= OVERLAP_ALONE) return true
         val namesBack = termSuggestions.any { normalise(it).contains(query) }
-        return namesBack && listOverlap(querySuggestions, termSuggestions) >= MIN_LIST_OVERLAP
+        return namesBack && overlap >= OVERLAP_WITH_NAMING
     }
 
     private fun normalise(text: String): String = text.trim().lowercase()

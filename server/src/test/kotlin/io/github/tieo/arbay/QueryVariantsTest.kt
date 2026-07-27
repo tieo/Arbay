@@ -165,17 +165,32 @@ class QueryVariantsTest {
         // Kleinanzeigen's real lists. Asked about the synonym it names the query back and the two
         // lists are asked about in the same company; the adjacent tool does neither.
         val queryList = listOf("motorsäge", "stihl", "stihl kettensäge", "husqvarna", "akku kettensäge")
-        assertTrue(QueryVariants.marketConfirms("kettensaege", queryList,
+        assertTrue(QueryVariants.marketConfirms("kettensaege", "motorsäge", queryList,
             listOf("motorsäge", "stihl motorsäge", "kettensäge", "stihl", "husqvarna")))
-        assertFalse(QueryVariants.marketConfirms("kettensaege", queryList,
+        assertFalse(QueryVariants.marketConfirms("kettensaege", "motorsäge", queryList,
             listOf("heckenschere", "stihl hochentaster", "hochentaster akku", "astsäge")))
     }
 
     @Test
     fun `naming the query back is not enough on its own`() {
         // A chisel names its machine back too, so the lists must also look alike.
-        assertFalse(QueryVariants.marketConfirms("drechselbank",
+        assertFalse(QueryVariants.marketConfirms("drechselbank", "drechseleisen",
             listOf("drechselmaschine", "holzdrehbank", "drehbank", "killinger"),
             listOf("drechselbank", "drechselwerkzeug", "drechselmesser", "crown", "drechselfutter")))
+    }
+
+    @Test
+    fun `lists alike enough settle it without the market naming the query back`() {
+        // A Kolbenkompressor is never named back by a Druckluftkompressor, but is asked about in
+        // the same company.
+        assertTrue(QueryVariants.marketConfirms("druckluftkompressor", "kolbenkompressor",
+            listOf("schraubenkompressor", "werkstattkompressor", "kompressor", "atlas copco", "boge"),
+            listOf("schraubenkompressor", "werkstattkompressor", "kompressor", "atlas copco", "boge")))
+    }
+
+    @Test
+    fun `the same word misspelled is the same word`() {
+        assertTrue(QueryVariants.marketConfirms("furnierpresse", "funierpresse", emptyList(), emptyList()))
+        assertFalse(QueryVariants.marketConfirms("furnierpresse", "furniersäge", emptyList(), emptyList()))
     }
 }

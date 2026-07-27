@@ -66,7 +66,7 @@ suspend fun Crawler.searchAllSpellings(
         // be the same thing ("Motorsäge" for "Kettensäge"); there the market decides, by naming the
         // query back and by asking about both words in the same company.
         val trusted = candidate.sharesStem ||
-            QueryVariants.marketConfirms(query.text, suggested, back)
+            QueryVariants.marketConfirms(query.text, candidate.term, suggested, back)
         if (!trusted) {
             log.debug("{}: dropped '{}' for '{}' — the market does not treat it as the same thing",
                 platformId.displayName, candidate.term, query.text)
