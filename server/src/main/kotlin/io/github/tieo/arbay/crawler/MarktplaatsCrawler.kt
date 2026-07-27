@@ -14,7 +14,7 @@ class MarktplaatsCrawler(
     private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.MARKTPLAATS,
     private val host: String = "https://www.marktplaats.nl",
-) : Crawler {
+) : Crawler, FetchesEveryPage, KnowsLocation, HasDetailSpecs {
 
     /** The search card carries only year and mileage; the detail page's attribute object adds
      *  power, gearbox, fuel, doors, body type and colour, so a filter on those verifies instead of

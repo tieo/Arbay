@@ -9,7 +9,9 @@ import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
-class KleinanzeigenCrawler(private val client: HttpClient) : Crawler {
+class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs {
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX)
+
     override val platformId = PlatformId.KLEINANZEIGEN
 
     private val log = LoggerFactory.getLogger(KleinanzeigenCrawler::class.java)

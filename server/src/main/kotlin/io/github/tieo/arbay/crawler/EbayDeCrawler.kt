@@ -17,7 +17,7 @@ class EbayDeCrawler(
     private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.EBAY_DE,
     private val domain: String = "ebay.de",
-) : Crawler {
+) : Crawler, FetchesEveryPage, HasSoldListings {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val emitter = coroutineContext[FetchProgressEmitter.Key]

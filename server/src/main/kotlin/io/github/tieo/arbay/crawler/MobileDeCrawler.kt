@@ -6,7 +6,9 @@ import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
-class MobileDeCrawler(private val client: HttpClient) : Crawler {
+class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation {
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+
     override val platformId = PlatformId.MOBILE_DE
 
     private val log = LoggerFactory.getLogger(MobileDeCrawler::class.java)

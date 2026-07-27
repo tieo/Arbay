@@ -7,7 +7,9 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
-class WillhabenCrawler(private val client: HttpClient) : Crawler {
+class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsListingAge, KnowsLocation {
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER)
+
     override val platformId = PlatformId.WILLHABEN
 
     private val json = Json { ignoreUnknownKeys = true }

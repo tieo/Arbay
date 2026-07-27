@@ -11,7 +11,9 @@ class AutoScout24Crawler(
     private val client: HttpClient,
     private val countries: List<String> = EUROPE,
     override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
-) : Crawler {
+) : Crawler, FetchesEveryPage, FiltersAtTheSource, KnowsLocation {
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+
 
     private val countryParam: String get() = countries.joinToString("%2C")
 

@@ -11,7 +11,9 @@ import org.jsoup.Jsoup
  * cards: section[data-listing-id] with data-grid slots for title, price and
  * location, and detail links under /tsp/.
  */
-class TruckScout24Crawler(private val client: HttpClient) : Crawler {
+class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation {
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+
     override val platformId = PlatformId.TRUCKSCOUT24
 
     override suspend fun search(query: SearchQuery): List<Listing> {

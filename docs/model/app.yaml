@@ -11,7 +11,7 @@
 meta:
   name: Arbay
   one_line: Search every second-hand market at once and see what is worth buying.
-  markets: 38
+  markets: 27
 
 views:
   - id: home

@@ -15,7 +15,7 @@ import org.jsoup.Jsoup
  * uri ("/price", "/mileage_scalar", "/year", ...), which is the site's own structured data, so
  * the values it yields are recorded as verified and may exclude on a filter.
  */
-class SubitoCrawler(private val client: HttpClient) : Crawler {
+class SubitoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, KnowsLocation {
     override val platformId = PlatformId.SUBITO
 
     private val json = Json { ignoreUnknownKeys = true }
