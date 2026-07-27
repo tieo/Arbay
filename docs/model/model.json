@@ -7,7 +7,15 @@
       "title": "Home",
       "statement": "Show the searches worth coming back to, and start a new one.",
       "status": "Built",
-      "screenshot": "home-light.png"
+      "screenshot": "home-light.png",
+      "plan": {
+        "canvas": [
+          "Each saved search with what is new since it was last opened",
+          "Whether it is watched, when it last ran, and what that run found"
+        ],
+        "behind": [],
+        "gone": []
+      }
     },
     {
       "tag": "VIEW",
@@ -21,7 +29,14 @@
       "title": "Search",
       "statement": "Get from an idea to a search, by typing or by browsing categories.",
       "status": "Built",
-      "screenshot": "search-light.png"
+      "screenshot": "search-light.png",
+      "plan": {
+        "canvas": [
+          "One notion of every market: a tile searches what typing the same words searches"
+        ],
+        "behind": [],
+        "gone": []
+      }
     },
     {
       "tag": "VIEW",
@@ -43,7 +58,26 @@
       "title": "Results",
       "statement": "Show what is for sale, cheapest and most relevant first, from every market at once.\n\nThis is the view the app exists for. Anything that is not an offer competes with the offers for the\nfirst screen.",
       "status": "Built",
-      "screenshot": "results-light.png"
+      "screenshot": "results-light.png",
+      "plan": {
+        "canvas": [
+          "The offers, from the first screen down",
+          "One line: what it is, how many offers, and one count that means one thing",
+          "A thin progress line while markets answer, which removes itself",
+          "One row of three: Filters (n), Price (best), Markets (n answered)"
+        ],
+        "behind": [
+          "Price band, markets, countries, condition, sort, blocked words → Filters",
+          "Median, spread, distribution, New/Used split, sold history → Price",
+          "Per-market term, counts, failures, cooldown → Markets"
+        ],
+        "gone": [
+          "The price overview card above the offers",
+          "The distribution chart above the offers",
+          "The market chip row, the car-filter chip row and the blocked-word chip row, all three",
+          "Two of the three result counts"
+        ]
+      }
     },
     {
       "tag": "VIEW",
@@ -56,7 +90,21 @@
       "uid": "VIEW-FILTERS",
       "title": "Filters",
       "statement": "Narrow the search without losing your place in the results.\n\nToday the price band, the market chips and the blocked words are laid out on the results canvas, and\nthe vehicle filters live in the search form, which re-runs the whole search.",
-      "status": "Missing"
+      "status": "Missing",
+      "plan": {
+        "canvas": [
+          "Price band",
+          "Condition: any, new, used",
+          "Sort order",
+          "Markets, grouped by country, with a country toggling all of its markets",
+          "Blocked words, added and removed here",
+          "For a vehicle search, the criteria that today re-run the whole search"
+        ],
+        "behind": [],
+        "gone": [
+          "Every filter that today sits on the results canvas"
+        ]
+      }
     },
     {
       "tag": "VIEW",
@@ -69,7 +117,19 @@
       "uid": "VIEW-MARKET-DETAIL",
       "title": "Markets",
       "statement": "Say what actually happened at each market: the term it was sent, what it answered, and what went\nwrong.\n\nEverything this needs is already collected on the server and none of it reaches the app.",
-      "status": "Missing"
+      "status": "Missing",
+      "plan": {
+        "canvas": [
+          "One row per market: the term it was sent, how many it returned, how many survived filtering",
+          "Why a market is absent, in its own words: blocked, rate limited, timed out, captcha, nothing found",
+          "Which markets are cooling down, and until when",
+          "A way into a captcha the crawler is holding open"
+        ],
+        "behind": [],
+        "gone": [
+          "The chip row on the results canvas that stood in for this"
+        ]
+      }
     },
     {
       "tag": "VIEW",
@@ -82,7 +142,18 @@
       "uid": "VIEW-PRICE-DETAIL",
       "title": "Price",
       "statement": "Say whether a price is good.\n\nThe median, the spread, the New/Used split and the chart all sit on the results canvas today, which\nis how one question came to have three competing answers above the fold.",
-      "status": "Missing"
+      "status": "Missing",
+      "plan": {
+        "canvas": [
+          "The distribution, with New and Used separable",
+          "Median and spread",
+          "Sold history where the market publishes it, and a plain sentence where it does not"
+        ],
+        "behind": [],
+        "gone": [
+          "The price card and the chart that today push the first offer off the screen"
+        ]
+      }
     },
     {
       "tag": "VIEW",
@@ -128,7 +199,15 @@
       "title": "Settings",
       "statement": "Point the app at its server and say how deeply it searches.",
       "status": "Built",
-      "screenshot": "settings-light.png"
+      "screenshot": "settings-light.png",
+      "plan": {
+        "canvas": [
+          "This device: server address, display currency, both surviving a restart",
+          "This server, marked as shared: search depth and alerts"
+        ],
+        "behind": [],
+        "gone": []
+      }
     }
   ],
   "states": [
@@ -1341,6 +1420,154 @@
       "statement": "Search depth and the free-item alerts are one shared setting on the server, presented as this\ndevice's, so changing them changes them for every client of that server.",
       "status": "Broken",
       "tier": "2 one tap away"
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-OFFERS-FIRST",
+      "title": "The first screen is offers",
+      "statement": "Nothing but one title line, one progress line and one row of three controls stands between opening the view and the first offer.",
+      "status": "Missing",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-ONE-SEARCH",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-THREE-DOORS",
+      "title": "One row of three doors",
+      "statement": "Filters, Price and Markets each carry their own summary — how many filters are active, the best price, how many markets answered — and each opens the view that owns it.",
+      "status": "Missing",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-NARROW",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-ONE-COUNT",
+      "title": "One count on screen",
+      "statement": "The count shown is the count of what is on screen. The pre-filter figure, when it differs, is said in words next to it rather than as a second number.",
+      "status": "Missing",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-COUNT-MEANS-SOMETHING",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-FILTERS-EVERYTHING-KEPT",
+      "title": "Every filter survives the view closing",
+      "statement": "Price band, condition, sort order, market choice and blocked words are all kept with the search, for every kind of search, not only vehicles.",
+      "status": "Missing",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "STORY-FILTERS-KEPT",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-FILTERS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-FILTERS-NO-REFETCH",
+      "title": "Narrowing does not re-ask the markets",
+      "statement": "Changing a filter re-reads what was already fetched. Only a change that no fetched result can answer says so, and asks.",
+      "status": "Missing",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "STORY-NARROW",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-FILTERS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-MARKETS-BLOCKED-IS-NOT-EMPTY",
+      "title": "A blocked market never reads as an empty one",
+      "statement": "Each of the server's failure kinds reaches the app as itself, and a market that was blocked, rate limited or timed out is named as such.",
+      "status": "Missing",
+      "tier": "3 on request",
+      "relations": [
+        {
+          "to": "STORY-WHO-ANSWERED",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-MARKETS-MORE-PAGES",
+      "title": "Say when a market held more",
+      "statement": "The server already reports that a market had further pages and whether the answer came from cache. Neither reaches the app, so a truncated answer looks complete.",
+      "status": "Missing",
+      "tier": "3 on request",
+      "relations": [
+        {
+          "to": "STORY-WHO-ANSWERED",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-MARKET-DETAIL",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-SETTINGS-DEVICE-OR-SERVER",
+      "title": "Say which settings are shared",
+      "statement": "Settings are grouped into this device and this server, because search depth and alerts change them for every client of that server.",
+      "status": "Missing",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "VIEW-SETTINGS",
+          "role": "Lives in"
+        }
+      ],
+      "planned": true
     }
   ]
 }

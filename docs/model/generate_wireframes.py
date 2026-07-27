@@ -288,6 +288,25 @@ def view_board(view, states, requirements, stories):
         board.text(req_x + 16, y + 10, title, size=15)
         board.text(req_x + 16, y + height - text_height(line, 11) - 12, line, size=11, colour=GREY)
         y += height + 12
+
+    # What the rework does to this view, beside what it is today.
+    plan = view.get("plan")
+    if plan:
+        plan_x = 1200
+        y = frame_y
+        board.text(plan_x, frame_y - 28, "after the rework", size=14, colour=GREY)
+        for heading, lines, colour in [
+                ("on the canvas", plan["canvas"], BUILT),
+                ("one tap away", plan["behind"], INK),
+                ("gone", plan["gone"], BROKEN)]:
+            if not lines:
+                continue
+            body = "\n".join(f"·  {wrap(line, 44)}".replace("\n", "\n   ") for line in lines)
+            height = 40 + text_height(body, 12) + 16
+            board.box(plan_x, y, 460, height, stroke=colour)
+            board.text(plan_x + 16, y + 12, heading, size=14, colour=colour)
+            board.text(plan_x + 16, y + 38, body, size=12, colour=GREY)
+            y += height + 14
     return board
 
 
