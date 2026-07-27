@@ -70,7 +70,7 @@ private fun inline(content: @Composable () -> Unit): @Composable () -> Unit = {
 private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
     "home" to {
         io.github.tieo.arbay.ui.screen.MainScreen(
-            productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(),
+            productViewModel = io.github.tieo.arbay.ui.viewmodel.ProductViewModel(saved = SampleData.saved),
             listingViewModel = io.github.tieo.arbay.ui.viewmodel.ListingViewModel(),
             freeItemViewModel = io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel(),
             client = io.github.tieo.arbay.api.ArbayClient(),

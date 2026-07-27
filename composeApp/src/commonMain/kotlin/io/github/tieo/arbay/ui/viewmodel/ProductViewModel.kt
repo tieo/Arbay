@@ -11,9 +11,12 @@ import kotlinx.datetime.Clock
 
 class ProductViewModel(
     private val client: ArbayClient = ArbayClient(),
+    // The gallery renders the views with no server to ask, and a Home with nothing saved shows an
+    // empty screen that says nothing about what Home looks like in use.
+    saved: List<TrackedProduct> = emptyList(),
 ) : ViewModel() {
 
-    private val _products = MutableStateFlow<List<TrackedProduct>>(emptyList())
+    private val _products = MutableStateFlow(saved)
     val products: StateFlow<List<TrackedProduct>> = _products
 
     private val _loading = MutableStateFlow(false)

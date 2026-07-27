@@ -41,10 +41,22 @@ function Model() {
   }, [current]);
 
   // A board opens showing the whole board, since it is a plan to look at before it is one to edit.
+  // Fitting is deferred a frame: it measures the canvas, which has no size until the scene mounts.
   useEffect(() => {
-    if (editor && scene) {
-      editor.scrollToContent(scene.elements, { fitToContent: true, animate: false });
-    }
+    if (!editor || !scene) return;
+    // Fit, then drop the view: the toolbar floats over the top of the canvas and would otherwise
+    // cover the board's own title.
+    const fit = () => {
+      editor.scrollToContent(editor.getSceneElements(), { fitToContent: true, animate: false });
+      const { scrollY, zoom } = editor.getAppState();
+      editor.updateScene({ appState: { scrollY: scrollY + 90 / zoom.value } });
+    };
+    const frame = requestAnimationFrame(fit);
+    const settle = setTimeout(fit, 300);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(settle);
+    };
   }, [editor, scene]);
 
   // The file on disk is the document. Every change is written back after a pause, so a board edited

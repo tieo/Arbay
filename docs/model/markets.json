@@ -693,6 +693,9 @@
         }
     ],
     "withoutCrawler": [
-        "AUTOSCOUT24_CH"
+        {
+            "id": "AUTOSCOUT24_CH",
+            "name": "AutoScout24 CH"
+        }
     ]
 }

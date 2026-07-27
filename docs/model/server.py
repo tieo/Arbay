@@ -17,7 +17,19 @@ import socketserver
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-TITLES = {"00-flow": "How you move through it", "01-markets": "The markets"}
+# Boards are listed in the order someone walks the app, under the name the view carries.
+ORDER = ["00-flow", "01-markets", "home", "discovery", "car-search", "results",
+         "filters", "market-detail", "price-detail", "free-items", "settings"]
+
+TITLES = {
+    "00-flow": "How you move through it",
+    "01-markets": "The markets",
+    "discovery": "Search",
+    "car-search": "Vehicle search",
+    "market-detail": "Markets",
+    "price-detail": "Price",
+    "free-items": "Free items",
+}
 
 
 def title_of(name):
@@ -50,7 +62,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/boards":
-            boards = sorted(p.stem for p in self.wireframes.glob("*.excalidraw"))
+            found = {p.stem for p in self.wireframes.glob("*.excalidraw")}
+            boards = [n for n in ORDER if n in found] + sorted(found - set(ORDER))
             return self.send_json([{"name": n, "title": title_of(n)} for n in boards])
         if self.path.startswith("/api/boards/"):
             path = self.board_path(self.path.removeprefix("/api/boards/"))

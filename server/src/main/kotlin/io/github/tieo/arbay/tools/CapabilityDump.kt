@@ -32,7 +32,10 @@ private data class MarketRecord(
 )
 
 @Serializable
-private data class Dump(val markets: List<MarketRecord>, val withoutCrawler: List<String>)
+private data class Offered(val id: String, val name: String)
+
+@Serializable
+private data class Dump(val markets: List<MarketRecord>, val withoutCrawler: List<Offered>)
 
 fun main() {
     val records = PlatformId.entries.mapNotNull { platform ->
@@ -56,7 +59,9 @@ fun main() {
             currency = capabilities.currency?.name,
         )
     }
-    val offered = PlatformId.entries.filter { CrawlerRegistry.crawlerFor(it) == null }.map { it.name }
+    val offered = PlatformId.entries
+        .filter { CrawlerRegistry.crawlerFor(it) == null }
+        .map { Offered(it.name, it.displayName) }
     println(Json { prettyPrint = true }.encodeToString(Dump(records, offered)))
     // The registry holds an HTTP client with a live connection pool, which keeps the JVM alive.
     exitProcess(0)

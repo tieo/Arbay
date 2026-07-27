@@ -42,4 +42,21 @@ object SampleData {
         l("s3", PlatformId.EBAY_DE, "Parkettschleifmaschine Profi 220V", 940_00, sold = true, soldDate = Instant.parse("2026-07-08T09:00:00Z")),
         l("s4", PlatformId.EBAY_DE, "Parkettschleifmaschine mit Absaugung", 700_00, sold = true, soldDate = Instant.parse("2026-06-30T09:00:00Z")),
     )
+
+    /** Saved searches, so Home renders what it looks like once it is used. */
+    val saved: List<io.github.tieo.arbay.model.TrackedProduct> = listOf(
+        "Parkettschleifmaschine" to listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS),
+        "VW Crafter L3H2" to listOf(
+            PlatformId.MOBILE_DE, PlatformId.AUTOSCOUT24, PlatformId.AUTOSCOUT24_IT,
+            PlatformId.AUTOSCOUT24_FR, PlatformId.WILLHABEN,
+        ),
+        "Bosch GWS 18V" to listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE),
+    ).mapIndexed { index, (name, platforms) ->
+        io.github.tieo.arbay.model.TrackedProduct(
+            id = "sample-$index",
+            name = name,
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = name, platforms = platforms),
+            createdAt = now,
+        )
+    }
 }
