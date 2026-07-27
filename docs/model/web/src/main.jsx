@@ -1,144 +1,327 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
-import "@excalidraw/excalidraw/index.css";
 import "./style.css";
+import { Sketch } from "./Sketch.jsx";
 
-const SAVE_AFTER_IDLE_MS = 1200;
+const SAVE_AFTER_IDLE_MS = 800;
 
 async function api(path, options) {
-  const response = await fetch(`api/${path}`, options);
+  const response = await fetch(path, options);
   if (!response.ok) throw new Error(`${options?.method ?? "GET"} ${path}: ${response.status}`);
   return response.json();
 }
 
-function Model() {
-  const [boards, setBoards] = useState([]);
-  const [current, setCurrent] = useState(null);
-  const [scene, setScene] = useState(null);
-  const [saved, setSaved] = useState("loaded");
-  const timer = useRef(null);
-  const shot = useRef(null);
-  const [editor, setEditor] = useState(null);
-
+/** The hash is the address: #/ , #/view/results , #/sketch/results , #/markets . */
+function useRoute() {
+  const [route, setRoute] = useState(() => location.hash.slice(2) || "");
   useEffect(() => {
-    api("boards").then((list) => {
-      setBoards(list);
-      const wanted = decodeURIComponent(location.hash.slice(1));
-      setCurrent(list.find((b) => b.name === wanted)?.name ?? list[0]?.name ?? null);
-    });
-  }, []);
-
-  // A card on the index board links to the board it depicts, which arrives as a hash change.
-  useEffect(() => {
-    const follow = () => {
-      const wanted = decodeURIComponent(location.hash.slice(1));
-      if (wanted) setCurrent((now) => (wanted === now ? now : wanted));
-    };
+    const follow = () => setRoute(location.hash.slice(2) || "");
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
   }, []);
+  return route;
+}
+
+const slug = (uid) => uid.replace(/^VIEW-/, "").toLowerCase();
+const statusClass = (status) => `pill ${status.toLowerCase()}`;
+
+function App() {
+  const route = useRoute();
+  const [model, setModel] = useState(null);
+  const [markets, setMarkets] = useState(null);
+  const [saved, setSaved] = useState("");
+  const timer = useRef(null);
 
   useEffect(() => {
-    if (!current) return;
-    setScene(null);
-    location.hash = encodeURIComponent(current);
-    api(`boards/${current}`).then((data) => {
-      shot.current = JSON.stringify(data.elements);
-      setScene(data);
-      setSaved("loaded");
-    });
-  }, [current]);
+    api("/api/model").then(setModel);
+    api("/api/markets").then(setMarkets).catch(() => {});
+  }, []);
 
-  // A board opens showing the whole board, since it is a plan to look at before it is one to edit.
-  // Fitting is deferred a frame: it measures the canvas, which has no size until the scene mounts.
-  useEffect(() => {
-    if (!editor || !scene) return;
-    // Fit, then drop the view: the toolbar floats over the top of the canvas and would otherwise
-    // cover the board's own title.
-    const fit = () => {
-      editor.scrollToContent(editor.getSceneElements(), { fitToContent: true, animate: false });
-      const { scrollY, zoom } = editor.getAppState();
-      editor.updateScene({ appState: { scrollY: scrollY + 90 / zoom.value } });
-    };
-    const frame = requestAnimationFrame(fit);
-    const settle = setTimeout(fit, 300);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(settle);
-    };
-  }, [editor, scene]);
+  // The model on disk is the document; an edit here is written back after a pause.
+  const save = useCallback((next) => {
+    setModel(next);
+    setSaved("saving…");
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      api("/api/model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      })
+        .then(() => setSaved("saved"))
+        .catch((error) => setSaved(`not saved: ${error.message}`));
+    }, SAVE_AFTER_IDLE_MS);
+  }, []);
 
-  // The file on disk is the document. Every change is written back after a pause, so a board edited
-  // here is a diff in the repository rather than a state only this browser knows about.
-  const onChange = useCallback(
-    (elements, appState, files) => {
-      if (!current || !scene) return;
-      const serialized = JSON.stringify(elements);
-      if (serialized === shot.current) return;
-      shot.current = serialized;
-      setSaved("saving");
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        api(`boards/${current}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "excalidraw",
-            version: 2,
-            source: "arbay-model",
-            elements,
-            appState: {
-              viewBackgroundColor: appState.viewBackgroundColor,
-              gridSize: appState.gridSize,
-            },
-            files,
-          }),
-        })
-          .then(() => setSaved("saved"))
-          .catch((error) => setSaved(`not saved: ${error.message}`));
-      }, SAVE_AFTER_IDLE_MS);
-    },
-    [current, scene],
-  );
+  if (!model) return <div className="loading">Reading the model…</div>;
+
+  const views = model.views;
+  const [section, argument] = route.split("/");
+
+  let page;
+  if (section === "view") {
+    const view = views.find((v) => slug(v.uid) === argument);
+    page = view ? <ViewPage model={model} view={view} onChange={save} /> : <NoSuchView />;
+  } else if (section === "sketch") {
+    page = <Sketch name={argument} title={views.find((v) => slug(v.uid) === argument)?.title} />;
+  } else if (section === "markets") {
+    page = <MarketsPage markets={markets} />;
+  } else {
+    page = <IndexPage views={views} model={model} />;
+  }
 
   return (
-    <div className="model">
+    <div className="shell">
       <aside>
-        <h1>The model</h1>
-        <p className="hint">Every view of Arbay. Edits are written to the file in the repository.</p>
+        <a className="brand" href="#/">
+          Arbay
+          <span>the model</span>
+        </a>
         <nav>
-          {boards.map((board) => (
-            <button
-              key={board.name}
-              className={board.name === current ? "on" : ""}
-              onClick={() => setCurrent(board.name)}
+          <a className={route === "" ? "on" : ""} href="#/">All views</a>
+          <a className={section === "markets" ? "on" : ""} href="#/markets">Markets</a>
+        </nav>
+        <p className="label">Views</p>
+        <nav>
+          {views.map((view) => (
+            <a
+              key={view.uid}
+              className={section === "view" && argument === slug(view.uid) ? "on" : ""}
+              href={`#/view/${slug(view.uid)}`}
             >
-              {board.title}
-            </button>
+              {view.title}
+              {view.status === "Missing" && <span className="dot" title="not built" />}
+            </a>
           ))}
         </nav>
-        <p className={`state ${saved.startsWith("not saved") ? "bad" : ""}`}>{saved}</p>
+        <p className="state">{saved}</p>
       </aside>
-      <main>
-        {scene && (
-          <Excalidraw
-            key={current}
-            initialData={scene}
-            excalidrawAPI={setEditor}
-            onChange={onChange}
-            UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false } }}
-          >
-            <MainMenu>
-              <MainMenu.DefaultItems.ToggleTheme />
-              <MainMenu.DefaultItems.ChangeCanvasBackground />
-              <MainMenu.DefaultItems.SaveAsImage />
-            </MainMenu>
-          </Excalidraw>
-        )}
-      </main>
+      <main>{page}</main>
     </div>
   );
 }
 
-createRoot(document.getElementById("root")).render(<Model />);
+function NoSuchView() {
+  return <div className="page"><h1>No such view</h1></div>;
+}
+
+function requirementsOf(model, uid) {
+  const own = model.requirements.filter((r) =>
+    r.relations.some((x) => x.to === uid && x.role === "Lives in"));
+  return {
+    all: own,
+    built: own.filter((r) => r.status === "Built").length,
+    broken: own.filter((r) => r.status === "Broken").length,
+    missing: own.filter((r) => r.status === "Missing").length,
+  };
+}
+
+function IndexPage({ views, model }) {
+  const open = model.requirements.filter((r) => r.status !== "Built");
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>Every view</h1>
+          <p>
+            {views.length} views · {model.requirements.length} requirements ·{" "}
+            {open.length === 0 ? "all built" : `${open.length} not built`}
+          </p>
+        </div>
+      </header>
+      <div className="grid">
+        {views.map((view) => {
+          const own = requirementsOf(model, view.uid);
+          return (
+            <a className="card" key={view.uid} href={`#/view/${slug(view.uid)}`}>
+              <div className="shot">
+                {view.screenshot ? (
+                  <img src={`/img/card/${view.screenshot}`} alt={view.title} loading="lazy" />
+                ) : (
+                  <div className="noshot">nothing renders this yet</div>
+                )}
+              </div>
+              <div className="card-body">
+                <h2>{view.title}</h2>
+                <p>{view.statement.split(".")[0]}.</p>
+                <div className="counts">
+                  {own.built > 0 && <span className="pill built">{own.built} built</span>}
+                  {own.broken > 0 && <span className="pill broken">{own.broken} broken</span>}
+                  {own.missing > 0 && <span className="pill missing">{own.missing} missing</span>}
+                </div>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ViewPage({ model, view, onChange }) {
+  const uid = view.uid;
+  const states = model.states.filter((s) =>
+    s.relations.some((r) => r.to === uid && r.role === "State of"));
+  const requirements = requirementsOf(model, uid).all;
+  const stories = useMemo(
+    () => Object.fromEntries(model.stories.map((s) => [s.uid, s])), [model.stories]);
+  const reachedFrom = view.relations
+    .filter((r) => r.role === "Reached from")
+    .map((r) => model.views.find((v) => v.uid === r.to))
+    .filter(Boolean);
+
+  const editView = (patch) => onChange({
+    ...model,
+    views: model.views.map((v) => (v.uid === uid ? { ...v, ...patch } : v)),
+  });
+
+  const setStatus = (reqUid, status) => onChange({
+    ...model,
+    requirements: model.requirements.map((r) => (r.uid === reqUid ? { ...r, status } : r)),
+  });
+
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>
+            {view.title}
+            {view.status === "Missing" && <span className="pill missing">not built</span>}
+          </h1>
+          <p>{view.statement}</p>
+          {reachedFrom.length > 0 && (
+            <p className="from">
+              Reached from{" "}
+              {reachedFrom.map((v, i) => (
+                <React.Fragment key={v.uid}>
+                  {i > 0 && ", "}
+                  <a href={`#/view/${slug(v.uid)}`}>{v.title}</a>
+                </React.Fragment>
+              ))}
+            </p>
+          )}
+        </div>
+        <a className="button" href={`#/sketch/${slug(uid)}`}>Sketch it</a>
+      </header>
+
+      <div className="columns">
+        <section className="render">
+          <h3>As it renders today</h3>
+          {view.screenshot ? (
+            <img src={`/img/small/${view.screenshot}`} alt={`${view.title} as rendered`} />
+          ) : (
+            <div className="noshot tall">
+              <span>Nothing renders this yet.</span>
+            </div>
+          )}
+        </section>
+
+        <div className="detail">
+          <section>
+            <h3>What it has to do</h3>
+            <ul className="reqs">
+              {requirements.map((req) => {
+                const served = req.relations
+                  .filter((r) => r.role === "Fulfils")
+                  .map((r) => stories[r.to]?.title)
+                  .filter(Boolean);
+                return (
+                  <li key={req.uid}>
+                    <div className="req-head">
+                      <span className={statusClass(req.status)}>{req.status}</span>
+                      <strong>{req.title}</strong>
+                    </div>
+                    <p>{req.statement}</p>
+                    {served.length > 0 && <p className="serves">Serves: {served.join(" · ")}</p>}
+                    <div className="setstatus">
+                      {["Built", "Broken", "Missing"].map((s) => (
+                        <button
+                          key={s}
+                          className={req.status === s ? "on" : ""}
+                          onClick={() => setStatus(req.uid, s)}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+              {requirements.length === 0 && <li className="empty">Nothing recorded yet.</li>}
+            </ul>
+          </section>
+
+          {states.length > 0 && (
+            <section>
+              <h3>States it can be in</h3>
+              <ul className="states">
+                {states.map((state) => (
+                  <li key={state.uid}>
+                    <strong>{state.title}</strong>
+                    <p>{state.statement}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section>
+            <h3>Notes</h3>
+            <textarea
+              value={view.notes ?? ""}
+              placeholder="What you want changed here. Written straight into model.json."
+              onChange={(e) => editView({ notes: e.target.value })}
+            />
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarketsPage({ markets }) {
+  if (!markets) return <div className="page"><h1>Markets</h1><p>No market data.</p></div>;
+  const rows = [...markets.markets].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>Markets</h1>
+          <p>
+            {rows.length} carry a crawler. What each can do is declared in the crawler and read from
+            there, so this table cannot quietly stop being true.
+          </p>
+        </div>
+      </header>
+      <table className="markets">
+        <thead>
+          <tr>
+            <th>Market</th><th>Country</th><th>Pages</th><th>Filters at the source</th>
+            <th>Sold</th><th>Age</th><th>Place</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => (
+            <tr key={m.id}>
+              <td><strong>{m.name}</strong></td>
+              <td>{m.country ?? "DE"}</td>
+              <td>{m.paginates ? "every page" : "first only"}</td>
+              <td>{m.nativeCriteria.length ? m.nativeCriteria.join(", ").toLowerCase() : "—"}</td>
+              <td>{m.soldListings ? "yes" : "—"}</td>
+              <td>{m.listingAge ? "yes" : "—"}</td>
+              <td>{m.location ? "yes" : "—"}</td>
+            </tr>
+          ))}
+          {markets.withoutCrawler.map((m) => (
+            <tr key={m.id ?? m} className="nocrawler">
+              <td><strong>{m.name ?? m}</strong></td>
+              <td colSpan={6}>offered in the app, and no crawler exists for it</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);

@@ -14,13 +14,16 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 case "${1:-}" in
 pull)
   rsync -a --delete "$host:$remote/wireframes/" "$here/wireframes/"
-  git -C "$here" status --short -- "$here/wireframes"
+  rsync -a "$host:$remote/model.json" "$here/model.json"
+  git -C "$here" status --short -- "$here"
   ;;
 push)
   (cd "$here/web" && pnpm install --silent && pnpm build >/dev/null)
   rsync -a --delete "$here/web/dist/" "$host:$remote/site/"
+  rsync -a --delete "$here/img/" "$host:$remote/img/"
+  mkdir -p "$here/wireframes"
   rsync -a --delete "$here/wireframes/" "$host:$remote/wireframes/"
-  rsync -a "$here/server.py" "$host:$remote/server.py"
+  rsync -a "$here/server.py" "$here/model.json" "$here/markets.json" "$host:$remote/"
   ssh "$host" "chown -R arbay:arbay $remote && systemctl restart arbay-model"
   ;;
 *)
