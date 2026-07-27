@@ -80,6 +80,7 @@ private val VIEWS: List<Pair<String, @Composable () -> Unit>> = listOf(
         io.github.tieo.arbay.ui.screen.MarketsSheet(
             statuses = SampleData.marketAnswers,
             offers = SampleData.active.groupBy { it.platformId }.mapValues { it.value.size },
+            capabilities = SampleData.marketAbilities,
             onSelectMarket = {}, onDismiss = {},
         )
     },

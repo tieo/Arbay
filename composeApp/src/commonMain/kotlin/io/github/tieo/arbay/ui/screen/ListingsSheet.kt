@@ -180,6 +180,7 @@ fun ListingsSheet(
         val updated = listingViewModel.unblockTerm(t)
         onBlockedTermsChange?.invoke(updated)
     }
+    val marketCapabilities by listingViewModel.capabilities.collectAsState()
     val shownMarkets by listingViewModel.shownMarkets.collectAsState()
     val shownCountries by listingViewModel.shownCountries.collectAsState()
     // The market and country narrowing is part of the saved search, like the price band.
@@ -735,6 +736,7 @@ fun ListingsSheet(
             MarketsSheet(
                 statuses = platformStatuses,
                 offers = platformOffers.associate { it.platform to it.count },
+                capabilities = marketCapabilities,
                 onSelectMarket = { market ->
                     listingViewModel.showOnly(market)
                     persistFilters { it.copy(showOnlyMarkets = setOf(market), showOnlyCountries = emptySet()) }

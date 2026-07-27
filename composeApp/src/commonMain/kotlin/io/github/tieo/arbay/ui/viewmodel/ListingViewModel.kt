@@ -67,6 +67,17 @@ class ListingViewModel(
     private val _shownCountries = MutableStateFlow<Set<String>>(emptySet())
     val shownCountries: StateFlow<Set<String>> = _shownCountries
 
+    // What each market can do, so the app can say why a field is empty instead of leaving it blank.
+    private val _capabilities = MutableStateFlow<Map<PlatformId, MarketCapability>>(emptyMap())
+    val capabilities: StateFlow<Map<PlatformId, MarketCapability>> = _capabilities
+
+    init {
+        viewModelScope.launch {
+            runCatching { client.getMarketCapabilities() }
+                .onSuccess { list -> _capabilities.value = list.associateBy { it.platform } }
+        }
+    }
+
     private val _platformStatuses = MutableStateFlow(sampleStatuses)
     val platformStatuses: StateFlow<List<PlatformStatus>> = _platformStatuses
 

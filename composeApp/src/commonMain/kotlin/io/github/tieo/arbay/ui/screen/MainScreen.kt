@@ -125,6 +125,13 @@ fun MainScreen(
 ) {
     val products by productViewModel.products.collectAsState()
     val productStatus by productViewModel.status.collectAsState()
+    // Only markets a crawler exists for are worth offering: selecting one without adds nothing to
+    // a search and says nothing about why.
+    val marketCapabilities by listingViewModel.capabilities.collectAsState()
+    val offerableMarkets = remember(marketCapabilities) {
+        val crawled = marketCapabilities.values.filter { it.crawled }.map { it.platform }
+        crawled.ifEmpty { PlatformId.entries }
+    }
     // The saved bookmark whose search text matches a query, if any — drives the header bookmark
     // toggle so a fresh search can be saved and an already-saved one removed, from the same place.
     fun savedFor(query: String): TrackedProduct? =
@@ -496,6 +503,54 @@ fun MainScreen(
         )
     }
 
+    // Adding a search by hand, and editing one that is not a vehicle. Both set showAddSheet and
+    // nothing rendered it, so "Custom search" and the Edit button on a non-vehicle bookmark did
+    // nothing at all.
+    if (showAddSheet) {
+        AddProductSheet(
+            markets = offerableMarkets,
+            prefill = addSheetPrefill,
+            editProduct = editingProduct,
+            initialQuery = addSheetInitialQuery,
+            onDismiss = {
+                showAddSheet = false
+                addSheetPrefill = null
+                addSheetInitialQuery = ""
+                editingProduct = null
+            },
+            onBack = if (cameFromDiscovery) {
+                {
+                    showAddSheet = false
+                    cameFromDiscovery = false
+                    showDiscovery = true
+                }
+            } else null,
+            onConfirm = { name, query, platforms, identifiers ->
+                val existing = editingProduct
+                if (existing != null) {
+                    productViewModel.updateProduct(
+                        existing.copy(
+                            name = name,
+                            searchQuery = existing.searchQuery.copy(text = query, platforms = platforms),
+                            identifiers = identifiers,
+                        ),
+                    )
+                } else {
+                    productViewModel.createProduct(
+                        name = name,
+                        searchText = query,
+                        platforms = platforms,
+                        identifiers = identifiers,
+                    )
+                }
+                showAddSheet = false
+                addSheetPrefill = null
+                addSheetInitialQuery = ""
+                editingProduct = null
+            },
+        )
+    }
+
     // Results, for every way in: a saved bookmark, a preview of something not saved yet, or a
     // fresh run of the car form. One sheet, wired once — saving, editing filters and blocking a
     // word mean the same thing whichever door the user came through.
@@ -804,6 +859,8 @@ private fun AddProductSheet(
     prefill: KnownProduct? = null,
     editProduct: TrackedProduct? = null,
     initialQuery: String = "",
+    // Only markets a crawler exists for.
+    markets: List<PlatformId> = PlatformId.entries,
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
     onConfirm: (name: String, query: String, platforms: List<PlatformId>, identifiers: ProductIdentifier) -> Unit,
@@ -822,7 +879,7 @@ private fun AddProductSheet(
     }
     val selectedPlatforms = remember {
         mutableStateListOf<PlatformId>().apply {
-            addAll(editProduct?.searchQuery?.platforms ?: prefill?.effectivePlatforms ?: PlatformId.entries)
+            addAll(editProduct?.searchQuery?.platforms ?: prefill?.effectivePlatforms ?: markets)
         }
     }
 
@@ -923,9 +980,9 @@ private fun AddProductSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Platforms (${selectedPlatforms.size}/${PlatformId.entries.size})", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Platforms (${selectedPlatforms.size}/${markets.size})", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { selectedPlatforms.clear(); selectedPlatforms.addAll(PlatformId.entries) }) {
+                    TextButton(onClick = { selectedPlatforms.clear(); selectedPlatforms.addAll(markets) }) {
                         Text("All", style = MaterialTheme.typography.labelSmall)
                     }
                     TextButton(onClick = { selectedPlatforms.clear() }) {
@@ -940,7 +997,7 @@ private fun AddProductSheet(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                PlatformId.entries.forEach { platform ->
+                markets.forEach { platform ->
                     FilterChip(
                         selected = platform in selectedPlatforms,
                         onClick = {

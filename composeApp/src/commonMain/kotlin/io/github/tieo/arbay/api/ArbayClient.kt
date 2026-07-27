@@ -53,6 +53,10 @@ class ArbayClient(
     suspend fun getProducts(): List<TrackedProduct> =
         client.get("$baseUrl/api/products").body()
 
+    /** What every market can do, declared by its crawler. */
+    suspend fun getMarketCapabilities(): List<MarketCapability> =
+        client.get("$baseUrl/api/markets").body()
+
     /** What each saved search has found since it was last opened, and whether it is watched. */
     suspend fun getSavedSearchStatus(): List<SavedSearchStatus> =
         client.get("$baseUrl/api/products/status").body()

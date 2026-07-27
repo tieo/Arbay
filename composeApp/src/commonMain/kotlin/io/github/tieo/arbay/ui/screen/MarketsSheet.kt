@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.tieo.arbay.model.MarketCapability
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.openBrowser
@@ -32,6 +33,9 @@ import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 fun MarketsSheet(
     statuses: List<PlatformStatus>,
     offers: Map<PlatformId, Int>,
+    // What each market can do, so a blank field reads as "this market does not publish that"
+    // rather than as a gap in the app.
+    capabilities: Map<PlatformId, MarketCapability>,
     onSelectMarket: (PlatformId) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -70,6 +74,7 @@ fun MarketsSheet(
                 MarketRow(
                     status = status,
                     kept = offers[runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()] ?: 0,
+                    can = capabilities[runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()],
                     onShowOnly = {
                         runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()?.let(onSelectMarket)
                         onDismiss()
@@ -124,7 +129,12 @@ private fun PlatformStatus.tint(): Color? = when (status) {
 }
 
 @Composable
-private fun MarketRow(status: PlatformStatus, kept: Int, onShowOnly: () -> Unit) {
+private fun MarketRow(
+    status: PlatformStatus,
+    kept: Int,
+    can: MarketCapability?,
+    onShowOnly: () -> Unit,
+) {
     val accent = status.tint()
     Surface(
         color = if (accent != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
@@ -189,6 +199,35 @@ private fun MarketRow(status: PlatformStatus, kept: Int, onShowOnly: () -> Unit)
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            // What this market cannot answer, said once rather than left as an empty field on
+            // every one of its cards.
+            can?.let { c ->
+                val cannot = buildList {
+                    if (!c.listingAge) add("when an ad was posted")
+                    if (!c.location) add("where the thing is")
+                    if (!c.paginates) add("more than its first page")
+                }
+                if (cannot.isNotEmpty() && status.status == PlatformSearchStatus.DONE) {
+                    Text(
+                        "does not give ${cannot.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (c.nativeCriteria.isNotEmpty()) {
+                    Text(
+                        "narrowed by the market itself: ${c.nativeCriteria.sorted().joinToString(", ") { it.lowercase() }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (status.status == PlatformSearchStatus.DONE) {
+                    Text(
+                        "applies no filter of its own — every criterion was applied afterwards",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             status.captchaUrl?.let { url ->
                 TextButton(

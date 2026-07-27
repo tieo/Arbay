@@ -1028,7 +1028,7 @@
       ],
       "uid": "REQ-RESULTS-AGE",
       "title": "Show how long the ad has been up",
-      "statement": "Two markets of thirty-seven publish when an ad was posted, so most offers carry no age and nothing\nsays the market cannot tell.",
+      "statement": "Two markets of thirty-seven publish when an ad was posted. The Markets view now names which cannot, and the card itself still leaves the field blank without saying so.",
       "status": "Broken",
       "tier": "1 canvas"
     },
@@ -1253,7 +1253,7 @@
       "uid": "REQ-MARKETS-NATIVE-OR-NOT",
       "title": "Say which filters the market itself applied",
       "statement": "Eleven markets of thirty-seven turn criteria into their own URL; the rest are filtered over what the\nfetched pages happened to contain, which is a weaker guarantee and reads identically.",
-      "status": "Missing",
+      "status": "Built",
       "tier": "3 on request"
     },
     {
@@ -1270,8 +1270,8 @@
       ],
       "uid": "REQ-MARKETS-NO-CRAWLER",
       "title": "Do not offer a market that cannot be searched",
-      "statement": "AutoScout24 Switzerland is offered as a market and has no crawler, so selecting it adds nothing and\nsays nothing.",
-      "status": "Broken",
+      "statement": "The app offers only markets a crawler exists for, taken from the server rather than from a list held here that can fall out of step.",
+      "status": "Built",
       "tier": "2 one tap away"
     },
     {
@@ -1288,8 +1288,8 @@
       ],
       "uid": "REQ-MARKETS-HIDDEN-CRAWLERS",
       "title": "Offer every market that works",
-      "statement": "Geizhals and ImmoScout24 have working crawlers and appear in no list, so they can only be reached by\nhand.",
-      "status": "Broken",
+      "statement": "Every market with a working crawler is offered, including Geizhals and ImmoScout24, because the list comes from the crawlers themselves.",
+      "status": "Built",
       "tier": "2 one tap away"
     },
     {
@@ -1618,6 +1618,24 @@
         },
         {
           "to": "VIEW-CAR-SEARCH",
+          "role": "Lives in"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-ADD-SHEET-RENDERS",
+      "title": "Editing a search that is not a vehicle does something",
+      "statement": "The add-and-edit sheet was written and never rendered, so Custom search and the Edit button on a non-vehicle bookmark both did nothing at all.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "STORY-SAVE",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-HOME",
           "role": "Lives in"
         }
       ]

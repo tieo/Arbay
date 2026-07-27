@@ -95,4 +95,21 @@ object SampleData {
         queryUsed = term,
         hasMore = hasMore,
     )
+
+    /** What the sample markets can do, mirroring what their crawlers declare. */
+    val marketAbilities: Map<PlatformId, io.github.tieo.arbay.model.MarketCapability> = mapOf(
+        PlatformId.KLEINANZEIGEN to io.github.tieo.arbay.model.MarketCapability(
+            PlatformId.KLEINANZEIGEN, paginates = true, nativeCriteria = setOf("FUEL", "GEARBOX"),
+            relatedSearches = true, listingAge = true, location = true, detailSpecs = true,
+        ),
+        PlatformId.EBAY_DE to io.github.tieo.arbay.model.MarketCapability(
+            PlatformId.EBAY_DE, paginates = true, soldListings = true,
+        ),
+        PlatformId.SUBITO to io.github.tieo.arbay.model.MarketCapability(
+            PlatformId.SUBITO, paginates = true, location = true,
+        ),
+        PlatformId.MARKTPLAATS to io.github.tieo.arbay.model.MarketCapability(
+            PlatformId.MARKTPLAATS, paginates = true, location = true, detailSpecs = true,
+        ),
+    )
 }
