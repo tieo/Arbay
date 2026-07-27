@@ -158,14 +158,24 @@ class QueryVariantsTest {
     }
 
     @Test
-    fun `a word built differently needs the market to name the query back`() {
+    fun `a word built differently is decided by the market, not by spelling`() {
         val candidate = QueryVariants.candidates(listOf("motorsäge"), "kettensaege").single()
         assertFalse(candidate.sharesStem, "shares no stem with the query")
-        // Kleinanzeigen's real suggestions for "motorsäge" name the query back; the adjacent
-        // "hochentaster" only names other tools.
-        assertTrue(QueryVariants.namesBack("kettensaege",
-            listOf("motorsäge", "stihl motorsäge", "kettensäge", "stihl")))
-        assertFalse(QueryVariants.namesBack("kettensaege",
+
+        // Kleinanzeigen's real lists. Asked about the synonym it names the query back and the two
+        // lists are asked about in the same company; the adjacent tool does neither.
+        val queryList = listOf("motorsäge", "stihl", "stihl kettensäge", "husqvarna", "akku kettensäge")
+        assertTrue(QueryVariants.marketConfirms("kettensaege", queryList,
+            listOf("motorsäge", "stihl motorsäge", "kettensäge", "stihl", "husqvarna")))
+        assertFalse(QueryVariants.marketConfirms("kettensaege", queryList,
             listOf("heckenschere", "stihl hochentaster", "hochentaster akku", "astsäge")))
+    }
+
+    @Test
+    fun `naming the query back is not enough on its own`() {
+        // A chisel names its machine back too, so the lists must also look alike.
+        assertFalse(QueryVariants.marketConfirms("drechselbank",
+            listOf("drechselmaschine", "holzdrehbank", "drehbank", "killinger"),
+            listOf("drechselbank", "drechselwerkzeug", "drechselmesser", "crown", "drechselfutter")))
     }
 }

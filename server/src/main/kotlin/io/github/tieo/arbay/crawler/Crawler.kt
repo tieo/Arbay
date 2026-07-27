@@ -63,11 +63,12 @@ suspend fun Crawler.searchAllSpellings(
         }.getOrDefault(emptyList())
 
         // A word built like the query is trusted on that alone. One built differently could still
-        // be the same thing ("Motorsäge" for "Kettensäge"), but only the market saying so both ways
-        // makes it worth keeping.
-        val trusted = candidate.sharesStem || QueryVariants.namesBack(query.text, back)
+        // be the same thing ("Motorsäge" for "Kettensäge"); there the market decides, by naming the
+        // query back and by asking about both words in the same company.
+        val trusted = candidate.sharesStem ||
+            QueryVariants.marketConfirms(query.text, suggested, back)
         if (!trusted) {
-            log.debug("{}: dropped '{}' for '{}' — the market does not name it back",
+            log.debug("{}: dropped '{}' for '{}' — the market does not treat it as the same thing",
                 platformId.displayName, candidate.term, query.text)
             return@flatMap emptyList()
         }
