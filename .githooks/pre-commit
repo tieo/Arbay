@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Refuse a commit that would put the machine, the network or the person into the repository.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+#
+# The point is not secrets — those are gitignored — but the incidental things that leak into a
+# public repo: a home directory in a stack trace, a LAN address as a default, a hostname in a note,
+# an ISP named in passing. Each of those got committed here at least once.
+
+set -u
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+fail=0
+report() {
+  [ "$fail" -eq 0 ] && echo "The commit was stopped: it carries something that identifies the machine or its owner." >&2
+  fail=1
+  echo "  $1" >&2
+}
+
+# Files that should never be committed at all, whatever is in them.
+for f in $staged; do
+  case "$f" in
+    *hs_err_pid*.log|*replay_pid*.log|core.*|*.hprof)
+      report "$f is a crash dump; it carries absolute paths from whoever ran the build." ;;
+    secret.properties|*.env|*.pem|*.key|*id_rsa*)
+      report "$f holds configuration that belongs outside the repository." ;;
+  esac
+done
+
+# Content that identifies a person, a machine or a network. Kept deliberately small and specific:
+# a broad rule that cries wolf gets disabled, and then protects nothing.
+patterns=(
+  '/home/[a-z][a-z0-9_-]+/'                 # a home directory, from a path or a stack trace
+  '\b(192\.168|10\.[0-9]{1,3})\.[0-9]{1,3}\.[0-9]{1,3}\b'  # a private network address
+  '\b(private pattern, kept outside the repository)\b'
+  '\b(private pattern, kept outside the repository)\b'
+  '\b(private pattern, kept outside the repository)\b'
+  '\bAS[0-9]{3,6}\b.*(GmbH|Ltd|Inc)'        # an ISP named by its autonomous system
+)
+# 10.0.2.2 is the Android emulator's alias for the host loopback: a documented constant, not a network.
+allow='10\.0\.2\.2'
+
+for f in $staged; do
+  [ -f "$f" ] || continue
+  case "$f" in */fixtures/*|*/testdata/*) continue ;; esac   # saved pages from the sites themselves
+  added=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -v '^+++' | grep -vE "$allow")
+  [ -z "$added" ] && continue
+  for p in "${patterns[@]}"; do
+    hit=$(printf '%s\n' "$added" | grep -inE "$p" | head -1)
+    [ -n "$hit" ] && report "$f: $(printf '%s' "$hit" | cut -c1-100)"
+  done
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo >&2
+  echo "Put the value in secret.properties (gitignored) and read it through AppSecrets, or write the" >&2
+  echo "general case instead of the specific one. To commit anyway: git commit --no-verify" >&2
+  exit 1
+fi
+exit 0
