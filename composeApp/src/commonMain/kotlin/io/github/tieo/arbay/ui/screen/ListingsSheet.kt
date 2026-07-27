@@ -333,16 +333,6 @@ fun ListingsSheet(
     val medianNewPrice = remember(newListings) { medianMoney(newListings.map { it.convertedPrice() }, displayCur) }
     val medianSoldPrice = remember(soldListings) { medianMoney(soldListings.map { it.convertedPrice() }, displayCur) }
 
-    val imageListings = remember(listings) {
-        val seen = mutableSetOf<String>()
-        listings.flatMap { listing ->
-            listing.imageUrls
-                .filter { it.startsWith("http") && !it.contains("placeholder") && !it.contains("no-image") }
-                .filter { seen.add(it) }
-                .map { url -> url to listing }
-        }.take(10)
-    }
-
     val platformOffers = remember(activeListings) {
         activeListings.groupBy { it.platformId }
             .map { (platform, items) ->
@@ -378,32 +368,6 @@ fun ListingsSheet(
                 ),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                // === Product images (skipped for car search, where the hero gallery is noise) ===
-                if (imageListings.isNotEmpty() && carFilters == null) {
-                    item("images") {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth().height(180.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(imageListings) { (url, listing) ->
-                                AsyncImage(
-                                    model = url,
-                                    contentDescription = listing.title,
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .widthIn(min = 140.dp, max = 240.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                        .clickable { openBrowser(listing.url) },
-                                    contentScale = ContentScale.Crop,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(16.dp))
-                    }
-                }
-
                 // === Header ===
                 item("header") {
                     Row(

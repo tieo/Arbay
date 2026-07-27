@@ -1,0 +1,90 @@
+# One view of the app, described as data. The browsable model is generated from these files, so
+# what you read is what the code is asked to do — and each view points at the rendered screenshot
+# the gallery produces, so the picture cannot drift from the description.
+#
+# Draft: format proof on the screen that needs the work most.
+
+id: results
+name: Results
+purpose: Show what is for sale, cheapest and most relevant first, from every market at once.
+screenshot: composeApp/build/gallery/results-light.png
+reached_from:
+  - { from: home, by: "tapping a saved search" }
+  - { from: discovery, by: "running a search or picking a product" }
+  - { from: car_search, by: "Show results" }
+
+# What the person can see without doing anything.
+shows:
+  - id: listings
+    what: "Each offer: photo, title, price, market, place, how old the ad is"
+    tier: 1
+  - id: price_summary
+    what: "One figure — the cheapest offer"
+    tier: 1
+    note: "Median and spread moved to the price sheet; three competing numbers was the old bug."
+  - id: progress
+    what: "While markets still answer: a thin bar and one line. Removes itself when done."
+    tier: 1
+  - id: active_filters
+    what: "One control saying how many filters are on"
+    tier: 2
+
+# What the person can do.
+actions:
+  - id: open_listing
+    what: "Open the offer on the market's own site"
+    where: tapping a row
+  - id: block_word
+    what: "Hide every offer whose title contains a word, for this search"
+    where: row menu → Block a word
+    persists_into: saved_search.excludeKeywords
+  - id: hide_listing
+    what: "Hide this one offer for good"
+    persists_into: device (banned ids)
+  - id: open_filters
+    what: "Price band, markets, countries, sort, blocked words"
+    opens: filter_sheet
+  - id: save_search
+    what: "Keep this search and come back to what is new"
+    persists_into: saved_search
+  - id: open_price_detail
+    what: "Median, spread, distribution, sold history"
+    opens: price_sheet
+  - id: open_market_detail
+    what: "Which markets were searched, with which term, and what each answered"
+    opens: market_sheet
+    status: MISSING
+    note: >
+      The data exists per platform (status, error, fetch stage, and queryUsed — the translated term
+      actually sent) and is not shown anywhere. This is the gap that prompted the model.
+
+# Every state the view can be in. Extensions, not just the happy path.
+states:
+  - id: searching
+    when: "One or more markets have not answered"
+    shows: "Results so far, plus the thin progress line"
+  - id: partial
+    when: "Some markets failed, timed out, were blocked or hit a captcha"
+    shows: "Results from the rest"
+    gap: "Nothing says which failed or why; the count is simply smaller."
+  - id: empty_after_filter
+    when: "Results exist but the filters admit none"
+    shows: "A line saying so, with the filter control still reachable"
+  - id: empty
+    when: "No market returned anything"
+  - id: captcha
+    when: "A market offers its captcha for a human to solve"
+    shows: "A link into the crawler's own browser session"
+
+# What this view does not do, so it cannot creep back.
+not_this_view:
+  - "No image carousel"
+  - "No permanent progress banner"
+  - "No stacked price summaries"
+  - "No filter laid out on the canvas; filters live in the sheet"
+
+open_questions:
+  - "Filtering by market: live over fetched results, or a filter that re-runs the search? Today the
+     chips do the first and the sheet does the second, and nothing says which."
+  - "Countries: every market carries one, and there is no way to search by it."
+  - "Should the term sent to each market be correctable, not just visible?"

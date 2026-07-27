@@ -5,11 +5,10 @@ market flows through it, so it is worth a serious, staged effort.
 
 ## What we actually know (grounded, not assumed)
 
-- **We have a German residential IP.** Egress from the dev/crawler machine is
-  `a residential ISP` (`a residential address pool`) — the best-case IP class
-  for German car sites. IP reputation is NOT our blocker here. Confirm the
-  production/container egress is the same (home line / the server), not a datacenter VPS,
-  before assuming this holds in prod.
+- **We crawl from a German residential IP.** That is the best-case address class for
+  German car sites, so IP reputation is not the blocker here. Confirm the production
+  egress is the same residential line rather than a datacenter VPS before assuming
+  this holds in production.
 - **mobile.de does not ban us.** It returns HTTP 200 + the Akamai JS challenge
   (~2.6 KB `sec-if-cpt` sensor script) — the same front door a fresh browser gets.
 - **Akamai scores in two phases.** Phase 1 = TLS/TCP/HTTP2 fingerprint, before any
@@ -46,8 +45,8 @@ experiments are one-line swaps.
 
 ## Rung 0 — Baseline instrumentation (free, do first)
 
-1. Confirm production egress IP class (home/the server vs VPS). Decides if IP is ever a
-   factor in prod.
+1. Confirm the production egress IP class (residential line vs VPS). Decides whether
+   the address is ever a factor in production.
 2. Instrument the existing Playwright path: log final URL, whether `_abck` turned
    `~0~` (trusted), and parsed result count. We may already pass and not know it.
 3. Capture a real browser's exact request (DevTools) to `consumer/api/search/srp`:
@@ -149,8 +148,8 @@ is Scrapfly asp or Apify.
 
 ## Cross-cutting: residential proxy
 
-Only needed if production egress is a datacenter VPS. If prod runs on the home line /
-the server (the ISP residential), skip entirely — we already have the IP everyone pays for.
+Only needed if production egress is a datacenter VPS. On a residential line, skip
+entirely — that is already the address class everyone else pays for.
 If needed: sticky-session residential (~€2–15/GB), same exit IP per session.
 
 ---

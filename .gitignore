@@ -18,3 +18,8 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 secret.properties
+
+# JVM crash dumps: they carry absolute paths from whoever ran the build
+hs_err_pid*.log
+replay_pid*.log
+core.*
