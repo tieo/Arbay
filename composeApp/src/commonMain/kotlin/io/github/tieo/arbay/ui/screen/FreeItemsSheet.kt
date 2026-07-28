@@ -196,6 +196,7 @@ fun FreeItemsSheet(
                         !editingProfile && visibleListings.isEmpty() && !loading && !loadingMore && profile != null -> {
                             EmptyState(
                                 hasLocation = profile?.location != null,
+                                searchFailed = error != null,
                                 onRetry = { viewModel.search() },
                             )
                         }

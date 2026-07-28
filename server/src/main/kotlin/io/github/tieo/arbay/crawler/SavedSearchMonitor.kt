@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.classifier.FreeItemMonitor
+import io.github.tieo.arbay.model.DealMatch
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.Money
@@ -13,9 +15,9 @@ import org.slf4j.LoggerFactory
 import java.io.File
 
 /**
- * Re-runs each saved search (TrackedProduct) on a slow schedule and pushes an ntfy alert when a
- * listing appears that was not seen on a previous run, so a bookmark keeps finding new stock
- * without the user re-searching.
+ * Re-runs each saved search (TrackedProduct) on a slow schedule, so a bookmark keeps finding new
+ * stock without the user re-searching. What it finds shows on the saved search itself; only a
+ * listing priced under that search's median is held for the phone to notify about.
  *
  * Off by default. Recurring crawls raise the flag risk the anti-block work manages, so this only
  * runs when ARBAY_SAVED_SEARCH_UPDATES=on is set. When it runs it reuses the same throttle,
@@ -36,10 +38,19 @@ class SavedSearchMonitor(
         (System.getenv("ARBAY_SAVED_SEARCH_INTERVAL_MIN")?.toLongOrNull() ?: 360L).coerceAtLeast(60L) * 60_000L
 
     // Opportunistic-buying threshold: a fresh listing priced at or below this fraction of the
-    // search's median counts as a deal worth a distinct alert. Needs at least DEAL_MIN_SAMPLE
-    // priced listings for the median to mean anything.
-    private val dealRatio = (System.getenv("ARBAY_DEAL_RATIO")?.toDoubleOrNull() ?: 0.75).coerceIn(0.3, 0.99)
+    // search's median counts as a deal worth interrupting for. The fraction and the switch are the
+    // notification settings the phone shows, so what the app promises is what runs here. Needs at
+    // least dealMinSample priced listings for the median to mean anything.
     private val dealMinSample = 5
+
+    // Deals found since the phone last polled. Held rather than sent: the notification is raised on
+    // the device, so this waits for the device to ask.
+    private val pendingDeals = mutableListOf<DealMatch>()
+
+    /** Deals found since the last call, handed to the phone that will raise the notifications. */
+    fun drainDeals(): List<DealMatch> = synchronized(pendingDeals) {
+        pendingDeals.toList().also { pendingDeals.clear() }
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
     private val seenFile = File(System.getProperty("user.home"), ".arbay/saved_search_seen.json")
@@ -129,10 +140,14 @@ class SavedSearchMonitor(
             }
             if (fresh.isEmpty() || silent) { saveSeen(); continue }
 
-            // Opportunistic buying: a fresh listing priced well below the search's typical price is a
-            // deal — a distinct, higher-value alert than mere new stock.
+            // Opportunistic buying: a fresh listing priced well below the search's typical price
+            // goes to the phone. New stock does not. Home shows what a saved search has found since
+            // it was last opened, so a notification saying the same thing every six hours is a
+            // second channel telling you what the first one already does.
+            val alerts = FreeItemMonitor.settings
+            val dealRatio = alerts.dealUnderMedianPct / 100.0
             val median = medianEur(found.values)
-            val deals = if (median != null) {
+            val deals = if (median != null && alerts.dealAlerts) {
                 fresh.mapNotNull { found[it] }
                     .mapNotNull { l -> eurCents(l.price)?.let { l to it } }
                     .filter { (_, cents) -> cents <= median * dealRatio }
@@ -140,21 +155,21 @@ class SavedSearchMonitor(
             } else emptyList()
 
             if (deals.isNotEmpty() && median != null) {
-                val best = deals.take(3).joinToString("; ") { (l, cents) ->
-                    val pct = (100 - cents * 100 / median)
-                    val where = l.location?.let { it.city ?: it.country }?.let { " ($it)" } ?: ""
-                    "${l.title.take(40)} €${cents / 100} −$pct%$where"
+                synchronized(pendingDeals) {
+                    deals.take(5).forEach { (l, cents) ->
+                        pendingDeals += DealMatch(
+                            listingId = l.id,
+                            searchName = product.name,
+                            title = l.title,
+                            url = l.url,
+                            priceText = "€${cents / 100}",
+                            underMedianPct = (100 - cents * 100 / median).toInt(),
+                            locationText = l.location?.let { it.city ?: it.country },
+                        )
+                    }
                 }
-                BlockAlerter.notify(
-                    title = "Arbay deal: ${deals.size} under market for ${product.name}",
-                    message = best,
-                )
-            } else {
-                // New stock is not a push. Home shows what a saved search has found since it was
-                // last opened, so a notification saying the same thing every six hours is a second
-                // channel telling you what the first one already does.
-                log.info("saved-search {}: {} new, shown on the saved search itself", product.name, fresh.size)
             }
+            log.info("saved-search {}: {} new, {} under median", product.name, fresh.size, deals.size)
         }
         saveSeen()
     }

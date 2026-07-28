@@ -13,47 +13,48 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
+/**
+ * The two notifications the app raises, on the device, one channel each so either can be silenced
+ * in Android's own settings.
+ *
+ * Both are about something that stops existing while you wait: a free item near you, and a listing
+ * priced under what its search usually costs. Anything the app knows that will still be there in an
+ * hour is shown when the app is opened.
+ */
 object NotificationHelper {
 
-    // ── Channel IDs (visible in Android notification settings) ────────────
-    const val CHANNEL_URGENT = "urgent_matches"
-    const val CHANNEL_DIGEST = "match_digest"
-    const val CHANNEL_NOVEL = "novel_items"
+    /** A free item near you, scoring above the threshold set in the app. */
+    const val CHANNEL_FREE_ITEM = "free_item_match"
+
+    /** A listing in a watched search priced under that search's median. */
+    const val CHANNEL_DEAL = "under_market_deal"
 
     private var channelsCreated = false
 
-    /** Create all notification channels. Call once on app start. */
+    /** Create both channels. Called on app start and before any notification. */
     fun ensureChannels(context: Context) {
         if (channelsCreated) return
 
         val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Urgent matches — high priority, heads-up, sound+vibrate
         mgr.createNotificationChannel(NotificationChannel(
-            CHANNEL_URGENT,
-            "Urgent Matches",
+            CHANNEL_FREE_ITEM,
+            "Free item near you",
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Instant notifications for very high-confidence free item matches (e.g. >90%)"
+            description = "Someone is giving away something that matches what you look for. " +
+                "Free items are usually gone within the hour."
             enableVibration(true)
         })
 
-        // Match digest — default priority, periodic summary
         mgr.createNotificationChannel(NotificationChannel(
-            CHANNEL_DIGEST,
-            "Match Digest",
-            NotificationManager.IMPORTANCE_DEFAULT,
+            CHANNEL_DEAL,
+            "Under the usual price",
+            NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Periodic summary of new free items above your match threshold"
-        })
-
-        // Novel/rare items — medium priority
-        mgr.createNotificationChannel(NotificationChannel(
-            CHANNEL_NOVEL,
-            "Novel Items",
-            NotificationManager.IMPORTANCE_DEFAULT,
-        ).apply {
-            description = "Items unlike anything you've seen before — potentially rare finds"
+            description = "A listing in one of your saved searches is priced well under what that " +
+                "search usually costs."
+            enableVibration(true)
         })
 
         channelsCreated = true
@@ -68,16 +69,15 @@ object NotificationHelper {
         return true
     }
 
-    /** Show an urgent match notification (high priority, heads-up). */
-    fun showUrgentMatch(title: String, body: String, url: String? = null) {
-        val context = MainActivity.instance ?: return
+    private fun show(context: Context, channel: String, id: Int, title: String, body: String, url: String?) {
         ensureChannels(context)
         if (!hasPermission(context)) return
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_URGENT)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
@@ -85,72 +85,26 @@ object NotificationHelper {
         url?.let {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
             val pending = PendingIntent.getActivity(
-                context, 0, intent,
+                context, id, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             builder.setContentIntent(pending)
         }
 
-        NotificationManagerCompat.from(context).notify(
-            System.currentTimeMillis().toInt(), builder.build(),
-        )
+        NotificationManagerCompat.from(context).notify(id, builder.build())
     }
 
-    /** Show a digest notification summarizing new matches. */
-    fun showDigest(count: Int, topTitle: String?) {
-        val context = MainActivity.instance ?: return
-        ensureChannels(context)
-        if (!hasPermission(context)) return
+    /** A free item worth fetching now. */
+    fun showFreeItem(context: Context, title: String, body: String, url: String?, id: Int) =
+        show(context, CHANNEL_FREE_ITEM, id, title, body, url)
 
-        val body = if (topTitle != null) {
-            "$count new items match your interests. Top: $topTitle"
-        } else {
-            "$count new items match your interests"
-        }
+    /** A listing under the median of the search that found it. */
+    fun showDeal(context: Context, title: String, body: String, url: String?, id: Int) =
+        show(context, CHANNEL_DEAL, id, title, body, url)
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_DIGEST)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle("Free Items Digest")
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
-
-        NotificationManagerCompat.from(context).notify(
-            "digest".hashCode(), notification,
-        )
-    }
-
-    /** Show a novel item notification. */
-    fun showNovelItem(title: String, body: String, url: String? = null) {
-        val context = MainActivity.instance ?: return
-        ensureChannels(context)
-        if (!hasPermission(context)) return
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_NOVEL)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-
-        url?.let {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
-            val pending = PendingIntent.getActivity(
-                context, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            builder.setContentIntent(pending)
-        }
-
-        NotificationManagerCompat.from(context).notify(
-            System.currentTimeMillis().toInt(), builder.build(),
-        )
-    }
-
-    /** Legacy method — delegates to urgent. */
+    /** The in-app seam for raising the free-item notification from shared code. */
     fun showNewMatchNotification(title: String, body: String) {
-        showUrgentMatch(title, body)
+        val context = MainActivity.instance ?: return
+        show(context, CHANNEL_FREE_ITEM, title.hashCode(), title, body, null)
     }
 }

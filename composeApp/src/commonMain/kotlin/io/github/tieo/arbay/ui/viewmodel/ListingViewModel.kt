@@ -47,6 +47,10 @@ class ListingViewModel(
     // Markets asked but not yet answered, for the same reason.
     sampleTotal: Int = 0,
     sampleCompleted: Int = 0,
+    // Blocked words reach this through an effect, and an effect does not run in the
+    // single frame a render draws, so a render of "the filters admit none" quietly
+    // showed everything.
+    sampleBlocked: List<String> = emptyList(),
 ) : ViewModel() {
 
     private val rendersASample = sample.isNotEmpty() || sampleStatuses.isNotEmpty() || sampleLoading
@@ -107,7 +111,7 @@ class ListingViewModel(
 
     // Per-bookmark blocked keywords: a listing whose title or description contains any of these
     // terms is hidden. Filtered client-side (never sent to a crawler's own search).
-    private val _blockedTerms = MutableStateFlow<List<String>>(emptyList())
+    private val _blockedTerms = MutableStateFlow(sampleBlocked)
     val blockedTerms: StateFlow<List<String>> = _blockedTerms
 
     /** Text reduced to its words, lowercase and single-spaced, so a match does not depend on the
@@ -135,7 +139,24 @@ class ListingViewModel(
                 blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), sample)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        // The first value, before the flow above has run once. Handed a sample and words
+        // to block, the blocking has to be in that first value too, or a single frame
+        // shows everything and a render of "the filters admit none" is a picture of the
+        // opposite.
+        sample.filter { listing ->
+            sampleBlocked.none { term ->
+                term.isNotBlank() &&
+                    wordsOnly("${listing.title} ${listing.description ?: ""}").contains(wordsOnly(term))
+            }
+        },
+    )
+
+    /** Everything the markets returned, before any filter of ours. What the empty results screen
+     *  needs to tell "nobody had one" apart from "the filters hide all of them". */
+    val fetched: StateFlow<List<Listing>> = _allListings
 
     /** Set the active blocked-keyword list (from the bookmark being viewed). */
     fun setBlockedTerms(terms: List<String>) { _blockedTerms.value = terms }

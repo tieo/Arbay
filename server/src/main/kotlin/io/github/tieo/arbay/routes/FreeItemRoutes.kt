@@ -7,6 +7,7 @@ import io.github.tieo.arbay.classifier.FreeItemFeedbackStore
 import io.github.tieo.arbay.classifier.FreeItemProfileStore
 import io.github.tieo.arbay.classifier.FreeItemScorer
 import io.github.tieo.arbay.classifier.FreeItemMonitor
+import io.github.tieo.arbay.crawler.SavedSearchMonitor
 import io.github.tieo.arbay.classifier.FreeItemStore
 import io.github.tieo.arbay.classifier.ModelArena
 import io.github.tieo.arbay.classifier.ModelRegistry
@@ -29,7 +30,7 @@ import kotlinx.serialization.json.Json
 
 private val json = Json { encodeDefaults = true }
 
-fun Route.freeItemRoutes() {
+fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
     route("/api/free-items") {
 
         // ── Profile ────────────────────────────────────────────────────────────
@@ -576,10 +577,11 @@ fun Route.freeItemRoutes() {
             call.respond(HttpStatusCode.OK, mapOf("ok" to true))
         }
 
-        // Poll now and return categorized results (for client-side notification)
+        // What the device asks for on its schedule: the two things worth a notification, drained
+        // so the same deal is not raised twice.
         get("/notifications/poll") {
             val result = FreeItemMonitor.pollNow()
-            call.respond(result)
+            call.respond(result.copy(deals = savedSearches.drainDeals()))
         }
 
         // Get last poll result without triggering a new poll

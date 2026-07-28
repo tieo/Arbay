@@ -97,6 +97,7 @@ fun PriceSheet(
                     conditionFilter = conditionFilter,
                     onSearchSold = onSearchSold,
                     soldLoading = soldLoading,
+                    soldPossible = soldPossible,
                     onBan = onBan,
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )

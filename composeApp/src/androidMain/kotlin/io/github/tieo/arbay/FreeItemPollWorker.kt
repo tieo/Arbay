@@ -3,16 +3,16 @@ package io.github.tieo.arbay
 import android.content.Context
 import androidx.work.*
 import io.github.tieo.arbay.api.ArbayClient
-import io.github.tieo.arbay.model.NotificationSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkManager periodic worker that polls the server for new free item matches
- * and fires notifications on the appropriate channels.
+ * Asks the server, on the schedule set in the app, whether either of the two things worth
+ * interrupting for has appeared, and raises them as notifications on this device.
  *
- * Runs even when the app is in the background / killed.
+ * Runs while the app is in the background or killed, which is the point: both kinds of find are
+ * gone by the time an app that only looks while open would see them.
  */
 class FreeItemPollWorker(
     appContext: Context,
@@ -26,36 +26,35 @@ class FreeItemPollWorker(
 
             NotificationHelper.ensureChannels(applicationContext)
 
-            // Urgent matches — immediate per-item notification
+            // A free item near you, above the score you set. Says the score, because that is the
+            // whole reason this one item interrupted and thousands of others did not.
             for (match in result.urgentMatches) {
                 val pct = ((match.relevanceScore ?: 0.0) * 100).toInt()
-                NotificationHelper.showUrgentMatch(
-                    title = "${pct}% match: ${match.title}",
-                    body = match.locationText ?: match.description ?: "New high-confidence match",
+                NotificationHelper.showFreeItem(
+                    context = applicationContext,
+                    title = "Free: ${match.title}",
+                    body = listOfNotNull(
+                        "${pct}% match",
+                        match.locationText,
+                    ).joinToString(", "),
                     url = match.url,
+                    id = match.listingId.hashCode(),
                 )
             }
 
-            // Novel items — separate channel
-            for (item in result.novelItems) {
-                NotificationHelper.showNovelItem(
-                    title = "Something new: ${item.title}",
-                    body = item.locationText ?: item.description ?: "Unlike anything you've seen before",
-                    url = item.url,
+            // A listing under the median of the saved search that found it. Says which search and
+            // how far under, so the notification carries the reason it was sent.
+            for (deal in result.deals) {
+                NotificationHelper.showDeal(
+                    context = applicationContext,
+                    title = "${deal.underMedianPct}% under: ${deal.title}",
+                    body = listOfNotNull(
+                        "${deal.priceText} in ${deal.searchName}",
+                        deal.locationText,
+                    ).joinToString(", "),
+                    url = deal.url,
+                    id = deal.listingId.hashCode(),
                 )
-            }
-
-            // Digest — summary notification for items above digest threshold
-            if (result.digestMatches.isNotEmpty()) {
-                // Only show digest if there are matches NOT already covered by urgent
-                val urgentIds = result.urgentMatches.map { it.listingId }.toSet()
-                val digestOnly = result.digestMatches.filter { it.listingId !in urgentIds }
-                if (digestOnly.isNotEmpty()) {
-                    NotificationHelper.showDigest(
-                        count = digestOnly.size,
-                        topTitle = digestOnly.firstOrNull()?.title,
-                    )
-                }
             }
 
             Result.success()
@@ -67,7 +66,7 @@ class FreeItemPollWorker(
     companion object {
         private const val WORK_NAME = "free_item_poll"
 
-        /** Schedule periodic polling. Call from MainActivity or when settings change. */
+        /** Ask this often. Called on app start and whenever the interval setting changes. */
         fun schedule(context: Context, intervalMinutes: Int = 60) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)

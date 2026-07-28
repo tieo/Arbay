@@ -48,9 +48,17 @@ private fun inline(content: @Composable () -> Unit): @Composable () -> Unit = {
 
 /** A screen in one of the states it can be in. The state's name becomes part of the file name, so
  *  the model reads as a list rather than a lookup table. */
-private data class Scene(val view: String, val state: String, val content: @Composable () -> Unit)
+private data class Scene(
+    val view: String,
+    val state: String,
+    // How much of the screen to draw. A view whose states differ below a chart needs
+    // more of itself in the frame than one whose states differ at the top.
+    val tall: Boolean = false,
+    val content: @Composable () -> Unit,
+)
 
-private fun scene(view: String, state: String, content: @Composable () -> Unit) = Scene(view, state, content)
+private fun scene(view: String, state: String, tall: Boolean = false, content: @Composable () -> Unit) =
+    Scene(view, state, tall, content)
 
 private val money = { cents: Long -> Money(cents, Currency.EUR) }
 
@@ -65,9 +73,6 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Search ────────────────────────────────────────────────────────────────
     add(scene("search", "as-it-is") { Search() })
-    add(scene("search", "loading") { Search() })
-    add(scene("search", "empty") { Search() })
-    add(scene("search", "failed") { Search() })
 
     // ── Results ───────────────────────────────────────────────────────────────
     add(scene("results", "as-it-is") { Results(PreviewData.active + PreviewData.sold, PreviewData.marketAnswers) })
@@ -76,9 +81,6 @@ private val SCENES: List<Scene> = buildList {
     })
     add(scene("results", "empty") { Results(emptyList(), PreviewData.nobodyHadAnything) })
     add(scene("results", "failed") { Results(emptyList(), PreviewData.everyoneFailed) })
-    add(scene("results", "every-market-answered") {
-        Results(PreviewData.active + PreviewData.sold, PreviewData.allAnswered)
-    })
     add(scene("results", "some-markets-failed") {
         Results(PreviewData.active.take(4), PreviewData.marketAnswers)
     })
@@ -91,9 +93,9 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Filters ───────────────────────────────────────────────────────────────
     add(scene("filters", "as-it-is") { Filters() })
-    add(scene("filters", "loading") { Filters(markets = emptyList(), priceMax = 120f) })
-    add(scene("filters", "empty") { Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f) })
-    add(scene("filters", "failed") { Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f) })
+    add(scene("filters", "nothing-to-narrow") {
+        Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f)
+    })
 
     // ── Markets ───────────────────────────────────────────────────────────────
     add(scene("markets", "as-it-is") { Markets(PreviewData.marketAnswers) })
@@ -103,16 +105,13 @@ private val SCENES: List<Scene> = buildList {
     add(scene("markets", "cooling-down") { Markets(PreviewData.everyoneFailed.take(3)) })
 
     // ── Price ─────────────────────────────────────────────────────────────────
-    add(scene("price", "as-it-is") { Price() })
-    add(scene("price", "loading") { Price(soldLoading = true, sold = emptyList()) })
-    add(scene("price", "empty") { Price(sold = emptyList(), soldPossible = true) })
-    add(scene("price", "failed") { Price(sold = emptyList(), soldPossible = false) })
+    add(scene("price", "as-it-is", tall = true) { Price() })
+    add(scene("price", "loading", tall = true) { Price(soldLoading = true, sold = emptyList()) })
+    add(scene("price", "empty", tall = true) { Price(sold = emptyList(), soldPossible = true) })
+    add(scene("price", "failed", tall = true) { Price(sold = emptyList(), soldPossible = false) })
 
     // ── Vehicle search ────────────────────────────────────────────────────────
     add(scene("car-search", "as-it-is") { VehicleSearch() })
-    add(scene("car-search", "loading") { VehicleSearch() })
-    add(scene("car-search", "empty") { VehicleSearch() })
-    add(scene("car-search", "failed") { VehicleSearch() })
 
     // ── Free items ────────────────────────────────────────────────────────────
     add(scene("free-items", "as-it-is") { FreeItems(profile = PreviewData.freeItemProfile, items = PreviewData.active.take(3)) })
@@ -124,9 +123,6 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Settings ──────────────────────────────────────────────────────────────
     add(scene("settings", "as-it-is") { Settings() })
-    add(scene("settings", "loading") { Settings() })
-    add(scene("settings", "empty") { Settings() })
-    add(scene("settings", "failed") { Settings() })
 }
 
 // ── The screens, each taking the state it is being drawn in ──────────────────
@@ -176,6 +172,7 @@ private fun Results(
             sampleLoading = loading,
             sampleTotal = total,
             sampleCompleted = completed,
+            sampleBlocked = blocked,
         ),
         platforms = PreviewData.active.map { it.platformId }.distinct(),
         blockedTerms = blocked,
@@ -292,8 +289,11 @@ fun main() {
             for (theme in listOf("light", "dark")) {
                 if (theme !in themes) continue
                 val dark = theme == "dark"
-                if ("phone" in sizes) add(Render("phone-$theme", PHONE_W, PHONE_H, dark, 2f))
-                if ("wide" in sizes) add(Render("wide-$theme", TABLET_W, TABLET_H, dark, 1.5f))
+                val tall = if (scene.tall) (PHONE_H * 1.7f).toInt() else PHONE_H
+                if ("phone" in sizes) add(Render("phone-$theme", PHONE_W, tall, dark, 2f))
+                if ("wide" in sizes) {
+                    add(Render("wide-$theme", TABLET_W, if (scene.tall) (TABLET_H * 1.5f).toInt() else TABLET_H, dark, 1.5f))
+                }
                 // Only the screen itself needs a card; the index shows views, not states.
                 if ("card" in sizes && scene.state == "as-it-is") {
                     add(Render("card-$theme", PHONE_W, CARD_H, dark, 2f))

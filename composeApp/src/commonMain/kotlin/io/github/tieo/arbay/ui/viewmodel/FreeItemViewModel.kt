@@ -122,8 +122,11 @@ class FreeItemViewModel(
         }
     }
 
-    /** Drop a stale error banner — e.g. when the guided profile editor is showing instead. */
-    fun clearError() { _error.value = null }
+    /** Drop a stale error banner, for instance when the guided profile editor shows instead. */
+    fun clearError() {
+        if (rendersASample) return
+        _error.value = null
+    }
 
     fun saveProfile(description: String, location: String? = null, radiusKm: Int? = null, trackingEnabled: Boolean? = null) {
         viewModelScope.launch {
@@ -145,6 +148,7 @@ class FreeItemViewModel(
     }
 
     fun loadInsights() {
+        if (rendersASample) return
         viewModelScope.launch {
             try {
                 val insights = client.getFreeItemInsights()
@@ -160,6 +164,7 @@ class FreeItemViewModel(
     }
 
     fun loadHistory() {
+        if (rendersASample) return
         _historyLoading.value = true
         viewModelScope.launch {
             try {
@@ -170,6 +175,7 @@ class FreeItemViewModel(
     }
 
     fun loadStats() {
+        if (rendersASample) return
         viewModelScope.launch {
             try {
                 _stats.value = client.getFreeItemStats()
@@ -179,6 +185,10 @@ class FreeItemViewModel(
 
     /** Fresh search — clears everything and starts from page 1 */
     fun search(query: String = "") {
+        // A sample holds the state it was handed. The screen starts a search when it opens with a
+        // profile and nothing to show, which would turn every state drawn from a sample into the
+        // loading one.
+        if (rendersASample) return
         searchJob?.cancel()
         loadMoreJob?.cancel()
         _listings.value = emptyList()
@@ -206,6 +216,7 @@ class FreeItemViewModel(
 
     /** Load more items — fetches the next batch and appends to existing listings */
     fun loadMore(query: String = "") {
+        if (rendersASample) return
         if (_loadingMore.value || !_hasMore || _loading.value) return
         loadMoreJob?.cancel()
         loadMoreJob = viewModelScope.launch {
@@ -453,6 +464,7 @@ class FreeItemViewModel(
 
     /** Poll for new matches from background tracking every 60s. */
     private fun startMatchPolling() {
+        if (rendersASample) return
         matchPollJob?.cancel()
         matchPollJob = viewModelScope.launch {
             while (true) {
@@ -475,6 +487,7 @@ class FreeItemViewModel(
     // ── Model Arena methods ─────────────────────────────────────────────────
 
     fun loadModels() {
+        if (rendersASample) return
         viewModelScope.launch {
             try {
                 _models.value = client.getModels()

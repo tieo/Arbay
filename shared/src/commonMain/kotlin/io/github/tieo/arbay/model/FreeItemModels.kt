@@ -90,25 +90,54 @@ data class FreeItemStats(
     val embeddingAvailable: Boolean,
 )
 
-/** Notification settings for free item monitoring. */
+/**
+ * When the app is allowed to interrupt.
+ *
+ * Two things are worth a notification, and they share one property: waiting costs you the thing.
+ * A free item near you is gone in an hour. A listing priced well under what that search usually
+ * costs is gone in a day. Everything else the app knows can be read when the app is opened, and
+ * saying it twice is noise: what a saved search found is on the saved search, what a market
+ * answered is in the markets view.
+ *
+ * Nothing here reaches a topic on a server. A notification is raised on the device the app runs
+ * on, so it can be silenced where every other notification is silenced.
+ */
 @Serializable
 data class NotificationSettings(
-    val pollIntervalMinutes: Int = 60,          // how often to crawl (default 1h)
-    val digestEnabled: Boolean = true,           // periodic digest of >threshold items
-    val digestIntervalHours: Int = 24,           // daily=24, bidaily=48, etc.
-    val digestThresholdPct: Int = 50,            // items above this % in digest
-    val urgentEnabled: Boolean = true,            // instant notification for very high matches
-    val urgentThresholdPct: Int = 90,            // threshold for instant notification
-    val novelEnabled: Boolean = true,             // notify about novel/rare items
-    val novelSimilarityThreshold: Double = 0.3,  // max similarity to known items (lower = more novel)
+    /** How often the server looks, whether or not anything is allowed to interrupt. */
+    val checkEveryMinutes: Int = 60,
+    /** A free item near you scoring at least [freeItemScorePct] against your profile. */
+    val freeItemAlerts: Boolean = true,
+    val freeItemScorePct: Int = 85,
+    /** A listing in a watched search priced at or under [dealUnderMedianPct] of that search's
+     *  median, counted only where enough listings carry a price for a median to mean anything. */
+    val dealAlerts: Boolean = true,
+    val dealUnderMedianPct: Int = 75,
 )
 
-/** Result of a background poll — summary for client-side notification. */
+/**
+ * One listing in a watched search priced far enough under that search's median to be worth
+ * hearing about before the app is next opened. [underMedianPct] is how far under, so the
+ * notification can say why it counts as a deal.
+ */
+@Serializable
+data class DealMatch(
+    val listingId: String,
+    val searchName: String,
+    val title: String,
+    val url: String,
+    val priceText: String,
+    val underMedianPct: Int,
+    val locationText: String? = null,
+)
+
+/** What a background poll found, for the device to raise notifications from. */
 @Serializable
 data class PollResult(
     val totalNew: Int = 0,
-    val urgentMatches: List<NewMatch> = emptyList(),   // items above urgent threshold
-    val digestMatches: List<NewMatch> = emptyList(),   // items above digest threshold
-    val novelItems: List<NewMatch> = emptyList(),      // items unlike anything seen
+    // Items worth interrupting for: near you, free, and scoring above your threshold.
+    val urgentMatches: List<NewMatch> = emptyList(),
+    // Listings in watched searches priced under that search's median.
+    val deals: List<DealMatch> = emptyList(),
     val lastPollTime: Instant? = null,
 )

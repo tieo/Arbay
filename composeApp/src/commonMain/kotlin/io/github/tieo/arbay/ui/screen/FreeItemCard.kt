@@ -699,16 +699,27 @@ internal fun LoadingState(platformStatus: PlatformStatus?) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-internal fun EmptyState(hasLocation: Boolean, onRetry: () -> Unit) {
+internal fun EmptyState(hasLocation: Boolean, searchFailed: Boolean = false, onRetry: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(Icons.Outlined.Inbox, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outlineVariant)
+        Icon(
+            if (searchFailed) Icons.Outlined.CloudOff else Icons.Outlined.Inbox,
+            null,
+            modifier = Modifier.size(48.dp),
+            tint = MaterialTheme.colorScheme.outlineVariant,
+        )
         Spacer(Modifier.height(12.dp))
-        Text("No free items found", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!hasLocation) {
+        // An unanswered search found nothing about the world, which is a different sentence from
+        // an answered one that came back empty.
+        Text(
+            if (searchFailed) "The markets were not asked" else "No free items found",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!hasLocation && !searchFailed) {
             Spacer(Modifier.height(8.dp))
             Text("Tip: Add your city to find nearby items", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

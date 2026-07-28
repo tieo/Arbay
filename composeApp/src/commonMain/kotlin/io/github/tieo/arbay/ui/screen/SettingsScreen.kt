@@ -12,7 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.loadDeviceSettings
@@ -232,98 +236,89 @@ fun SettingsSheet(
                 ) { Text("Save") }
             }
 
-            // ── Free-item notifications ─────────────────────────
+            // Two notifications, each one a thing that stops existing while you wait.
             SettingSection(
                 icon = Icons.Outlined.Notifications,
-                title = "Free-item alerts",
-                subtitle = "The app checks for new free items in the background and can notify you. Each alert type is a separate Android channel you can also mute in system settings.",
+                title = "Notifications",
+                subtitle = "Two things can raise a notification on this phone, and both are gone if you " +
+                    "wait for the app to be opened. Everything else the app finds is shown when you open it.",
             ) {
-                Text("Check for new items every", style = MaterialTheme.typography.labelLarge)
+                AlertTypeCard(
+                    icon = Icons.Default.NotificationsActive,
+                    tint = MaterialTheme.colorScheme.error,
+                    title = "Free item near you",
+                    trigger = "someone gives away an item scoring at least " +
+                        "${notifSettings.freeItemScorePct}% against what you have kept and skipped.",
+                    why = "free items are taken within the hour, so the first person there gets it.",
+                    enabled = notifSettings.freeItemAlerts,
+                    onToggle = { notifSettings = notifSettings.copy(freeItemAlerts = it) },
+                ) {
+                    Text(
+                        "Score it has to reach: ${notifSettings.freeItemScorePct}%",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Slider(
+                        value = notifSettings.freeItemScorePct.toFloat(),
+                        onValueChange = { notifSettings = notifSettings.copy(freeItemScorePct = it.toInt()) },
+                        valueRange = 70f..99f,
+                        steps = 28,
+                    )
+                    Text(
+                        "Lower means more notifications and more of them wrong.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                AlertTypeCard(
+                    icon = Icons.Default.TrendingDown,
+                    tint = MaterialTheme.colorScheme.primary,
+                    title = "Under the usual price",
+                    trigger = "a listing turns up in one of your saved searches at or under " +
+                        "${notifSettings.dealUnderMedianPct}% of what that search normally costs.",
+                    why = "an underpriced listing is sold within a day, and the median only exists " +
+                        "because the search has already been run many times.",
+                    enabled = notifSettings.dealAlerts,
+                    onToggle = { notifSettings = notifSettings.copy(dealAlerts = it) },
+                ) {
+                    Text(
+                        "At or under ${notifSettings.dealUnderMedianPct}% of the search median",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Slider(
+                        value = notifSettings.dealUnderMedianPct.toFloat(),
+                        onValueChange = { notifSettings = notifSettings.copy(dealUnderMedianPct = it.toInt()) },
+                        valueRange = 40f..95f,
+                        steps = 10,
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Text("The phone asks the server this often", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Nothing can reach you faster than this, and a shorter interval costs battery.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(6.dp))
                 val intervalOptions = listOf(15 to "15 min", 30 to "30 min", 60 to "1 hour", 120 to "2 hours", 240 to "4 hours")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     intervalOptions.forEach { (mins, label) ->
                         FilterChip(
-                            selected = notifSettings.pollIntervalMinutes == mins,
+                            selected = notifSettings.checkEveryMinutes == mins,
                             colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                 selectedLabelColor = MaterialTheme.colorScheme.primary,
                             ),
-                            onClick = { notifSettings = notifSettings.copy(pollIntervalMinutes = mins) },
+                            onClick = { notifSettings = notifSettings.copy(checkEveryMinutes = mins) },
                             label = { Text(label) },
                         )
                     }
                 }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Urgent
-                AlertTypeCard(
-                    icon = Icons.Default.NotificationsActive,
-                    tint = MaterialTheme.colorScheme.error,
-                    title = "Instant alerts",
-                    explanation = "Ping me the moment a free item looks like a very strong match, so I can grab it first.",
-                    enabled = notifSettings.urgentEnabled,
-                    onToggle = { notifSettings = notifSettings.copy(urgentEnabled = it) },
-                ) {
-                    Text("Only alert above: ${notifSettings.urgentThresholdPct}% match", style = MaterialTheme.typography.labelMedium)
-                    Slider(
-                        value = notifSettings.urgentThresholdPct.toFloat(),
-                        onValueChange = { notifSettings = notifSettings.copy(urgentThresholdPct = it.toInt()) },
-                        valueRange = 70f..99f,
-                        steps = 28,
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Digest
-                AlertTypeCard(
-                    icon = Icons.Default.Summarize,
-                    tint = MaterialTheme.colorScheme.primary,
-                    title = "Summary digest",
-                    explanation = "Instead of pinging per item, collect new matches and send one recap on a schedule.",
-                    enabled = notifSettings.digestEnabled,
-                    onToggle = { notifSettings = notifSettings.copy(digestEnabled = it) },
-                ) {
-                    Text("Send a recap every", style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.height(6.dp))
-                    val digestOptions = listOf(12 to "12h", 24 to "Daily", 48 to "2 days", 72 to "3 days", 168 to "Weekly")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        digestOptions.forEach { (hours, label) ->
-                            FilterChip(
-                                selected = notifSettings.digestIntervalHours == hours,
-                                colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary,
-                                ),
-                                onClick = { notifSettings = notifSettings.copy(digestIntervalHours = hours) },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Include items above: ${notifSettings.digestThresholdPct}% match", style = MaterialTheme.typography.labelMedium)
-                    Slider(
-                        value = notifSettings.digestThresholdPct.toFloat(),
-                        onValueChange = { notifSettings = notifSettings.copy(digestThresholdPct = it.toInt()) },
-                        valueRange = 20f..80f,
-                        steps = 11,
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Novel
-                AlertTypeCard(
-                    icon = Icons.Default.AutoAwesome,
-                    tint = MaterialTheme.colorScheme.tertiary,
-                    title = "Surprising finds",
-                    explanation = "Rare or unusual items the model can't confidently score — the odd stuff worth a look.",
-                    enabled = notifSettings.novelEnabled,
-                    onToggle = { notifSettings = notifSettings.copy(novelEnabled = it) },
-                    content = null,
-                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -332,7 +327,7 @@ fun SettingsSheet(
                         scope.launch {
                             try {
                                 client.updateNotificationSettings(notifSettings)
-                                schedulePolling(notifSettings.pollIntervalMinutes)
+                                schedulePolling(notifSettings.checkEveryMinutes)
                             } catch (_: Exception) {}
                         }
                     },
@@ -402,7 +397,8 @@ private fun AlertTypeCard(
     icon: ImageVector,
     tint: androidx.compose.ui.graphics.Color,
     title: String,
-    explanation: String,
+    trigger: String,
+    why: String,
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
     content: (@Composable ColumnScope.() -> Unit)? = null,
@@ -418,13 +414,34 @@ private fun AlertTypeCard(
                 Text(title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
                 Switch(checked = enabled, onCheckedChange = onToggle)
             }
-            Text(explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            AlertLine("Sent when", trigger)
+            AlertLine("Because", why)
             if (enabled && content != null) {
                 Spacer(Modifier.height(12.dp))
                 content()
             }
         }
     }
+}
+
+/** One labelled sentence of an alert's contract, so the card says what fires it and what it costs
+ *  to miss it rather than naming itself twice. */
+@Composable
+private fun AlertLine(label: String, text: String) {
+    // Label and sentence are one paragraph, so a wrapped line starts at the left edge instead of
+    // hanging under the label.
+    val line = buildAnnotatedString {
+        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("$label ") }
+        append(text)
+    }
+    Text(
+        line,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Start,
+        modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+    )
 }
 
 private sealed class Status {

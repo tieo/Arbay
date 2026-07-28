@@ -48,6 +48,7 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.roundToInt
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -120,6 +121,7 @@ fun ListingsSheet(
     onBlockedTermsChange: ((List<String>) -> Unit)? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
+    val fetchedListings by listingViewModel.fetched.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
@@ -530,20 +532,36 @@ fun ListingsSheet(
                             Modifier.fillMaxWidth().height(200.dp),
                             contentAlignment = Alignment.Center,
                         ) {
+                            // Nothing on screen has two causes, and they lead somewhere different:
+                            // the markets had nothing, or they had something and our own filters
+                            // hide all of it.
+                            val hiddenByUs = fetchedListings.size
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.Outlined.SearchOff, null,
+                                    if (hiddenByUs > 0) Icons.Outlined.FilterAltOff else Icons.Outlined.SearchOff,
+                                    null,
                                     modifier = Modifier.size(48.dp),
                                     tint = MaterialTheme.colorScheme.outlineVariant,
                                 )
                                 Spacer(Modifier.height(12.dp))
-                                Text("No listings found", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (hiddenByUs > 0) "Your filters hide all $hiddenByUs of them"
+                                    else "No listings found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Try a different search or check back later.",
+                                    if (hiddenByUs > 0) "The markets answered. Widen the price, the markets or the blocked words."
+                                    else "Try a different search or check back later.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 32.dp),
                                 )
+                                if (hiddenByUs > 0) {
+                                    Spacer(Modifier.height(14.dp))
+                                    OutlinedButton(onClick = { showFilters = true }) { Text("Open filters") }
+                                }
                             }
                         }
                     }

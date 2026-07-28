@@ -213,6 +213,8 @@ internal fun PriceDistributionChart(
     conditionFilter: String? = null,
     onSearchSold: () -> Unit = {},
     soldLoading: Boolean = false,
+    // No market in this search publishes what sold, so there is no history to switch to.
+    soldPossible: Boolean = true,
     onBan: ((Listing) -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
@@ -295,7 +297,7 @@ internal fun PriceDistributionChart(
                             )
                         }
                     }
-                    FilterChip(
+                    if (soldPossible) FilterChip(
                         selected = showSoldHistory,
                         onClick = {
                             val wasSold = showSoldHistory

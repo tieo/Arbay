@@ -65,7 +65,7 @@
           "to": "VIEW-HOME"
         }
       ],
-      "statement": "Saved searches are re-run every six hours and alert on new stock or a price well under the median; Home shows whether a search is watched, when it last ran and what it found.",
+      "statement": "Saved searches are re-run every six hours; Home shows whether a search is watched, when it last ran and what it found. Only a listing priced under that search's median leaves the app, as a notification on the phone.",
       "status": "Built",
       "tag": "REQUIREMENT",
       "tier": "2 one tap away",
@@ -902,7 +902,7 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-SETTINGS-EARNS-ITS-PLACE",
       "title": "A setting that changes nothing does not belong",
-      "statement": "Of the shared settings, only the per-market result cap earns its place: it is what every crawler stops at, and raising it is what gets an address flagged. Sort by price adds one parameter to eBay's URL and nothing else. The alert settings configure notifications that duplicate what the app already shows.",
+      "statement": "Of the shared settings, the per-market result cap earns its place: it is what every crawler stops at, and raising it is what gets an address flagged. Sort by price adds one parameter to eBay's URL and nothing else.",
       "status": "Broken",
       "tier": "2 one tap away",
       "relations": [
@@ -913,10 +913,24 @@
       ]
     },
     {
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-SETTINGS"
+        }
+      ],
+      "statement": "Each notification is a card naming what is sent, the condition that sends it, why missing it costs you the thing, and a switch. The threshold in the sentence is the number the slider under it sets, so the promise and the setting cannot drift apart.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Every alert says what fires it and why",
+      "uid": "REQ-SETTINGS-ALERTS-SAY-WHY"
+    },
+    {
       "tag": "REQUIREMENT",
       "uid": "REQ-ALERTS-WORTH-A-PUSH",
       "title": "Only push what is worth interrupting for",
-      "statement": "Three kinds of push went out: a crawler block-rate warning, new stock per saved search every six hours, and a listing priced well under the median. The middle one said what Home already shows and fired per search per run. It is a log line now; the deal alert stays, because that is the one worth acting on.",
+      "statement": "Two things raise a notification, both of which stop existing while you wait: a free item near you above the score you set, and a listing in a watched search at or under a percentage of that search's median. Each is a notification on the device, on its own Android channel. New stock per saved search and a crawler block-rate warning are log lines, because Home already shows the first and nobody buys anything from the second.",
       "status": "Built",
       "tier": "3 on request",
       "relations": [
@@ -1042,96 +1056,6 @@
     },
     {
       "tag": "STATE",
-      "uid": "STATE-SEARCH-LOADING",
-      "title": "Loading",
-      "statement": "The catalogue is being read; the tiles are what stands there meanwhile.",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "search-loading-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "search-loading-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "search-loading-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "search-loading-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-SEARCH-EMPTY",
-      "title": "Empty",
-      "statement": "Nothing has been typed, so the categories are the whole of it.",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "search-empty-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "search-empty-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "search-empty-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "search-empty-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-SEARCH-FAILED",
-      "title": "Failed",
-      "statement": "The catalogue could not be read, and the tiles are all that is left.",
-      "relations": [
-        {
-          "to": "VIEW-DISCOVERY",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "search-failed-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "search-failed-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "search-failed-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "search-failed-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
       "uid": "STATE-RESULTS-LOADING",
       "title": "Loading",
       "statement": "Some markets have not answered yet, and what has arrived is shown under a progress line.",
@@ -1222,36 +1146,6 @@
     },
     {
       "tag": "STATE",
-      "uid": "STATE-RESULTS-EVERYMARKETANSWERED",
-      "title": "Every market answered",
-      "statement": "The search is complete and the list is final until a filter changes.",
-      "relations": [
-        {
-          "to": "VIEW-RESULTS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "results-every-market-answered-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "results-every-market-answered-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "results-every-market-answered-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "results-every-market-answered-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
       "uid": "STATE-RESULTS-SOMEMARKETSFAILED",
       "title": "Some markets failed",
       "statement": "A market timed out, was blocked or hit a captcha, so the list is shorter than it should be.",
@@ -1336,96 +1230,6 @@
         },
         {
           "file": "results-the-filters-admit-none-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-FILTERS-LOADING",
-      "title": "Loading",
-      "statement": "The results are still arriving, so there is little yet to narrow.",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "filters-loading-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "filters-loading-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "filters-loading-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "filters-loading-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-FILTERS-EMPTY",
-      "title": "Empty",
-      "statement": "Nothing has been found, so there is nothing to filter and the controls say so.",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "filters-empty-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "filters-empty-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "filters-empty-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "filters-empty-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-FILTERS-FAILED",
-      "title": "Failed",
-      "statement": "No market answered, so no filter can be built from what came back.",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "filters-failed-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "filters-failed-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "filters-failed-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "filters-failed-wide-dark.png",
           "label": "wide dark"
         }
       ]
@@ -1642,96 +1446,6 @@
     },
     {
       "tag": "STATE",
-      "uid": "STATE-CARSEARCH-LOADING",
-      "title": "Loading",
-      "statement": "The make and model catalogue is being read from the markets themselves.",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "car-search-loading-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "car-search-loading-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "car-search-loading-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "car-search-loading-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-CARSEARCH-EMPTY",
-      "title": "Empty",
-      "statement": "Nothing has been chosen yet: the form as it opens.",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "car-search-empty-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "car-search-empty-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "car-search-empty-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "car-search-empty-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-CARSEARCH-FAILED",
-      "title": "Failed",
-      "statement": "The catalogue could not be read, so make and model fall back to what is bundled.",
-      "relations": [
-        {
-          "to": "VIEW-CAR-SEARCH",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "car-search-failed-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "car-search-failed-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "car-search-failed-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "car-search-failed-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
       "uid": "STATE-FREEITEMS-LOADING",
       "title": "Loading",
       "statement": "Items are being fetched for the area that was set.",
@@ -1822,90 +1536,30 @@
     },
     {
       "tag": "STATE",
-      "uid": "STATE-SETTINGS-LOADING",
-      "title": "Loading",
-      "statement": "The server's own settings are being read.",
+      "uid": "STATE-FILTERS-NOTHINGTONARROW",
+      "title": "Nothing to narrow",
+      "statement": "No market has answered with anything, so the controls stand with nothing behind them. Waiting, empty and failed are one picture here, because a filter over nothing looks the same whatever the reason.",
       "relations": [
         {
-          "to": "VIEW-SETTINGS",
+          "to": "VIEW-FILTERS",
           "role": "State of"
         }
       ],
       "renders": [
         {
-          "file": "settings-loading-phone-light.png",
+          "file": "filters-nothing-to-narrow-phone-light.png",
           "label": "phone light"
         },
         {
-          "file": "settings-loading-phone-dark.png",
+          "file": "filters-nothing-to-narrow-phone-dark.png",
           "label": "phone dark"
         },
         {
-          "file": "settings-loading-wide-light.png",
+          "file": "filters-nothing-to-narrow-wide-light.png",
           "label": "wide light"
         },
         {
-          "file": "settings-loading-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-SETTINGS-EMPTY",
-      "title": "Empty",
-      "statement": "Nothing is configured beyond the defaults.",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "settings-empty-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "settings-empty-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "settings-empty-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "settings-empty-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-SETTINGS-FAILED",
-      "title": "Failed",
-      "statement": "The server could not be reached, so its shared settings cannot be shown or changed.",
-      "relations": [
-        {
-          "to": "VIEW-SETTINGS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "settings-failed-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "settings-failed-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "settings-failed-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "settings-failed-wide-dark.png",
+          "file": "filters-nothing-to-narrow-wide-dark.png",
           "label": "wide dark"
         }
       ]
@@ -2581,7 +2235,8 @@
         "behind": [],
         "canvas": [
           "This device: server address, display currency, both surviving a restart",
-          "This server, marked as shared: search depth and alerts"
+          "The two notifications, each saying what fires it and why, with its threshold under it",
+          "This server, marked as shared: search depth"
         ],
         "gone": []
       },
@@ -2591,7 +2246,7 @@
           "to": "VIEW-HOME"
         }
       ],
-      "statement": "Point the app at its server and say how deeply it searches.",
+      "statement": "Point the app at its server, say how deeply it searches, and decide what may interrupt you.",
       "status": "Built",
       "tag": "VIEW",
       "title": "Settings",

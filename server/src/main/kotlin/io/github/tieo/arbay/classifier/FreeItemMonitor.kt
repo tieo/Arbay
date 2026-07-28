@@ -50,8 +50,8 @@ object FreeItemMonitor {
 
     fun start() {
         if (job?.isActive == true) return
-        val intervalMs = _settings.pollIntervalMinutes * 60 * 1000L
-        log.info("Starting free item background monitor (every ${_settings.pollIntervalMinutes}min)")
+        val intervalMs = _settings.checkEveryMinutes * 60 * 1000L
+        log.info("Starting free item background monitor (every ${_settings.checkEveryMinutes}min)")
         job = scope.launch {
             while (isActive) {
                 try {
@@ -139,30 +139,14 @@ object FreeItemMonitor {
         val newIds = FreeItemStore.trackBatch(scored)
         val newScored = scored.filter { it.id in newIds }
 
-        val urgentThreshold = _settings.urgentThresholdPct / 100.0
-        val digestThreshold = _settings.digestThresholdPct / 100.0
-
-        // Categorize matches
-        val urgentMatches = if (_settings.urgentEnabled) {
-            newScored.filter { (it.relevanceScore ?: 0.0) >= urgentThreshold }
+        // One kind of item is worth interrupting for: near, free, and a good enough fit that
+        // waiting until the app is next opened would lose it. A digest of middling matches and
+        // a hunt for items unlike anything seen before were two more ways of being told about
+        // things nobody was going to fetch.
+        val worthTelling = _settings.freeItemScorePct / 100.0
+        val urgentMatches = if (_settings.freeItemAlerts) {
+            newScored.filter { (it.relevanceScore ?: 0.0) >= worthTelling }
                 .sortedByDescending { it.relevanceScore }
-        } else emptyList()
-
-        val digestMatches = if (_settings.digestEnabled) {
-            newScored.filter { (it.relevanceScore ?: 0.0) >= digestThreshold }
-                .sortedByDescending { it.relevanceScore }
-        } else emptyList()
-
-        // Novel items — things very different from everything seen before
-        val allEmbeddings = FreeItemFeedbackStore.lovedEmbeddings() + FreeItemFeedbackStore.dislikedEmbeddings()
-        val novelItems = if (_settings.novelEnabled && allEmbeddings.size >= 5) {
-            newScored.filter { listing ->
-                (listing.relevanceScore ?: 0.0) >= 0.4
-            }.filter { listing ->
-                val emb = EmbeddingModel.embed(listing.title) ?: return@filter false
-                val maxSim = allEmbeddings.maxOf { EmbeddingModel.similarity(emb, it) }
-                maxSim < _settings.novelSimilarityThreshold
-            }
         } else emptyList()
 
         fun toNewMatch(l: io.github.tieo.arbay.model.Listing) = NewMatch(
@@ -179,16 +163,13 @@ object FreeItemMonitor {
         lastPollResult = PollResult(
             totalNew = newIds.size,
             urgentMatches = urgentMatches.map { toNewMatch(it) },
-            digestMatches = digestMatches.map { toNewMatch(it) },
-            novelItems = novelItems.map { toNewMatch(it) },
             lastPollTime = Clock.System.now(),
         )
 
         // Still populate old-style pending matches for backward compat
-        val allNotifiable = (urgentMatches + novelItems).distinctBy { it.id }
+        val allNotifiable = urgentMatches.distinctBy { it.id }
         if (allNotifiable.isNotEmpty()) {
-            log.info("Found {} notifiable items ({} urgent, {} digest, {} novel)",
-                allNotifiable.size, urgentMatches.size, digestMatches.size, novelItems.size)
+            log.info("Found {} items worth telling about", allNotifiable.size)
             synchronized(pendingMatches) {
                 allNotifiable.forEach { listing ->
                     pendingMatches.add(TrackedItem(
@@ -209,8 +190,8 @@ object FreeItemMonitor {
         }
 
         lastRunTime = Clock.System.now()
-        log.info("Background check complete: {} total, {} new, {} urgent, {} digest, {} novel",
-            results.size, newIds.size, urgentMatches.size, digestMatches.size, novelItems.size)
+        log.info("Background check complete: {} total, {} new, {} worth telling about",
+            results.size, newIds.size, urgentMatches.size)
     }
 
     private fun loadSettings(): NotificationSettings {

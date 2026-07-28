@@ -26,7 +26,7 @@ fun Application.configureRouting() {
         marketRoutes()
         listingRoutes(listingRepo)
         crawlerRoutes(listingRepo)
-        freeItemRoutes()
+        freeItemRoutes(savedSearches)
         taxonomyRoutes()
     }
 }
