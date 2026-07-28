@@ -313,13 +313,21 @@ fun ListingsSheet(
         shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
     ).count { it }
-    val marketChoices = remember(platformOffers) {
+    val marketChoices = remember(platformOffers, activeListings) {
+        // How far the nearest offer from each market is, so the filter list can be
+        // ordered by what is close rather than by what starts with A. Known only
+        // once the search carries a location.
+        val nearest = activeListings
+            .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, distances) -> distances.min() }
         platformOffers.map { offer ->
             MarketChoice(
                 platform = offer.platform,
                 name = offer.platform.displayName,
                 country = MarketSets.countryOf(offer.platform),
                 count = offer.count,
+                nearestKm = nearest[offer.platform],
             )
         }
     }

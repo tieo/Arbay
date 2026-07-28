@@ -20,6 +20,7 @@ import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
 import kotlin.math.ln
+import kotlin.math.roundToInt
 import kotlin.math.exp
 
 /**
@@ -146,11 +147,26 @@ fun FiltersSheet(
                         // Grouped by the country the listings are in, because "which markets" and
                         // "which countries" are one question asked at two grains: tapping the
                         // country takes all of it, tapping a market takes that one.
-                        markets.groupBy { it.country ?: "Home" }.toSortedMap().forEach { (country, group) ->
+                        //
+                        // Nearest first where the search knows where the searcher is: a list that
+                        // starts at Austria because A comes first is a list ordered by nothing
+                        // anyone cares about. Alphabetical is the fallback, not the rule.
+                        val byCountry = markets.groupBy { it.country ?: "Home" }
+                        val ordered = byCountry.entries.sortedWith(
+                            compareBy<Map.Entry<String, List<MarketChoice>>> { entry ->
+                                entry.value.mapNotNull { it.nearestKm }.minOrNull() ?: Double.MAX_VALUE
+                            }.thenBy { it.key },
+                        )
+                        ordered.forEach { (country, unsorted) ->
+                            val group = unsorted.sortedWith(
+                                compareBy<MarketChoice> { it.nearestKm ?: Double.MAX_VALUE }
+                                    .thenByDescending { it.count },
+                            )
                             CountryRow(
                                 country = country,
                                 count = group.sumOf { it.count },
                                 markets = group.size,
+                                nearestKm = group.mapNotNull { it.nearestKm }.minOrNull(),
                                 selected = country in shownCountries,
                                 onClick = {
                                     onShowCountries(
@@ -252,6 +268,9 @@ data class MarketChoice(
     val name: String,
     val country: String?,
     val count: Int,
+    // How far the nearest offer from this market is, when the search knows where
+    // the searcher is. Null when nothing here carries a place.
+    val nearestKm: Double? = null,
 )
 
 @Composable
@@ -268,6 +287,7 @@ private fun CountryRow(
     country: String,
     count: Int,
     markets: Int,
+    nearestKm: Double? = null,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -287,7 +307,13 @@ private fun CountryRow(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${if (markets == 1) "1 market" else "$markets markets"} · $count",
+                buildString {
+                    append(if (markets == 1) "1 market" else "$markets markets")
+                    append(" · $count")
+                    // How far away the nearest thing in this country is, which is why
+                    // the country sits where it does in the list.
+                    nearestKm?.let { append(" · from ${it.roundToInt()} km") }
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

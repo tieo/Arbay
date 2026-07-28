@@ -143,7 +143,21 @@ object PreviewData {
         radiusKm = 30,
     )
 
-    /** Markets as the filters list shows them, from the sample listings. */
+    /** Markets as the filters list shows them, from the sample listings. Distances are
+     *  what a search from southern Germany would measure, so the rendered list is in the
+     *  order someone there would see. */
+    private val nearestByMarket = mapOf(
+        PlatformId.KLEINANZEIGEN to 34.0,
+        PlatformId.EBAY_DE to 61.0,
+        PlatformId.RICARDO to 148.0,
+        PlatformId.WILLHABEN to 310.0,
+        PlatformId.SUBITO to 402.0,
+        PlatformId.EBAY_IT to 455.0,
+        PlatformId.MARKTPLAATS to 520.0,
+        PlatformId.TWEEDEHANDS to 545.0,
+        PlatformId.EBAY_ES to 1180.0,
+    )
+
     val marketChoices: List<io.github.tieo.arbay.ui.screen.MarketChoice> =
         active.groupBy { it.platformId }.map { (platform, items) ->
             io.github.tieo.arbay.ui.screen.MarketChoice(
@@ -151,6 +165,7 @@ object PreviewData {
                 name = platform.displayName,
                 country = io.github.tieo.arbay.model.MarketSets.countryOf(platform),
                 count = items.size,
+                nearestKm = nearestByMarket[platform],
             )
         }
 
