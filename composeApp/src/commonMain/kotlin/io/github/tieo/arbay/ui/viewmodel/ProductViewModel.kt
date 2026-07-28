@@ -19,6 +19,9 @@ class ProductViewModel(
     // server, and unable to reach it.
     sampleLoading: Boolean = false,
     sampleError: String? = null,
+    // Handed nothing on purpose: an empty Home is a state to draw, not a Home
+    // that has not asked yet.
+    rendersASample: Boolean = false,
 ) : ViewModel() {
 
     private val _products = MutableStateFlow(saved)
@@ -35,7 +38,8 @@ class ProductViewModel(
     private val _status = MutableStateFlow(savedStatus.associateBy { it.productId })
     val status: StateFlow<Map<String, SavedSearchStatus>> = _status
 
-    private val rendersASample = saved.isNotEmpty() || sampleLoading || sampleError != null
+    private val rendersASample =
+        rendersASample || saved.isNotEmpty() || sampleLoading || sampleError != null
 
     fun loadProducts() {
         if (rendersASample) return

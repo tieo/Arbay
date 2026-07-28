@@ -175,7 +175,9 @@ internal fun ListingCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Thumbnail
-            val firstImage = listing.imageUrls.firstOrNull { it.startsWith("http") }
+            // http for a listing off a market, a path for one drawn off-screen: both are
+            // things the image loader can fetch, and the card only needs there to be one.
+            val firstImage = listing.imageUrls.firstOrNull { it.isNotBlank() }
             if (firstImage != null) {
                 AsyncImage(
                     model = firstImage,

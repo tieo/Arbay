@@ -19,9 +19,10 @@ class FreeItemViewModel(
     sampleItems: List<Listing> = emptyList(),
     sampleLoading: Boolean = false,
     sampleError: String? = null,
+    rendersASample: Boolean = false,
 ) : ViewModel() {
 
-    private val rendersASample =
+    private val rendersASample = rendersASample ||
         sampleProfile != null || sampleItems.isNotEmpty() || sampleLoading || sampleError != null
 
     // ── Discover tab ──────────────────────────────────────────────────────────

@@ -27,7 +27,22 @@ object PreviewData {
         price = Money(priceCents, currency), condition = condition,
         location = if (city != null) Location(city = city, country = country) else null,
         sold = sold, soldDate = soldDate, scrapedAt = now,
+        // A photo the renderer can actually load. A real listing carries an address at a
+        // market; a drawn one carries a file, so a render shows the image column a card
+        // really has rather than pretending a card is all text.
+        imageUrls = listOf(photo(id)),
     )
+
+    /** Where the stand-in photos are. Whoever draws with them says so, because only they
+     *  know what the working directory is. */
+    var photoRoot: String = "docs/model/sample-photos"
+
+    /** Stand-in photos, kept beside the model they are drawn into. */
+    private fun photo(id: String): String {
+        val names = listOf("sander.jpg", "belt.jpg", "drum.jpg", "edge.jpg")
+        val which = names[(id.hashCode().let { if (it < 0) -it else it }) % names.size]
+        return "$photoRoot/$which"
+    }
 
     val active: List<Listing> = listOf(
         l("1", PlatformId.KLEINANZEIGEN, "Lägler Hummel Parkettschleifmaschine Bandschleifer", 250_00, city = "Steinen", country = "DE", condition = Condition.USED),

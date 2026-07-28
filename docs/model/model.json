@@ -879,6 +879,24 @@
           "role": "Lives in"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-SAYS-WHAT-ELSE-WAS-SEARCHED",
+      "title": "Say what else was searched for",
+      "statement": "A search also covers what each market calls the thing, and the results include offers the typed query never named. The header says how many markets were translated for and nothing says which terms were used, so an unexpected result looks like a mistake rather than the feature working.",
+      "status": "Broken",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "to": "STORY-OWN-WORDS",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-RESULTS",
+          "role": "Lives in"
+        }
+      ]
     }
   ],
   "states": [

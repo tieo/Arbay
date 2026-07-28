@@ -138,6 +138,7 @@ private fun Home(
     io.github.tieo.arbay.ui.screen.MainScreen(
         productViewModel = ProductViewModel(
             saved = saved, savedStatus = status, sampleLoading = loading, sampleError = error,
+            rendersASample = true,
         ),
         listingViewModel = ListingViewModel(),
         freeItemViewModel = FreeItemViewModel(sampleProfile = profile),
@@ -249,6 +250,7 @@ private fun FreeItems(
     io.github.tieo.arbay.ui.screen.FreeItemsSheet(
         viewModel = FreeItemViewModel(
             sampleProfile = profile, sampleItems = items, sampleLoading = loading, sampleError = error,
+            rendersASample = true,
         ),
         onDismiss = {},
     )
@@ -266,6 +268,10 @@ fun main() {
     val only = System.getProperty("gallery.only")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
     val sizes = (System.getProperty("gallery.sizes") ?: "phone,wide,card").split(",").map { it.trim() }.toSet()
     val themes = (System.getProperty("gallery.themes") ?: "light,dark").split(",").map { it.trim() }.toSet()
+    // The task runs with the module as its working directory, so the photos are
+    // named absolutely or they are not found at all.
+    PreviewData.photoRoot = "file://" + File(System.getProperty("gallery.photos") ?: "../docs/model/sample-photos")
+        .absoluteFile.normalize().path
     val started = System.currentTimeMillis()
 
     val wanted = SCENES.filter { only == null || it.view in only || "${it.view}-${it.state}" in only }
