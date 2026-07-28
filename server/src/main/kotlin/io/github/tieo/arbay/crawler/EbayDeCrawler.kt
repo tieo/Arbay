@@ -174,7 +174,9 @@ class EbayDeCrawler(
                     ?.let { add("_sacat=$it") }
             }
             add("_ipg=${CrawlerConfig.current.ebayItemsPerPage}")
-            if (CrawlerConfig.current.sortByPrice) add("_sop=15") // sort by price+shipping lowest first
+            // Cheapest first, always: the result cap decides which listings come back, and the
+            // cheap end is the end a price comparison is about.
+            add("_sop=15")
             if (page > 1) add("_pgn=$page")
             if (query.soldOnly) add("LH_Sold=1&LH_Complete=1")
             // For ebay.com, restrict to listings that ship to Germany

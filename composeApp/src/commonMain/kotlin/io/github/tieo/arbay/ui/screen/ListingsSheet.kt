@@ -412,10 +412,17 @@ fun ListingsSheet(
                                         tint = MaterialTheme.colorScheme.primary,
                                     )
                                     Spacer(Modifier.width(4.dp))
+                                    // The terms themselves, not their count: an offer in the list
+                                    // that the typed query never named is explained by the word
+                                    // beside it, and a bad translation is only visible if shown.
+                                    val shown = translations.take(2).joinToString(", ") { it.second }
+                                    val rest = translations.size - 2
                                     Text(
-                                        "translated for ${translations.size} markets",
+                                        if (rest > 0) "also searched: $shown +$rest more" else "also searched: $shown",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
@@ -514,13 +521,46 @@ fun ListingsSheet(
                 }
 
                 // === Loading (only when zero results yet) ===
-                if (loading && listings.isEmpty() && platformStatuses.isEmpty()) {
+                // A wait with nothing on the screen reads as a screen that is finished and empty.
+                // What is known while waiting is which markets have answered, so that is what
+                // stands here until the first listing arrives.
+                if (loading && listings.isEmpty()) {
                     item("loading") {
-                        Box(
-                            Modifier.fillMaxWidth().height(120.dp),
-                            contentAlignment = Alignment.Center,
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            CircularProgressIndicator()
+                            if (totalPlatforms > 0) {
+                                LinearProgressIndicator(
+                                    progress = { completedPlatforms.toFloat() / totalPlatforms.coerceAtLeast(1) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Text(
+                                    "$completedPlatforms of $totalPlatforms markets have answered",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            } else {
+                                CircularProgressIndicator()
+                                Text("Asking the markets", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            val waiting = platformStatuses.filter { it.status == PlatformSearchStatus.SEARCHING }
+                            if (waiting.isNotEmpty()) {
+                                Text(
+                                    "Still out: " + waiting.take(4).joinToString(", ") { it.platformName } +
+                                        if (waiting.size > 4) " and ${waiting.size - 4} more" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                            if (answeredMarkets > 0) {
+                                Text(
+                                    "Nothing yet from the $answeredMarkets that have.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -532,35 +572,49 @@ fun ListingsSheet(
                             Modifier.fillMaxWidth().height(200.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            // Nothing on screen has two causes, and they lead somewhere different:
-                            // the markets had nothing, or they had something and our own filters
-                            // hide all of it.
+                            // Nothing on screen has three causes and they lead somewhere different:
+                            // our own filters hide everything that came, no market could be asked,
+                            // or every market answered and had nothing.
                             val hiddenByUs = fetchedListings.size
+                            val nobodyAnswered = hiddenByUs == 0 && failedMarkets > 0 && answeredMarkets == 0
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    if (hiddenByUs > 0) Icons.Outlined.FilterAltOff else Icons.Outlined.SearchOff,
+                                    when {
+                                        hiddenByUs > 0 -> Icons.Outlined.FilterAltOff
+                                        nobodyAnswered -> Icons.Outlined.CloudOff
+                                        else -> Icons.Outlined.SearchOff
+                                    },
                                     null,
                                     modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.outlineVariant,
+                                    tint = if (nobodyAnswered) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.outlineVariant,
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    if (hiddenByUs > 0) "Your filters hide all $hiddenByUs of them"
-                                    else "No listings found",
+                                    when {
+                                        hiddenByUs > 0 -> "Your filters hide all $hiddenByUs of them"
+                                        nobodyAnswered -> "No market could be asked"
+                                        else -> "No listings found"
+                                    },
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    if (hiddenByUs > 0) "The markets answered. Widen the price, the markets or the blocked words."
-                                    else "Try a different search or check back later.",
+                                    when {
+                                        hiddenByUs > 0 -> "The markets answered. Widen the price, the markets or the blocked words."
+                                        nobodyAnswered -> "All $failedMarkets blocked, timed out or asked for a captcha. This says nothing about whether the thing exists."
+                                        else -> "All $answeredMarkets markets answered and none had one. Try other words."
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.padding(horizontal = 32.dp),
                                 )
-                                if (hiddenByUs > 0) {
-                                    Spacer(Modifier.height(14.dp))
-                                    OutlinedButton(onClick = { showFilters = true }) { Text("Open filters") }
+                                Spacer(Modifier.height(14.dp))
+                                when {
+                                    hiddenByUs > 0 -> OutlinedButton(onClick = { showFilters = true }) { Text("Open filters") }
+                                    nobodyAnswered -> OutlinedButton(onClick = { showMarkets = true }) { Text("What each market said") }
+                                    else -> {}
                                 }
                             }
                         }

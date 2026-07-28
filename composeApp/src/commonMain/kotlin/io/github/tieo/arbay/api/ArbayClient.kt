@@ -118,7 +118,6 @@ class ArbayClient(
         val maxResultsPerPlatform: Int = 60,
         val maxPages: Int = 8,
         val ebayItemsPerPage: Int = 120,
-        val sortByPrice: Boolean = true,
     )
 
     suspend fun getExchangeRates(): Map<String, Double> =
@@ -138,10 +137,10 @@ class ArbayClient(
     suspend fun getCrawlerConfig(): CrawlerConfigDto =
         client.get("$baseUrl/api/crawler/config").body()
 
-    suspend fun updateCrawlerConfig(maxResultsPerPlatform: Int, sortByPrice: Boolean) {
+    suspend fun updateCrawlerConfig(maxResultsPerPlatform: Int) {
         client.post("$baseUrl/api/crawler/config") {
             contentType(io.ktor.http.ContentType.Application.Json)
-            setBody(CrawlerConfigDto(maxResultsPerPlatform = maxResultsPerPlatform, sortByPrice = sortByPrice))
+            setBody(CrawlerConfigDto(maxResultsPerPlatform = maxResultsPerPlatform))
         }
     }
 

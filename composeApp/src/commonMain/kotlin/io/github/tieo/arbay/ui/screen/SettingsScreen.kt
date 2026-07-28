@@ -193,13 +193,10 @@ fun SettingsSheet(
                 subtitle = "How hard each search digs. More depth means more results but slower searches.",
             ) {
                 var maxResults by remember { mutableStateOf("60") }
-                var sortByPrice by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
                     try {
-                        val config = client.getCrawlerConfig()
-                        maxResults = config.maxResultsPerPlatform.toString()
-                        sortByPrice = config.sortByPrice
+                        maxResults = client.getCrawlerConfig().maxResultsPerPlatform.toString()
                     } catch (_: Exception) {}
                 }
 
@@ -215,20 +212,10 @@ fun SettingsSheet(
 
                 Spacer(Modifier.height(12.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Sort by price", style = MaterialTheme.typography.bodyMedium)
-                        Text("Cheapest first across all markets", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = sortByPrice, onCheckedChange = { sortByPrice = it })
-                }
-
-                Spacer(Modifier.height(12.dp))
-
                 Button(
                     onClick = {
                         scope.launch {
-                            try { client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500), sortByPrice) } catch (_: Exception) {}
+                            try { client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500)) } catch (_: Exception) {}
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

@@ -848,8 +848,8 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-RESULTS-LOADING-SAYS-SOMETHING",
       "title": "Waiting looks like waiting",
-      "statement": "While markets are answering and nothing has arrived, the screen is blank below the doors: no progress line, no skeleton, nothing but a small count in the header. The render of the loading state shows it.",
-      "status": "Broken",
+      "statement": "While markets are answering and nothing has arrived, the screen shows how many of them have answered, which ones are still out, and that the ones that answered brought nothing yet.",
+      "status": "Built",
       "tier": "1 canvas",
       "relations": [
         {
@@ -866,8 +866,8 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-RESULTS-FAILED-IS-NOT-EMPTY",
       "title": "A failed search does not read as an empty one",
-      "statement": "Every market blocked and every market empty draw the same screen: \\u201cNo listings found\\u201d. The only difference is the Markets door reading \\u201c0 ok, 4 not\\u201d in small text. Put the reason on the canvas where the absence is.",
-      "status": "Broken",
+      "statement": "Empty has three causes and each says its own sentence: the filters hide everything that came, no market could be asked (blocked, timed out or captcha, which says nothing about whether the thing exists), or every market answered and none had one. Each offers the way on: filters, the market list, other words.",
+      "status": "Built",
       "tier": "1 canvas",
       "relations": [
         {
@@ -884,8 +884,8 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-RESULTS-SAYS-WHAT-ELSE-WAS-SEARCHED",
       "title": "Say what else was searched for",
-      "statement": "A search also covers what each market calls the thing, and the results include offers the typed query never named. The header says how many markets were translated for and nothing says which terms were used, so an unexpected result looks like a mistake rather than the feature working.",
-      "status": "Broken",
+      "statement": "The header prints the translated terms themselves, two of them with a count of the rest, so an offer the typed query never named is explained by the word beside it. Tapping shows every term with the country it was used in.",
+      "status": "Built",
       "tier": "1 canvas",
       "relations": [
         {
@@ -902,8 +902,8 @@
       "tag": "REQUIREMENT",
       "uid": "REQ-SETTINGS-EARNS-ITS-PLACE",
       "title": "A setting that changes nothing does not belong",
-      "statement": "Of the shared settings, the per-market result cap earns its place: it is what every crawler stops at, and raising it is what gets an address flagged. Sort by price adds one parameter to eBay's URL and nothing else.",
-      "status": "Broken",
+      "statement": "The shared group holds the one setting that changes what a search does: the per-market result cap, which is what every crawler stops at and what gets an address flagged when raised. Sort by price is gone as a choice; eBay is always asked cheapest first, because the cap decides which listings come back and the cheap end is the end a price comparison is about.",
+      "status": "Built",
       "tier": "2 one tap away",
       "relations": [
         {
