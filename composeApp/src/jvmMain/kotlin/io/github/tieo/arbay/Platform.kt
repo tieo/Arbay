@@ -26,6 +26,10 @@ actual fun saveBannedIds(ids: Set<String>) {
     } catch (_: Exception) {}
 }
 
+actual fun imageModel(address: String): Any =
+    if (address.startsWith("http")) address
+    else File(address.removePrefix("file://"))
+
 private val settingsFile = File(System.getProperty("user.home"), ".arbay/settings.txt")
 
 actual fun loadDeviceSettings(): Map<String, String> = try {

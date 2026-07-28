@@ -19,6 +19,11 @@ expect fun saveBannedIds(ids: Set<String>)
 
 /** Settings that belong to this device rather than to the server it talks to: which server that is,
  *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
+/** What the image loader should be handed for a picture's address. A listing off a market carries
+ *  an http address, which every platform loads as it stands; one drawn off-screen carries a path,
+ *  which the JVM has to be given as a file rather than as an unresolvable URI. */
+expect fun imageModel(address: String): Any
+
 expect fun loadDeviceSettings(): Map<String, String>
 expect fun saveDeviceSettings(settings: Map<String, String>)
 

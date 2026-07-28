@@ -180,7 +180,7 @@ internal fun ListingCard(
             val firstImage = listing.imageUrls.firstOrNull { it.isNotBlank() }
             if (firstImage != null) {
                 AsyncImage(
-                    model = firstImage,
+                    model = io.github.tieo.arbay.imageModel(firstImage),
                     contentDescription = listing.title,
                     modifier = Modifier
                         .size(56.dp)

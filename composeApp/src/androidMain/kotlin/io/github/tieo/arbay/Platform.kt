@@ -27,6 +27,9 @@ actual fun saveBannedIds(ids: Set<String>) {
 }
 
 
+actual fun imageModel(address: String): Any =
+    if (address.startsWith("http")) address else File(address.removePrefix("file://"))
+
 actual fun loadDeviceSettings(): Map<String, String> {
     val f = File(appDir() ?: return emptyMap(), "settings.txt")
     return try {
