@@ -265,6 +265,7 @@ fun main() {
     // model shows a phone and a wide window, so dark is drawn only when asked.
     val only = System.getProperty("gallery.only")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
     val sizes = (System.getProperty("gallery.sizes") ?: "phone,wide,card").split(",").map { it.trim() }.toSet()
+    val themes = (System.getProperty("gallery.themes") ?: "light,dark").split(",").map { it.trim() }.toSet()
     val started = System.currentTimeMillis()
 
     val wanted = SCENES.filter { only == null || it.view in only || "${it.view}-${it.state}" in only }
@@ -278,13 +279,19 @@ fun main() {
         // The screen as it is keeps the plain name; a state carries its own, so
         // results-empty-phone.png says what it is without a table to look it up in.
         val stem = if (scene.state == "as-it-is") scene.view else "${scene.view}-${scene.state}"
+        // Both shapes in both themes, with the theme in the name: a book read in
+        // the dark that falls back to whichever render does not say "light" ends
+        // up showing some screens light and some dark.
         val jobs = buildList {
-            if ("phone" in sizes) add(Render("phone", PHONE_W, PHONE_H, dark = false, scale = 2f))
-            if ("dark" in sizes) add(Render("dark", PHONE_W, PHONE_H, dark = true, scale = 2f))
-            if ("wide" in sizes) add(Render("wide", TABLET_W, TABLET_H, dark = false, scale = 1f))
-            // Only the screen itself needs a card; the index shows views, not states.
-            if ("card" in sizes && scene.state == "as-it-is") {
-                add(Render("card", PHONE_W, CARD_H, dark = false, scale = 2f))
+            for (theme in listOf("light", "dark")) {
+                if (theme !in themes) continue
+                val dark = theme == "dark"
+                if ("phone" in sizes) add(Render("phone-$theme", PHONE_W, PHONE_H, dark, 2f))
+                if ("wide" in sizes) add(Render("wide-$theme", TABLET_W, TABLET_H, dark, 1f))
+                // Only the screen itself needs a card; the index shows views, not states.
+                if ("card" in sizes && scene.state == "as-it-is") {
+                    add(Render("card-$theme", PHONE_W, CARD_H, dark, 2f))
+                }
             }
         }
         for (job in jobs) {

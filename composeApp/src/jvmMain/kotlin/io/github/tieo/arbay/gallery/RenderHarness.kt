@@ -3,6 +3,8 @@ package io.github.tieo.arbay.gallery
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -37,7 +39,12 @@ fun renderToPng(
         density = density,
     ) {
         ArbayTheme(darkTheme = dark) {
-            Box(Modifier.fillMaxSize()) { content() }
+            // The window behind the screen. A sheet drawn in place carries no
+            // background of its own - in the app a dialog's surface paints it -
+            // so without this a dark render came out as pale text on white.
+            Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize()) { content() }
+            }
         }
     }
     try {
