@@ -897,6 +897,38 @@
           "role": "Lives in"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-SETTINGS-EARNS-ITS-PLACE",
+      "title": "A setting that changes nothing does not belong",
+      "statement": "Of the shared settings, only the per-market result cap earns its place: it is what every crawler stops at, and raising it is what gets an address flagged. Sort by price adds one parameter to eBay's URL and nothing else. The alert settings configure notifications that duplicate what the app already shows.",
+      "status": "Broken",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "to": "VIEW-SETTINGS",
+          "role": "Lives in"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-ALERTS-WORTH-A-PUSH",
+      "title": "Only push what is worth interrupting for",
+      "statement": "Three kinds of push went out: a crawler block-rate warning, new stock per saved search every six hours, and a listing priced well under the median. The middle one said what Home already shows and fired per search per run. It is a log line now; the deal alert stays, because that is the one worth acting on.",
+      "status": "Built",
+      "tier": "3 on request",
+      "relations": [
+        {
+          "to": "STORY-ALERT",
+          "role": "Fulfils"
+        },
+        {
+          "to": "VIEW-HOME",
+          "role": "Lives in"
+        }
+      ]
     }
   ],
   "states": [

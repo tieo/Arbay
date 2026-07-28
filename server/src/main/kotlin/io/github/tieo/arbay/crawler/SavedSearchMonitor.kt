@@ -150,11 +150,10 @@ class SavedSearchMonitor(
                     message = best,
                 )
             } else {
-                val examples = fresh.take(3).joinToString("; ") { found[it]?.title.orEmpty().take(50) }
-                BlockAlerter.notify(
-                    title = "Arbay: ${fresh.size} new for ${product.name}",
-                    message = examples,
-                )
+                // New stock is not a push. Home shows what a saved search has found since it was
+                // last opened, so a notification saying the same thing every six hours is a second
+                // channel telling you what the first one already does.
+                log.info("saved-search {}: {} new, shown on the saved search itself", product.name, fresh.size)
             }
         }
         saveSeen()

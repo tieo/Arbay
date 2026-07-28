@@ -21,8 +21,12 @@ import java.io.File
 
 /** A gallery of the app's result-view building blocks rendered with sample data, so the design can
  *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
-private val TABLET_W = 1100
-private val TABLET_H = 1400
+// The wide render is looked at beside the upright one, in half a window, so what
+// matters is not how many pixels it has but how few logical ones: text keeps its
+// size relative to the frame only if the frame is narrow. Density buys sharpness,
+// not legibility, since both are scaled to the same width in the end.
+private val TABLET_W = 860
+private val TABLET_H = 1150
 /** One picture to draw: its name, its size in dp, and how many pixels per dp. */
 private data class Render(
     val suffix: String,
@@ -293,7 +297,7 @@ fun main() {
                 if (theme !in themes) continue
                 val dark = theme == "dark"
                 if ("phone" in sizes) add(Render("phone-$theme", PHONE_W, PHONE_H, dark, 2f))
-                if ("wide" in sizes) add(Render("wide-$theme", TABLET_W, TABLET_H, dark, 1f))
+                if ("wide" in sizes) add(Render("wide-$theme", TABLET_W, TABLET_H, dark, 1.5f))
                 // Only the screen itself needs a card; the index shows views, not states.
                 if ("card" in sizes && scene.state == "as-it-is") {
                     add(Render("card-$theme", PHONE_W, CARD_H, dark, 2f))
