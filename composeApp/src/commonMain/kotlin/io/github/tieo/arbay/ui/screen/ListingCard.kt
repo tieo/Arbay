@@ -179,15 +179,26 @@ internal fun ListingCard(
             // things the image loader can fetch, and the card only needs there to be one.
             val firstImage = listing.imageUrls.firstOrNull { it.isNotBlank() }
             if (firstImage != null) {
-                AsyncImage(
-                    model = io.github.tieo.arbay.imageModel(firstImage),
-                    contentDescription = listing.title,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    contentScale = ContentScale.Crop,
-                )
+                val thumbnail = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                val already = io.github.tieo.arbay.ui.LocalPreloadedImages.current(firstImage)
+                if (already != null) {
+                    androidx.compose.foundation.Image(
+                        painter = already,
+                        contentDescription = listing.title,
+                        modifier = thumbnail,
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    AsyncImage(
+                        model = io.github.tieo.arbay.imageModel(firstImage),
+                        contentDescription = listing.title,
+                        modifier = thumbnail,
+                        contentScale = ContentScale.Crop,
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
             }
 

@@ -33,15 +33,13 @@ object PreviewData {
         imageUrls = listOf(photo(id)),
     )
 
-    /** Where the stand-in photos are. Whoever draws with them says so, because only they
-     *  know what the working directory is. */
-    var photoRoot: String = "docs/model/sample-photos"
-
-    /** Stand-in photos, kept beside the model they are drawn into. */
+    /** Stand-in photos, named rather than located: only whoever draws them knows where
+     *  they are on disk, and an object initialises the moment it is first touched, which
+     *  is too early for anyone to have told it. */
     private fun photo(id: String): String {
         val names = listOf("sander.jpg", "belt.jpg", "drum.jpg", "edge.jpg")
         val which = names[(id.hashCode().let { if (it < 0) -it else it }) % names.size]
-        return "$photoRoot/$which"
+        return "sample-photos/$which"
     }
 
     val active: List<Listing> = listOf(

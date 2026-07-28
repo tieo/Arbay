@@ -15,6 +15,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 
+/**
+ * A picture already in hand, for an address that would otherwise be fetched.
+ *
+ * An image normally arrives on a background thread and appears when the screen recomposes, which
+ * is fine in an app and useless to a renderer drawing one synchronous frame: the frame is gone
+ * before the picture lands. Whoever draws off-screen puts decoded images here, and a card uses one
+ * if it is offered rather than starting a fetch that will never finish in time.
+ */
+val LocalPreloadedImages = androidx.compose.runtime.compositionLocalOf<(String) -> androidx.compose.ui.graphics.painter.Painter?> { { null } }
+
 /** The widest a column of text and cards may get before it stops being readable. */
 val READABLE_WIDTH = 760.dp
 
