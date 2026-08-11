@@ -302,6 +302,8 @@ fun ListingsSheet(
             .sortedBy { it.minPrice?.amount ?: Long.MAX_VALUE }
     }
 
+    val nothingToShow = displayedActiveListings.isEmpty() && soldListings.isEmpty()
+
     val answeredMarkets = platformStatuses.count { it.status == PlatformSearchStatus.DONE }
     val failedMarkets = platformStatuses.count {
         it.status in setOf(
@@ -527,11 +529,13 @@ fun ListingsSheet(
                     }
                 }
 
-                // === Loading (only when zero results yet) ===
+                // Whether the body has anything at all to draw. Keyed on what is actually shown,
+                // not on what was fetched: listings that exist but are all filtered out by price or
+                // condition left the screen completely blank, saying nothing about why.
                 // A wait with nothing on the screen reads as a screen that is finished and empty.
                 // What is known while waiting is which markets have answered, so that is what
                 // stands here until the first listing arrives.
-                if (loading && listings.isEmpty()) {
+                if (loading && nothingToShow) {
                     item("loading") {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 28.dp),
@@ -573,7 +577,7 @@ fun ListingsSheet(
                 }
 
                 // === Empty ===
-                if (listings.isEmpty() && !loading) {
+                if (nothingToShow && !loading) {
                     item("empty") {
                         Box(
                             Modifier.fillMaxWidth().height(200.dp),
