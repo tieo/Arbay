@@ -13,7 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.state.ToggleableState
 import io.github.tieo.arbay.model.MarketCapability
+import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.openBrowser
@@ -22,13 +24,17 @@ import io.github.tieo.arbay.ui.READABLE_WIDTH
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 
 /**
- * What actually happened at each market.
+ * What happened at each market, and which of them the results are narrowed to.
  *
  * The server distinguishes a market that was blocked, one that timed out, one holding a captcha and
  * one that simply had nothing. On the results canvas all four looked the same: a shorter list. Here
  * each says what it is, alongside the term it was sent — which is translated per country, so a
  * German search reaches eBay Italy as Italian — and how many results it gave before and after
  * filtering.
+ *
+ * The picking lives here too. It used to sit in Filters as a second list of the same markets, so
+ * the place that said what a market did and the place where you chose it were different screens
+ * showing different subsets.
  */
 @Composable
 fun MarketsSheet(
@@ -37,11 +43,16 @@ fun MarketsSheet(
     // What each market can do, so a blank field reads as "this market does not publish that"
     // rather than as a gap in the app.
     capabilities: Map<PlatformId, MarketCapability>,
-    onSelectMarket: (PlatformId) -> Unit,
+    // Which markets and countries the results are narrowed to. Empty means every one of them.
+    shownMarkets: Set<PlatformId> = emptySet(),
+    onShowMarkets: (Set<PlatformId>) -> Unit = {},
+    shownCountries: Set<String> = emptySet(),
+    onShowCountries: (Set<String>) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val answered = statuses.count { it.status == PlatformSearchStatus.DONE }
     val failed = statuses.count { it.isFailure }
+    val narrowed = shownMarkets.isNotEmpty() || shownCountries.isNotEmpty()
 
     AdaptiveSheet(onDismiss = onDismiss) {
         Row(
@@ -57,6 +68,7 @@ fun MarketsSheet(
                     buildString {
                         append("$answered of ${statuses.size} answered")
                         if (failed > 0) append(" · $failed could not")
+                        append(if (narrowed) " · showing some" else " · showing all")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -69,19 +81,123 @@ fun MarketsSheet(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Failures first: they are the reason a result list is shorter than it should be.
-            items(statuses.sortedWith(compareByDescending<PlatformStatus> { it.isFailure }
-                .thenByDescending { offers[runCatching { PlatformId.valueOf(it.platformId) }.getOrNull()] ?: 0 })) { status ->
-                MarketRow(
-                    status = status,
-                    kept = offers[runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()] ?: 0,
-                    can = capabilities[runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()],
-                    onShowOnly = {
-                        runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()?.let(onSelectMarket)
-                        onDismiss()
+            item("what-ticking-does") {
+                Text(
+                    "Tick as many as you want to narrow the results to them. A country takes every " +
+                        "market in it. A market with nothing to give cannot be ticked, and says why.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item("every-market") {
+                PickRow(
+                    label = "Every market",
+                    trailing = "${offers.values.sum()}",
+                    state = if (narrowed) ToggleableState.Off else ToggleableState.On,
+                    enabled = true,
+                    onClick = {
+                        onShowMarkets(emptySet())
+                        onShowCountries(emptySet())
                     },
                 )
             }
+
+            // Grouped by country, and inside a country the failures come first: they are the reason
+            // a result list is shorter than it should be.
+            val byCountry = statuses.groupBy { s ->
+                runCatching { PlatformId.valueOf(s.platformId) }.getOrNull()
+                    ?.let { MarketSets.countryOf(it) } ?: "?"
+            }
+            val ordered = byCountry.entries.sortedWith(
+                compareByDescending<Map.Entry<String, List<PlatformStatus>>> { entry ->
+                    entry.value.sumOf { offers[runCatching { PlatformId.valueOf(it.platformId) }.getOrNull()] ?: 0 }
+                }.thenBy { it.key },
+            )
+            ordered.forEach { (country, group) ->
+                val platformsHere = group.mapNotNull { runCatching { PlatformId.valueOf(it.platformId) }.getOrNull() }
+                val withOffers = platformsHere.filter { (offers[it] ?: 0) > 0 }
+                val pickedHere = withOffers.count { it in shownMarkets }
+                item("country-$country") {
+                    PickRow(
+                        label = country,
+                        trailing = group.size.let { if (it == 1) "1 market" else "$it markets" } +
+                            " · " + platformsHere.sumOf { offers[it] ?: 0 },
+                        state = when {
+                            country in shownCountries ||
+                                (withOffers.isNotEmpty() && pickedHere == withOffers.size) -> ToggleableState.On
+                            pickedHere > 0 -> ToggleableState.Indeterminate
+                            else -> ToggleableState.Off
+                        },
+                        // A country whose markets all came back empty cannot narrow anything.
+                        enabled = withOffers.isNotEmpty(),
+                        onClick = {
+                            val taking = country !in shownCountries && pickedHere < withOffers.size
+                            onShowCountries(if (taking) shownCountries + country else shownCountries - country)
+                            onShowMarkets(if (taking) shownMarkets else shownMarkets - platformsHere.toSet())
+                        },
+                    )
+                }
+                items(
+                    group.sortedWith(
+                        compareByDescending<PlatformStatus> { it.isFailure }
+                            .thenByDescending { offers[runCatching { PlatformId.valueOf(it.platformId) }.getOrNull()] ?: 0 },
+                    ),
+                ) { status ->
+                    val platform = runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()
+                    val kept = offers[platform] ?: 0
+                    val wholeCountry = country in shownCountries
+                    MarketRow(
+                        status = status,
+                        kept = kept,
+                        can = capabilities[platform],
+                        picked = kept > 0 && (wholeCountry || platform in shownMarkets),
+                        pickable = kept > 0,
+                        onPick = {
+                            if (platform != null) {
+                                when {
+                                    wholeCountry -> {
+                                        onShowCountries(shownCountries - country)
+                                        onShowMarkets(shownMarkets + platformsHere - platform)
+                                    }
+                                    platform in shownMarkets -> onShowMarkets(shownMarkets - platform)
+                                    else -> onShowMarkets(shownMarkets + platform)
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A line that is only a tick and a label: the all-markets row and the country headers. */
+@Composable
+private fun PickRow(
+    label: String,
+    trailing: String,
+    state: ToggleableState,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = { if (enabled) onClick() },
+        color = if (state != ToggleableState.Off) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp, end = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TriStateCheckbox(state = state, enabled = enabled, onClick = onClick)
+            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                trailing,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -104,6 +220,7 @@ private fun PlatformStatus.saidWhat(kept: Int): String = when (status) {
     PlatformSearchStatus.IP_BLOCKED -> "refused this machine — 403"
     PlatformSearchStatus.BLOCKED -> "rate limited, and is cooling down"
     PlatformSearchStatus.ERROR -> shortError(error) ?: "failed for a reason it did not give"
+    // (the no-answer case arrives as an ERROR carrying its own sentence)
     PlatformSearchStatus.DONE -> when {
         rawCount == 0 -> "had nothing for this search"
         kept == rawCount -> "$rawCount, all of them kept"
@@ -134,7 +251,9 @@ private fun MarketRow(
     status: PlatformStatus,
     kept: Int,
     can: MarketCapability?,
-    onShowOnly: () -> Unit,
+    picked: Boolean,
+    pickable: Boolean,
+    onPick: () -> Unit,
 ) {
     val accent = status.tint()
     Surface(
@@ -144,11 +263,12 @@ private fun MarketRow(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().clickable(enabled = kept > 0, onClick = onShowOnly)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().clickable(enabled = pickable, onClick = onPick)
+                .padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 10.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = picked, enabled = pickable, onCheckedChange = { onPick() })
                 Text(
                     status.platformName,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -216,7 +336,9 @@ private fun MarketRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (c.nativeCriteria.isNotEmpty()) {
+                // What a market narrows by describes a search it ran. Beside "no answer at all"
+                // it reads as a report from a market that never spoke.
+                if (c.nativeCriteria.isNotEmpty() && status.status == PlatformSearchStatus.DONE) {
                     Text(
                         "narrowed by the market itself: ${c.nativeCriteria.sorted().joinToString(", ") { it.lowercase() }}",
                         style = MaterialTheme.typography.bodySmall,

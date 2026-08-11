@@ -6,12 +6,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -47,11 +47,11 @@ fun FiltersSheet(
     sort: SortMode,
     onSort: (SortMode) -> Unit,
     markets: List<MarketChoice>,
-    // Empty means every market that answered, which is what "no filter" is.
+    // Empty means every market that answered, which is what "no filter" is. The picking itself is
+    // on the markets screen; this only says how things stand and leads there.
     shownMarkets: Set<PlatformId>,
-    onShowMarkets: (Set<PlatformId>) -> Unit,
     shownCountries: Set<String>,
-    onShowCountries: (Set<String>) -> Unit,
+    onOpenMarkets: (() -> Unit)? = null,
     blockedTerms: List<String>,
     onUnblock: (String) -> Unit,
     onBlock: (String) -> Unit,
@@ -133,100 +133,30 @@ fun FiltersSheet(
             }
 
             if (markets.isNotEmpty()) {
-                FilterSection("Markets and countries") {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        val narrowed = shownMarkets.isNotEmpty() || shownCountries.isNotEmpty()
+                FilterSection("Markets") {
+                    // The markets live on their own screen, where each one also says what it
+                    // answered. Two lists of the same markets, one saying what happened and one
+                    // where you chose, meant the choosing screen quietly showed fewer of them.
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Tick as many as you want. A country takes every market in it. " +
-                                "The list stays whole whatever is ticked.",
+                            when {
+                                shownCountries.isNotEmpty() && shownMarkets.isNotEmpty() ->
+                                    "Narrowed to ${shownMarkets.size} markets and ${shownCountries.size} countries."
+                                shownMarkets.isNotEmpty() ->
+                                    if (shownMarkets.size == 1) "Narrowed to one market."
+                                    else "Narrowed to ${shownMarkets.size} markets."
+                                shownCountries.isNotEmpty() ->
+                                    if (shownCountries.size == 1) "Narrowed to one country."
+                                    else "Narrowed to ${shownCountries.size} countries."
+                                else -> "Every market that was asked is being shown."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp),
                         )
-                        MarketRow(
-                            label = "Every market",
-                            count = markets.sumOf { it.count },
-                            selected = !narrowed,
-                            onClick = {
-                                onShowMarkets(emptySet())
-                                onShowCountries(emptySet())
-                            },
-                        )
-                        // Grouped by the country the listings are in, because "which markets" and
-                        // "which countries" are one question asked at two grains: tapping the
-                        // country takes all of it, tapping a market takes that one.
-                        //
-                        // Nearest first where the search knows where the searcher is: a list that
-                        // starts at Austria because A comes first is a list ordered by nothing
-                        // anyone cares about. Alphabetical is the fallback, not the rule.
-                        val byCountry = markets.groupBy { it.country ?: "Home" }
-                        val ordered = byCountry.entries.sortedWith(
-                            compareBy<Map.Entry<String, List<MarketChoice>>> { entry ->
-                                entry.value.mapNotNull { it.nearestKm }.minOrNull() ?: Double.MAX_VALUE
-                            }.thenBy { it.key },
-                        )
-                        ordered.forEach { (country, unsorted) ->
-                            val group = unsorted.sortedWith(
-                                compareBy<MarketChoice> { it.nearestKm ?: Double.MAX_VALUE }
-                                    .thenByDescending { it.count },
-                            )
-                            val withOffers = group.filter { it.emptyBecause == null }
-                            val pickedHere = withOffers.count { it.platform in shownMarkets }
-                            CountryRow(
-                                country = country,
-                                count = group.sumOf { it.count },
-                                markets = group.size,
-                                nearestKm = group.mapNotNull { it.nearestKm }.minOrNull(),
-                                state = when {
-                                    country in shownCountries ||
-                                        (withOffers.isNotEmpty() && pickedHere == withOffers.size) -> ToggleableState.On
-                                    pickedHere > 0 -> ToggleableState.Indeterminate
-                                    else -> ToggleableState.Off
-                                },
-                                // A country every one of whose markets came back empty cannot narrow
-                                // anything, so its box is dead while its rows still say what happened.
-                                enabled = withOffers.isNotEmpty(),
-                                onClick = {
-                                    // Ticking a country takes all of it and unticking gives all of
-                                    // it back, so the markets under it follow the box above them.
-                                    val taking = country !in shownCountries && pickedHere < withOffers.size
-                                    onShowCountries(
-                                        if (taking) shownCountries + country else shownCountries - country,
-                                    )
-                                    onShowMarkets(
-                                        if (taking) shownMarkets else shownMarkets - group.map { it.platform }.toSet(),
-                                    )
-                                },
-                            )
-                            group.forEach { market ->
-                                // A market inside a ticked country is being shown, so it is ticked.
-                                // Unticking it drops the country and keeps its siblings, which is
-                                // the only reading of "not this one" that leaves the rest alone.
-                                val wholeCountry = country in shownCountries
-                                MarketRow(
-                                    label = market.name,
-                                    count = market.count,
-                                    emptyBecause = market.emptyBecause,
-                                    // A market with nothing in it is never part of what is shown,
-                                    // so a ticked country must not tick it along with its siblings.
-                                    selected = market.emptyBecause == null &&
-                                        (wholeCountry || market.platform in shownMarkets),
-                                    onClick = {
-                                        when {
-                                            wholeCountry -> {
-                                                onShowCountries(shownCountries - country)
-                                                onShowMarkets(
-                                                    shownMarkets + group.map { it.platform } - market.platform,
-                                                )
-                                            }
-                                            market.platform in shownMarkets ->
-                                                onShowMarkets(shownMarkets - market.platform)
-                                            else -> onShowMarkets(shownMarkets + market.platform)
-                                        }
-                                    },
-                                    indented = true,
-                                )
-                            }
+                        OutlinedButton(onClick = { onOpenMarkets?.invoke() }) {
+                            Icon(Icons.Outlined.Storefront, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Markets, and what each one said")
                         }
                     }
                 }
@@ -324,91 +254,6 @@ private fun FilterSection(title: String, content: @Composable () -> Unit) {
 }
 
 /** A country, holding every market whose listings are in it. */
-@Composable
-private fun CountryRow(
-    country: String,
-    count: Int,
-    markets: Int,
-    nearestKm: Double? = null,
-    state: ToggleableState,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = { if (enabled) onClick() },
-        color = if (state != ToggleableState.Off) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 2.dp, end = 10.dp, top = 0.dp, bottom = 0.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Half-ticked when some of the country's markets are picked and the country itself
-            // is not, so a country row never claims more than what is actually being shown.
-            TriStateCheckbox(state = state, enabled = enabled, onClick = onClick)
-            Text(
-                country,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                buildString {
-                    append(if (markets == 1) "1 market" else "$markets markets")
-                    append(" · $count")
-                    // How far away the nearest thing in this country is, which is why
-                    // the country sits where it does in the list.
-                    nearestKm?.let { append(" · from ${it.roundToInt()} km") }
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MarketRow(
-    label: String,
-    count: Int,
-    selected: Boolean,
-    onClick: () -> Unit,
-    indented: Boolean = false,
-    // Why this market shows no offers, when it shows none. Such a row is here to be read, not
-    // ticked: narrowing to a market with nothing in it would empty the screen.
-    emptyBecause: String? = null,
-) {
-    val pickable = emptyBecause == null
-    Surface(
-        onClick = { if (pickable) onClick() },
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 2.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // A box, because any number of these can be ticked at once. Colour alone said one
-            // was chosen and never said a second could be.
-            Checkbox(checked = selected, enabled = pickable, onCheckedChange = { onClick() })
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (pickable) MaterialTheme.colorScheme.onSurface
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                emptyBecause ?: "$count",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 /**
  * The price band, on a log scale: prices cluster low and trail high, so a linear track spends most
  * of its length on the few dear listings and leaves the cluster a sliver.

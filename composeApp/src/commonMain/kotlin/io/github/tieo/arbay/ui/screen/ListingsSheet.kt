@@ -762,14 +762,10 @@ fun ListingsSheet(
                 },
                 markets = marketChoices,
                 shownMarkets = shownMarkets,
-                onShowMarkets = { chosen ->
-                    listingViewModel.showMarkets(chosen)
-                    persistFilters { it.copy(showOnlyMarkets = chosen) }
-                },
                 shownCountries = shownCountries,
-                onShowCountries = { chosen ->
-                    listingViewModel.showCountries(chosen)
-                    persistFilters { it.copy(showOnlyCountries = chosen) }
+                onOpenMarkets = {
+                    showFilters = false
+                    showMarkets = true
                 },
                 blockedTerms = activeBlockedTerms,
                 onUnblock = unblockWord,
@@ -823,11 +819,19 @@ fun ListingsSheet(
         if (showMarkets) {
             MarketsSheet(
                 statuses = platformStatuses,
-                offers = platformOffers.associate { it.platform to it.count },
+                // What each market has to give, counted before the market picks so a market does
+                // not read as empty because another one is picked.
+                offers = marketChoices.associate { it.platform to it.count },
                 capabilities = marketCapabilities,
-                onSelectMarket = { market ->
-                    listingViewModel.showOnly(market)
-                    persistFilters { it.copy(showOnlyMarkets = setOf(market), showOnlyCountries = emptySet()) }
+                shownMarkets = shownMarkets,
+                onShowMarkets = { chosen ->
+                    listingViewModel.showMarkets(chosen)
+                    persistFilters { it.copy(showOnlyMarkets = chosen) }
+                },
+                shownCountries = shownCountries,
+                onShowCountries = { chosen ->
+                    listingViewModel.showCountries(chosen)
+                    persistFilters { it.copy(showOnlyCountries = chosen) }
                 },
                 onDismiss = { showMarkets = false },
             )

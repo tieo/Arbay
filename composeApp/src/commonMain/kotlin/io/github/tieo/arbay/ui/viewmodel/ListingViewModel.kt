@@ -334,6 +334,21 @@ class ListingViewModel(
                 )
             }
         }
+        // A market the run never mentioned still belongs on the record: it was asked and said
+        // nothing at all, which is a different thing from having nothing to give.
+        val heardFrom = _platformStatuses.value.map { it.platformId }.toSet()
+        val silent = asked.orEmpty().filter { it.name !in heardFrom }
+        if (silent.isNotEmpty()) {
+            _platformStatuses.value = _platformStatuses.value + silent.map { platform ->
+                PlatformStatus(
+                    platformId = platform.name,
+                    platformName = platform.displayName,
+                    status = PlatformSearchStatus.ERROR,
+                    error = "no answer at all: the search ended without it reporting",
+                )
+            }
+        }
+
         // The denominator is what was asked, and a run that never announced itself still asked
         // whatever this search covers.
         val counted = _platformStatuses.value.size

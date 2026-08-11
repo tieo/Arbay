@@ -964,23 +964,37 @@
     },
     {
       "tag": "REQUIREMENT",
-      "uid": "REQ-FILTERS-PICK-SEVERAL",
-      "title": "Any number of markets, and the list stays whole",
-      "statement": "Markets and countries carry a tick box each, a country half-ticked when only some of its markets are, and the list is built from everything fetched rather than from what is currently shown, so picking one market leaves the others there to pick. The picks add up: a country and a market elsewhere show both, where requiring both at once showed nothing.",
+      "uid": "REQ-MARKETS-PICK-SEVERAL",
+      "title": "Any number of markets, picked where they are explained",
+      "statement": "Markets and countries carry a tick box each on the markets screen, beside what that market answered, a country half-ticked when only some of its markets are. The list is built from everything fetched rather than from what is currently shown, so picking one market leaves the others there to pick. The picks add up: a country and a market elsewhere show both, where requiring both at once showed nothing.",
       "status": "Built",
       "tier": "2 one tap away",
       "relations": [
         {
           "role": "Lives in",
-          "to": "VIEW-FILTERS"
+          "to": "VIEW-MARKET-DETAIL"
         }
       ]
     },
     {
       "tag": "REQUIREMENT",
-      "uid": "REQ-FILTERS-EVERY-MARKET-ASKED",
+      "uid": "REQ-MARKETS-EVERY-ONE-ASKED",
       "title": "Every market that was asked is on the list",
-      "statement": "The market list is what the search asked, not what happened to answer with something. A market with no offers says why: nothing there, blocked, captcha, timed out, failed, still asking, or hidden by the price and condition filters. Its box is dead, because narrowing to a market with nothing in it would empty the screen. Without this a reader cannot tell mobile.de having nothing from mobile.de never having been asked, and those mean opposite things.",
+      "statement": "The list is what the search asked, not what happened to answer with something. A market with no offers says why: nothing there, blocked, captcha, timed out, failed, still asking, no answer at all, or hidden by the price and condition filters. Its box is dead and stays unticked inside a ticked country, because narrowing onto an empty market would empty the screen. Without this a reader cannot tell mobile.de having nothing from mobile.de never having been asked, and those mean opposite things.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-FILTERS-MARKETS-LIVE-ELSEWHERE",
+      "title": "One list of markets, not two",
+      "statement": "Filters says how the markets stand and leads to the markets screen; the choosing happens there, next to what each market answered. Two lists of the same markets, one saying what happened and one where you chose, is how the choosing list came to show fewer markets than the explaining one.",
       "status": "Built",
       "tier": "2 one tap away",
       "relations": [
@@ -1594,60 +1608,30 @@
     },
     {
       "tag": "STATE",
-      "uid": "STATE-FILTERS-SEVERAL-PICKED",
-      "title": "Several markets picked",
-      "statement": "Two markets and a whole country are picked at once, and every market that was not picked is still on the list to pick next.",
+      "uid": "STATE-MARKETS-SEVERAL-PICKED",
+      "title": "Several picked",
+      "statement": "Two markets and a whole country are ticked at once. Every other market is still on the list, including the ones that were blocked or had nothing, which say so and cannot be ticked.",
       "relations": [
         {
-          "to": "VIEW-FILTERS",
+          "to": "VIEW-MARKET-DETAIL",
           "role": "State of"
         }
       ],
       "renders": [
         {
-          "file": "filters-several-markets-picked-phone-light.png",
+          "file": "markets-several-picked-phone-light.png",
           "label": "phone light"
         },
         {
-          "file": "filters-several-markets-picked-phone-dark.png",
+          "file": "markets-several-picked-phone-dark.png",
           "label": "phone dark"
         },
         {
-          "file": "filters-several-markets-picked-wide-light.png",
+          "file": "markets-several-picked-wide-light.png",
           "label": "wide light"
         },
         {
-          "file": "filters-several-markets-picked-wide-dark.png",
-          "label": "wide dark"
-        }
-      ]
-    },
-    {
-      "tag": "STATE",
-      "uid": "STATE-FILTERS-MARKETS-EMPTY",
-      "title": "Markets that found nothing",
-      "statement": "Markets that were asked and brought nothing back are on the list, saying whether they had nothing or never answered, with a box that cannot be ticked.",
-      "relations": [
-        {
-          "to": "VIEW-FILTERS",
-          "role": "State of"
-        }
-      ],
-      "renders": [
-        {
-          "file": "filters-markets-that-found-nothing-phone-light.png",
-          "label": "phone light"
-        },
-        {
-          "file": "filters-markets-that-found-nothing-phone-dark.png",
-          "label": "phone dark"
-        },
-        {
-          "file": "filters-markets-that-found-nothing-wide-light.png",
-          "label": "wide light"
-        },
-        {
-          "file": "filters-markets-that-found-nothing-wide-dark.png",
+          "file": "markets-several-picked-wide-dark.png",
           "label": "wide dark"
         }
       ]
@@ -2110,7 +2094,7 @@
           "Markets, grouped by country, with a country toggling all of its markets",
           "Blocked words, added and removed here",
           "For a vehicle search, the criteria that today re-run the whole search",
-          "Every market and country with a tick box, as many at once as you like"
+          "How the markets stand, and the way to the screen that picks them"
         ],
         "gone": [
           "Every filter that today sits on the results canvas"
@@ -2153,7 +2137,9 @@
           "One row per market: the term it was sent, how many it returned, how many survived filtering",
           "Why a market is absent, in its own words: blocked, rate limited, timed out, captcha, nothing found",
           "Which markets are cooling down, and until when",
-          "A way into a captcha the crawler is holding open"
+          "A way into a captcha the crawler is holding open",
+          "What each market answered, in its own words",
+          "A tick box per market and per country, any number at once"
         ],
         "gone": [
           "The chip row on the results canvas that stood in for this"

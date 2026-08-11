@@ -93,21 +93,6 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Filters ───────────────────────────────────────────────────────────────
     add(scene("filters", "as-it-is") { Filters() })
-    // Several markets picked at once, which is what the picker is for: the list has to still hold
-    // every other market, or a second one could never be picked.
-    add(scene("filters", "several-markets-picked") {
-        Filters(
-            shownMarkets = setOf(
-                io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
-                io.github.tieo.arbay.model.PlatformId.RICARDO,
-            ),
-            shownCountries = setOf("AT"),
-        )
-    })
-    // Markets that were asked and found nothing are on the list too, saying what happened.
-    add(scene("filters", "markets-that-found-nothing", tall = true) {
-        Filters(markets = PreviewData.marketChoicesWithEmpties)
-    })
     add(scene("filters", "nothing-to-narrow") {
         Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f)
     })
@@ -118,6 +103,18 @@ private val SCENES: List<Scene> = buildList {
     add(scene("markets", "empty") { Markets(PreviewData.nobodyHadAnything) })
     add(scene("markets", "failed") { Markets(PreviewData.everyoneFailed) })
     add(scene("markets", "cooling-down") { Markets(PreviewData.everyoneFailed.take(3)) })
+    // Several markets picked at once, which is what the picking is for: every other market has to
+    // stay on the list, or a second one could never be picked.
+    add(scene("markets", "several-picked", tall = true) {
+        Markets(
+            PreviewData.marketAnswers,
+            shownMarkets = setOf(
+                io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
+                io.github.tieo.arbay.model.PlatformId.RICARDO,
+            ),
+            shownCountries = setOf("AT"),
+        )
+    })
 
     // ── Price ─────────────────────────────────────────────────────────────────
     add(scene("price", "as-it-is", tall = true) { Price() })
@@ -213,8 +210,7 @@ private fun Filters(
         newCount = if (markets.isEmpty()) 0 else 3, usedCount = if (markets.isEmpty()) 0 else 9,
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = markets,
-        shownMarkets = shownMarkets, onShowMarkets = {},
-        shownCountries = shownCountries, onShowCountries = {},
+        shownMarkets = shownMarkets, shownCountries = shownCountries, onOpenMarkets = {},
         blockedTerms = blocked, onUnblock = {}, onBlock = {},
         activeCount = active, onClearAll = {},
         hasCarCriteria = false, onEditCarCriteria = null,
@@ -223,12 +219,18 @@ private fun Filters(
 }()
 
 @Composable
-private fun Markets(statuses: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus>) = inline {
+private fun Markets(
+    statuses: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus>,
+    shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
+    shownCountries: Set<String> = emptySet(),
+) = inline {
     io.github.tieo.arbay.ui.screen.MarketsSheet(
         statuses = statuses,
         offers = PreviewData.active.groupBy { it.platformId }.mapValues { it.value.size },
         capabilities = PreviewData.marketAbilities,
-        onSelectMarket = {}, onDismiss = {},
+        shownMarkets = shownMarkets, onShowMarkets = {},
+        shownCountries = shownCountries, onShowCountries = {},
+        onDismiss = {},
     )
 }()
 

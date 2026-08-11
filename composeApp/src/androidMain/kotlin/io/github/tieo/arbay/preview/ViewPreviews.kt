@@ -61,8 +61,7 @@ fun FiltersPreview() = inPlace {
         condition = "USED", onCondition = {}, newCount = 3, usedCount = 9,
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = PreviewData.marketChoices,
-        shownMarkets = emptySet(), onShowMarkets = {},
-        shownCountries = emptySet(), onShowCountries = {},
+        shownMarkets = emptySet(), shownCountries = emptySet(), onOpenMarkets = {},
         blockedTerms = listOf("defekt", "bastler"), onUnblock = {}, onBlock = {},
         activeCount = 3, onClearAll = {},
         hasCarCriteria = false, onEditCarCriteria = null,
@@ -77,7 +76,7 @@ fun MarketsPreview() = inPlace {
         statuses = PreviewData.marketAnswers,
         offers = PreviewData.active.groupBy { it.platformId }.mapValues { it.value.size },
         capabilities = PreviewData.marketAbilities,
-        onSelectMarket = {}, onDismiss = {},
+        onDismiss = {},
     )
 }
 
