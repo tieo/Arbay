@@ -497,7 +497,9 @@ class ListingViewModel(
                 // stored is right, but silently is not: without this the markets look like they
                 // were asked and said nothing, when in truth none of them was asked at all.
                 refusedBy = e.message?.takeIf { it.isNotBlank() }
-                _notSearched.value = when {
+                // Only a run that never reached a single market did not run. One that answered and
+                // then broke its connection has results to show and no business claiming otherwise.
+                _notSearched.value = if (_platformStatuses.value.isNotEmpty()) null else when {
                     refusedBy?.contains("busy", ignoreCase = true) == true ->
                         "The server was busy, so this search did not run."
                     refusedBy?.contains("Rate limit", ignoreCase = true) == true ||
@@ -524,7 +526,7 @@ class ListingViewModel(
                 // Mark any still-searching platforms as timed out
                 _platformStatuses.value = _platformStatuses.value.map {
                     if (it.status == PlatformSearchStatus.SEARCHING)
-                        it.copy(status = PlatformSearchStatus.ERROR, error = "Timeout")
+                        it.copy(status = PlatformSearchStatus.TIMEOUT, error = null)
                     else it
                 }
                 accountForListingsWithoutAStatus(platforms)

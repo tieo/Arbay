@@ -1031,6 +1031,34 @@
           "to": "VIEW-RESULTS"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-SAYS-WHAT-WE-HID",
+      "title": "What our own filters hide is counted",
+      "statement": "Results say how many listings the app itself is hiding and on what grounds: the price and condition set here, the blocked words, and the vehicle criteria the crawler applied after fetching. These are not the markets' filters, and without the number the app's own hand in a short list is invisible. Tapping the line opens the filters.",
+      "status": "Built",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-UNCHECKED-CRITERIA",
+      "title": "A listing says which criteria it was never checked against",
+      "statement": "A listing kept because the market published no year, power or gearbox says so on the card. Losing every listing that states nothing would lose most of a market, so they are kept; kept is not the same as matching, and only this line tells one from the other.",
+      "status": "Built",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ]
     }
   ],
   "states": [

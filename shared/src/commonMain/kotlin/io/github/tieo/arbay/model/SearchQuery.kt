@@ -61,6 +61,31 @@ data class CarFilters(
     // all (precise but loses coverage); off = keep unknowns.
     val strictUnknown: Boolean = false,
 ) {
+    /**
+     * The criteria this listing was never actually checked against: active here, unknown there.
+     *
+     * A listing whose year, power and gearbox the market never published is kept, because losing
+     * every listing that fails to state a spec loses most of the market. Kept is not the same as
+     * matching, and only this says which is which.
+     */
+    fun uncheckedFor(v: VehicleInfo?): List<String> = buildList {
+        if ((firstRegFromYear != null || firstRegToYear != null) && v?.firstRegYear == null) add("year")
+        if ((minMileageKm != null || maxMileageKm != null) && v?.mileageKm == null) add("km")
+        if ((minPowerKw != null || maxPowerKw != null) && v?.powerKw == null) add("power")
+        if (transmission != null && v?.gearbox == null) add("gearbox")
+        if (fuels.isNotEmpty() && v?.fuel == null) add("fuel")
+        if (bodyTypes.isNotEmpty() && v?.bodyType == null) add("body")
+        if (conditions.isNotEmpty() && v?.condition == null) add("condition")
+        if (drivetrain != null && v?.drivetrain == null) add("drive")
+        if (colors.isNotEmpty() && v?.color == null) add("colour")
+        if (minDoors != null && v?.doors == null) add("doors")
+        if (minSeats != null && v?.seats == null) add("seats")
+        if (minEmissionEuro != null && v?.emissionClassEuro == null) add("emission")
+        if (sellerType != null) { /* the seller is on the listing itself, not the vehicle */ }
+        if (vanLengths.isNotEmpty() && v?.vanLength == null) add("length")
+        if (vanHeights.isNotEmpty() && v?.vanHeight == null) add("height")
+    }
+
     val isEmpty: Boolean get() =
         firstRegFromYear == null && firstRegToYear == null &&
             minMileageKm == null && maxMileageKm == null &&

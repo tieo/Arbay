@@ -161,6 +161,10 @@ internal fun ListingCard(
     onBan: (() -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
+    // The vehicle criteria in force, so a listing can say which of them it was never checked
+    // against: a market that publishes no power and no gearbox cannot be filtered by either, and
+    // the listing is here on sufferance rather than on merit.
+    carFilters: CarFilters? = null,
     modifier: Modifier = Modifier,
 ) {
     var showBlockDialog by remember { mutableStateOf(false) }
@@ -232,7 +236,7 @@ internal fun ListingCard(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    listing.title,
+                    listing.title.tidyTitle(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
@@ -248,6 +252,23 @@ internal fun ListingCard(
                 }
 
                 listing.vehicle?.let { VehicleSpecsRow(it) }
+
+                // Kept, not matched: this market published none of these, so none of them was
+                // checked. Without the line a listing that states nothing looks like one that
+                // satisfies everything.
+                val unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty()
+                if (unchecked.isNotEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "not checked: " + unchecked.joinToString(", "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        // The whole list or none of it: a criterion cut off mid-word is one the
+                        // reader cannot tell was unchecked.
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
 
                 // Semantic fit to the searcher's ideal-car description, when they gave one.
                 listing.matchScore?.let { score ->

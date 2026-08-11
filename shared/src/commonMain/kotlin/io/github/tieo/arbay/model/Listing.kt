@@ -44,3 +44,15 @@ data class Listing(
         price.currency,
     )
 }
+
+/**
+ * A title as it should be read, not as the market's HTML happened to serialise.
+ *
+ * eBay puts an inline image in some titles, which arrives as U+FFFC and draws on the phone as a
+ * box reading OBJ. Control characters and runs of whitespace come from the same source.
+ */
+fun String.tidyTitle(): String =
+    filter { it == '\n' || it.code >= 32 }
+        .replace('\uFFFC', ' ')
+        .replace(Regex("\\s+"), " ")
+        .trim()

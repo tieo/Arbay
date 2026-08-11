@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.repo
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.model.PlatformId
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -77,15 +78,23 @@ class ListingRepo {
     }
 
     fun upsert(listing: Listing): Listing {
-        listings[listing.id] = listing
-        if (listing.sold) schedulePersist()
-        return listing
+        val clean = listing.tidied()
+        listings[clean.id] = clean
+        if (clean.sold) schedulePersist()
+        return clean
     }
 
     fun upsertBatch(batch: List<Listing>): Int {
-        batch.forEach { listings[it.id] = it }
+        batch.forEach { val clean = it.tidied(); listings[clean.id] = clean }
         if (batch.any { it.sold }) schedulePersist()
         return batch.size
+    }
+
+    /** A market's HTML leaks into its titles: eBay's inline image arrives as U+FFFC and draws as a
+     *  box reading OBJ. Cleaned once here rather than at every place a title is read. */
+    private fun Listing.tidied(): Listing {
+        val clean = title.tidyTitle()
+        return if (clean == title) this else copy(title = clean)
     }
 
     fun search(query: String, limit: Int = 50): List<Listing> {

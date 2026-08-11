@@ -560,6 +560,37 @@ fun ListingsSheet(
                     }
                 }
 
+                // Our filters are not the markets' filters, and the difference is worth a number:
+                // what a market sent and we dropped is ours to answer for, and it is invisible
+                // otherwise.
+                item("hidden-count") {
+                    val hiddenHere = marketBasis.count { !it.sold } - displayedActiveListings.size
+                    val droppedBeforeArrival = platformStatuses.sumOf {
+                        (it.rawCount - it.resultCount).coerceAtLeast(0)
+                    }
+                    val blockedByWords = fetchedListings.size - marketBasis.size
+                    if (hiddenHere > 0 || droppedBeforeArrival > 0 || blockedByWords > 0) {
+                        val parts = buildList {
+                            if (hiddenHere > 0) add("$hiddenHere by the price and condition you set")
+                            if (blockedByWords > 0) add("$blockedByWords by your blocked words")
+                            if (droppedBeforeArrival > 0) add("$droppedBeforeArrival as not matching your vehicle criteria")
+                        }
+                        Surface(
+                            onClick = { showFilters = true },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                "Hidden by filters of ours, not the markets': " + parts.joinToString(", ") + ".",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+
                 notSearched?.let { why ->
                     item("not-searched") {
                         Surface(
@@ -737,6 +768,7 @@ fun ListingsSheet(
                         }
                         ListingCard(
                             listing = listing,
+                            carFilters = carFilters,
                             onBan = { listingViewModel.ban(listing) },
                             onBlockWord = blockWord,
                             searchQuery = searchQuery,
