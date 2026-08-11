@@ -117,9 +117,17 @@ internal fun flagEmoji(cc: String): String {
  * and the unchecked count sits at the end as a quiet pill that opens the detail.
  */
 @Composable
-private fun MetaLine(condition: Condition?, vehicle: VehicleInfo?, unchecked: List<String>) {
+private fun MetaLine(
+    source: String,
+    sold: Boolean,
+    condition: Condition?,
+    vehicle: VehicleInfo?,
+    unchecked: List<String>,
+) {
     val v = vehicle
     val specs = buildList {
+        add(source to true)
+        if (sold) add("sold" to true)
         condition?.let {
             add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " ") to true)
         }
@@ -148,8 +156,6 @@ private fun MetaLine(condition: Condition?, vehicle: VehicleInfo?, unchecked: Li
             }
         }
     }
-    if (specs.isEmpty() && unchecked.isEmpty()) return
-
     var explaining by remember { mutableStateOf(false) }
     Spacer(Modifier.height(2.dp))
     // One line that never wraps: the specs shorten, the count stays. Left to wrap, a card ran to
@@ -279,41 +285,50 @@ internal fun ListingCard(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                // One neutral source tag (platform + optional origin flag). Condition and location
-                // are quiet metadata below the title, not more coloured pills.
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val origin = originCountry(listing)
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    ) {
+                // The title leads and the price sits beside it. A source pill on a line of its own
+                // left a band of empty card across every row and put three differently shaped tags
+                // at three different heights.
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        listing.title.tidyTitle(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
-                            else listing.platformId.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            listing.effectivePrice.format(),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (listing.sold) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
                         )
-                    }
-                    if (listing.sold) {
-                        Text(
-                            "Sold",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                        val shippingCost = listing.shipping?.cost
+                        when {
+                            shippingCost != null -> Text(
+                                "+ ${shippingCost.format()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            listing.shipping?.free == true -> Text(
+                                "free shipping",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    listing.title.tidyTitle(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                // Condition, specs and what went unchecked read as one line of metadata. Stacked as
-                // three, each a few words long, they left more gap on the card than content.
+
+                // Source, condition and specs on one line, in the same quiet type: the source is
+                // metadata like the rest of it, not a badge.
+                val origin = originCountry(listing)
                 MetaLine(
+                    source = if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
+                    else listing.platformId.displayName,
+                    sold = listing.sold,
                     condition = listing.condition?.takeIf { !listing.sold },
                     vehicle = listing.vehicle,
                     unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty(),
@@ -342,38 +357,15 @@ internal fun ListingCard(
                 }
             }
 
-            Spacer(Modifier.width(4.dp))
-
-            Column(horizontalAlignment = Alignment.End) {
+            // The old price, when the market shows one, is the only thing left for this column:
+            // the price itself now sits beside the title.
+            listing.oldPrice?.let {
+                Spacer(Modifier.width(4.dp))
                 Text(
-                    listing.effectivePrice.format(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (listing.sold) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface,
+                    it.format(),
+                    style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Shipping breakdown when a cost is known, otherwise a free-shipping note.
-                val shippingCost = listing.shipping?.cost
-                val isFreeShipping = listing.shipping?.free == true
-                if (shippingCost != null) {
-                    Text(
-                        "${listing.price.format()} + ${shippingCost.format()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else if (isFreeShipping) {
-                    Text(
-                        "Free shipping",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-                listing.oldPrice?.let {
-                    Text(
-                        it.format(),
-                        style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
 
             if (onBan != null || onBlockWord != null) {

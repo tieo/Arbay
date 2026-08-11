@@ -27,8 +27,15 @@ class EbayDeCrawler(
         // browser tier. It is also the one page eBay defends hardest, and a defended page costs a
         // browser attempt per engine: bounded here so a market that will not answer costs seconds
         // rather than the whole search's budget.
-        kotlinx.coroutines.withTimeoutOrNull(25_000L) {
-            EbayDetailParser.parse(fetchWithFallback(client, listing.url, "eBay", browserOnly = true))
+        kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+            // Primed with a search page first: eBay serves an item page to a browser that arrives
+            // from its own search and a 403 to one that arrives cold.
+            val html = fetchWithFallback(
+                client, listing.url, "eBay",
+                primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
+                browserOnly = true,
+            )
+            EbayDetailParser.parse(html)
         }
     } catch (e: Exception) {
         null

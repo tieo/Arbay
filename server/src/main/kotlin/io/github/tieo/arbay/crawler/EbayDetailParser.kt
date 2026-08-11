@@ -21,15 +21,28 @@ object EbayDetailParser {
         val doc = Jsoup.parse(html)
         val attrs = HashMap<String, String>()
 
-        // The modern layout pairs a label div with a value div; the older one is a plain table.
-        for (row in doc.select("div.ux-layout-section__row, div.ux-layout-section-evo__row")) {
-            val cols = row.select("div.ux-labels-values__labels, div.ux-labels-values__values")
-            if (cols.size >= 2) {
-                val label = cols[0].text().trim().trimEnd(':')
-                val value = cols[1].text().trim()
-                if (label.isNotBlank() && value.isNotBlank()) attrs[label.lowercase()] = value
+        // eBay's item specifics are spans inside unclassed divs, in label, value order. Matching
+        // on the wrapper classes broke the moment the layout changed; reading the section's spans
+        // in document order and pairing them survives it, and there is nothing else in that
+        // section but the pairs.
+        val sections = doc.select("div.ux-layout-section-evo, div.ux-layout-section, section")
+            .filter { sec ->
+                val head = sec.text().take(120)
+                head.contains("Info zum Artikel", true) || head.contains("Artikelmerkmale", true) ||
+                    head.contains("Item specifics", true)
+            }
+        for (section in sections) {
+            val spans = section.select("span.ux-textspans").map { it.text().trim() }.filter { it.isNotBlank() }
+            var i = 0
+            while (i + 1 < spans.size) {
+                val label = spans[i].trimEnd(':')
+                val value = spans[i + 1]
+                // A label is short and a value follows it; anything longer is prose, not a pair.
+                if (label.length in 2..40 && value.length in 1..60) attrs.putIfAbsent(label.lowercase(), value)
+                i += 2
             }
         }
+        // Older layouts still ship a plain table.
         for (row in doc.select("table tr")) {
             val cells = row.select("th, td")
             if (cells.size == 2) {
@@ -45,8 +58,11 @@ object EbayDetailParser {
 
         val year = number("jahr der erstzulassung")?.takeIf { it in 1950..2035 }
             ?: number("erstzulassung")?.takeIf { it in 1950..2035 }
-        val km = number("kilometer")?.takeIf { it in 1..2_000_000 }
-            ?: number("kilometerstand")?.takeIf { it in 1..2_000_000 }
+        // Pairing spans by position can put the wrong value against a label once in a while, and a
+        // van with 266 km on the clock is that, not a find. A mileage is four digits or carries its
+        // unit; anything smaller is treated as unknown rather than as a nearly new vehicle.
+        val kmRaw = attrs["kilometerstand"] ?: attrs["kilometer"]
+        val km = kmRaw?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1000..2_000_000 }
         // "Leistung 100" on a van is kW, the unit German registration papers use. A three-digit
         // value with "ps" beside it is horsepower and converts.
         val powerRaw = attrs["leistung"]
@@ -58,7 +74,7 @@ object EbayDetailParser {
                 else -> n
             }?.takeIf { it in 20..1000 }
         }
-        val gearbox = attrs["getriebeart"]?.let {
+        val gearbox = (attrs["getriebeart"] ?: attrs["getriebe"])?.let {
             when {
                 it.contains("automat", ignoreCase = true) -> Transmission.AUTOMATIC
                 it.contains("schalt", ignoreCase = true) -> Transmission.MANUAL
@@ -79,7 +95,7 @@ object EbayDetailParser {
                 else -> null
             }
         }
-        val colour = attrs["farbe"]?.takeIf { it.length in 2..30 }
+        val colour = (attrs["farbe"] ?: attrs["außenfarbe"])?.takeIf { it.length in 2..30 }
 
         val info = VehicleInfo(
             firstRegYear = year,
