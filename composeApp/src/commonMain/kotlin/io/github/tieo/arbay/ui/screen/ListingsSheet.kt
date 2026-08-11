@@ -32,6 +32,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -560,32 +563,54 @@ fun ListingsSheet(
                     }
                 }
 
-                // Our filters are not the markets' filters, and the difference is worth a number:
-                // what a market sent and we dropped is ours to answer for, and it is invisible
-                // otherwise.
+                // Our filters are not the markets' filters, and the difference is worth a number.
+                // Three numbers and their grounds, on one line: a paragraph of it pushed the first
+                // offer off the screen, which is the one thing this view exists to show.
                 item("hidden-count") {
                     val hiddenHere = marketBasis.count { !it.sold } - displayedActiveListings.size
                     val droppedBeforeArrival = platformStatuses.sumOf {
                         (it.rawCount - it.resultCount).coerceAtLeast(0)
                     }
                     val blockedByWords = fetchedListings.size - marketBasis.size
-                    if (hiddenHere > 0 || droppedBeforeArrival > 0 || blockedByWords > 0) {
-                        val parts = buildList {
-                            if (hiddenHere > 0) add("$hiddenHere by the price and condition you set")
-                            if (blockedByWords > 0) add("$blockedByWords by your blocked words")
-                            if (droppedBeforeArrival > 0) add("$droppedBeforeArrival as not matching your vehicle criteria")
-                        }
-                        Surface(
-                            onClick = { showFilters = true },
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                    val parts = buildList {
+                        if (hiddenHere > 0) add(hiddenHere to "price")
+                        if (blockedByWords > 0) add(blockedByWords to "words")
+                        if (droppedBeforeArrival > 0) add(droppedBeforeArrival to "criteria")
+                    }
+                    if (parts.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { showFilters = true }
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
+                            Icon(
+                                Icons.Outlined.FilterAlt,
+                                null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             Text(
-                                "Hidden by filters of ours, not the markets': " + parts.joinToString(", ") + ".",
-                                style = MaterialTheme.typography.bodySmall,
+                                buildAnnotatedString {
+                                    append("Hidden by your filters: ")
+                                    parts.forEachIndexed { i, (count, why) ->
+                                        if (i > 0) append(" · ")
+                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("$count") }
+                                        append(" $why")
+                                    }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

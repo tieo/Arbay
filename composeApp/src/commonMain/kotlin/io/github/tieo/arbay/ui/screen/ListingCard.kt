@@ -110,7 +110,7 @@ internal fun flagEmoji(cc: String): String {
 }
 
 @Composable
-private fun VehicleSpecsRow(v: VehicleInfo) {
+private fun VehicleSpecsRow(v: VehicleInfo, unchecked: List<String> = emptyList()) {
     data class Spec(val text: String, val field: VehicleField)
     val specs = buildList {
         v.firstRegYear?.let {
@@ -138,10 +138,14 @@ private fun VehicleSpecsRow(v: VehicleInfo) {
             add(Spec(vanCode, field))
         }
     }
-    if (specs.isEmpty()) return
+    if (specs.isEmpty() && unchecked.isEmpty()) return
+    var explaining by remember { mutableStateOf(false) }
     Spacer(Modifier.height(3.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        specs.take(5).forEach { spec ->
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        specs.take(4).forEach { spec ->
             val verified = v.isVerified(spec.field)
             Text(
                 if (verified) spec.text else "~${spec.text}",
@@ -152,6 +156,39 @@ private fun VehicleSpecsRow(v: VehicleInfo) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // What the market did not publish, as a count rather than a list: the list is the same on
+        // every listing from a market that publishes nothing, and seven words of it per card buried
+        // the listings themselves. The names are one tap away, where they answer a question the
+        // reader has actually asked.
+        if (unchecked.isNotEmpty()) {
+            Surface(
+                onClick = { explaining = true },
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Text(
+                    "${unchecked.size} unchecked",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+            }
+        }
+    }
+    if (explaining) {
+        AlertDialog(
+            onDismissRequest = { explaining = false },
+            title = { Text("Not checked", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    "This market publishes no " + unchecked.joinToString(", ") +
+                        ", so those criteria of yours were never tested against this listing. " +
+                        "It is here because a missing spec is not treated as a mismatch.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = { TextButton(onClick = { explaining = false }) { Text("Close") } },
+        )
     }
 }
 
@@ -251,24 +288,12 @@ internal fun ListingCard(
                     )
                 }
 
-                listing.vehicle?.let { VehicleSpecsRow(it) }
-
-                // Kept, not matched: this market published none of these, so none of them was
-                // checked. Without the line a listing that states nothing looks like one that
-                // satisfies everything.
-                val unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty()
-                if (unchecked.isNotEmpty()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "not checked: " + unchecked.joinToString(", "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        // The whole list or none of it: a criterion cut off mid-word is one the
-                        // reader cannot tell was unchecked.
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                // Kept, not matched: a listing whose specs the market never published was never
+                // tested against the criteria that name them.
+                VehicleSpecsRow(
+                    listing.vehicle ?: VehicleInfo(),
+                    unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty(),
+                )
 
                 // Semantic fit to the searcher's ideal-car description, when they gave one.
                 listing.matchScore?.let { score ->
