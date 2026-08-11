@@ -93,6 +93,17 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Filters ───────────────────────────────────────────────────────────────
     add(scene("filters", "as-it-is") { Filters() })
+    // Several markets picked at once, which is what the picker is for: the list has to still hold
+    // every other market, or a second one could never be picked.
+    add(scene("filters", "several-markets-picked") {
+        Filters(
+            shownMarkets = setOf(
+                io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
+                io.github.tieo.arbay.model.PlatformId.RICARDO,
+            ),
+            shownCountries = setOf("AT"),
+        )
+    })
     add(scene("filters", "nothing-to-narrow") {
         Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f)
     })
@@ -188,6 +199,8 @@ private fun Filters(
     blocked: List<String> = listOf("defekt", "bastler"),
     active: Int = 3,
     priceMax: Float = 1400f,
+    shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
+    shownCountries: Set<String> = emptySet(),
 ) = inline {
     io.github.tieo.arbay.ui.screen.FiltersSheet(
         priceMin = 120f, priceMax = priceMax, priceRange = 200f..900f,
@@ -196,8 +209,8 @@ private fun Filters(
         newCount = if (markets.isEmpty()) 0 else 3, usedCount = if (markets.isEmpty()) 0 else 9,
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = markets,
-        shownMarkets = emptySet(), onShowMarkets = {},
-        shownCountries = emptySet(), onShowCountries = {},
+        shownMarkets = shownMarkets, onShowMarkets = {},
+        shownCountries = shownCountries, onShowCountries = {},
         blockedTerms = blocked, onUnblock = {}, onBlock = {},
         activeCount = active, onClearAll = {},
         hasCarCriteria = false, onEditCarCriteria = null,

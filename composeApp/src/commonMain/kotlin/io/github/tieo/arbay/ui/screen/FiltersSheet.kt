@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -135,6 +136,13 @@ fun FiltersSheet(
                 FilterSection("Markets and countries") {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         val narrowed = shownMarkets.isNotEmpty() || shownCountries.isNotEmpty()
+                        Text(
+                            "Tick as many as you want. A country takes every market in it. " +
+                                "The list stays whole whatever is ticked.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
                         MarketRow(
                             label = "Every market",
                             count = markets.sumOf { it.count },
@@ -162,29 +170,50 @@ fun FiltersSheet(
                                 compareBy<MarketChoice> { it.nearestKm ?: Double.MAX_VALUE }
                                     .thenByDescending { it.count },
                             )
+                            val pickedHere = group.count { it.platform in shownMarkets }
                             CountryRow(
                                 country = country,
                                 count = group.sumOf { it.count },
                                 markets = group.size,
                                 nearestKm = group.mapNotNull { it.nearestKm }.minOrNull(),
-                                selected = country in shownCountries,
+                                state = when {
+                                    country in shownCountries || pickedHere == group.size -> ToggleableState.On
+                                    pickedHere > 0 -> ToggleableState.Indeterminate
+                                    else -> ToggleableState.Off
+                                },
                                 onClick = {
+                                    // Ticking a country takes all of it and unticking gives all of
+                                    // it back, so the markets under it follow the box above them.
+                                    val taking = country !in shownCountries && pickedHere < group.size
                                     onShowCountries(
-                                        if (country in shownCountries) shownCountries - country
-                                        else shownCountries + country,
+                                        if (taking) shownCountries + country else shownCountries - country,
+                                    )
+                                    onShowMarkets(
+                                        if (taking) shownMarkets else shownMarkets - group.map { it.platform }.toSet(),
                                     )
                                 },
                             )
                             group.forEach { market ->
+                                // A market inside a ticked country is being shown, so it is ticked.
+                                // Unticking it drops the country and keeps its siblings, which is
+                                // the only reading of "not this one" that leaves the rest alone.
+                                val wholeCountry = country in shownCountries
                                 MarketRow(
                                     label = market.name,
                                     count = market.count,
-                                    selected = market.platform in shownMarkets,
+                                    selected = wholeCountry || market.platform in shownMarkets,
                                     onClick = {
-                                        onShowMarkets(
-                                            if (market.platform in shownMarkets) shownMarkets - market.platform
-                                            else shownMarkets + market.platform,
-                                        )
+                                        when {
+                                            wholeCountry -> {
+                                                onShowCountries(shownCountries - country)
+                                                onShowMarkets(
+                                                    shownMarkets + group.map { it.platform } - market.platform,
+                                                )
+                                            }
+                                            market.platform in shownMarkets ->
+                                                onShowMarkets(shownMarkets - market.platform)
+                                            else -> onShowMarkets(shownMarkets + market.platform)
+                                        }
                                     },
                                     indented = true,
                                 )
@@ -288,19 +317,23 @@ private fun CountryRow(
     count: Int,
     markets: Int,
     nearestKm: Double? = null,
-    selected: Boolean,
+    state: ToggleableState,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        color = if (state != ToggleableState.Off) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(start = 2.dp, end = 10.dp, top = 0.dp, bottom = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Half-ticked when some of the country's markets are picked and the country itself
+            // is not, so a country row never claims more than what is actually being shown.
+            TriStateCheckbox(state = state, onClick = onClick)
             Text(
                 country,
                 style = MaterialTheme.typography.labelLarge,
@@ -336,9 +369,12 @@ private fun MarketRow(
         modifier = Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.padding(start = 2.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // A box, because any number of these can be ticked at once. Colour alone said one
+            // was chosen and never said a second could be.
+            Checkbox(checked = selected, onCheckedChange = { onClick() })
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(
                 "$count",

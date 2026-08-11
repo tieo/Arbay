@@ -961,6 +961,20 @@
           "role": "Lives in"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-FILTERS-PICK-SEVERAL",
+      "title": "Any number of markets, and the list stays whole",
+      "statement": "Markets and countries carry a tick box each, a country half-ticked when only some of its markets are, and the list is built from everything fetched rather than from what is currently shown, so picking one market leaves the others there to pick. The picks add up: a country and a market elsewhere show both, where requiring both at once showed nothing.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ]
     }
   ],
   "states": [
@@ -1563,6 +1577,36 @@
           "label": "wide dark"
         }
       ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-FILTERS-SEVERAL-PICKED",
+      "title": "Several markets picked",
+      "statement": "Two markets and a whole country are picked at once, and every market that was not picked is still on the list to pick next.",
+      "relations": [
+        {
+          "to": "VIEW-FILTERS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "filters-several-markets-picked-phone-light.png",
+          "label": "phone light"
+        },
+        {
+          "file": "filters-several-markets-picked-phone-dark.png",
+          "label": "phone dark"
+        },
+        {
+          "file": "filters-several-markets-picked-wide-light.png",
+          "label": "wide light"
+        },
+        {
+          "file": "filters-several-markets-picked-wide-dark.png",
+          "label": "wide dark"
+        }
+      ]
     }
   ],
   "stories": [
@@ -2021,7 +2065,8 @@
           "Sort order",
           "Markets, grouped by country, with a country toggling all of its markets",
           "Blocked words, added and removed here",
-          "For a vehicle search, the criteria that today re-run the whole search"
+          "For a vehicle search, the criteria that today re-run the whole search",
+          "Every market and country with a tick box, as many at once as you like"
         ],
         "gone": [
           "Every filter that today sits on the results canvas"

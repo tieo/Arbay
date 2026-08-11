@@ -122,6 +122,7 @@ fun ListingsSheet(
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
+    val marketBasis by listingViewModel.marketBasis.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
@@ -315,23 +316,29 @@ fun ListingsSheet(
         shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
     ).count { it }
-    val marketChoices = remember(platformOffers, activeListings) {
-        // How far the nearest offer from each market is, so the filter list can be
-        // ordered by what is close rather than by what starts with A. Known only
-        // once the search carries a location.
-        val nearest = activeListings
+    // Every market that has something to offer, whatever is picked right now. Derived from the
+    // basis rather than from the results, because a list of markets that shrinks to the one just
+    // picked cannot be used to pick a second.
+    val marketChoices = remember(marketBasis, priceRange, conditionFilter) {
+        val offered = marketBasis
+            .filter { !it.sold }
+            .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
+            .filter { conditionMatches(conditionFilter, it.condition) }
+        val nearest = offered
             .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }
             .groupBy({ it.first }, { it.second })
             .mapValues { (_, distances) -> distances.min() }
-        platformOffers.map { offer ->
-            MarketChoice(
-                platform = offer.platform,
-                name = offer.platform.displayName,
-                country = MarketSets.countryOf(offer.platform),
-                count = offer.count,
-                nearestKm = nearest[offer.platform],
-            )
-        }
+        offered.groupBy { it.platformId }
+            .map { (platform, items) ->
+                MarketChoice(
+                    platform = platform,
+                    name = platform.displayName,
+                    country = MarketSets.countryOf(platform),
+                    count = items.size,
+                    nearestKm = nearest[platform],
+                )
+            }
+            .sortedByDescending { it.count }
     }
     // Only a market that publishes what sold can answer the sold question at all.
     val soldPossible = remember(platforms) {

@@ -124,34 +124,51 @@ class ListingViewModel(
         markets to countries
     }
 
-    val listings: StateFlow<List<Listing>> = combine(_allListings, _marketFilter, _bannedIds, _blockedTerms) { all, filter, banned, blocked ->
+    /** Whether a listing survives everything except the market and country picks: not banned by
+     *  hand, and carrying none of the blocked words. Punctuation is collapsed to single spaces on
+     *  both sides, so a blocked word still matches "OVP!Lagerverkauf" and a blocked phrase still
+     *  matches "NEU ! Lagerverkauf". */
+    private fun kept(listing: Listing, banned: Set<String>, blocked: List<String>): Boolean {
+        if (listing.id in banned) return false
+        if (blocked.isEmpty()) return true
+        val hay = wordsOnly("${listing.title} ${listing.description ?: ""}")
+        return blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
+    }
+
+    /**
+     * Everything that survives every filter except the market and country picks.
+     *
+     * This is what the market picker lists. Building that list out of [listings] instead meant the
+     * choices were whatever was already showing, so picking one market deleted every other market
+     * from the list and a second one could never be picked.
+     */
+    val marketBasis: StateFlow<List<Listing>> =
+        combine(_allListings, _bannedIds, _blockedTerms) { all, banned, blocked ->
+            all.filter { kept(it, banned, blocked) }
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            // The first value, before the flow above has run once. Handed a sample and words to
+            // block, the blocking has to be in that first value too, or a single frame shows
+            // everything and a render of "the filters admit none" is a picture of the opposite.
+            sample.filter { kept(it, emptySet(), sampleBlocked) },
+        )
+
+    val listings: StateFlow<List<Listing>> = combine(marketBasis, _marketFilter) { kept, filter ->
         val (markets, countries) = filter
-        val platformFiltered = all.filter { listing ->
-            (markets.isEmpty() || listing.platformId in markets) &&
-                (countries.isEmpty() || MarketSets.countryOf(listing.platformId) in countries)
-        }
-        platformFiltered.filter { l ->
-            l.id !in banned && run {
-                if (blocked.isEmpty()) return@run true
-                // Punctuation collapsed to single spaces on both sides, so a blocked word still
-                // matches "OVP!Lagerverkauf" and a blocked phrase still matches "NEU ! Lagerverkauf".
-                val hay = wordsOnly("${l.title} ${l.description ?: ""}")
-                blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
-            }
+        // Markets and countries are one list of picks at two grains, so they add up rather than
+        // narrow each other: picking Germany and ricardo.ch shows both, where requiring both at
+        // once would show nothing. Nothing picked means everything.
+        val narrowed = markets.isNotEmpty() || countries.isNotEmpty()
+        kept.filter { listing ->
+            !narrowed ||
+                listing.platformId in markets ||
+                MarketSets.countryOf(listing.platformId) in countries
         }
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        // The first value, before the flow above has run once. Handed a sample and words
-        // to block, the blocking has to be in that first value too, or a single frame
-        // shows everything and a render of "the filters admit none" is a picture of the
-        // opposite.
-        sample.filter { listing ->
-            sampleBlocked.none { term ->
-                term.isNotBlank() &&
-                    wordsOnly("${listing.title} ${listing.description ?: ""}").contains(wordsOnly(term))
-            }
-        },
+        sample.filter { kept(it, emptySet(), sampleBlocked) },
     )
 
     /** Everything the markets returned, before any filter of ours. What the empty results screen
