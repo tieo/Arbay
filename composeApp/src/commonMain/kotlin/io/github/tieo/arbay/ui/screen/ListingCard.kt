@@ -118,54 +118,55 @@ internal fun flagEmoji(cc: String): String {
  */
 @Composable
 private fun MetaLine(condition: Condition?, vehicle: VehicleInfo?, unchecked: List<String>) {
-    data class Spec(val text: String, val verified: Boolean)
     val v = vehicle
     val specs = buildList {
         condition?.let {
-            add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " "), true))
+            add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " ") to true)
         }
         if (v != null) {
             v.firstRegYear?.let {
                 val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
-                add(Spec(ym, v.isVerified(VehicleField.FIRST_REG_YEAR)))
+                add(ym to v.isVerified(VehicleField.FIRST_REG_YEAR))
             }
-            v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", v.isVerified(VehicleField.MILEAGE))) }
-            v.powerKw?.let { add(Spec("$it kW", v.isVerified(VehicleField.POWER))) }
+            v.mileageKm?.let { add("${"%,d".format(it)} km" to v.isVerified(VehicleField.MILEAGE)) }
+            v.powerKw?.let { add("$it kW" to v.isVerified(VehicleField.POWER)) }
             v.gearbox?.let {
-                add(Spec(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe",
-                    v.isVerified(VehicleField.GEARBOX)))
+                add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to
+                    v.isVerified(VehicleField.GEARBOX))
             }
-            // OTHER is what the parser says when it could not tell, so it is not a spec.
             v.fuel?.takeIf { it != Fuel.OTHER }?.let {
-                add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, v.isVerified(VehicleField.FUEL)))
+                add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() } to v.isVerified(VehicleField.FUEL))
             }
             val vanCode = buildString {
                 v.vanLength?.let { append("L$it") }
                 v.vanHeight?.let { append("H$it") }
             }
             if (vanCode.isNotEmpty()) {
-                add(Spec(vanCode, v.isVerified(
+                add(vanCode to v.isVerified(
                     if (v.vanLength != null) VehicleField.VAN_LENGTH else VehicleField.VAN_HEIGHT,
-                )))
+                ))
             }
         }
     }
     if (specs.isEmpty() && unchecked.isEmpty()) return
 
     var explaining by remember { mutableStateOf(false) }
-    Spacer(Modifier.height(3.dp))
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    Spacer(Modifier.height(2.dp))
+    // One line that never wraps: the specs shorten, the count stays. Left to wrap, a card ran to
+    // six lines and the next one to three, and a list of them reads as chaos rather than as a list.
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        specs.take(5).forEach { spec ->
+        if (specs.isNotEmpty()) {
             Text(
-                if (spec.verified) spec.text else "~${spec.text}",
+                specs.joinToString(" · ") { (text, verified) -> if (verified) text else "~$text" },
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-                    .copy(alpha = if (spec.verified) 1f else 0.55f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
         if (unchecked.isNotEmpty()) {
@@ -178,6 +179,7 @@ private fun MetaLine(condition: Condition?, vehicle: VehicleInfo?, unchecked: Li
                     "${unchecked.size} unchecked",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                 )
             }
@@ -317,63 +319,26 @@ internal fun ListingCard(
                     unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty(),
                 )
 
-                // Semantic fit to the searcher's ideal-car description, when they gave one.
-                listing.matchScore?.let { score ->
-                    Spacer(Modifier.height(3.dp))
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Text(
-                            "${(score * 100).roundToInt()}% match",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
+                // Where it is, how old it is, how well it fits: one line, because three lines of
+                // two words each is what turned a list of vans into a wall.
+                val foot = buildList {
+                    listing.location?.let { loc ->
+                        val place = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
+                        if (place.isNotBlank()) add(place)
                     }
+                    listing.distanceKm?.let { add("${it.roundToInt()} km away") }
+                    listing.listingDate?.let { posted -> ageLabel(posted)?.let { add(it) } }
+                    listing.matchScore?.let { add("${(it * 100).roundToInt()}% match") }
                 }
-
-                listing.location?.let { loc ->
-                    val locText = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
-                    // Distance from the searcher, when the search carried the device position.
-                    val distText = listing.distanceKm?.let { "${it.roundToInt()} km away" }
-                    val text = listOfNotNull(locText.takeIf { it.isNotBlank() }, distText).joinToString(" · ")
-                    if (text.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.LocationOn, null,
-                                modifier = Modifier.size(11.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Text(
-                                text,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-                // How old the ad is, when the platform exposes a posting date.
-                listing.listingDate?.let { posted ->
-                    ageLabel(posted)?.let { label ->
-                        Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.Schedule, null,
-                                modifier = Modifier.size(11.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                if (foot.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        foot.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
