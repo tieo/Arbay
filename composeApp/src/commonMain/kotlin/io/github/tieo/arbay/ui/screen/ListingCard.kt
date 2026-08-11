@@ -123,7 +123,10 @@ private fun VehicleSpecsRow(v: VehicleInfo) {
             val g = if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe"
             add(Spec(g, VehicleField.GEARBOX))
         }
-        v.fuel?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, VehicleField.FUEL)) }
+        // OTHER is what the parser says when it could not tell, so it is not a spec: "~Other"
+        // beside a van says nothing a reader can use.
+        v.fuel?.takeIf { it != Fuel.OTHER }
+            ?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, VehicleField.FUEL)) }
         // Van size code: verified when the listing stated an explicit L/H, inferred from a
         // roof/wheelbase word otherwise. Uses the length field's verification for the marker.
         val vanCode = buildString {

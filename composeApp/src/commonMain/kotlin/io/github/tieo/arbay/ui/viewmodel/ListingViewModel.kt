@@ -309,6 +309,40 @@ class ListingViewModel(
         }
     }
 
+    /**
+     * Give every market that produced listings a status, when the stream did not.
+     *
+     * The stream reports per-market progress, but the two fallback paths and a cached answer hand
+     * back listings with no events at all. The screen then counted the markets it had heard from,
+     * which was none, and said "0 answered" above a list of offers those very markets had sent.
+     * A market whose listings are on the screen has answered, whatever the transport was.
+     */
+    private fun accountForListingsWithoutAStatus(asked: List<PlatformId>?) {
+        val results = _allListings.value
+        if (results.isEmpty()) return
+        val known = _platformStatuses.value.map { it.platformId }.toSet()
+        val missing = results.groupBy { it.platformId }.filterKeys { it.name !in known }
+        if (missing.isNotEmpty()) {
+            _platformStatuses.value = _platformStatuses.value + missing.map { (platform, items) ->
+                PlatformStatus(
+                    platformId = platform.name,
+                    platformName = platform.displayName,
+                    status = PlatformSearchStatus.DONE,
+                    resultCount = items.size,
+                    rawCount = items.size,
+                    fromCache = true,
+                )
+            }
+        }
+        // The denominator is what was asked, and a run that never announced itself still asked
+        // whatever this search covers.
+        val counted = _platformStatuses.value.size
+        if (_totalPlatforms.value < counted) _totalPlatforms.value = maxOf(asked?.size ?: 0, counted)
+        _completedPlatforms.value = _platformStatuses.value.count {
+            it.status != PlatformSearchStatus.SEARCHING
+        }
+    }
+
     fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
         if (query.isBlank() || rendersASample) return
         if (!force && query == _searchQuery.value && filters == carFilters && (_allListings.value.isNotEmpty() || _loading.value)) return
@@ -436,6 +470,7 @@ class ListingViewModel(
                         it.copy(status = PlatformSearchStatus.ERROR, error = "Timeout")
                     else it
                 }
+                accountForListingsWithoutAStatus(platforms)
             }
         }
     }

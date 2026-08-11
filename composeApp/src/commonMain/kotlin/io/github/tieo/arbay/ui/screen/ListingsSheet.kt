@@ -390,7 +390,8 @@ fun ListingsSheet(
                                 )
                             } else if (listings.isNotEmpty()) {
                                 Text(
-                                    "${displayedActiveListings.size} offers across ${platformOffers.size} markets",
+                                    "${displayedActiveListings.size} offers across " +
+                                        if (platformOffers.size == 1) "1 market" else "${platformOffers.size} markets",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -516,7 +517,14 @@ fun ListingsSheet(
                                         label = "Markets",
                                         detail = when {
                                             failedMarkets > 0 -> "$answeredMarkets ok, $failedMarkets not"
-                                            else -> "$answeredMarkets answered"
+                                            answeredMarkets > 0 ->
+                                                if (answeredMarkets == 1) "1 answered" else "$answeredMarkets answered"
+                                            // Nothing was asked in this session: these listings come
+                                            // from the last crawl this search stored.
+                                            platformOffers.isNotEmpty() ->
+                                                if (platformOffers.size == 1) "1 market, stored"
+                                                else "${platformOffers.size} markets, stored"
+                                            else -> "none asked"
                                         },
                                         highlighted = failedMarkets > 0,
                                         onClick = { showMarkets = true },
@@ -874,5 +882,14 @@ internal fun Money.format(): String {
     }
     val whole = convertedAmount / 100
     val cents = convertedAmount % 100
-    return if (cents == 0L) "$symbol$whole" else "$symbol$whole.${cents.toString().padStart(2, '0')}"
+    return if (cents == 0L) "$symbol${grouped(whole)}"
+    else "$symbol${grouped(whole)}.${cents.toString().padStart(2, '0')}"
+}
+
+/** Thousands in groups, because a van at 10000 and one at 100000 are one glance apart otherwise. */
+private fun grouped(value: Long): String {
+    val digits = value.toString()
+    val sign = if (digits.startsWith("-")) "-" else ""
+    val body = digits.removePrefix("-")
+    return sign + body.reversed().chunked(3).joinToString(",").reversed()
 }
