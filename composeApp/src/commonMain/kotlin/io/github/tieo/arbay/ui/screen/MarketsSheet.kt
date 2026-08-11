@@ -119,6 +119,7 @@ fun MarketsSheet(
                 val pickedHere = withOffers.count { it in shownMarkets }
                 item("country-$country") {
                     PickRow(
+                        heading = true,
                         label = country,
                         trailing = group.size.let { if (it == 1) "1 market" else "$it markets" } +
                             " · " + platformsHere.sumOf { offers[it] ?: 0 },
@@ -147,6 +148,7 @@ fun MarketsSheet(
                     val kept = offers[platform] ?: 0
                     val wholeCountry = country in shownCountries
                     MarketRow(
+                        modifier = Modifier.padding(start = 22.dp),
                         status = status,
                         kept = kept,
                         can = capabilities[platform],
@@ -178,21 +180,28 @@ private fun PickRow(
     trailing: String,
     state: ToggleableState,
     enabled: Boolean,
+    // A country stands over the markets drawn under it, so it is drawn heavier and with air above.
+    heading: Boolean = false,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = { if (enabled) onClick() },
         color = if (state != ToggleableState.Off) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surface,
+        else MaterialTheme.colorScheme.surfaceContainerHighest,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(top = if (heading) 10.dp else 0.dp),
     ) {
         Row(
             modifier = Modifier.padding(start = 4.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TriStateCheckbox(state = state, enabled = enabled, onClick = onClick)
-            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                label,
+                style = if (heading) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                else MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
             Text(
                 trailing,
                 style = MaterialTheme.typography.labelSmall,
@@ -246,6 +255,7 @@ private fun PlatformStatus.tint(): Color? = when (status) {
 
 @Composable
 private fun MarketRow(
+    modifier: Modifier = Modifier,
     status: PlatformStatus,
     kept: Int,
     can: MarketCapability?,
@@ -259,7 +269,7 @@ private fun MarketRow(
         color = if (accent != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().clickable(enabled = pickable, onClick = onPick)
