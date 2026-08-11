@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -158,6 +159,13 @@ private suspend fun localizedQuery(base: SearchQuery, platform: PlatformId): Sea
 private fun priceEurCents(money: Money): Long =
     if (money.currency == Currency.EUR) money.amount
     else ExchangeRates.convert(money.amount, money.currency.name, "EUR")
+
+/** How long one market may take before the stream gives up on it. Every crawler runs inside this,
+ *  so a hung browser costs one market's results rather than the server's ability to search at all. */
+private const val PLATFORM_BUDGET_MS = 180_000L
+
+/** How long a whole search may hold its scrape permit, whatever the crawlers are doing. */
+private const val SEARCH_BUDGET_MS = 420_000L
 
 /** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
  *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
@@ -388,6 +396,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val permit = call.acquireScrapeSlot() ?: return@get
             try {
+            withTimeoutOrNull(SEARCH_BUDGET_MS) {
             call.respondTextWriter(contentType = ContentType.Text.Plain) {
                 // Send SEARCH_STARTED
                 val startEvent = CrawlerSearchEvent(
@@ -413,6 +422,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val resultChannel = Channel<CrawlerSearchEvent>(Channel.UNLIMITED)
                     val jobs = platforms.map { platformId ->
                         launch {
+                          // A crawler that never returns must not outlive the request. Without this
+                          // its coroutine holds the stream open, the stream holds the scrape permit,
+                          // and the server refuses every later search as busy until it restarts.
+                          withTimeoutOrNull(PLATFORM_BUDGET_MS) crawl@{
                             val crawler = CrawlerRegistry.crawlerFor(platformId)
                             if (crawler == null) {
                                 resultChannel.send(CrawlerSearchEvent(
@@ -421,7 +434,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     platformName = platformId.displayName,
                                     error = "No crawler available",
                                 ))
-                                return@launch
+                                return@crawl
                             }
 
                             // Cross-border markets are searched in their own language; surface the
@@ -457,7 +470,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     fromCache = true,
                                     facets = facets,
                                 ))
-                                return@launch
+                                return@crawl
                             }
 
                             // Cooling down from a recent block: don't re-crawl (would deepen the
@@ -471,7 +484,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     error = "Cooling down after a block (~${coolMs / 60000} min left)",
                                     errorType = "COOLING_DOWN",
                                 ))
-                                return@launch
+                                return@crawl
                             }
 
                             val progressEmitter = FetchProgressEmitter { stage ->
@@ -592,7 +605,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // Client disconnected mid-search (a cancelling parent scope) — not a
                                 // crawler failure; don't record it or emit an error event.
                                 if (e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true) {
-                                    return@launch
+                                    return@crawl
                                 }
                                 val errorType = classifyException(e)
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
@@ -609,6 +622,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 )
                             }
                             resultChannel.send(event)
+                          } ?: resultChannel.send(CrawlerSearchEvent(
+                              type = CrawlerEventType.PLATFORM_ERROR,
+                              platform = platformId.name,
+                              platformName = platformId.displayName,
+                              error = "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on",
+                              errorType = "TIMEOUT",
+                          ))
                         }
                     }
                     // Close channel once all platform coroutines finish
@@ -639,6 +659,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 )
                 write(json.encodeToString(completeEvent) + "\n")
                 flush()
+            }
             }
             } finally {
                 permit.release()

@@ -122,6 +122,7 @@ fun ListingsSheet(
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
+    val notSearched by listingViewModel.notSearched.collectAsState()
     val marketBasis by listingViewModel.marketBasis.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
@@ -554,6 +555,33 @@ fun ListingsSheet(
                                     )
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                            }
+                        }
+                    }
+                }
+
+                notSearched?.let { why ->
+                    item("not-searched") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(why, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "What is below was stored the last time it ran.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(onClick = {
+                                    listingViewModel.search(searchQuery, platforms, carFilters, force = true)
+                                }) { Text("Try again") }
                             }
                         }
                     }

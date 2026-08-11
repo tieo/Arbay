@@ -199,6 +199,17 @@ class ListingViewModel(
         saveBannedIds(updated)
     }
 
+    // Why this search never reached the markets, when it did not: the server's own words.
+    private var refusedBy: String? = null
+
+    /**
+     * Said once, at the top, when the search did not run at all: the server was busy, or could not
+     * be reached, and what is on the screen is what it had stored from an earlier run. Every market
+     * then reading "no answer" is seven copies of one fact, and none of them the fact itself.
+     */
+    private val _notSearched = MutableStateFlow<String?>(null)
+    val notSearched: StateFlow<String?> = _notSearched
+
     private var searchJob: Job? = null
     private var carFilters: CarFilters? = null
 
@@ -317,6 +328,20 @@ class ListingViewModel(
      * which was none, and said "0 answered" above a list of offers those very markets had sent.
      * A market whose listings are on the screen has answered, whatever the transport was.
      */
+    /** Update this market's status, adding it if the stream never announced it starting. */
+    private fun upsertStatus(
+        platform: String,
+        name: String,
+        change: (PlatformStatus) -> PlatformStatus,
+    ) {
+        val existing = _platformStatuses.value.firstOrNull { it.platformId == platform }
+        _platformStatuses.value =
+            if (existing != null) _platformStatuses.value.map { if (it.platformId == platform) change(it) else it }
+            else _platformStatuses.value + change(
+                PlatformStatus(platformId = platform, platformName = name, status = PlatformSearchStatus.PENDING),
+            )
+    }
+
     private fun accountForListingsWithoutAStatus(asked: List<PlatformId>?) {
         val results = _allListings.value
         if (results.isEmpty()) return
@@ -339,12 +364,13 @@ class ListingViewModel(
         val heardFrom = _platformStatuses.value.map { it.platformId }.toSet()
         val silent = asked.orEmpty().filter { it.name !in heardFrom }
         if (silent.isNotEmpty()) {
+            val why = "not searched"
             _platformStatuses.value = _platformStatuses.value + silent.map { platform ->
                 PlatformStatus(
                     platformId = platform.name,
                     platformName = platform.displayName,
                     status = PlatformSearchStatus.ERROR,
-                    error = "no answer at all: the search ended without it reporting",
+                    error = why,
                 )
             }
         }
@@ -368,6 +394,8 @@ class ListingViewModel(
         searchJob = viewModelScope.launch {
             _loading.value = true
             _error.value = null
+            refusedBy = null
+            _notSearched.value = null
             _allListings.value = emptyList()
             _platformStatuses.value = emptyList()
             _completedPlatforms.value = 0
@@ -424,13 +452,13 @@ class ListingViewModel(
                                 "BLOCKED_403", "AUTH_REQUIRED_401" -> PlatformSearchStatus.IP_BLOCKED
                                 else -> PlatformSearchStatus.ERROR
                             }
-                            _platformStatuses.value = _platformStatuses.value.map {
-                                if (it.platformId == event.platform) it.copy(
+                            upsertStatus(event.platform, event.platformName) {
+                                it.copy(
                                     status = errorStatus,
                                     error = event.error,
                                     errorType = event.errorType,
                                     captchaUrl = event.captchaUrl,
-                                ) else it
+                                )
                             }
                         }
 
@@ -465,10 +493,24 @@ class ListingViewModel(
                 }
                 } // withTimeoutOrNull
             } catch (e: Exception) {
+                // The server refuses a search it has no capacity for. Falling back to what is
+                // stored is right, but silently is not: without this the markets look like they
+                // were asked and said nothing, when in truth none of them was asked at all.
+                refusedBy = e.message?.takeIf { it.isNotBlank() }
+                _notSearched.value = when {
+                    refusedBy?.contains("busy", ignoreCase = true) == true ->
+                        "The server was busy, so this search did not run."
+                    refusedBy?.contains("Rate limit", ignoreCase = true) == true ||
+                        refusedBy?.contains("Slow down", ignoreCase = true) == true ->
+                        "Too many searches in a row, so this one did not run."
+                    else -> "The server could not be reached, so this search did not run."
+                }
                 if (_allListings.value.isEmpty()) {
                     try {
                         val results = client.crawlerSearch(query, null)
                         _allListings.value = results
+                        refusedBy = null
+                        _notSearched.value = null
                     } catch (e2: Exception) {
                         try {
                             _allListings.value = client.searchListings(query)

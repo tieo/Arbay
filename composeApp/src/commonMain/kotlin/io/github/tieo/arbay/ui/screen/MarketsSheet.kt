@@ -211,33 +211,31 @@ private val PlatformStatus.isFailure: Boolean
         PlatformSearchStatus.CAPTCHA,
     )
 
-/** What happened at one market, in its own words rather than as an absence. */
-private fun PlatformStatus.saidWhat(kept: Int): String = when (status) {
+/**
+ * What happened at one market, in as few words as carry it.
+ *
+ * A market that worked says nothing: the count beside its name is the whole story. Only a market
+ * that gave you less than it could explains itself, and then in one line. What each market can and
+ * cannot publish used to be printed on every row, four lines of it, which turned a list you pick
+ * from into a wall of prose nobody reads.
+ */
+private fun PlatformStatus.saidWhat(kept: Int): String? = when (status) {
     PlatformSearchStatus.PENDING -> "waiting its turn"
     PlatformSearchStatus.SEARCHING -> fetchStage ?: "being asked"
-    PlatformSearchStatus.CAPTCHA -> "answered with a captcha instead of results"
-    PlatformSearchStatus.TIMEOUT -> "took too long and was given up on"
-    PlatformSearchStatus.IP_BLOCKED -> "refused this machine — 403"
-    PlatformSearchStatus.BLOCKED -> "rate limited, and is cooling down"
-    PlatformSearchStatus.ERROR -> shortError(error) ?: "failed for a reason it did not give"
-    // (the no-answer case arrives as an ERROR carrying its own sentence)
-    PlatformSearchStatus.DONE -> when {
-        rawCount == 0 -> "had nothing for this search"
-        kept == rawCount -> "$rawCount, all of them kept"
-        else -> "$rawCount found, $kept kept after filtering"
-    }
+    PlatformSearchStatus.CAPTCHA -> "asked for a captcha instead of answering"
+    PlatformSearchStatus.TIMEOUT -> "too slow, given up on"
+    PlatformSearchStatus.IP_BLOCKED -> "blocked us"
+    PlatformSearchStatus.BLOCKED -> "rate limited, cooling down"
+    PlatformSearchStatus.ERROR -> shortError(error) ?: "failed"
+    PlatformSearchStatus.DONE -> if (kept == 0) "nothing here" else null
 }
 
-/**
- * The first line of a failure, in a length someone can read.
- *
- * A crawler failure arrives as whatever the underlying library threw, which for the browser-driven
- * markets is a stack trace hundreds of lines long. The row says what happened; the whole thing is
- * one tap away for when it needs reporting.
- */
+/** The first line of a failure, cut to a length someone reads rather than skips. A crawler failure
+ *  arrives as whatever the underlying library threw, which for the browser-driven markets is a
+ *  stack trace hundreds of lines long. */
 private fun shortError(error: String?): String? {
     val first = error?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() } ?: return null
-    return if (first.length <= 120) first else first.take(117) + "…"
+    return if (first.length <= 60) first else first.take(57) + "…"
 }
 
 private fun PlatformStatus.tint(): Color? = when (status) {
@@ -256,6 +254,7 @@ private fun MarketRow(
     onPick: () -> Unit,
 ) {
     val accent = status.tint()
+    val note = status.saidWhat(kept)
     Surface(
         color = if (accent != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -264,8 +263,7 @@ private fun MarketRow(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().clickable(enabled = pickable, onClick = onPick)
-                .padding(start = 4.dp, end = 14.dp, top = 4.dp, bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+                .padding(start = 4.dp, end = 14.dp, top = 2.dp, bottom = 6.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = picked, enabled = pickable, onCheckedChange = { onPick() })
@@ -278,79 +276,24 @@ private fun MarketRow(
                     Text("$kept", style = MaterialTheme.typography.labelLarge)
                 }
             }
-            Text(
-                status.saidWhat(kept),
-                style = MaterialTheme.typography.bodySmall,
-                color = accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            val detail = status.error
-            if (detail != null && detail.length > 120) {
-                var expanded by remember { mutableStateOf(false) }
-                TextButton(
-                    onClick = { expanded = !expanded },
-                    contentPadding = PaddingValues(0.dp),
-                ) { Text(if (expanded) "Hide the detail" else "What it said in full") }
-                if (expanded) {
-                    Text(
-                        detail.take(4000),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            status.queryUsed?.takeIf { it.isNotBlank() }?.let { term ->
+            // One line, and only when the market gave less than it could have.
+            note?.let {
                 Text(
-                    "asked for “$term”",
+                    it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp),
                 )
             }
-            // A market that held more pages gave a sample, not an answer; saying so is the
-            // difference between "nothing cheaper exists" and "nothing cheaper was looked at".
+            // A market that held more pages gave a sample, not an answer. That much a buyer needs:
+            // it is the difference between "nothing cheaper exists" and "nothing cheaper was seen".
             if (status.hasMore) {
                 Text(
-                    "held more than it was asked for — this is the first pages only",
+                    "first pages only",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(start = 12.dp),
                 )
-            }
-            if (status.fromCache) {
-                Text(
-                    "answered from a stored crawl, not a fresh one",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // What this market cannot answer, said once rather than left as an empty field on
-            // every one of its cards.
-            can?.let { c ->
-                val cannot = buildList {
-                    if (!c.listingAge) add("when an ad was posted")
-                    if (!c.location) add("where the thing is")
-                    if (!c.paginates) add("more than its first page")
-                }
-                if (cannot.isNotEmpty() && status.status == PlatformSearchStatus.DONE) {
-                    Text(
-                        "does not give ${cannot.joinToString(", ")}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                // What a market narrows by describes a search it ran. Beside "no answer at all"
-                // it reads as a report from a market that never spoke.
-                if (c.nativeCriteria.isNotEmpty() && status.status == PlatformSearchStatus.DONE) {
-                    Text(
-                        "narrowed by the market itself: ${c.nativeCriteria.sorted().joinToString(", ") { it.lowercase() }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else if (status.status == PlatformSearchStatus.DONE) {
-                    Text(
-                        "applies no filter of its own — every criterion was applied afterwards",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
             status.captchaUrl?.let { url ->
                 TextButton(

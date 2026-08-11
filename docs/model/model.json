@@ -1003,6 +1003,34 @@
           "to": "VIEW-FILTERS"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-MARKETS-SAYS-LITTLE",
+      "title": "A market that worked says nothing",
+      "statement": "A row is a tick, a name and a count. Only a market that gave less than it could explains itself, in one short line: nothing here, blocked us, too slow, asked for a captcha, not searched. What a market can and cannot publish, and whether the answer came from a stored crawl, used to print on every row and turned a list you pick from into prose nobody reads.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-MARKET-DETAIL"
+        }
+      ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-RESULTS-SAYS-IT-DID-NOT-RUN",
+      "title": "A search that did not run says so once",
+      "statement": "When the server turns a search away, the results say so in one line above them, with what is shown being what was stored last time and a way to try again. The markets are not each made to report a failure they had no part in.",
+      "status": "Built",
+      "tier": "1 canvas",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-RESULTS"
+        }
+      ]
     }
   ],
   "states": [
