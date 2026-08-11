@@ -975,6 +975,20 @@
           "to": "VIEW-FILTERS"
         }
       ]
+    },
+    {
+      "tag": "REQUIREMENT",
+      "uid": "REQ-FILTERS-EVERY-MARKET-ASKED",
+      "title": "Every market that was asked is on the list",
+      "statement": "The market list is what the search asked, not what happened to answer with something. A market with no offers says why: nothing there, blocked, captcha, timed out, failed, still asking, or hidden by the price and condition filters. Its box is dead, because narrowing to a market with nothing in it would empty the screen. Without this a reader cannot tell mobile.de having nothing from mobile.de never having been asked, and those mean opposite things.",
+      "status": "Built",
+      "tier": "2 one tap away",
+      "relations": [
+        {
+          "role": "Lives in",
+          "to": "VIEW-FILTERS"
+        }
+      ]
     }
   ],
   "states": [
@@ -1604,6 +1618,36 @@
         },
         {
           "file": "filters-several-markets-picked-wide-dark.png",
+          "label": "wide dark"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-FILTERS-MARKETS-EMPTY",
+      "title": "Markets that found nothing",
+      "statement": "Markets that were asked and brought nothing back are on the list, saying whether they had nothing or never answered, with a box that cannot be ticked.",
+      "relations": [
+        {
+          "to": "VIEW-FILTERS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "filters-markets-that-found-nothing-phone-light.png",
+          "label": "phone light"
+        },
+        {
+          "file": "filters-markets-that-found-nothing-phone-dark.png",
+          "label": "phone dark"
+        },
+        {
+          "file": "filters-markets-that-found-nothing-wide-light.png",
+          "label": "wide light"
+        },
+        {
+          "file": "filters-markets-that-found-nothing-wide-dark.png",
           "label": "wide dark"
         }
       ]

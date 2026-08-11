@@ -170,21 +170,26 @@ fun FiltersSheet(
                                 compareBy<MarketChoice> { it.nearestKm ?: Double.MAX_VALUE }
                                     .thenByDescending { it.count },
                             )
-                            val pickedHere = group.count { it.platform in shownMarkets }
+                            val withOffers = group.filter { it.emptyBecause == null }
+                            val pickedHere = withOffers.count { it.platform in shownMarkets }
                             CountryRow(
                                 country = country,
                                 count = group.sumOf { it.count },
                                 markets = group.size,
                                 nearestKm = group.mapNotNull { it.nearestKm }.minOrNull(),
                                 state = when {
-                                    country in shownCountries || pickedHere == group.size -> ToggleableState.On
+                                    country in shownCountries ||
+                                        (withOffers.isNotEmpty() && pickedHere == withOffers.size) -> ToggleableState.On
                                     pickedHere > 0 -> ToggleableState.Indeterminate
                                     else -> ToggleableState.Off
                                 },
+                                // A country every one of whose markets came back empty cannot narrow
+                                // anything, so its box is dead while its rows still say what happened.
+                                enabled = withOffers.isNotEmpty(),
                                 onClick = {
                                     // Ticking a country takes all of it and unticking gives all of
                                     // it back, so the markets under it follow the box above them.
-                                    val taking = country !in shownCountries && pickedHere < group.size
+                                    val taking = country !in shownCountries && pickedHere < withOffers.size
                                     onShowCountries(
                                         if (taking) shownCountries + country else shownCountries - country,
                                     )
@@ -201,7 +206,11 @@ fun FiltersSheet(
                                 MarketRow(
                                     label = market.name,
                                     count = market.count,
-                                    selected = wholeCountry || market.platform in shownMarkets,
+                                    emptyBecause = market.emptyBecause,
+                                    // A market with nothing in it is never part of what is shown,
+                                    // so a ticked country must not tick it along with its siblings.
+                                    selected = market.emptyBecause == null &&
+                                        (wholeCountry || market.platform in shownMarkets),
                                     onClick = {
                                         when {
                                             wholeCountry -> {
@@ -300,6 +309,10 @@ data class MarketChoice(
     // How far the nearest offer from this market is, when the search knows where
     // the searcher is. Null when nothing here carries a place.
     val nearestKm: Double? = null,
+    // Why a market has nothing here: it answered with nothing, or it never answered. Null when it
+    // has offers. A market that was asked belongs on this list whatever came back, or the list
+    // reads as the whole of what was searched when it is only the part that succeeded.
+    val emptyBecause: String? = null,
 )
 
 @Composable
@@ -318,10 +331,11 @@ private fun CountryRow(
     markets: Int,
     nearestKm: Double? = null,
     state: ToggleableState,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Surface(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         color = if (state != ToggleableState.Off) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.small,
@@ -333,7 +347,7 @@ private fun CountryRow(
         ) {
             // Half-ticked when some of the country's markets are picked and the country itself
             // is not, so a country row never claims more than what is actually being shown.
-            TriStateCheckbox(state = state, onClick = onClick)
+            TriStateCheckbox(state = state, enabled = enabled, onClick = onClick)
             Text(
                 country,
                 style = MaterialTheme.typography.labelLarge,
@@ -361,9 +375,13 @@ private fun MarketRow(
     selected: Boolean,
     onClick: () -> Unit,
     indented: Boolean = false,
+    // Why this market shows no offers, when it shows none. Such a row is here to be read, not
+    // ticked: narrowing to a market with nothing in it would empty the screen.
+    emptyBecause: String? = null,
 ) {
+    val pickable = emptyBecause == null
     Surface(
-        onClick = onClick,
+        onClick = { if (pickable) onClick() },
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp),
@@ -374,10 +392,16 @@ private fun MarketRow(
         ) {
             // A box, because any number of these can be ticked at once. Colour alone said one
             // was chosen and never said a second could be.
-            Checkbox(checked = selected, onCheckedChange = { onClick() })
-            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Checkbox(checked = selected, enabled = pickable, onCheckedChange = { onClick() })
             Text(
-                "$count",
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (pickable) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                emptyBecause ?: "$count",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

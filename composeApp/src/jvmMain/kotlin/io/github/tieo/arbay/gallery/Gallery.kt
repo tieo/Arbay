@@ -104,6 +104,10 @@ private val SCENES: List<Scene> = buildList {
             shownCountries = setOf("AT"),
         )
     })
+    // Markets that were asked and found nothing are on the list too, saying what happened.
+    add(scene("filters", "markets-that-found-nothing", tall = true) {
+        Filters(markets = PreviewData.marketChoicesWithEmpties)
+    })
     add(scene("filters", "nothing-to-narrow") {
         Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f)
     })

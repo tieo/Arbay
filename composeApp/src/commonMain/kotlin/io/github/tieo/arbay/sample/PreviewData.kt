@@ -167,6 +167,26 @@ object PreviewData {
             )
         }
 
+    /** The same markets plus the ones that were asked and had nothing to give, which is what the
+     *  picker shows after a search where mobile.de and Kleinanzeigen came back empty. */
+    val marketChoicesWithEmpties: List<io.github.tieo.arbay.ui.screen.MarketChoice> =
+        marketChoices + listOf(
+            io.github.tieo.arbay.ui.screen.MarketChoice(
+                platform = PlatformId.MOBILE_DE,
+                name = PlatformId.MOBILE_DE.displayName,
+                country = io.github.tieo.arbay.model.MarketSets.countryOf(PlatformId.MOBILE_DE),
+                count = 0,
+                emptyBecause = "nothing there",
+            ),
+            io.github.tieo.arbay.ui.screen.MarketChoice(
+                platform = PlatformId.AUTOSCOUT24,
+                name = PlatformId.AUTOSCOUT24.displayName,
+                country = io.github.tieo.arbay.model.MarketSets.countryOf(PlatformId.AUTOSCOUT24),
+                count = 0,
+                emptyBecause = "blocked",
+            ),
+        )
+
     // ── The states a search can be in ────────────────────────────────────────
     //
     // A screen is not one picture. These are the answers a set of markets can

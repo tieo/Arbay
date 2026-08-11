@@ -318,10 +318,12 @@ fun ListingsSheet(
         shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
     ).count { it }
-    // Every market that has something to offer, whatever is picked right now. Derived from the
-    // basis rather than from the results, because a list of markets that shrinks to the one just
-    // picked cannot be used to pick a second.
-    val marketChoices = remember(marketBasis, priceRange, conditionFilter) {
+    // Every market this search asked, whatever came back and whatever is picked right now.
+    //
+    // Built from the offers alone, the list was the markets that happened to find something: a
+    // reader could not tell mobile.de had been asked and had nothing from mobile.de never having
+    // been asked at all, and the two mean opposite things about the thing being searched for.
+    val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditionFilter) {
         val offered = marketBasis
             .filter { !it.sold }
             .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
@@ -330,18 +332,38 @@ fun ListingsSheet(
             .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }
             .groupBy({ it.first }, { it.second })
             .mapValues { (_, distances) -> distances.min() }
-        offered.groupBy { it.platformId }
-            .map { (platform, items) ->
-                MarketChoice(
-                    platform = platform,
-                    name = platform.displayName,
-                    country = MarketSets.countryOf(platform),
-                    count = items.size,
-                    nearestKm = nearest[platform],
-                )
-            }
-            .sortedByDescending { it.count }
+        val byMarket = offered.groupBy { it.platformId }
+        val asked = platformStatuses.mapNotNull { status ->
+            runCatching { PlatformId.valueOf(status.platformId) }.getOrNull()?.let { it to status }
+        }
+        // The search's own platform list belongs here too. A market that never reported at all is
+        // missing from the statuses, and leaving it off the list is what made a search that could
+        // not reach mobile.de look like a search that never covered it.
+        val everyMarket = (asked.map { it.first } + byMarket.keys + platforms.orEmpty()).distinct()
+        val statusOf = asked.toMap()
+        everyMarket.map { platform ->
+            val items = byMarket[platform].orEmpty()
+            MarketChoice(
+                platform = platform,
+                name = platform.displayName,
+                country = MarketSets.countryOf(platform),
+                count = items.size,
+                nearestKm = nearest[platform],
+                emptyBecause = if (items.isNotEmpty()) null else when (statusOf[platform]?.status) {
+                    PlatformSearchStatus.DONE -> "nothing there"
+                    PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED -> "blocked"
+                    PlatformSearchStatus.CAPTCHA -> "captcha"
+                    PlatformSearchStatus.TIMEOUT -> "timed out"
+                    PlatformSearchStatus.ERROR -> "failed"
+                    PlatformSearchStatus.SEARCHING, PlatformSearchStatus.PENDING -> "still asking"
+                    // No word from it at all: either it has not started yet, or the run ended
+                    // without it ever answering.
+                    null -> if (loading) "still asking" else "no answer"
+                },
+            )
+        }.sortedWith(compareByDescending<MarketChoice> { it.count }.thenBy { it.name })
     }
+
     // Only a market that publishes what sold can answer the sold question at all.
     val soldPossible = remember(platforms) {
         (platforms ?: PlatformId.entries).any { it.name.startsWith("EBAY") }
