@@ -19,6 +19,21 @@ class EbayDeCrawler(
     private val domain: String = "ebay.de",
 ) : Crawler, FetchesEveryPage, HasSoldListings {
 
+    /** eBay keeps the vehicle specs on the item page, in "Info zum Artikel", and none of them on
+     *  the search card. Without this every eBay listing reaches a vehicle filter with everything
+     *  unknown and is kept by default. */
+    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = try {
+        // eBay answers 403 to every plain client on an item page, so this goes straight to the
+        // browser tier. It is also the one page eBay defends hardest, and a defended page costs a
+        // browser attempt per engine: bounded here so a market that will not answer costs seconds
+        // rather than the whole search's budget.
+        kotlinx.coroutines.withTimeoutOrNull(25_000L) {
+            EbayDetailParser.parse(fetchWithFallback(client, listing.url, "eBay", browserOnly = true))
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         val emitter = coroutineContext[FetchProgressEmitter.Key]
         val allResults = mutableListOf<Listing>()

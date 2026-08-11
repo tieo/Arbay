@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -163,6 +164,17 @@ private fun priceEurCents(money: Money): Long =
 /** How long one market may take before the stream gives up on it. Every crawler runs inside this,
  *  so a hung browser costs one market's results rather than the server's ability to search at all. */
 private const val PLATFORM_BUDGET_MS = 180_000L
+
+/**
+ * How many markets are actually crawled at once.
+ *
+ * Launching all eleven at once does not make them finish sooner: the browser-driven ones queue on
+ * the shared browser anyway, and each one's clock was already running while it waited. Kleinanzeigen
+ * answers in six seconds and mobile.de in fourteen when they are asked alone; both were being given
+ * up on as too slow. Four at a time keeps every running crawl actually running, and results still
+ * stream in as each finishes.
+ */
+private val crawlSlots = kotlinx.coroutines.sync.Semaphore(4)
 
 /** How long a whole search may hold its scrape permit, whatever the crawlers are doing. */
 private const val SEARCH_BUDGET_MS = 420_000L
@@ -425,6 +437,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // A crawler that never returns must not outlive the request. Without this
                           // its coroutine holds the stream open, the stream holds the scrape permit,
                           // and the server refuses every later search as busy until it restarts.
+                          // The budget starts when the crawl does, not when it joins the queue.
+                          crawlSlots.withPermit {
                           withTimeoutOrNull(PLATFORM_BUDGET_MS) crawl@{
                             val crawler = CrawlerRegistry.crawlerFor(platformId)
                             if (crawler == null) {
@@ -629,6 +643,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                               error = "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on",
                               errorType = "TIMEOUT",
                           ))
+                          }
                         }
                     }
                     // Close channel once all platform coroutines finish

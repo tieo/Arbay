@@ -109,62 +109,70 @@ internal fun flagEmoji(cc: String): String {
     }
 }
 
+/**
+ * One line of metadata: what the listing is, what it states, and how much it never stated.
+ *
+ * Condition, specs and the unchecked criteria used to be three stacked lines of a few words each,
+ * which spent more of the card on gaps than on the listing. The specs wrap when there are many,
+ * and the unchecked count sits at the end as a quiet pill that opens the detail.
+ */
 @Composable
-private fun VehicleSpecsRow(v: VehicleInfo, unchecked: List<String> = emptyList()) {
-    data class Spec(val text: String, val field: VehicleField)
+private fun MetaLine(condition: Condition?, vehicle: VehicleInfo?, unchecked: List<String>) {
+    data class Spec(val text: String, val verified: Boolean)
+    val v = vehicle
     val specs = buildList {
-        v.firstRegYear?.let {
-            val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
-            add(Spec(ym, VehicleField.FIRST_REG_YEAR))
+        condition?.let {
+            add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " "), true))
         }
-        v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", VehicleField.MILEAGE)) }
-        v.powerKw?.let { add(Spec("$it kW", VehicleField.POWER)) }
-        v.gearbox?.let {
-            val g = if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe"
-            add(Spec(g, VehicleField.GEARBOX))
-        }
-        // OTHER is what the parser says when it could not tell, so it is not a spec: "~Other"
-        // beside a van says nothing a reader can use.
-        v.fuel?.takeIf { it != Fuel.OTHER }
-            ?.let { add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, VehicleField.FUEL)) }
-        // Van size code: verified when the listing stated an explicit L/H, inferred from a
-        // roof/wheelbase word otherwise. Uses the length field's verification for the marker.
-        val vanCode = buildString {
-            v.vanLength?.let { append("L$it") }
-            v.vanHeight?.let { append("H$it") }
-        }
-        if (vanCode.isNotEmpty()) {
-            val field = if (v.vanLength != null) VehicleField.VAN_LENGTH else VehicleField.VAN_HEIGHT
-            add(Spec(vanCode, field))
+        if (v != null) {
+            v.firstRegYear?.let {
+                val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
+                add(Spec(ym, v.isVerified(VehicleField.FIRST_REG_YEAR)))
+            }
+            v.mileageKm?.let { add(Spec("${"%,d".format(it)} km", v.isVerified(VehicleField.MILEAGE))) }
+            v.powerKw?.let { add(Spec("$it kW", v.isVerified(VehicleField.POWER))) }
+            v.gearbox?.let {
+                add(Spec(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe",
+                    v.isVerified(VehicleField.GEARBOX)))
+            }
+            // OTHER is what the parser says when it could not tell, so it is not a spec.
+            v.fuel?.takeIf { it != Fuel.OTHER }?.let {
+                add(Spec(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }, v.isVerified(VehicleField.FUEL)))
+            }
+            val vanCode = buildString {
+                v.vanLength?.let { append("L$it") }
+                v.vanHeight?.let { append("H$it") }
+            }
+            if (vanCode.isNotEmpty()) {
+                add(Spec(vanCode, v.isVerified(
+                    if (v.vanLength != null) VehicleField.VAN_LENGTH else VehicleField.VAN_HEIGHT,
+                )))
+            }
         }
     }
     if (specs.isEmpty() && unchecked.isEmpty()) return
+
     var explaining by remember { mutableStateOf(false) }
     Spacer(Modifier.height(3.dp))
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        specs.take(4).forEach { spec ->
-            val verified = v.isVerified(spec.field)
+        specs.take(5).forEach { spec ->
             Text(
-                if (verified) spec.text else "~${spec.text}",
+                if (spec.verified) spec.text else "~${spec.text}",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (verified) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    .copy(alpha = if (spec.verified) 1f else 0.55f),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
-        // What the market did not publish, as a count rather than a list: the list is the same on
-        // every listing from a market that publishes nothing, and seven words of it per card buried
-        // the listings themselves. The names are one tap away, where they answer a question the
-        // reader has actually asked.
         if (unchecked.isNotEmpty()) {
             Surface(
                 onClick = { explaining = true },
                 shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
             ) {
                 Text(
                     "${unchecked.size} unchecked",
@@ -175,21 +183,43 @@ private fun VehicleSpecsRow(v: VehicleInfo, unchecked: List<String> = emptyList(
             }
         }
     }
-    if (explaining) {
-        AlertDialog(
-            onDismissRequest = { explaining = false },
-            title = { Text("Not checked", style = MaterialTheme.typography.titleMedium) },
-            text = {
+    if (explaining) UncheckedDialog(unchecked) { explaining = false }
+}
+
+/** The criteria this listing was never tested against, as the list it is, with one line of why. */
+@Composable
+private fun UncheckedDialog(unchecked: List<String>, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Never checked", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    unchecked.forEach { name ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
                 Text(
-                    "This market publishes no " + unchecked.joinToString(", ") +
-                        ", so those criteria of yours were never tested against this listing. " +
-                        "It is here because a missing spec is not treated as a mismatch.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "This market never published them, so the listing was kept rather than dropped.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            },
-            confirmButton = { TextButton(onClick = { explaining = false }) { Text("Close") } },
-        )
-    }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+    )
 }
 
 @Composable
@@ -215,8 +245,8 @@ internal fun ListingCard(
     ) {
       Column {
         Row(
-            modifier = Modifier.padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 10.dp),
+            verticalAlignment = Alignment.Top,
         ) {
             // Thumbnail
             // http for a listing off a market, a path for one drawn off-screen: both are
@@ -224,7 +254,7 @@ internal fun ListingCard(
             val firstImage = listing.imageUrls.firstOrNull { it.isNotBlank() }
             if (firstImage != null) {
                 val thumbnail = Modifier
-                    .size(56.dp)
+                    .size(64.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 val already = io.github.tieo.arbay.ui.LocalPreloadedImages.current(firstImage)
@@ -271,7 +301,7 @@ internal fun ListingCard(
                         )
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     listing.title.tidyTitle(),
                     style = MaterialTheme.typography.bodyMedium,
@@ -279,19 +309,11 @@ internal fun ListingCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // Condition as quiet metadata, not a coloured pill.
-                listing.condition?.takeIf { !listing.sold }?.let {
-                    Text(
-                        it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                // Kept, not matched: a listing whose specs the market never published was never
-                // tested against the criteria that name them.
-                VehicleSpecsRow(
-                    listing.vehicle ?: VehicleInfo(),
+                // Condition, specs and what went unchecked read as one line of metadata. Stacked as
+                // three, each a few words long, they left more gap on the card than content.
+                MetaLine(
+                    condition = listing.condition?.takeIf { !listing.sold },
+                    vehicle = listing.vehicle,
                     unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty(),
                 )
 
