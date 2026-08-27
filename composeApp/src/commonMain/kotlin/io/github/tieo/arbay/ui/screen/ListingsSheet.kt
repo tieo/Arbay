@@ -128,6 +128,10 @@ fun ListingsSheet(
     onToggleBookmark: (() -> Unit)? = null,
     platforms: List<PlatformId>? = null,
     carFilters: CarFilters? = null,
+    // Alternate phrasings that count as this same search (a catalogue product's own data, or
+    // whatever a bookmark/history entry carries) — sent to the crawl alongside carFilters, never
+    // embedded in searchQuery itself.
+    aliases: List<String> = emptyList(),
     onEditFilters: (() -> Unit)? = null,
     // The saved price bound from the bookmark's filter (display currency), so the results slider
     // starts where the user last left it instead of resetting to the full range on reopen.
@@ -402,8 +406,11 @@ fun ListingsSheet(
         (platforms ?: PlatformId.entries).any { it.name.startsWith("EBAY") }
     }
 
-    LaunchedEffect(searchQuery, carFilters) {
-        listingViewModel.search(searchQuery, platforms, carFilters)
+    // Keyed on searchQuery/carFilters/aliases only, same as before — blockedTerms is read at
+    // whatever value it holds when one of those actually changes, but blocking/unblocking a word
+    // live must not itself trigger a re-crawl: it only re-filters what was already fetched.
+    LaunchedEffect(searchQuery, carFilters, aliases) {
+        listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases)
     }
 
     AdaptiveSheet(onDismiss = onDismiss) {
@@ -665,7 +672,7 @@ fun ListingsSheet(
                                     )
                                 }
                                 TextButton(onClick = {
-                                    listingViewModel.search(searchQuery, platforms, carFilters, force = true)
+                                    listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases, force = true)
                                 }) { Text("Try again") }
                             }
                         }

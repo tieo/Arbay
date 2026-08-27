@@ -145,14 +145,32 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
     )
 }
 
+/** Structured search-text extras carried as request params, never folded into the query text
+ *  itself — an alternate phrasing or an excluded word is data about the search, not something
+ *  typed into the box a person or a catalog entry's [io.github.tieo.arbay.catalog.KnownProduct]
+ *  names their search by. */
+private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQuery): SearchQuery {
+    val excludeKeywords = queryParameters["excludeKeywords"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    val aliases = queryParameters["aliases"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    return base.copy(
+        excludeKeywords = excludeKeywords ?: base.excludeKeywords,
+        aliases = aliases ?: base.aliases,
+    )
+}
+
 /** The search query localized to a platform's language — a cross-border market (e.g. eBay.it) is
  *  searched with the translated term ("Parkettschleifmaschine" → "levigatrice per parquet") so its
  *  own search returns local listings; the home language passes through unchanged. Both the crawl
- *  and the relevance filter then use this same localized query. */
+ *  and the relevance filter then use this same localized query. Aliases travel the same way, so a
+ *  catalog entry's alternate spelling still matches a translated title. */
 private suspend fun localizedQuery(base: SearchQuery, platform: PlatformId): SearchQuery {
     if (platform.searchLanguage == "de" || base.text.isBlank()) return base
     val translated = Translator.translate(base.text, "de", platform.searchLanguage)
-    return if (translated == base.text) base else base.copy(text = translated)
+    val translatedAliases = base.aliases.map { alias ->
+        Translator.translate(alias, "de", platform.searchLanguage)
+    }
+    return if (translated == base.text && translatedAliases == base.aliases) base
+    else base.copy(text = translated, aliases = translatedAliases)
 }
 
 /** A price in EUR cents, converting from the listing's own currency so cross-border results
@@ -348,7 +366,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             }
 
             val soldOnly = call.queryParameters["sold"]?.toBooleanStrictOrNull() ?: false
-            val searchQuery = call.applyCarFilters(SearchQuery(text = query, soldOnly = soldOnly))
+            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query, soldOnly = soldOnly)))
 
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try {
@@ -402,8 +420,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 defaultPlatforms(isCarQuery(query))
             }
 
-            val searchQuery = call.applyCarFilters(SearchQuery(text = query))
-            val parsedQuery = RelevanceFilter.parseQuery(query)
+            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query)))
             val isCarQuery = isCarQuery(query)
 
             val permit = call.acquireScrapeSlot() ?: return@get

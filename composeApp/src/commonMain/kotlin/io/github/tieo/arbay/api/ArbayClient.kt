@@ -147,6 +147,7 @@ class ArbayClient(
     suspend fun crawlerSearch(
         query: String, platform: PlatformId? = null, limit: Int = 50, sold: Boolean = false,
         carFilters: io.github.tieo.arbay.model.CarFilters? = null,
+        excludeKeywords: List<String> = emptyList(), aliases: List<String> = emptyList(),
     ): List<Listing> =
         client.get("$baseUrl/api/crawler/search") {
             parameter("q", query)
@@ -156,6 +157,8 @@ class ArbayClient(
             carFilters?.takeUnless { it.isEmpty }?.let {
                 parameter("carFilters", streamJson.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), it))
             }
+            if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
+            if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
         }.body()
 
     // ── Free Items ────────────────────────────────────────────────────────────
@@ -320,6 +323,8 @@ class ArbayClient(
         platform: PlatformId? = null,
         platforms: List<PlatformId>? = null,
         filters: CarFilters? = null,
+        excludeKeywords: List<String> = emptyList(),
+        aliases: List<String> = emptyList(),
         lat: Double? = null,
         lon: Double? = null,
     ): Flow<CrawlerSearchEvent> = flow {
@@ -336,6 +341,8 @@ class ArbayClient(
                 // mirrors the native-param fields itself.
                 parameter("carFilters", streamJson.encodeToString(CarFilters.serializer(), f))
             }
+            if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
+            if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
         }.execute { response ->
             if (!response.status.isSuccess()) throw ArbayApiException(response.bodyAsText().ifBlank { response.status.description })
             val channel = response.bodyAsChannel()

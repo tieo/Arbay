@@ -28,6 +28,8 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.debug.DebugRegistry
 import io.github.tieo.arbay.debug.debugJson
+import io.github.tieo.arbay.history.SearchHistoryEntry
+import io.github.tieo.arbay.history.SearchHistoryStore
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.model.FreeItemProfile
@@ -50,12 +52,21 @@ import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
 
-/** Best-effort make/model nodes from a saved search's query text, for prefilling the editor. */
+/**
+ * Best-effort make/model nodes for prefilling the vehicle-search form's dropdowns, from the text of
+ * a search already known to be a car search — see [ResultsView.isCar]. Never used to decide whether
+ * something IS a car search: that used to be guessed from whether a make's name appeared anywhere
+ * in the query text, which misfires on any make that is also an ordinary word (RAM is a real
+ * vehicle brand and also what a "32GB SODIMM RAM" listing calls itself). A wrong guess here only
+ * means the wrong dropdown is preselected in a form the user is looking straight at; it can no
+ * longer silently reroute an unrelated search into vehicle mode.
+ */
 private fun resolveCarNodes(query: String): Pair<CarMakeNode?, CarModelNode?> {
-    val q = query.lowercase()
+    val q = query.trim().lowercase()
+    fun leads(word: String) = q == word || q.startsWith("$word ")
     val make = CarTaxonomyStore.taxonomy.makes.firstOrNull { m ->
         val n = m.name.lowercase()
-        q.contains(n) || (n == "volkswagen" && Regex("""\bvw\b""").containsMatchIn(q))
+        leads(n) || (n == "volkswagen" && leads("vw"))
     }
     val model = make?.models?.firstOrNull { q.contains(it.name.lowercase()) }
     return make to model
@@ -66,7 +77,8 @@ private fun resolveCarNodes(query: String): Pair<CarMakeNode?, CarModelNode?> {
  * running the car form — produces one of these, so the results sheet is wired once instead of
  * three times with three different notions of what saving, editing and blocking mean.
  *
- * A non-null [filters] marks it a vehicle search and gives the sheet its car view; the bookmark
+ * [isCar] marks it a vehicle search and gives the sheet its car view; it is carried explicitly
+ * from wherever the search actually came from, never re-derived from the query text. The bookmark
  * behind it, if any, is looked up live from the saved searches by query text rather than carried
  * here, so saving and removing take effect without rebuilding this.
  */
@@ -77,45 +89,71 @@ private data class ResultsView(
     val make: CarMakeNode? = null,
     val model: CarModelNode? = null,
     val filters: CarFilters? = null,
+    val isCar: Boolean = false,
+    // Alternate phrasings and excluded words this search carries — a catalogue product's own
+    // data, or whatever a bookmark/history entry was last narrowed to. Never embedded in [query]
+    // itself.
+    val aliases: List<String> = emptyList(),
+    val excludeKeywords: List<String> = emptyList(),
     /** Back leads to the car form it was run from, else to discovery, else nowhere. */
     val fromCarForm: Boolean = false,
     val fromDiscovery: Boolean = false,
 ) {
-    val isCar: Boolean get() = filters != null
-
     companion object {
-        /** The results of a saved search. A vehicle query gets the car view even with no filters
-         *  set yet, so the filters can be added from there. */
+        /** The results of a saved search. A vehicle bookmark gets the car view even with no
+         *  filters set yet, so the filters can be added from there. */
         fun of(product: TrackedProduct): ResultsView {
-            val (make, model) = resolveCarNodes(product.searchQuery.text)
+            val isCar = product.searchQuery.isVehicleSearch
+            val (make, model) = if (isCar) resolveCarNodes(product.searchQuery.text) else null to null
             return ResultsView(
                 name = product.name,
                 query = product.searchQuery.text,
                 platforms = product.searchQuery.platforms,
                 make = make,
                 model = model,
-                filters = if (make != null) product.searchQuery.toCarFilters() ?: CarFilters() else null,
+                filters = if (isCar) product.searchQuery.toCarFilters() ?: CarFilters() else null,
+                isCar = isCar,
+                aliases = product.searchQuery.aliases,
+                excludeKeywords = product.searchQuery.excludeKeywords,
             )
         }
 
-        /** The results of a query that is not saved yet. */
+        /** The results of a search that was run before but never saved — same shape as reopening a
+         *  bookmark, since a history entry carries the same [SearchQuery]. */
+        fun of(entry: SearchHistoryEntry): ResultsView {
+            val isCar = entry.searchQuery.isVehicleSearch
+            val (make, model) = if (isCar) resolveCarNodes(entry.searchQuery.text) else null to null
+            return ResultsView(
+                name = entry.name,
+                query = entry.searchQuery.text,
+                platforms = entry.searchQuery.platforms,
+                make = make,
+                model = model,
+                filters = if (isCar) entry.searchQuery.toCarFilters() ?: CarFilters() else null,
+                isCar = isCar,
+                aliases = entry.searchQuery.aliases,
+                excludeKeywords = entry.searchQuery.excludeKeywords,
+            )
+        }
+
+        /** The results of a query typed into the plain search box or a catalogue product — never a
+         *  vehicle search, since neither way in goes through the car form. Aliases/excludeKeywords
+         *  are a catalogue product's own data (empty for a plain typed search). */
         fun of(
             name: String,
             query: String,
             platforms: List<PlatformId>?,
             fromDiscovery: Boolean = false,
-        ): ResultsView {
-            val (make, model) = resolveCarNodes(query)
-            return ResultsView(
-                name = name,
-                query = query,
-                platforms = platforms,
-                make = make,
-                model = model,
-                filters = if (make != null) CarFilters() else null,
-                fromDiscovery = fromDiscovery,
-            )
-        }
+            aliases: List<String> = emptyList(),
+            excludeKeywords: List<String> = emptyList(),
+        ): ResultsView = ResultsView(
+            name = name,
+            query = query,
+            platforms = platforms,
+            fromDiscovery = fromDiscovery,
+            aliases = aliases,
+            excludeKeywords = excludeKeywords,
+        )
     }
 }
 
@@ -185,11 +223,19 @@ fun MainScreen(
     // The bookmark behind the open results, if the query is saved. Looked up live, so saving or
     // removing one takes effect without rebuilding the view.
     val resultsBookmark = results?.let { savedFor(it.query) }
+    // A search's filters live somewhere the moment it opens: on the bookmark if it is saved, in
+    // history otherwise. This is the "otherwise" — looked up live, same as the bookmark above.
+    val searchHistory by SearchHistoryStore.entries.collectAsState()
+    val resultsHistoryEntry = results?.let { view -> searchHistory.firstOrNull {
+        it.searchQuery.text.trim().equals(view.query.trim(), ignoreCase = true)
+    } }
     // Blocked keywords for the open results, held locally so edits filter live before they are
-    // saved. Seeded from the bookmark; a search not saved yet starts with none.
+    // saved. Seeded from the bookmark, else from history; a search with neither starts with none.
     var resultsBlockedTerms by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(results?.query, resultsBookmark?.id) {
-        resultsBlockedTerms = resultsBookmark?.searchQuery?.excludeKeywords ?: emptyList()
+        resultsBlockedTerms = resultsBookmark?.searchQuery?.excludeKeywords
+            ?: resultsHistoryEntry?.searchQuery?.excludeKeywords
+            ?: emptyList()
     }
 
     // "Where we are" for the debug dump (debug/DebugRegistry.kt): which sheet is open and what it
@@ -228,7 +274,18 @@ fun MainScreen(
     fun openResults(view: ResultsView) {
         cameFromDiscovery = showDiscovery
         showDiscovery = false
-        results = view.copy(fromDiscovery = view.fromDiscovery || cameFromDiscovery)
+        val opened = view.copy(fromDiscovery = view.fromDiscovery || cameFromDiscovery)
+        // Recorded before showing, so the results sheet's own filter/history lookups already see
+        // this search. Keeps whatever it was narrowed to last time it ran (recordOpen only refreshes
+        // the name, platforms and vehicle criteria), so reopening a history row does not reset it.
+        // Empty here means "this way in doesn't know about aliases/excludes" (a plain typed
+        // search, a bookmark with none set), not "clear whatever history already has" — null
+        // keeps recordOpen's existing-entry merge, same as it already does for carFilters.
+        SearchHistoryStore.recordOpen(
+            opened.name, opened.query, opened.platforms, opened.filters, opened.isCar,
+            aliases = opened.aliases.ifEmpty { null }, excludeKeywords = opened.excludeKeywords.ifEmpty { null },
+        )
+        results = opened
     }
 
     fun openPreview(name: String, query: String, platforms: List<PlatformId>?) {
@@ -236,7 +293,12 @@ fun MainScreen(
     }
 
     fun openPreview(product: KnownProduct) {
-        openPreview(product.displayName, product.searchQuery, product.effectivePlatforms)
+        openResults(
+            ResultsView.of(
+                product.displayName, product.searchQuery, product.effectivePlatforms,
+                aliases = product.aliases, excludeKeywords = product.excludeKeywords,
+            ),
+        )
     }
 
     /** Open the car form on a search, prefilled. The one way in, from the bookmark card, from the
@@ -460,6 +522,10 @@ fun MainScreen(
             onCustomSearch = { query -> openAddSheet(initialQuery = query) },
             onLiveSearch = { query -> openPreview(query, query, null) },
             onFreeItems = { showFreeItems = true },
+            history = searchHistory,
+            onOpenHistory = { entry -> openResults(ResultsView.of(entry)) },
+            onRemoveHistory = { query -> SearchHistoryStore.remove(query) },
+            onClearHistory = { SearchHistoryStore.clear() },
             onCarSearch = {
                 // Fresh car search: clear any state left from a previous edit so the form
                 // opens empty, not prefilled with the last bookmark's make/model/filters.
@@ -521,10 +587,14 @@ fun MainScreen(
                             searchQuery = saved.searchQuery.withCarFilters(filters).copy(
                                 text = query,
                                 platforms = platforms ?: PlatformId.entries,
+                                isVehicleSearch = true,
                             ),
                         ),
                     )
                 }
+                // Reaching this callback IS running the vehicle form, so this is always a car
+                // search — recorded the same way any other search is, so it shows up in Recent.
+                SearchHistoryStore.recordOpen(name, query, platforms, filters, isVehicleSearch = true)
                 results = ResultsView(
                     name = name,
                     query = query,
@@ -532,6 +602,7 @@ fun MainScreen(
                     make = make,
                     model = model,
                     filters = filters,
+                    isCar = true,
                     fromCarForm = true,
                 )
             },
@@ -581,6 +652,8 @@ fun MainScreen(
                         searchText = query,
                         platforms = platforms,
                         identifiers = identifiers,
+                        aliases = addSheetPrefill?.aliases ?: emptyList(),
+                        excludeKeywords = addSheetPrefill?.excludeKeywords ?: emptyList(),
                     )
                 }
                 showAddSheet = false
@@ -602,20 +675,28 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = view.platforms,
             carFilters = view.filters,
+            aliases = (bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery)?.aliases ?: view.aliases,
             // A vehicle search can always reach the form, even with no filters set yet, so they
             // can be added from the results.
             onEditFilters = if (view.isCar) {
                 { openCarEditor(view, bookmark) }
             } else null,
-            // Filters are part of the saved search, so they only persist once there is one.
-            savedFilters = bookmark?.searchQuery,
-            onFiltersPersist = bookmark?.let { saved ->
-                { query: SearchQuery -> productViewModel.updateProduct(saved.copy(searchQuery = query)) }
+            // A search's filters live on the bookmark once it is saved; until then they live in
+            // history, which openResults already seeded, so this is never null for an open search.
+            savedFilters = bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery,
+            onFiltersPersist = { query: SearchQuery ->
+                if (bookmark != null) productViewModel.updateProduct(bookmark.copy(searchQuery = query))
+                else SearchHistoryStore.record(view.name, query)
             },
             blockedTerms = resultsBlockedTerms,
             onBlockedTermsChange = { updated ->
                 resultsBlockedTerms = updated
-                bookmark?.let { productViewModel.setBlockedKeywords(it, updated) }
+                if (bookmark != null) {
+                    productViewModel.setBlockedKeywords(bookmark, updated)
+                } else {
+                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters)
+                    SearchHistoryStore.record(view.name, base.copy(excludeKeywords = updated))
+                }
             },
             isBookmarked = bookmark != null,
             onToggleBookmark = {
@@ -628,6 +709,8 @@ fun MainScreen(
                         platforms = view.platforms ?: PlatformId.entries,
                         carFilters = view.filters,
                         excludeKeywords = resultsBlockedTerms,
+                        isVehicleSearch = view.isCar,
+                        aliases = resultsHistoryEntry?.searchQuery?.aliases ?: view.aliases,
                     )
                 }
             },

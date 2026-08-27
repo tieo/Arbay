@@ -21,8 +21,13 @@ class RelevanceFilterTest {
         scrapedAt = Clock.System.now(),
     )
 
-    private fun search(query: String, listings: List<Listing>): List<Listing> =
-        RelevanceFilter.filter(listings, SearchQuery(text = query))
+    private fun search(
+        query: String,
+        listings: List<Listing>,
+        excludeKeywords: List<String> = emptyList(),
+        aliases: List<String> = emptyList(),
+    ): List<Listing> =
+        RelevanceFilter.filter(listings, SearchQuery(text = query, excludeKeywords = excludeKeywords, aliases = aliases))
 
     // === Placeholder title filtering ===
 
@@ -57,12 +62,12 @@ class RelevanceFilterTest {
 
     @Test
     fun `negative keywords exclude matching listings`() {
-        val results = search("MFC-L2750DW -toner -drum", listOf(
+        val results = search("MFC-L2750DW", listOf(
             listing("Brother MFC-L2750DW Multifunktionsdrucker"),
             listing("Toner kompatibel für Brother MFC-L2750DW"),
             listing("DR2400 Trommel Drum für MFC-L2750DW"),
             listing("Brother MFC-L2750DW 4-in-1 Laserdrucker"),
-        ))
+        ), excludeKeywords = listOf("toner", "drum"))
         assertEquals(2, results.size)
         assertTrue(results.all { !it.title.lowercase().contains("toner") && !it.title.lowercase().contains("drum") })
     }
@@ -107,11 +112,11 @@ class RelevanceFilterTest {
 
     @Test
     fun `OR query matches either group`() {
-        val results = search("Sony WH-1000XM5 OR Sony WH-1000XM4", listOf(
+        val results = search("Sony WH-1000XM5", listOf(
             listing("Sony WH-1000XM5 Noise Cancelling Headphones"),
             listing("Sony WH-1000XM4 Wireless Headphones"),
             listing("Sony WF-1000XM5 Earbuds"),
-        ))
+        ), aliases = listOf("Sony WH-1000XM4"))
         assertTrue(results.any { it.title.contains("XM5 Noise") })
         assertTrue(results.any { it.title.contains("XM4 Wireless") })
     }

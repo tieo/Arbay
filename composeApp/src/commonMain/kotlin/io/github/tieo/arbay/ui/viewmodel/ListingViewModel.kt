@@ -214,6 +214,11 @@ class ListingViewModel(
 
     private var searchJob: Job? = null
     private var carFilters: CarFilters? = null
+    // What must not appear, and alternate phrasings that count as this same search — set once per
+    // search() call, alongside carFilters, so a re-search (refresh, sold history) uses the same
+    // identity as the search that first ran.
+    private var excludeKeywords: List<String> = emptyList()
+    private var aliases: List<String> = emptyList()
 
     /** Show only these markets; empty shows every market that answered. */
     fun showMarkets(markets: Set<PlatformId>) { _shownMarkets.value = markets }
@@ -231,7 +236,7 @@ class ListingViewModel(
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
-        search(query, platforms, carFilters, force = true)
+        search(query, platforms, carFilters, excludeKeywords, aliases, force = true)
     }
 
     fun searchSold() {
@@ -250,7 +255,12 @@ class ListingViewModel(
                 )
                 val filters = carFilters
                 val freshSold = ebayPlatforms.flatMap { platform ->
-                    try { client.crawlerSearch(query, platform, limit = 500, sold = true, carFilters = filters) } catch (_: Exception) { emptyList() }
+                    try {
+                        client.crawlerSearch(
+                            query, platform, limit = 500, sold = true, carFilters = filters,
+                            excludeKeywords = excludeKeywords, aliases = aliases,
+                        )
+                    } catch (_: Exception) { emptyList() }
                 }
                 val seen = mutableSetOf<String>()
                 _priceHistory.value = (freshSold + history + _priceHistory.value)
@@ -386,11 +396,23 @@ class ListingViewModel(
         }
     }
 
-    fun search(query: String, platforms: List<PlatformId>? = null, filters: CarFilters? = null, force: Boolean = false) {
+    fun search(
+        query: String,
+        platforms: List<PlatformId>? = null,
+        filters: CarFilters? = null,
+        excludeKeywords: List<String> = emptyList(),
+        aliases: List<String> = emptyList(),
+        force: Boolean = false,
+    ) {
         if (query.isBlank() || rendersASample) return
-        if (!force && query == _searchQuery.value && filters == carFilters && (_allListings.value.isNotEmpty() || _loading.value)) return
+        if (!force && query == _searchQuery.value && filters == carFilters &&
+            excludeKeywords == this.excludeKeywords && aliases == this.aliases &&
+            (_allListings.value.isNotEmpty() || _loading.value)
+        ) return
         _searchQuery.value = query
         carFilters = filters
+        this.excludeKeywords = excludeKeywords
+        this.aliases = aliases
         _priceHistory.value = emptyList()
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
@@ -406,7 +428,11 @@ class ListingViewModel(
 
             try {
                 withTimeoutOrNull(360_000L) {
-                client.crawlerSearchStream(query, platforms = platforms, filters = filters, lat = userLat, lon = userLon).collect { event ->
+                client.crawlerSearchStream(
+                    query, platforms = platforms, filters = filters,
+                    excludeKeywords = excludeKeywords, aliases = aliases,
+                    lat = userLat, lon = userLon,
+                ).collect { event ->
                     when (event.type) {
                         CrawlerEventType.SEARCH_STARTED -> {
                             _totalPlatforms.value = event.totalPlatforms

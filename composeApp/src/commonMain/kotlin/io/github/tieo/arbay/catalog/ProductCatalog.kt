@@ -36,6 +36,7 @@ object ProductCatalog {
                 it.brand.contains(q, ignoreCase = true) ||
                 it.mpn?.contains(q, ignoreCase = true) == true ||
                 it.searchQuery.contains(q, ignoreCase = true) ||
+                it.aliases.any { a -> a.contains(q, ignoreCase = true) } ||
                 it.tags.any { t -> t.contains(q, ignoreCase = true) }
         }
     }

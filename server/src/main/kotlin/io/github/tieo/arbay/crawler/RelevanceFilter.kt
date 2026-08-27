@@ -5,43 +5,34 @@ import io.github.tieo.arbay.model.SearchQuery
 
 object RelevanceFilter {
 
+    // Unit suffixes that can be glued to a number: "256gb", "512tb", "16mp"
+    private val unitSuffixes = setOf("gb", "tb", "mb", "mp", "mhz", "ghz", "mah", "wh", "mm", "cm", "kg", "zoll", "inch")
+
     data class ParsedQuery(
         val positiveTokens: List<String>,
         val negativeTokens: List<String>,
         val orGroups: List<List<String>>,
     )
 
-    fun parseQuery(raw: String): ParsedQuery {
-        val parts = raw.split(" ").filter { it.isNotBlank() }
-        val negative = mutableListOf<String>()
-        val positiveParts = mutableListOf<String>()
-
-        for (part in parts) {
-            if (part.startsWith("-") && part.length > 1) {
-                negative.add(normalizeToken(part.removePrefix("-")))
-            } else {
-                positiveParts.add(part)
-            }
-        }
-
-        val orGroups = mutableListOf<List<String>>()
-        val plainTokens = mutableListOf<String>()
-        val joined = positiveParts.joinToString(" ")
-        if (joined.contains(" OR ", ignoreCase = true)) {
-            val alternatives = joined.split(Regex("\\s+OR\\s+", RegexOption.IGNORE_CASE))
-            for (alt in alternatives) {
-                orGroups.add(alt.trim().split("\\s+".toRegex()).map { normalizeToken(it) })
-            }
+    /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
+     *  not appear, [SearchQuery.aliases] for alternate phrasings that count as the same search.
+     *  Neither is read out of the query text: a person's search box, and a catalog entry's own
+     *  canonical phrase, both stay exactly the one thing they name. */
+    fun parseQuery(query: SearchQuery): ParsedQuery {
+        val orGroups = if (query.aliases.isNotEmpty()) {
+            (listOf(query.text) + query.aliases).map { tokenize(it) }
         } else {
-            plainTokens.addAll(positiveParts.map { normalizeToken(it) })
+            emptyList()
         }
-
         return ParsedQuery(
-            positiveTokens = plainTokens,
-            negativeTokens = negative,
+            positiveTokens = tokenize(query.text),
+            negativeTokens = query.excludeKeywords.map { normalizeToken(it) },
             orGroups = orGroups,
         )
     }
+
+    private fun tokenize(phrase: String): List<String> =
+        phrase.split(" ").filter { it.isNotBlank() }.map { normalizeToken(it) }
 
     private fun normalizeToken(token: String): String {
         val n = normalize(token.lowercase()).replace(" ", "")
@@ -69,10 +60,16 @@ object RelevanceFilter {
                 .replace(Regex("\\s+"), " ").trim()
         )
         val titleCompact = titleNormForMatching.replace(" ", "")
-        // Strip context numbers that must NOT match numeric model tokens — BUT only
-        // strip storage values if the query doesn't contain storage-like tokens (e.g. "256")
+        // Strip context numbers that must NOT match numeric model tokens — BUT only strip storage
+        // values if the query isn't itself asking for a size. Asking for one means mentioning the
+        // unit at all: as its own word ("32 GB"), glued to the number ("32GB"), or glued to a
+        // kit's quantity×size ("1x32GB"). A fixed list of "plausible" sizes was tried here before
+        // and got it wrong both ways — it missed "1x32" (not a bare number) and would reject a
+        // real, non-power-of-two drive size ("500GB", "480GB") that a query is free to ask for.
         val queryHasStorageToken = (parsed.positiveTokens + parsed.orGroups.flatten()).any { t ->
-            t.all { c -> c.isDigit() } && t.length >= 2 && t.toIntOrNull()?.let { it in listOf(8,16,32,64,128,256,512,1024,2048) } == true
+            t in unitSuffixes || unitSuffixes.any { u ->
+                t.endsWith(u) && t.dropLast(u.length).let { pre -> pre.isNotEmpty() && pre.all { c -> c.isDigit() || c == 'x' } }
+            }
         }
         val titleNormStripped = titleNormForMatching
             .let { if (queryHasStorageToken) it else it.replace(Regex("\\d+\\s*(?:gb|tb|mb)\\b"), " ") }
@@ -101,17 +98,25 @@ object RelevanceFilter {
             }
         }
 
-        // Unit suffixes that can be glued to a number: "256gb", "512tb", "16mp"
-        val unitSuffixes = setOf("gb", "tb", "mb", "mp", "mhz", "ghz", "mah", "wh", "mm", "cm", "kg", "zoll", "inch")
-
         fun tokenMatches(token: String): Boolean {
+            // A bare unit word ("GB", "MHz", "Zoll"...) is never its own word in a real listing
+            // title — every seller glues it to the number ("32GB"). A query typed with a space
+            // before the unit ("32 GB", "1x32 GB") must still match those titles.
+            if (token in unitSuffixes && titleWords.any { Regex("""^\d+${Regex.escape(token)}$""").matches(it) }) {
+                return true
+            }
             // ≤2 chars: whole-word only, or number+unit (e.g. "6" matches "6" but not "16")
             if (token.length <= 2) return titleWords.any { it == token }
             // 3-5 chars: whole-word, or numeric token matching word that starts with it + unit suffix
             // (e.g. "256" matches "256gb", "512" matches "512tb")
             if (token.length <= 5) {
                 if (titleWords.any { it == token }) return true
-                if (token.all { it.isDigit() }) {
+                // A plain size ("256") or a kit's quantity×size ("1x32", "2x16") both glue directly
+                // to a unit suffix in real listing titles ("256gb", "1x32gb"), never with the space a
+                // query typed between them ("1x32 GB" searching for a title that never wrote "1x32 "
+                // as its own word never matched anything, on any market, and looked identical to
+                // nothing existing).
+                if (token.all { it.isDigit() } || Regex("""^\d+x\d+$""").matches(token)) {
                     if (titleWords.any { word -> word.startsWith(token) && unitSuffixes.any { word == token + it } }) return true
                 }
                 // Compact matching with word-boundary guard (catches hyphen-split tokens).
@@ -336,7 +341,7 @@ object RelevanceFilter {
     }
 
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
-        val parsed = parseQuery(query.text)
+        val parsed = parseQuery(query)
         val listings = listings
             .filter(::hasSanePrice)
             .filterNot { isWantedOrJobAd(it, query.text) }
@@ -384,7 +389,7 @@ object RelevanceFilter {
      * (a ThinkPad X1 is a "laptop" without the word in its title).
      */
     fun irrelevanceReport(listings: List<Listing>, query: SearchQuery): String? {
-        val parsed = parseQuery(query.text)
+        val parsed = parseQuery(query)
         val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
         if (tokenCount < 2 || listings.size < 5) return null
         val matching = listings.count { score(it, parsed) > 0.0 }

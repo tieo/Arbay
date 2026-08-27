@@ -162,21 +162,21 @@ data class SearchQuery(
     // Vehicle criteria, read through carCriteria: crawlers turn what their site supports into
     // native URL parameters, and post-filtering enforces the rest.
     val carFilters: CarFilters? = null,
+    // Set once, when this search was created through the vehicle-search form — never re-derived
+    // from the query text. carFilters alone cannot answer "is this a car search": a vehicle search
+    // with no criteria chosen yet has empty carFilters, indistinguishable from a plain search that
+    // never was one. Guessing from words instead ("does a car make's name appear in this text")
+    // misfires on any make that is also an ordinary word — RAM is a real vehicle brand and also
+    // what a "32GB SODIMM RAM" listing calls itself.
+    val isVehicleSearch: Boolean = false,
+    // Alternate phrasings that count as this same search — a listing matching any one of these as
+    // well as [text] is a match (e.g. text="Fujifilm X-T5", aliases=["XT5"]). Structured data, not
+    // embedded "OR" syntax: the field the user searches stays exactly what they typed or what a
+    // catalog entry names as its one canonical phrase; an alternate spelling is its own thing.
+    val aliases: List<String> = emptyList(),
 ) {
-    /** Search text with negative keywords and OR logic resolved — for platforms that don't support exclusion/OR syntax.
-     *  For OR queries, picks the group with the most tokens (most specific variant). */
+    /** The one phrase to hand a platform search box that only takes a single term — [text] itself,
+     *  or the most descriptive of [aliases] when [text] is less specific than one of them. */
     val positiveText: String
-        get() {
-            val withoutNegatives = text.split(" ")
-                .filter { it.isNotBlank() && !it.startsWith("-") }
-                .joinToString(" ")
-            return if (withoutNegatives.contains(" OR ", ignoreCase = true)) {
-                // Split on OR and pick the group with the most tokens (most descriptive)
-                withoutNegatives.split(Regex("\\s+OR\\s+", RegexOption.IGNORE_CASE))
-                    .maxByOrNull { it.trim().split("\\s+".toRegex()).size }
-                    ?.trim() ?: withoutNegatives
-            } else {
-                withoutNegatives
-            }
-        }
+        get() = (listOf(text) + aliases).maxByOrNull { it.trim().split("\\s+".toRegex()).size } ?: text
 }
