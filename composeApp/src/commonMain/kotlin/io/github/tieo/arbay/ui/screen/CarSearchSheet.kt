@@ -21,6 +21,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.CarTaxonomyStore
+import io.github.tieo.arbay.debug.DebugSlice
+import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.CarMakeNode
@@ -33,6 +35,8 @@ import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlin.math.roundToInt
 
 /** Car marketplaces, paired with the country whose stock they surface. Kept in the
@@ -47,6 +51,40 @@ private val CAR_COLORS = listOf(
 
 /** Metric horsepower per kilowatt, for the hp hint under the power field. */
 private const val HP_PER_KW = 1.35962
+
+/** Every field of the car form as typed, before it becomes a [CarFilters] — see [buildFilters] in
+ *  [CarSearchSheet], called only on submit. */
+@Serializable
+private data class CarSearchScreenSnapshot(
+    val make: CarMakeNode?,
+    val model: CarModelNode?,
+    val showMakePicker: Boolean,
+    val showModelPicker: Boolean,
+    val yearFrom: String,
+    val yearTo: String,
+    val minKm: String,
+    val maxKm: String,
+    val minPrice: String,
+    val maxPrice: String,
+    val minPowerKw: String,
+    val maxPowerKw: String,
+    val transmission: Transmission?,
+    val fuels: List<Fuel>,
+    val bodyTypes: List<BodyType>,
+    val conditions: List<VehicleCondition>,
+    val colors: List<String>,
+    val drivetrain: Drivetrain?,
+    val minDoors: Int?,
+    val minSeats: String,
+    val minEmission: Int?,
+    val sellerType: SellerType?,
+    val vanLengths: List<Int>,
+    val vanHeights: List<Int>,
+    val descriptionContains: String,
+    val idealDescription: String,
+    val strictUnknown: Boolean,
+    val selectedPlatforms: List<PlatformId>,
+)
 
 /**
  * Structured entry form for a car search. Fields are ordered the way a buyer reasons:
@@ -111,6 +149,43 @@ fun CarSearchSheet(
     fun togglePlatform(p: PlatformId) {
         if (p in selectedPlatforms) selectedPlatforms.remove(p) else selectedPlatforms.add(p)
         onPlatformsChange(selectedPlatforms.toList())
+    }
+
+    // Every field as typed, before it becomes a CarFilters — the two disagree exactly when a typed
+    // value fails to parse (a stray unit, a blank field), which is otherwise invisible.
+    DebugSlice("carSearchScreen") {
+        debugJson.encodeToString(
+            CarSearchScreenSnapshot(
+                make = make,
+                model = model,
+                showMakePicker = showMakePicker,
+                showModelPicker = showModelPicker,
+                yearFrom = yearFrom,
+                yearTo = yearTo,
+                minKm = minKm,
+                maxKm = maxKm,
+                minPrice = minPrice,
+                maxPrice = maxPrice,
+                minPowerKw = minPowerKw,
+                maxPowerKw = maxPowerKw,
+                transmission = transmission,
+                fuels = fuels.toList(),
+                bodyTypes = bodyTypes.toList(),
+                conditions = conditions.toList(),
+                colors = colors.toList(),
+                drivetrain = drivetrain,
+                minDoors = minDoors,
+                minSeats = minSeats,
+                minEmission = minEmission,
+                sellerType = sellerType,
+                vanLengths = vanLengths.toList(),
+                vanHeights = vanHeights.toList(),
+                descriptionContains = descriptionContains,
+                idealDescription = idealDescription,
+                strictUnknown = strictUnknown,
+                selectedPlatforms = selectedPlatforms.toList(),
+            ),
+        )
     }
 
     fun buildFilters() = CarFilters(

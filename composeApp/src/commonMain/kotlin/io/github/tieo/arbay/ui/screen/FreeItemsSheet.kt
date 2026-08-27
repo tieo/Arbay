@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.debug.DebugSlice
+import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.rememberCityDetector
@@ -42,10 +44,24 @@ import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlin.math.absoluteValue
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+
+/** The profile editor and saved-matches sheet are local to this screen, not the view model, so
+ *  the debug dump would otherwise show none of what is currently being typed or which is open. */
+@Serializable
+private data class FreeItemsScreenSnapshot(
+    val editingProfile: Boolean,
+    val profileDraft: String,
+    val locationDraft: String,
+    val radiusDraft: Float,
+    val showSavedSheet: Boolean,
+    val buttonAction: String?,
+)
 
 // ── Main Sheet ──────────────────────────────────────────────────────────────
 
@@ -78,6 +94,19 @@ fun FreeItemsSheet(
     var locationDraft by remember(profile) { mutableStateOf(profile?.location ?: "") }
     var radiusDraft by remember(profile) { mutableFloatStateOf((profile?.radiusKm ?: 30).toFloat()) }
     var showSavedSheet by remember { mutableStateOf(false) }
+
+    DebugSlice("freeItemsScreen") {
+        debugJson.encodeToString(
+            FreeItemsScreenSnapshot(
+                editingProfile = editingProfile,
+                profileDraft = profileDraft,
+                locationDraft = locationDraft,
+                radiusDraft = radiusDraft,
+                showSavedSheet = showSavedSheet,
+                buttonAction = buttonAction,
+            ),
+        )
+    }
 
     // A fresh open starts without a stale error banner from an earlier search this app session.
     LaunchedEffect(Unit) { viewModel.clearError() }

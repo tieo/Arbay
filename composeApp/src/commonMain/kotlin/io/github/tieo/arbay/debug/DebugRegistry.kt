@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.debug
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+
 /**
  * What the app actually holds right now, as JSON, for a developer to pull instead of tapping
  * through a live session and screenshotting each state.
@@ -39,4 +42,17 @@ object DebugRegistry {
 
     private fun String.jsonQuoted(): String =
         "\"" + replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+}
+
+/**
+ * A debug slice tied to a sheet's own composition, not the app's. A sheet that only exists while
+ * its own flag is true — Discovery, the car search form, Settings — must not leave its last state
+ * behind in the dump once dismissed, or a closed sheet reads as still open. Call once at the top of
+ * such a sheet; it re-registers with fresh values on every recomposition and unregisters itself
+ * when the sheet leaves composition.
+ */
+@Composable
+fun DebugSlice(key: String, json: () -> String) {
+    DebugRegistry.set(key, json())
+    DisposableEffect(Unit) { onDispose { DebugRegistry.unregister(key) } }
 }

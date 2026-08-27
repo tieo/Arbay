@@ -30,6 +30,9 @@ fun App() {
             DebugRegistry.register("products") { productViewModel.debugSnapshotJson() }
             DebugRegistry.register("results") { listingViewModel.debugSnapshotJson() }
             DebugRegistry.register("freeItems") { freeItemViewModel.debugSnapshotJson() }
+            // A global, not a screen: affects every price on every screen regardless of whether
+            // Settings is open, so it belongs beside the view models, not behind a DebugSlice.
+            DebugRegistry.register("displayCurrency") { "\"${DisplayCurrency.current}\"" }
         }
 
         // Load exchange rates + refresh the car taxonomy on startup

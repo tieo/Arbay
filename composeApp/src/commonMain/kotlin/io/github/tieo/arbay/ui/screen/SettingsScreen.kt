@@ -23,11 +23,15 @@ import io.github.tieo.arbay.loadDeviceSettings
 import io.github.tieo.arbay.saveDeviceSettings
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.appSecrets
+import io.github.tieo.arbay.debug.DebugSlice
+import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.defaultServerUrl
 import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.schedulePolling
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +50,23 @@ fun SettingsSheet(
     // Notification settings
     var notifSettings by remember { mutableStateOf(NotificationSettings()) }
     var notifLoaded by remember { mutableStateOf(false) }
+
+    DebugSlice("settingsScreen") {
+        val statusLabel = when (val s = status) {
+            is Status.Idle -> "idle"
+            is Status.Testing -> "testing"
+            is Status.Ok -> "ok"
+            is Status.Err -> "error: ${s.msg}"
+        }
+        debugJson.encodeToString(
+            SettingsScreenSnapshot(
+                serverUrl = serverUrl,
+                connectionStatus = statusLabel,
+                notifSettings = notifSettings,
+                notifLoaded = notifLoaded,
+            ),
+        )
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -430,6 +451,14 @@ private fun AlertLine(label: String, text: String) {
         modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
     )
 }
+
+@Serializable
+private data class SettingsScreenSnapshot(
+    val serverUrl: String,
+    val connectionStatus: String,
+    val notifSettings: NotificationSettings,
+    val notifLoaded: Boolean,
+)
 
 private sealed class Status {
     data object Idle : Status()

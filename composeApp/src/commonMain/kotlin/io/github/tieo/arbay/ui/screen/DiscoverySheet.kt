@@ -23,8 +23,12 @@ import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.catalog.ProductCatalog
 import io.github.tieo.arbay.catalog.ProductCategory
+import io.github.tieo.arbay.debug.DebugSlice
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import kotlinx.coroutines.delay
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import io.github.tieo.arbay.debug.debugJson
 
 /**
  * The way into a search.
@@ -37,6 +41,9 @@ import kotlinx.coroutines.delay
  * promising a catalogue the app does not have. A tile searched the same words the field does, one
  * tap later and across a narrower set of markets.
  */
+@Serializable
+private data class DiscoveryDebugSnapshot(val typed: String)
+
 @Composable
 fun DiscoverySheet(
     initialCategory: ProductCategory? = null,
@@ -51,6 +58,10 @@ fun DiscoverySheet(
     val focus = remember { FocusRequester() }
     // Matches from the bundled catalogue, which spare the typing rather than replace it.
     val known = remember(typed) { if (typed.isBlank()) emptyList() else ProductCatalog.search(typed) }
+
+    // What is typed but not yet searched — otherwise invisible to the debug dump, since it never
+    // reaches a view model until Enter is pressed or a suggestion is tapped.
+    DebugSlice("discoveryScreen") { debugJson.encodeToString(DiscoveryDebugSnapshot(typed = typed)) }
 
     fun search() {
         val query = typed.trim()

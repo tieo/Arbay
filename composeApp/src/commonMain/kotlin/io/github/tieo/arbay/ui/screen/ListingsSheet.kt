@@ -58,10 +58,14 @@ import coil3.compose.AsyncImage
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.debug.DebugSlice
+import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 import io.github.tieo.arbay.model.SortMode
 import androidx.compose.ui.geometry.Size
@@ -97,6 +101,18 @@ internal fun normalizeCountry(c: String): String? = when (c.trim().uppercase()) 
     "SE", "SCHWEDEN", "SWEDEN" -> "SE"
     else -> c.trim().takeIf { it.length == 2 && it.all { ch -> ch.isLetter() } }?.uppercase()
 }
+
+/** Which of this sheet's own sub-sheets is open and what the shared filters are set to — state
+ *  that lives here, not in [ListingViewModel], so the debug dump would otherwise miss it. */
+@Serializable
+private data class ResultsSheetUiSnapshot(
+    val showFilters: Boolean,
+    val showPrice: Boolean,
+    val showMarkets: Boolean,
+    val conditionFilter: String?,
+    val priceRangeStart: Float,
+    val priceRangeEnd: Float,
+)
 
 @Composable
 fun ListingsSheet(
@@ -209,6 +225,19 @@ fun ListingsSheet(
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
+
+    DebugSlice("resultsScreen") {
+        debugJson.encodeToString(
+            ResultsSheetUiSnapshot(
+                showFilters = showFilters,
+                showPrice = showPrice,
+                showMarkets = showMarkets,
+                conditionFilter = conditionFilter,
+                priceRangeStart = priceRange.start,
+                priceRangeEnd = priceRange.endInclusive,
+            ),
+        )
+    }
 
     // Nearest-first: fetch the device position and order by the distance measured from the
     // coordinates the server already resolved for each listing. No re-crawl.
