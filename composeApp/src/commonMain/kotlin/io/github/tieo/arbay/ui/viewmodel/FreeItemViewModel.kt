@@ -10,6 +10,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 
 class FreeItemViewModel(
     private val client: ArbayClient = ArbayClient(),
@@ -43,6 +44,7 @@ class FreeItemViewModel(
     val dismissedIds: StateFlow<Set<String>> = _dismissedIds
 
     // ── Undo support ─────────────────────────────────────────────────────────
+    @Serializable
     data class UndoableAction(val listing: Listing, val action: FeedbackAction, val direction: String = "left")
     private val _lastAction = MutableStateFlow<UndoableAction?>(null)
     val lastAction: StateFlow<UndoableAction?> = _lastAction
@@ -557,6 +559,7 @@ class FreeItemViewModel(
     }
 }
 
+@Serializable
 data class TelemetryEvent(
     val timestamp: kotlinx.datetime.Instant,
     val action: String,

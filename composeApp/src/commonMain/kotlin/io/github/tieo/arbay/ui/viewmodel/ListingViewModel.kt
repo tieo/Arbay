@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.SortMode
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class PlatformStatus(
     val platformId: String,
     val platformName: String,

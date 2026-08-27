@@ -26,6 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
+import io.github.tieo.arbay.debug.DebugRegistry
+import io.github.tieo.arbay.debug.debugJson
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.PlatformId
@@ -115,6 +119,22 @@ private data class ResultsView(
     }
 }
 
+/** The results sheet's own slice of the "where we are" debug snapshot — [ResultsView] is private
+ *  to this file, so its snapshot type lives here too rather than in the debug package. */
+@Serializable
+private data class ResultsScreenSnapshot(val name: String, val query: String, val isCar: Boolean)
+
+@Serializable
+private data class ScreenDebugSnapshot(
+    val showDiscovery: Boolean,
+    val showAddSheet: Boolean,
+    val showSettings: Boolean,
+    val showFreeItems: Boolean,
+    val showCarSearch: Boolean,
+    val editingProductId: String?,
+    val results: ResultsScreenSnapshot?,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -171,6 +191,26 @@ fun MainScreen(
     LaunchedEffect(results?.query, resultsBookmark?.id) {
         resultsBlockedTerms = resultsBookmark?.searchQuery?.excludeKeywords ?: emptyList()
     }
+
+    // "Where we are" for the debug dump (debug/DebugRegistry.kt): which sheet is open and what it
+    // was opened with. Registered fresh on every recomposition of this screen, which is exactly
+    // when any of these values can change, so it is never stale by the time a dump is requested.
+    DebugRegistry.set(
+        "screen",
+        debugJson.encodeToString(
+            ScreenDebugSnapshot(
+                showDiscovery = showDiscovery,
+                showAddSheet = showAddSheet,
+                showSettings = showSettings,
+                showFreeItems = showFreeItems,
+                showCarSearch = showCarSearch,
+                editingProductId = editingProduct?.id,
+                results = results?.let {
+                    ResultsScreenSnapshot(name = it.name, query = it.query, isCar = it.isCar)
+                },
+            ),
+        ),
+    )
 
     LaunchedEffect(Unit) {
         productViewModel.loadProducts()

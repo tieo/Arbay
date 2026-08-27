@@ -19,6 +19,10 @@ class MainActivity : ComponentActivity() {
         // Schedule background polling (WorkManager handles dedup)
         FreeItemPollWorker.schedule(this)
 
+        // Debug-only: lets a dev pull the app's live state over adb instead of screenshotting
+        // through a session. See DebugDumpReceiver.kt.
+        if (BuildConfig.DEBUG) registerDebugDumpReceiver()
+
         setContent { App() }
     }
 
