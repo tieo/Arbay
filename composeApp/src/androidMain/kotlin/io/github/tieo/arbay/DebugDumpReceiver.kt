@@ -30,7 +30,12 @@ fun Context.registerDebugDumpReceiver() {
             File(dir, "debug_state.json").writeText(json)
         }
     }
+    // Exported: a NOT_EXPORTED receiver took the shell-sent broadcast fine on the emulator but was
+    // silently dropped before reaching the app on a real Pixel (a real device or its patch level
+    // enforces this more strictly than the AOSP emulator image does). The action string is
+    // unguessable enough, and all a broadcast can trigger is one write of already-visible app
+    // state to app-private storage, so exported is an acceptable trade to have this work at all.
     ContextCompat.registerReceiver(
-        this, receiver, IntentFilter(ACTION_DEBUG_DUMP), ContextCompat.RECEIVER_NOT_EXPORTED,
+        this, receiver, IntentFilter(ACTION_DEBUG_DUMP), ContextCompat.RECEIVER_EXPORTED,
     )
 }
