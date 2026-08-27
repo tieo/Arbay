@@ -26,6 +26,19 @@ actual fun saveBannedIds(ids: Set<String>) {
     } catch (_: Exception) {}
 }
 
+private val searchHistoryFile = File(System.getProperty("user.home"), ".arbay/search_history.json")
+
+actual fun loadSearchHistory(): String = try {
+    if (searchHistoryFile.exists()) searchHistoryFile.readText() else ""
+} catch (_: Exception) { "" }
+
+actual fun saveSearchHistory(json: String) {
+    try {
+        searchHistoryFile.parentFile.mkdirs()
+        searchHistoryFile.writeText(json)
+    } catch (_: Exception) {}
+}
+
 actual fun imageModel(address: String): Any =
     if (address.startsWith("http")) address
     else File(address.removePrefix("file://"))

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +25,8 @@ import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.catalog.ProductCatalog
 import io.github.tieo.arbay.catalog.ProductCategory
 import io.github.tieo.arbay.debug.DebugSlice
+import io.github.tieo.arbay.history.SearchHistoryEntry
+import io.github.tieo.arbay.history.summary
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
@@ -53,6 +56,11 @@ fun DiscoverySheet(
     onLiveSearch: ((String) -> Unit)? = null,
     onFreeItems: (() -> Unit)? = null,
     onCarSearch: (() -> Unit)? = null,
+    // Searches run before, most recent first, each carrying whatever it was last narrowed to.
+    history: List<SearchHistoryEntry> = emptyList(),
+    onOpenHistory: (SearchHistoryEntry) -> Unit = {},
+    onRemoveHistory: (String) -> Unit = {},
+    onClearHistory: () -> Unit = {},
 ) {
     var typed by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
@@ -128,28 +136,58 @@ fun DiscoverySheet(
                     }
                 }
             } else {
-                Text(
-                    "Or one of the two searches that are not words:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                onCarSearch?.let {
-                    WayIn(
-                        icon = Icons.Outlined.DirectionsCar,
-                        title = "Vehicle search",
-                        detail = "Make, year, mileage, price, power and gearbox, asked of 25 markets in their own languages",
-                        onClick = it,
-                    )
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (history.isNotEmpty()) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    "Recent",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = onClearHistory) { Text("Clear") }
+                            }
+                        }
+                        items(history, key = { it.searchQuery.text }) { entry ->
+                            HistoryRow(
+                                entry = entry,
+                                onClick = { onOpenHistory(entry) },
+                                onRemove = { onRemoveHistory(entry.searchQuery.text) },
+                            )
+                        }
+                    }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Text(
+                                "Or one of the two searches that are not words:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            onCarSearch?.let {
+                                WayIn(
+                                    icon = Icons.Outlined.DirectionsCar,
+                                    title = "Vehicle search",
+                                    detail = "Make, year, mileage, price, power and gearbox, asked of 25 markets in their own languages",
+                                    onClick = it,
+                                )
+                            }
+                            onFreeItems?.let {
+                                WayIn(
+                                    icon = Icons.Outlined.CardGiftcard,
+                                    title = "Free items",
+                                    detail = "What is being given away near you, one at a time, learning what is worth a detour",
+                                    onClick = it,
+                                )
+                            }
+                        }
+                    }
                 }
-                onFreeItems?.let {
-                    WayIn(
-                        icon = Icons.Outlined.CardGiftcard,
-                        title = "Free items",
-                        detail = "What is being given away near you, one at a time, learning what is worth a detour",
-                        onClick = it,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -182,6 +220,48 @@ private fun WayIn(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/** A search run before, with the one line saying what it was last narrowed to. Tapping the row
+ *  reopens it exactly as it was left; the close button forgets it without opening anything. */
+@Composable
+private fun HistoryRow(entry: SearchHistoryEntry, onClick: () -> Unit, onRemove: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.History, null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    entry.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    entry.summary(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Close, "Remove from recent", modifier = Modifier.size(16.dp))
             }
         }
     }

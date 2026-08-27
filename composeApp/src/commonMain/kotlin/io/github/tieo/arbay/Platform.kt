@@ -17,6 +17,12 @@ expect fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Un
 expect fun loadBannedIds(): Set<String>
 expect fun saveBannedIds(ids: Set<String>)
 
+/** Raw JSON for the search history (see history/SearchHistory.kt), or "" if none is stored yet.
+ *  Kept as one opaque blob rather than a key-value setting, since it is a list of structured
+ *  entries and not a flat set of preferences. */
+expect fun loadSearchHistory(): String
+expect fun saveSearchHistory(json: String)
+
 /** Settings that belong to this device rather than to the server it talks to: which server that is,
  *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
 /** What the image loader should be handed for a picture's address. A listing off a market carries

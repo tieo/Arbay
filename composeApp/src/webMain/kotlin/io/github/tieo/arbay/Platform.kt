@@ -3,6 +3,8 @@ package io.github.tieo.arbay
 actual fun openBrowser(url: String) {}
 actual fun loadBannedIds(): Set<String> = emptySet()
 actual fun saveBannedIds(ids: Set<String>) {}
+actual fun loadSearchHistory(): String = ""
+actual fun saveSearchHistory(json: String) {}
 
 actual fun imageModel(address: String): Any = address
 

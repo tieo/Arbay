@@ -26,6 +26,16 @@ actual fun saveBannedIds(ids: Set<String>) {
     try { f.writeText(ids.joinToString("\n")) } catch (_: Exception) {}
 }
 
+actual fun loadSearchHistory(): String {
+    val f = File(appDir() ?: return "", "search_history.json")
+    return try { if (f.exists()) f.readText() else "" } catch (_: Exception) { "" }
+}
+
+actual fun saveSearchHistory(json: String) {
+    val f = File(appDir() ?: return, "search_history.json")
+    try { f.writeText(json) } catch (_: Exception) {}
+}
+
 
 actual fun imageModel(address: String): Any =
     if (address.startsWith("http")) address else File(address.removePrefix("file://"))

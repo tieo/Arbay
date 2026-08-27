@@ -73,6 +73,7 @@ private val SCENES: List<Scene> = buildList {
 
     // ── Search ────────────────────────────────────────────────────────────────
     add(scene("search", "as-it-is") { Search() })
+    add(scene("search", "no-history") { Search(history = emptyList()) })
 
     // ── Results ───────────────────────────────────────────────────────────────
     add(scene("results", "as-it-is") { Results(PreviewData.active + PreviewData.sold, PreviewData.marketAnswers) })
@@ -159,10 +160,11 @@ private fun Home(
 }()
 
 @Composable
-private fun Search() = inline {
+private fun Search(history: List<io.github.tieo.arbay.history.SearchHistoryEntry> = PreviewData.searchHistory) = inline {
     io.github.tieo.arbay.ui.screen.DiscoverySheet(
         onDismiss = {}, onProductSelected = {}, onCustomSearch = {},
         onLiveSearch = {}, onFreeItems = {}, onCarSearch = {},
+        history = history,
     )
 }()
 

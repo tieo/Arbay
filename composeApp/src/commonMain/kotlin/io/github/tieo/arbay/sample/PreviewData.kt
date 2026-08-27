@@ -229,4 +229,32 @@ object PreviewData {
         answer(PlatformId.IDEALO, PlatformSearchStatus.ERROR, raw = 0, kept = 0,
             error = "idealo:parkettschleifmaschine: HTTP 503"),
     )
+
+    // ── Recent searches, for Discovery's empty state ─────────────────────────────
+    // Two shapes: a plain search narrowed by hand, and a vehicle search with real criteria — the
+    // two kinds of thing a search's filters can hold.
+    val searchHistory: List<io.github.tieo.arbay.history.SearchHistoryEntry> = listOf(
+        io.github.tieo.arbay.history.SearchHistoryEntry(
+            name = "Parkettschleifmaschine",
+            searchQuery = SearchQuery(
+                text = "parkettschleifmaschine",
+                minPrice = Money(25000, Currency.EUR),
+                maxPrice = Money(90000, Currency.EUR),
+                condition = listOf(Condition.USED),
+                excludeKeywords = listOf("defekt"),
+            ),
+            lastRunAt = now,
+        ),
+        io.github.tieo.arbay.history.SearchHistoryEntry(
+            name = "Volkswagen Crafter",
+            searchQuery = SearchQuery(
+                text = "Volkswagen Crafter",
+                carFilters = CarFilters(
+                    firstRegFromYear = 2019, maxMileageKm = 150000, minPowerKw = 110,
+                    transmission = Transmission.AUTOMATIC,
+                ),
+            ),
+            lastRunAt = now,
+        ),
+    )
 }

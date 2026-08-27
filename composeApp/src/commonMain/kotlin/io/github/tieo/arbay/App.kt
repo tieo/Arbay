@@ -6,8 +6,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.debug.DebugRegistry
+import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.debug.debugSnapshotJson
+import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.ui.LocalDesktopMode
+import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.ui.screen.MainScreen
 import io.github.tieo.arbay.ui.theme.ArbayTheme
 import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
@@ -33,6 +36,7 @@ fun App() {
             // A global, not a screen: affects every price on every screen regardless of whether
             // Settings is open, so it belongs beside the view models, not behind a DebugSlice.
             DebugRegistry.register("displayCurrency") { "\"${DisplayCurrency.current}\"" }
+            DebugRegistry.register("searchHistory") { debugJson.encodeToString(SearchHistoryStore.entries.value) }
         }
 
         // Load exchange rates + refresh the car taxonomy on startup
