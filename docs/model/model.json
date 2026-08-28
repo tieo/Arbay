@@ -1059,6 +1059,24 @@
           "to": "VIEW-RESULTS"
         }
       ]
+    },
+    {
+      "relations": [
+        {
+          "role": "Fulfils",
+          "to": "STORY-FILTERS-KEPT"
+        },
+        {
+          "role": "Lives in",
+          "to": "VIEW-DISCOVERY"
+        }
+      ],
+      "statement": "A search that was run, saved or not, is kept with whatever it was last narrowed to — price, condition, sort, markets, blocked words, vehicle criteria — and shown under Discovery with a one-line summary of that narrowing. Opening it restores the search exactly as it was left.",
+      "status": "Built",
+      "tag": "REQUIREMENT",
+      "tier": "1 canvas",
+      "title": "Remember a recent search with what it was narrowed to",
+      "uid": "REQ-SEARCH-HISTORY"
     }
   ],
   "states": [
@@ -1691,6 +1709,36 @@
           "label": "wide dark"
         }
       ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-SEARCH-NOHISTORY",
+      "title": "No history",
+      "statement": "Nothing has been searched yet, so Discovery carries only the two ways in.",
+      "relations": [
+        {
+          "to": "VIEW-DISCOVERY",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "search-no-history-phone-light.png",
+          "label": "phone light"
+        },
+        {
+          "file": "search-no-history-phone-dark.png",
+          "label": "phone dark"
+        },
+        {
+          "file": "search-no-history-wide-light.png",
+          "label": "wide light"
+        },
+        {
+          "file": "search-no-history-wide-dark.png",
+          "label": "wide dark"
+        }
+      ]
     }
   ],
   "stories": [
@@ -1866,7 +1914,7 @@
         }
       ],
       "statement": "I want the price band, the sort order and the condition I chose to still be there when I come back\nto the search.",
-      "status": "Partly served",
+      "status": "Served",
       "tag": "STORY",
       "title": "Keep what I set",
       "uid": "STORY-FILTERS-KEPT"
@@ -2043,7 +2091,8 @@
         "canvas": [
           "A field, which is the search for anything that is words",
           "Vehicle search, because criteria are not a sentence",
-          "Free items, because sifting is not searching"
+          "Free items, because sifting is not searching",
+          "Recent searches, because a search already run should not start from nothing"
         ],
         "behind": [
           "Catalogue matches, once something is typed"
