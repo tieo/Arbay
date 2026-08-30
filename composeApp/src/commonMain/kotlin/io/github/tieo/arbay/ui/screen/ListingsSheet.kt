@@ -133,6 +133,9 @@ fun ListingsSheet(
     // embedded in searchQuery itself.
     aliases: List<String> = emptyList(),
     onEditFilters: (() -> Unit)? = null,
+    // Rewrite the plain search term this view is running, whether or not it is saved. Null hides
+    // the affordance entirely (the vehicle-search preview edits through the car form instead).
+    onEditQuery: ((String) -> Unit)? = null,
     // The saved price bound from the bookmark's filter (display currency), so the results slider
     // starts where the user last left it instead of resetting to the full range on reopen.
     // The saved search this view is showing, when there is one. Every filter choice made here is
@@ -518,6 +521,41 @@ fun ListingsSheet(
                                     },
                                     confirmButton = {
                                         TextButton(onClick = { translationsExpanded = false }) { Text("Close") }
+                                    },
+                                )
+                            }
+                        }
+                        onEditQuery?.let { edit ->
+                            var showEditQuery by remember { mutableStateOf(false) }
+                            var editQueryText by remember(searchQuery) { mutableStateOf(searchQuery) }
+                            IconButton(onClick = { editQueryText = searchQuery; showEditQuery = true }) {
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    "Edit search term",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (showEditQuery) {
+                                AlertDialog(
+                                    onDismissRequest = { showEditQuery = false },
+                                    title = { Text("Edit search term", style = MaterialTheme.typography.titleMedium) },
+                                    text = {
+                                        OutlinedTextField(
+                                            value = editQueryText,
+                                            onValueChange = { editQueryText = it },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    },
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            val t = editQueryText.trim()
+                                            if (t.isNotBlank() && t != searchQuery) edit(t)
+                                            showEditQuery = false
+                                        }) { Text("Save") }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showEditQuery = false }) { Text("Cancel") }
                                     },
                                 )
                             }

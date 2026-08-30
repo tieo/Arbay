@@ -681,6 +681,31 @@ fun MainScreen(
             onEditFilters = if (view.isCar) {
                 { openCarEditor(view, bookmark) }
             } else null,
+            // A vehicle search edits its term through the car form's make/model fields, not here.
+            onEditQuery = if (view.isCar) null else { newQuery ->
+                // The name followed the term until someone gave it its own — keep following it.
+                val followsTerm = view.name.equals(view.query, ignoreCase = true)
+                val newName = if (followsTerm) newQuery else view.name
+                if (bookmark != null) {
+                    productViewModel.updateProduct(
+                        bookmark.copy(
+                            name = newName,
+                            searchQuery = bookmark.searchQuery.copy(text = newQuery, aliases = emptyList()),
+                        ),
+                    )
+                } else {
+                    // Read what this search carries BEFORE removing its old-text entry — removing
+                    // first would erase the very excludeKeywords being carried over. Aliases do NOT
+                    // carry over: they name alternate spellings of the OLD term specifically (e.g.
+                    // "XT5" for "Fujifilm X-T5"), which says nothing about whatever the term is
+                    // rewritten to.
+                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters)
+                        .copy(text = newQuery, aliases = emptyList())
+                    SearchHistoryStore.remove(view.query)
+                    SearchHistoryStore.record(newName, base)
+                }
+                results = view.copy(name = newName, query = newQuery)
+            },
             // A search's filters live on the bookmark once it is saved; until then they live in
             // history, which openResults already seeded, so this is never null for an open search.
             savedFilters = bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery,
