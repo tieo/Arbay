@@ -3,6 +3,7 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.model.withCarFilters
@@ -16,7 +17,7 @@ class SearchQueryPriceTest {
 
     @Test
     fun `storing car filters lifts the price out of them`() {
-        val q = SearchQuery(text = "vw crafter")
+        val q = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES)
             .withCarFilters(CarFilters(minPriceEur = 5_000, maxPriceEur = 20_000, minPowerKw = 110))
 
         assertEquals(Money(500_000, Currency.EUR), q.minPrice)
@@ -28,7 +29,7 @@ class SearchQueryPriceTest {
 
     @Test
     fun `reading car filters puts the price back`() {
-        val q = SearchQuery(text = "vw crafter")
+        val q = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES)
             .withCarFilters(CarFilters(minPriceEur = 5_000, maxPriceEur = 20_000, minPowerKw = 110))
 
         val f = q.toCarFilters()
@@ -38,7 +39,7 @@ class SearchQueryPriceTest {
 
     @Test
     fun `a price band alone is a filter, on a query with no car filters`() {
-        val q = SearchQuery(text = "parkettschleifmaschine").withPriceRangeEur(300, 700)
+        val q = SearchQuery(text = "parkettschleifmaschine", category = MarketGroup.GENERAL).withPriceRangeEur(300, 700)
 
         assertEquals(Money(30_000, Currency.EUR), q.minPrice)
         assertEquals(Money(70_000, Currency.EUR), q.maxPrice)
@@ -48,7 +49,7 @@ class SearchQueryPriceTest {
 
     @Test
     fun `narrowing the band leaves the other filters alone`() {
-        val q = SearchQuery(text = "vw crafter")
+        val q = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES)
             .withCarFilters(CarFilters(minPowerKw = 110, maxMileageKm = 200_000))
             .withPriceRangeEur(1_000, 15_000)
 
@@ -59,7 +60,7 @@ class SearchQueryPriceTest {
 
     @Test
     fun `clearing the filters clears the price with them`() {
-        val q = SearchQuery(text = "vw crafter")
+        val q = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES)
             .withCarFilters(CarFilters(maxPriceEur = 20_000))
             .withCarFilters(null)
 

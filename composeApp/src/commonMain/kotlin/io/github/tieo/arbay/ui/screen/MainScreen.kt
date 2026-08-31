@@ -726,6 +726,18 @@ fun MainScreen(
                 }
                 results = view.copy(name = newName, query = newQuery)
             },
+            // The structured stand-in for typing "OR" into the search box — a listing matching
+            // any one of these counts as a match. Available for a vehicle search too: the car
+            // form's make/model fields narrow by model, not by alternate model-number spellings
+            // ("314" vs "315").
+            onAliasesChange = { updated ->
+                if (bookmark != null) {
+                    productViewModel.updateProduct(bookmark.copy(searchQuery = bookmark.searchQuery.copy(aliases = updated)))
+                } else {
+                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
+                    SearchHistoryStore.record(view.name, base.copy(aliases = updated))
+                }
+            },
             // A search's filters live on the bookmark once it is saved; until then they live in
             // history, which openResults already seeded, so this is never null for an open search.
             savedFilters = bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery,

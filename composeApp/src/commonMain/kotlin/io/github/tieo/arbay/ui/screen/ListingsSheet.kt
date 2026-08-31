@@ -136,6 +136,10 @@ fun ListingsSheet(
     // Rewrite the plain search term this view is running, whether or not it is saved. Null hides
     // the affordance entirely (the vehicle-search preview edits through the car form instead).
     onEditQuery: ((String) -> Unit)? = null,
+    // Add/remove an alternate spelling that also counts as this search — the structured
+    // replacement for typing "OR" into the search box, which used to be parsed back out of the
+    // text. Shares the same edit-term dialog rather than a second affordance.
+    onAliasesChange: ((List<String>) -> Unit)? = null,
     // The saved price bound from the bookmark's filter (display currency), so the results slider
     // starts where the user last left it instead of resetting to the full range on reopen.
     // The saved search this view is showing, when there is one. Every filter choice made here is
@@ -513,32 +517,85 @@ fun ListingsSheet(
                                 )
                             }
                         }
-                        onEditQuery?.let { edit ->
+                        // A vehicle search's own term still edits through the car form (make/model
+                        // fields, not free text) — but aliases are orthogonal to that, so this
+                        // shows for a car search too whenever onAliasesChange is offered, just
+                        // without the Term field.
+                        if (onEditQuery != null || onAliasesChange != null) {
                             var showEditQuery by remember { mutableStateOf(false) }
                             var editQueryText by remember(searchQuery) { mutableStateOf(searchQuery) }
+                            // Seeded fresh each time the dialog opens, not tied to the aliases
+                            // param directly — editing is a draft until Save.
+                            val editAliases = remember(showEditQuery) { aliases.toMutableStateList() }
+                            var newAliasText by remember(showEditQuery) { mutableStateOf("") }
                             IconButton(onClick = { editQueryText = searchQuery; showEditQuery = true }) {
                                 Icon(
                                     Icons.Outlined.Edit,
-                                    "Edit search term",
+                                    "Edit search terms",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             if (showEditQuery) {
                                 AlertDialog(
                                     onDismissRequest = { showEditQuery = false },
-                                    title = { Text("Edit search term", style = MaterialTheme.typography.titleMedium) },
+                                    title = { Text("Edit search terms", style = MaterialTheme.typography.titleMedium) },
                                     text = {
-                                        OutlinedTextField(
-                                            value = editQueryText,
-                                            onValueChange = { editQueryText = it },
-                                            singleLine = true,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            if (onEditQuery != null) {
+                                                OutlinedTextField(
+                                                    value = editQueryText,
+                                                    onValueChange = { editQueryText = it },
+                                                    label = { Text("Term") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                            if (onAliasesChange != null) {
+                                                // A listing matching any one of these counts as a match —
+                                                // the structured stand-in for "OR" typed into the box.
+                                                Text(
+                                                    "Also matches any of these",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                                editAliases.forEachIndexed { index, alias ->
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        OutlinedTextField(
+                                                            value = alias,
+                                                            onValueChange = { editAliases[index] = it },
+                                                            singleLine = true,
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                        IconButton(onClick = { editAliases.removeAt(index) }) {
+                                                            Icon(Icons.Default.Close, "Remove")
+                                                        }
+                                                    }
+                                                }
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    OutlinedTextField(
+                                                        value = newAliasText,
+                                                        onValueChange = { newAliasText = it },
+                                                        placeholder = { Text("Add an alternate spelling") },
+                                                        singleLine = true,
+                                                        modifier = Modifier.weight(1f),
+                                                    )
+                                                    IconButton(onClick = {
+                                                        val t = newAliasText.trim()
+                                                        if (t.isNotBlank() && t !in editAliases) editAliases.add(t)
+                                                        newAliasText = ""
+                                                    }) {
+                                                        Icon(Icons.Default.Add, "Add")
+                                                    }
+                                                }
+                                            }
+                                        }
                                     },
                                     confirmButton = {
                                         TextButton(onClick = {
                                             val t = editQueryText.trim()
-                                            if (t.isNotBlank() && t != searchQuery) edit(t)
+                                            if (onEditQuery != null && t.isNotBlank() && t != searchQuery) onEditQuery(t)
+                                            val newAliases = editAliases.toList()
+                                            if (onAliasesChange != null && newAliases != aliases) onAliasesChange(newAliases)
                                             showEditQuery = false
                                         }) { Text("Save") }
                                     },
