@@ -192,24 +192,15 @@ fun ListingsSheet(
     }
 
     // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
-    // Bounds are the 5th/95th percentile, not the absolute min/max: a lone cheap part or a single
-    // dear outlier must not stretch the track so the real cluster is a hair-thin sliver. Listings
-    // outside the band still show (the filter only bites once the user narrows inside the band).
+    // The true min and max — not a percentile trim. A trimmed bound looked like an active filter
+    // (a "from"/"to" narrower than what was actually there) while doing nothing, since a listing
+    // outside a slider bound that was never dragged still showed anyway; the number on screen and
+    // what was actually filterable just disagreed. The slider still only filters once it is
+    // actually moved inward from these true ends.
     val allActivePrices = remember(allActiveListings) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
-    val priceMin = remember(allActivePrices) {
-        if (allActivePrices.isEmpty()) 0f
-        else {
-            val i = if (allActivePrices.size >= 12) (allActivePrices.size * 0.05f).toInt() else 0
-            allActivePrices[i] / 100f
-        }
-    }
+    val priceMin = remember(allActivePrices) { (allActivePrices.firstOrNull() ?: 0L) / 100f }
     val priceMax = remember(allActivePrices) {
-        if (allActivePrices.isEmpty()) 1000f
-        else {
-            val n = allActivePrices.size
-            val i = if (n >= 12) (n - 1 - (n * 0.05f).toInt()).coerceIn(0, n - 1) else n - 1
-            (allActivePrices[i] / 100f).coerceAtLeast(priceMin + 1f)
-        }
+        ((allActivePrices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
     }
     // Seed from the saved bound (clamped into the current data range), else the full range.
     var priceRange by remember(priceMin, priceMax) {
@@ -302,13 +293,10 @@ fun ListingsSheet(
     val minPrice = remember(activeListings) {
         activeListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    // Upper reference for the summary — the 95th percentile, so one outlier doesn't inflate it.
-    val maxPrice = remember(allPrices) {
-        if (allPrices.isEmpty()) null
-        else {
-            val i = if (allPrices.size >= 12) (allPrices.size - 1 - (allPrices.size * 0.05f).toInt()).coerceIn(0, allPrices.size - 1) else allPrices.size - 1
-            Money(allPrices[i], displayCur)
-        }
+    // Upper reference for the summary — the true highest price among what's shown, matching
+    // minPrice above: whatever number is on screen is an actual listing, not a trimmed estimate.
+    val maxPrice = remember(activeListings) {
+        activeListings.maxByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
 
     val usedListings = remember(activeListings) {
