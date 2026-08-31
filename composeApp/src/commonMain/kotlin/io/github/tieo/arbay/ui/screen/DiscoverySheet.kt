@@ -54,6 +54,10 @@ fun DiscoverySheet(
     onProductSelected: (KnownProduct) -> Unit,
     onCustomSearch: (String) -> Unit,
     onLiveSearch: ((String) -> Unit)? = null,
+    // Same typed text, but as a vehicle search — a bare model name ("Sprinter", "Golf") has no
+    // make in it for CarQueryResolver to recognise, so automatic car detection misses it. This is
+    // the explicit override: choosing it, not guessing it.
+    onLiveVehicleSearch: ((String) -> Unit)? = null,
     onFreeItems: (() -> Unit)? = null,
     onCarSearch: (() -> Unit)? = null,
     // Searches run before, most recent first, each carrying whatever it was last narrowed to.
@@ -119,6 +123,20 @@ fun DiscoverySheet(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                onLiveVehicleSearch?.let { vehicleSearch ->
+                    OutlinedButton(
+                        onClick = { vehicleSearch(typed.trim()) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.DirectionsCar, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Search vehicle sites for “${typed.trim()}”",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 if (known.isNotEmpty()) {
                     Text(

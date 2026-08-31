@@ -535,6 +535,11 @@ fun MainScreen(
             onProductSelected = { product -> openPreview(product) },
             onCustomSearch = { query -> openAddSheet(initialQuery = query) },
             onLiveSearch = { query -> openPreview(query, query, null) },
+            // The explicit override for a bare model name ("Sprinter", "Golf") that automatic
+            // car detection misses because it has no make in it — chosen, not guessed.
+            onLiveVehicleSearch = { query ->
+                openResults(ResultsView.of(query, query, MarketSets.vehicles, category = MarketGroup.VEHICLES))
+            },
             onFreeItems = { showFreeItems = true },
             history = searchHistory,
             onOpenHistory = { entry -> openResults(ResultsView.of(entry)) },
