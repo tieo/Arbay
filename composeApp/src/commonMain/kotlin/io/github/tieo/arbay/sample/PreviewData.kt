@@ -73,17 +73,18 @@ object PreviewData {
 
     /** Saved searches, so Home renders what it looks like once it is used. */
     val saved: List<io.github.tieo.arbay.model.TrackedProduct> = listOf(
-        "Parkettschleifmaschine" to listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS),
-        "VW Crafter L3H2" to listOf(
-            PlatformId.MOBILE_DE, PlatformId.AUTOSCOUT24, PlatformId.AUTOSCOUT24_IT,
-            PlatformId.AUTOSCOUT24_FR, PlatformId.WILLHABEN,
+        Triple("Parkettschleifmaschine", listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS), io.github.tieo.arbay.model.MarketGroup.GENERAL),
+        Triple(
+            "VW Crafter L3H2",
+            listOf(PlatformId.MOBILE_DE, PlatformId.AUTOSCOUT24, PlatformId.AUTOSCOUT24_IT, PlatformId.AUTOSCOUT24_FR, PlatformId.WILLHABEN),
+            io.github.tieo.arbay.model.MarketGroup.VEHICLES,
         ),
-        "Bosch GWS 18V" to listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE),
-    ).mapIndexed { index, (name, platforms) ->
+        Triple("Bosch GWS 18V", listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE), io.github.tieo.arbay.model.MarketGroup.GENERAL),
+    ).mapIndexed { index, (name, platforms, category) ->
         io.github.tieo.arbay.model.TrackedProduct(
             id = "sample-$index",
             name = name,
-            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = name, platforms = platforms),
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = name, platforms = platforms, category = category),
             createdAt = now,
         )
     }
@@ -242,6 +243,7 @@ object PreviewData {
                 maxPrice = Money(90000, Currency.EUR),
                 condition = listOf(Condition.USED),
                 excludeKeywords = listOf("defekt"),
+                category = io.github.tieo.arbay.model.MarketGroup.GENERAL,
             ),
             lastRunAt = now,
         ),
@@ -253,6 +255,7 @@ object PreviewData {
                     firstRegFromYear = 2019, maxMileageKm = 150000, minPowerKw = 110,
                     transmission = Transmission.AUTOMATIC,
                 ),
+                category = io.github.tieo.arbay.model.MarketGroup.VEHICLES,
             ),
             lastRunAt = now,
         ),

@@ -64,10 +64,10 @@ class ProductViewModel(
         name: String,
         searchText: String,
         platforms: List<PlatformId>,
+        category: MarketGroup,
         identifiers: ProductIdentifier = ProductIdentifier(),
         carFilters: io.github.tieo.arbay.model.CarFilters? = null,
         excludeKeywords: List<String> = emptyList(),
-        isVehicleSearch: Boolean = false,
         aliases: List<String> = emptyList(),
     ) {
         viewModelScope.launch {
@@ -79,7 +79,7 @@ class ProductViewModel(
                         text = searchText,
                         platforms = platforms,
                         excludeKeywords = excludeKeywords,
-                        isVehicleSearch = isVehicleSearch,
+                        category = category,
                         aliases = aliases,
                     ).withCarFilters(carFilters),
                     identifiers = identifiers,

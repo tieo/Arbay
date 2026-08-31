@@ -3,8 +3,11 @@ package io.github.tieo.arbay.history
 import io.github.tieo.arbay.loadSearchHistory
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Condition
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.SearchQueryMigration
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.toCarFilters
@@ -16,6 +19,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.encodeToString
 
 /**
  * A search that was run, with whatever it was last narrowed to.
@@ -88,29 +94,34 @@ object SearchHistoryStore {
         _entries.value.firstOrNull { key(it.searchQuery.text) == key(query) }
 
     /** The full query to persist, whichever a caller already has: what history already knows about
-     *  this search, or a fresh one built from what was just opened with. */
-    fun baseQuery(query: String, platforms: List<PlatformId>?, carFilters: CarFilters?): SearchQuery =
+     *  this search, or a fresh one built from what was just opened with. [category] decides the
+     *  platforms a fresh entry defaults to — never "every platform", which is what searching a
+     *  parkettschleifmaschine against car and real-estate sites forever turned out to mean. */
+    fun baseQuery(query: String, platforms: List<PlatformId>?, carFilters: CarFilters?, category: MarketGroup): SearchQuery =
         entryFor(query)?.searchQuery
-            ?: SearchQuery(text = query, platforms = platforms ?: PlatformId.entries, carFilters = carFilters)
+            ?: SearchQuery(text = query, platforms = platforms ?: MarketSets.platformsFor(category), carFilters = carFilters, category = category)
 
     /** A search was opened. Keeps whatever it was narrowed to last time; only the display name and
      *  freshly-known platforms/vehicle criteria are refreshed, so reopening the same search does not
-     *  reset a price band or blocked word set the way starting a new one should not inherit them. */
+     *  reset a price band or blocked word set the way starting a new one should not inherit them.
+     *  [category] is what this search IS, not something to keep re-guessing — an existing entry's
+     *  own category wins over whatever this particular open call happens to pass. */
     fun recordOpen(
         name: String,
         query: String,
         platforms: List<PlatformId>?,
         carFilters: CarFilters?,
-        isVehicleSearch: Boolean,
+        category: MarketGroup,
         aliases: List<String>? = null,
         excludeKeywords: List<String>? = null,
     ) {
         if (query.isBlank()) return
         val existing = entryFor(query)
-        val q = (existing?.searchQuery ?: SearchQuery(text = query)).copy(
-            platforms = platforms ?: existing?.searchQuery?.platforms ?: PlatformId.entries,
+        val resolvedCategory = existing?.searchQuery?.category ?: category
+        val q = (existing?.searchQuery ?: SearchQuery(text = query, category = resolvedCategory)).copy(
+            platforms = platforms ?: existing?.searchQuery?.platforms ?: MarketSets.platformsFor(resolvedCategory),
             carFilters = carFilters ?: existing?.searchQuery?.carFilters,
-            isVehicleSearch = isVehicleSearch || existing?.searchQuery?.isVehicleSearch == true,
+            category = resolvedCategory,
             aliases = aliases ?: existing?.searchQuery?.aliases ?: emptyList(),
             excludeKeywords = excludeKeywords ?: existing?.searchQuery?.excludeKeywords ?: emptyList(),
         )
@@ -143,6 +154,16 @@ object SearchHistoryStore {
 
     private fun load(): List<SearchHistoryEntry> = try {
         val raw = loadSearchHistory()
-        if (raw.isBlank()) emptyList() else json.decodeFromString(raw)
+        if (raw.isBlank()) return emptyList()
+        val parsed = json.parseToJsonElement(raw) as JsonArray
+        val migrated = SearchQueryMigration.migrateList(parsed)
+        val entries = json.decodeFromJsonElement<List<SearchHistoryEntry>>(migrated)
+        // Old entries missing searchQuery.category (or carrying platforms outside it) were just
+        // backfilled in memory — persist that once so the file self-heals instead of re-migrating
+        // from the same stale JSON on every load.
+        if (migrated != parsed) {
+            try { saveSearchHistory(json.encodeToString(entries)) } catch (_: Exception) {}
+        }
+        entries
     } catch (_: Exception) { emptyList() }
 }

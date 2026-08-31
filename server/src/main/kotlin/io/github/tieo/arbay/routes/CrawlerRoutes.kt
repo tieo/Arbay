@@ -64,9 +64,10 @@ private data class CrawlerTestResult(
     val results: List<Listing>,
 )
 
-/** Default platforms for general product searches (excludes car/real-estate sites). Shared with
- *  the client so a typed custom search defaults the same way, not to every crawlable platform. */
-private val GENERAL_PLATFORMS = PlatformCategories.GENERAL
+/** Default platforms for general product searches (excludes car/real-estate sites). MarketSets is
+ *  shared with the client so a typed custom search defaults the same way, not to every crawlable
+ *  platform. */
+private val GENERAL_PLATFORMS = MarketSets.general
 
 /** How common a word is across every listing crawled so far, so a search's own results can be
  *  judged against it when looking for the market's other names for the thing. */
@@ -239,7 +240,7 @@ private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<
  *  plus cross-border sourcing markets: AutoScout24 spans Western/Central Europe via
  *  its country filter, the national sites reach markets it covers thinly. Shared with the
  *  client for the same reason as [GENERAL_PLATFORMS]. */
-private val CAR_PLATFORMS = PlatformCategories.CAR
+private val CAR_PLATFORMS = MarketSets.vehicles
 
 /** Identity a scrape is throttled against: the Authelia-forwarded user when present, else
  *  the client IP. So one account is one bucket regardless of source address. */
@@ -341,20 +342,22 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val platformName = call.queryParameters["platform"]
             val limit = call.queryParameters["limit"]?.toIntOrNull() ?: 50
 
+            val isCar = isCarQuery(query)
             val platforms = if (platformName != null) {
                 val platform = runCatching { PlatformId.valueOf(platformName) }.getOrNull()
                     ?: throw BadRequestException("Unknown platform: $platformName")
                 listOf(platform)
             } else {
-                defaultPlatforms(isCarQuery(query))
+                defaultPlatforms(isCar)
             }
 
             val soldOnly = call.queryParameters["sold"]?.toBooleanStrictOrNull() ?: false
-            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query, soldOnly = soldOnly)))
+            val category = if (isCar) MarketGroup.VEHICLES else MarketGroup.GENERAL
+            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query, soldOnly = soldOnly, category = category)))
 
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try {
-                val isCarQuery = isCarQuery(query)
+                val isCarQuery = isCar
                 val perPlatform = platforms.map { platformId ->
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
                     // Cross-border markets are searched in their own language.
@@ -394,6 +397,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val platformName = call.queryParameters["platform"]
             val platformNames = call.queryParameters["platforms"]
 
+            val isCarQuery = isCarQuery(query)
             val platforms = if (platformName != null) {
                 val platform = runCatching { PlatformId.valueOf(platformName) }.getOrNull()
                     ?: throw BadRequestException("Unknown platform: $platformName")
@@ -401,11 +405,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             } else if (platformNames != null) {
                 platformNames.split(",").mapNotNull { runCatching { PlatformId.valueOf(it.trim()) }.getOrNull() }
             } else {
-                defaultPlatforms(isCarQuery(query))
+                defaultPlatforms(isCarQuery)
             }
 
-            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query)))
-            val isCarQuery = isCarQuery(query)
+            val category = if (isCarQuery) MarketGroup.VEHICLES else MarketGroup.GENERAL
+            val searchQuery = call.applySearchExtras(call.applyCarFilters(SearchQuery(text = query, category = category)))
 
             val permit = call.acquireScrapeSlot() ?: return@get
             try {
@@ -691,7 +695,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platformName")
 
-            val searchQuery = call.applyCarFilters(SearchQuery(text = query))
+            val category = if (isCarQuery(query)) MarketGroup.VEHICLES else MarketGroup.GENERAL
+            val searchQuery = call.applyCarFilters(SearchQuery(text = query, category = category))
             val permit = call.acquireScrapeSlot() ?: return@get
             val results = try { crawler.trackedSearch(searchQuery, corpusBackground(listingRepo)) } finally { permit.release() }
 

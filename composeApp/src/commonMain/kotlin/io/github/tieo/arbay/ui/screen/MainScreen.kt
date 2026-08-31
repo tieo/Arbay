@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
+import io.github.tieo.arbay.catalog.ProductCategory
 import io.github.tieo.arbay.debug.DebugRegistry
 import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.history.SearchHistoryEntry
@@ -34,8 +35,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
-import io.github.tieo.arbay.model.PlatformCategories
-import io.github.tieo.arbay.model.PlatformCategory
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SearchQuery
@@ -88,10 +89,10 @@ private data class ResultsView(
     val name: String,
     val query: String,
     val platforms: List<PlatformId>?,
+    val category: MarketGroup,
     val make: CarMakeNode? = null,
     val model: CarModelNode? = null,
     val filters: CarFilters? = null,
-    val isCar: Boolean = false,
     // Alternate phrasings and excluded words this search carries — a catalogue product's own
     // data, or whatever a bookmark/history entry was last narrowed to. Never embedded in [query]
     // itself.
@@ -101,20 +102,25 @@ private data class ResultsView(
     val fromCarForm: Boolean = false,
     val fromDiscovery: Boolean = false,
 ) {
+    /** Whether this is the vehicle-search view — computed from [category] rather than stored
+     *  alongside it, so the two can never disagree. */
+    val isCar: Boolean get() = category == MarketGroup.VEHICLES
+
     companion object {
         /** The results of a saved search. A vehicle bookmark gets the car view even with no
          *  filters set yet, so the filters can be added from there. */
         fun of(product: TrackedProduct): ResultsView {
-            val isCar = product.searchQuery.isVehicleSearch
+            val category = product.searchQuery.category
+            val isCar = category == MarketGroup.VEHICLES
             val (make, model) = if (isCar) resolveCarNodes(product.searchQuery.text) else null to null
             return ResultsView(
                 name = product.name,
                 query = product.searchQuery.text,
                 platforms = product.searchQuery.platforms,
+                category = category,
                 make = make,
                 model = model,
                 filters = if (isCar) product.searchQuery.toCarFilters() ?: CarFilters() else null,
-                isCar = isCar,
                 aliases = product.searchQuery.aliases,
                 excludeKeywords = product.searchQuery.excludeKeywords,
             )
@@ -123,28 +129,32 @@ private data class ResultsView(
         /** The results of a search that was run before but never saved — same shape as reopening a
          *  bookmark, since a history entry carries the same [SearchQuery]. */
         fun of(entry: SearchHistoryEntry): ResultsView {
-            val isCar = entry.searchQuery.isVehicleSearch
+            val category = entry.searchQuery.category
+            val isCar = category == MarketGroup.VEHICLES
             val (make, model) = if (isCar) resolveCarNodes(entry.searchQuery.text) else null to null
             return ResultsView(
                 name = entry.name,
                 query = entry.searchQuery.text,
                 platforms = entry.searchQuery.platforms,
+                category = category,
                 make = make,
                 model = model,
                 filters = if (isCar) entry.searchQuery.toCarFilters() ?: CarFilters() else null,
-                isCar = isCar,
                 aliases = entry.searchQuery.aliases,
                 excludeKeywords = entry.searchQuery.excludeKeywords,
             )
         }
 
-        /** The results of a query typed into the plain search box or a catalogue product — never a
-         *  vehicle search, since neither way in goes through the car form. Aliases/excludeKeywords
-         *  are a catalogue product's own data (empty for a plain typed search). */
+        /** The results of a query typed into the plain search box or a catalogue product. Never
+         *  the vehicle-search view (that only opens through the car form) — [category] still
+         *  distinguishes a catalogue car (e.g. "VW Golf 8") from an ordinary product search, since
+         *  that decides which markets it defaults to reaching. Aliases/excludeKeywords are a
+         *  catalogue product's own data (empty for a plain typed search). */
         fun of(
             name: String,
             query: String,
             platforms: List<PlatformId>?,
+            category: MarketGroup,
             fromDiscovery: Boolean = false,
             aliases: List<String> = emptyList(),
             excludeKeywords: List<String> = emptyList(),
@@ -152,6 +162,7 @@ private data class ResultsView(
             name = name,
             query = query,
             platforms = platforms,
+            category = category,
             fromDiscovery = fromDiscovery,
             aliases = aliases,
             excludeKeywords = excludeKeywords,
@@ -284,20 +295,21 @@ fun MainScreen(
         // search, a bookmark with none set), not "clear whatever history already has" — null
         // keeps recordOpen's existing-entry merge, same as it already does for carFilters.
         SearchHistoryStore.recordOpen(
-            opened.name, opened.query, opened.platforms, opened.filters, opened.isCar,
+            opened.name, opened.query, opened.platforms, opened.filters, opened.category,
             aliases = opened.aliases.ifEmpty { null }, excludeKeywords = opened.excludeKeywords.ifEmpty { null },
         )
         results = opened
     }
 
     fun openPreview(name: String, query: String, platforms: List<PlatformId>?) {
-        openResults(ResultsView.of(name, query, platforms))
+        openResults(ResultsView.of(name, query, platforms, category = MarketGroup.GENERAL))
     }
 
     fun openPreview(product: KnownProduct) {
+        val category = if (product.category == ProductCategory.CARS) MarketGroup.VEHICLES else MarketGroup.GENERAL
         openResults(
             ResultsView.of(
-                product.displayName, product.searchQuery, product.effectivePlatforms,
+                product.displayName, product.searchQuery, product.effectivePlatforms, category,
                 aliases = product.aliases, excludeKeywords = product.excludeKeywords,
             ),
         )
@@ -588,23 +600,23 @@ fun MainScreen(
                             name = name,
                             searchQuery = saved.searchQuery.withCarFilters(filters).copy(
                                 text = query,
-                                platforms = platforms ?: PlatformId.entries,
-                                isVehicleSearch = true,
+                                platforms = platforms ?: MarketSets.vehicles,
+                                category = MarketGroup.VEHICLES,
                             ),
                         ),
                     )
                 }
                 // Reaching this callback IS running the vehicle form, so this is always a car
                 // search — recorded the same way any other search is, so it shows up in Recent.
-                SearchHistoryStore.recordOpen(name, query, platforms, filters, isVehicleSearch = true)
+                SearchHistoryStore.recordOpen(name, query, platforms, filters, category = MarketGroup.VEHICLES)
                 results = ResultsView(
                     name = name,
                     query = query,
                     platforms = platforms,
+                    category = MarketGroup.VEHICLES,
                     make = make,
                     model = model,
                     filters = filters,
-                    isCar = true,
                     fromCarForm = true,
                 )
             },
@@ -653,6 +665,7 @@ fun MainScreen(
                         name = name,
                         searchText = query,
                         platforms = platforms,
+                        category = if (addSheetPrefill?.category == ProductCategory.CARS) MarketGroup.VEHICLES else MarketGroup.GENERAL,
                         identifiers = identifiers,
                         aliases = addSheetPrefill?.aliases ?: emptyList(),
                         excludeKeywords = addSheetPrefill?.excludeKeywords ?: emptyList(),
@@ -701,7 +714,7 @@ fun MainScreen(
                     // carry over: they name alternate spellings of the OLD term specifically (e.g.
                     // "XT5" for "Fujifilm X-T5"), which says nothing about whatever the term is
                     // rewritten to.
-                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters)
+                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
                         .copy(text = newQuery, aliases = emptyList())
                     SearchHistoryStore.remove(view.query)
                     SearchHistoryStore.record(newName, base)
@@ -721,7 +734,7 @@ fun MainScreen(
                 if (bookmark != null) {
                     productViewModel.setBlockedKeywords(bookmark, updated)
                 } else {
-                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters)
+                    val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
                     SearchHistoryStore.record(view.name, base.copy(excludeKeywords = updated))
                 }
             },
@@ -734,14 +747,13 @@ fun MainScreen(
                         name = view.name.ifBlank { view.query },
                         searchText = view.query,
                         // A plain search (no catalogue/car platform list of its own) is bookmarked
-                        // with the same general marketplaces it was actually searched with — never
-                        // "every platform including car-only and real-estate sites", which the
+                        // with the same markets it was actually searched with — never "every
+                        // platform including car-only and real-estate sites", which the
                         // saved-search monitor would then re-run forever regardless of relevance.
-                        platforms = view.platforms
-                            ?: (if (view.isCar) PlatformCategories.CAR else PlatformCategories.GENERAL),
+                        platforms = view.platforms ?: MarketSets.platformsFor(view.category),
+                        category = view.category,
                         carFilters = view.filters,
                         excludeKeywords = resultsBlockedTerms,
-                        isVehicleSearch = view.isCar,
                         aliases = resultsHistoryEntry?.searchQuery?.aliases ?: view.aliases,
                     )
                 }
@@ -1040,7 +1052,7 @@ private fun AddProductSheet(
             addAll(
                 editProduct?.searchQuery?.platforms
                     ?: prefill?.effectivePlatforms
-                    ?: markets.filter { it in PlatformCategories.GENERAL },
+                    ?: markets.filter { it in MarketSets.general },
             )
         }
     }
@@ -1156,21 +1168,11 @@ private fun AddProductSheet(
             Spacer(Modifier.height(4.dp))
 
             // Grouped by what each platform actually is, not one flat wall of ~35 unlabeled
-            // chips — a platform in more than one category (Kleinanzeigen: general and cars)
-            // shows once, under the first group it belongs to.
+            // chips — MarketSets.groupOf picks one group for a platform in more than one
+            // (Kleinanzeigen: general and vehicles), so its chip shows once.
             val groupedMarkets = remember(markets) {
-                val assigned = mutableSetOf<PlatformId>()
-                buildList {
-                    for (category in PlatformCategory.entries) {
-                        val inGroup = markets.filter { it !in assigned && category in it.categories }
-                        if (inGroup.isNotEmpty()) {
-                            assigned += inGroup
-                            add(category.label to inGroup)
-                        }
-                    }
-                    val leftover = markets.filterNot { it in assigned }
-                    if (leftover.isNotEmpty()) add("Other" to leftover)
-                }
+                val byGroup = markets.groupBy { MarketSets.groupOf(it) }
+                MarketGroup.entries.mapNotNull { group -> byGroup[group]?.let { group.label to it } }
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 groupedMarkets.forEach { (label, platforms) ->

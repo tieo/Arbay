@@ -1,5 +1,17 @@
 package io.github.tieo.arbay.model
 
+import kotlinx.serialization.Serializable
+
+/** What kind of thing a search is for — the one tag a search carries, set once at creation and
+ *  never re-derived from its text. Decides both which markets it reaches by default and how the
+ *  markets picker groups its chips. */
+@Serializable
+enum class MarketGroup(val label: String) {
+    GENERAL("General marketplaces"),
+    VEHICLES("Vehicle sites"),
+    REAL_ESTATE("Real estate"),
+}
+
 /**
  * Which markets a kind of search covers.
  *
@@ -30,6 +42,27 @@ object MarketSets {
         PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.TWEEDEHANDS,
         PlatformId.RICARDO, PlatformId.SUBITO,
     )
+
+    /** Where a home is found. Its own group rather than folded into general: a housing-shaped
+     *  search has somewhere to grow into instead of falling through both lists uncounted, which
+     *  is exactly what left ImmoScout24 reachable only by explicitly forcing every platform in. */
+    val realEstate: List<PlatformId> = listOf(PlatformId.IMMOSCOUT24)
+
+    fun platformsFor(group: MarketGroup): List<PlatformId> = when (group) {
+        MarketGroup.GENERAL -> general
+        MarketGroup.VEHICLES -> vehicles
+        MarketGroup.REAL_ESTATE -> realEstate
+    }
+
+    /** The group a platform's chip sits under in the markets picker. A platform in more than one
+     *  list (Kleinanzeigen: general and vehicles) picks the first by this priority, so its chip
+     *  appears once, not duplicated per group. */
+    fun groupOf(platform: PlatformId): MarketGroup = when {
+        platform in general -> MarketGroup.GENERAL
+        platform in vehicles -> MarketGroup.VEHICLES
+        platform in realEstate -> MarketGroup.REAL_ESTATE
+        else -> MarketGroup.GENERAL
+    }
 
     /** The country whose listings a market carries, for grouping it under. The home markets carry
      *  no country of their own; AutoScout24's own site spans several. */

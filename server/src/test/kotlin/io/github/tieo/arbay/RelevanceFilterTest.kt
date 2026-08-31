@@ -27,7 +27,7 @@ class RelevanceFilterTest {
         excludeKeywords: List<String> = emptyList(),
         aliases: List<String> = emptyList(),
     ): List<Listing> =
-        RelevanceFilter.filter(listings, SearchQuery(text = query, excludeKeywords = excludeKeywords, aliases = aliases))
+        RelevanceFilter.filter(listings, SearchQuery(text = query, excludeKeywords = excludeKeywords, aliases = aliases, category = MarketGroup.GENERAL))
 
     // === Placeholder title filtering ===
 
@@ -158,7 +158,7 @@ class RelevanceFilterTest {
 
     @Test
     fun `irrelevanceReport flags result set without any query matches`() {
-        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Volkswagen Crafter"))
+        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES))
         assertNotNull(report, "10 listings with zero query matches should be flagged")
     }
 
@@ -171,19 +171,19 @@ class RelevanceFilterTest {
             listing("Volkswagen Crafter Kombi 9-Sitzer"),
             listing("VW Crafter Grand California 600"),
         )
-        val report = RelevanceFilter.irrelevanceReport(genuine, SearchQuery(text = "Volkswagen Crafter"))
+        val report = RelevanceFilter.irrelevanceReport(genuine, SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES))
         assertNull(report, "Matching results should not be flagged")
     }
 
     @Test
     fun `irrelevanceReport exempts single-token queries`() {
-        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Laptop"))
+        val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Laptop", category = MarketGroup.GENERAL))
         assertNull(report, "Single-token queries may match beyond the title and are exempt")
     }
 
     @Test
     fun `irrelevanceReport skips small result sets`() {
-        val report = RelevanceFilter.irrelevanceReport(garbageListings.take(4), SearchQuery(text = "Volkswagen Crafter"))
+        val report = RelevanceFilter.irrelevanceReport(garbageListings.take(4), SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES))
         assertNull(report, "Fewer than 5 results is too small a sample to flag")
     }
 

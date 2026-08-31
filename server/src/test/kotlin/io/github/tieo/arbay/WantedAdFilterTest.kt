@@ -3,6 +3,7 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
@@ -26,7 +27,7 @@ class WantedAdFilterTest {
     )
 
     private fun keptTitles(titles: List<String>, query: String = "parkettschleifmaschine") =
-        RelevanceFilter.filter(titles.map(::listing), SearchQuery(text = query)).map { it.title }
+        RelevanceFilter.filter(titles.map(::listing), SearchQuery(text = query, category = MarketGroup.GENERAL)).map { it.title }
 
     @Test
     fun `drops job postings and wanted ads`() {

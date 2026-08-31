@@ -310,6 +310,7 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
                 radiusKm = call.queryParameters["radiusKm"]?.toIntOrNull() ?: profile?.radiusKm ?: 30,
                 maxPages = batchSize,
                 startPage = startPage,
+                category = MarketGroup.GENERAL,
             )
 
             val profileEmbedding = FreeItemProfileStore.getEmbedding()

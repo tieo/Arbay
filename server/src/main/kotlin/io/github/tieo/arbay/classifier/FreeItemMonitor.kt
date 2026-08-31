@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.classifier
 
 import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.NewMatch
 import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.model.PlatformId
@@ -111,6 +112,7 @@ object FreeItemMonitor {
             location = profile.location,
             radiusKm = profile.radiusKm,
             maxPages = 10,
+            category = MarketGroup.GENERAL,
         )
 
         log.info("Running background check for new free items...")

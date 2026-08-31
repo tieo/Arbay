@@ -3,6 +3,7 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import kotlin.test.Test
@@ -11,7 +12,7 @@ import kotlin.test.assertNotEquals
 
 class QueryResultCacheKeyTest {
 
-    private fun query(cf: CarFilters?) = SearchQuery(text = "volkswagen crafter", carFilters = cf)
+    private fun query(cf: CarFilters?) = SearchQuery(text = "volkswagen crafter", carFilters = cf, category = MarketGroup.VEHICLES)
 
     @Test
     fun postFilterDimsShareCacheEntry() {

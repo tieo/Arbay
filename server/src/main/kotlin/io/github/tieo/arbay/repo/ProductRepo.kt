@@ -1,8 +1,11 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.model.SearchQueryMigration
 import io.github.tieo.arbay.model.TrackedProduct
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -20,9 +23,15 @@ class ProductRepo {
     private fun load() {
         try {
             if (!persistFile.exists()) return
-            json.decodeFromString<List<TrackedProduct>>(persistFile.readText())
+            val raw = json.parseToJsonElement(persistFile.readText()) as JsonArray
+            val migrated = SearchQueryMigration.migrateList(raw)
+            json.decodeFromJsonElement<List<TrackedProduct>>(migrated)
                 .forEach { products[it.id] = it }
             log.info("Loaded ${products.size} saved searches")
+            // Old records missing searchQuery.category (or carrying platforms outside it) were
+            // just backfilled in memory — persist that once so the file self-heals instead of
+            // re-migrating from the same stale JSON on every restart.
+            if (migrated != raw) persist()
         } catch (e: Exception) {
             log.warn("Failed to load saved searches: ${e.message}")
         }

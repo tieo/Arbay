@@ -1,6 +1,7 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.*
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import io.ktor.client.*
@@ -14,7 +15,7 @@ import kotlin.test.*
 
 class CrawlerParserTest {
 
-    private val query = SearchQuery(text = "Sony WH-1000XM4")
+    private val query = SearchQuery(text = "Sony WH-1000XM4", category = MarketGroup.GENERAL)
 
     private fun mockClientFrom(filePath: String, statusCode: HttpStatusCode = HttpStatusCode.OK): HttpClient {
         val file = File(filePath)
@@ -127,7 +128,7 @@ class CrawlerParserTest {
         }
         val client = mockClientFrom("/tmp/autoscout.html")
         val crawler = AutoScout24Crawler(client)
-        val carQuery = SearchQuery(text = "BMW 320d")
+        val carQuery = SearchQuery(text = "BMW 320d", category = MarketGroup.VEHICLES)
         val results = crawler.search(carQuery)
         println("AutoScout24 parsed: ${results.size} results")
         assertTrue(results.isNotEmpty(), "AutoScout24 parser should find results")

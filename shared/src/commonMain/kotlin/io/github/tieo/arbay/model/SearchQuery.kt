@@ -136,7 +136,20 @@ fun SearchQuery.withPriceRangeEur(minEur: Int?, maxEur: Int?): SearchQuery = cop
 @Serializable
 data class SearchQuery(
     val text: String,
-    val platforms: List<PlatformId> = PlatformId.entries,
+    // What kind of thing this search is for — set once, when the search is created, from wherever
+    // it was actually started (the vehicle form, a catalogue category, or a plain typed search),
+    // and never re-derived from the query text afterward. No default: every call site names its
+    // group explicitly rather than silently landing on one. Two things this replaced both failed
+    // the same way — carFilters alone can't answer "is this a car search" (a vehicle search with
+    // no criteria chosen yet has empty carFilters, indistinguishable from a plain search that
+    // never was one), and guessing from words ("does a car make's name appear in this text")
+    // misfires on any make that is also an ordinary word — RAM is a real vehicle brand and also
+    // what a "32GB SODIMM RAM" listing calls itself. Declared before [platforms] so that field's
+    // own default can read it: a platforms list omitted at construction defaults to whatever this
+    // category actually reaches, never "every platform including car-only and real-estate sites"
+    // — the default this replaced, which silently matched the exact bug it was hiding.
+    val category: MarketGroup,
+    val platforms: List<PlatformId> = MarketSets.platformsFor(category),
     val minPrice: Money? = null,
     val maxPrice: Money? = null,
     val condition: List<Condition>? = null,
@@ -162,13 +175,6 @@ data class SearchQuery(
     // Vehicle criteria, read through carCriteria: crawlers turn what their site supports into
     // native URL parameters, and post-filtering enforces the rest.
     val carFilters: CarFilters? = null,
-    // Set once, when this search was created through the vehicle-search form — never re-derived
-    // from the query text. carFilters alone cannot answer "is this a car search": a vehicle search
-    // with no criteria chosen yet has empty carFilters, indistinguishable from a plain search that
-    // never was one. Guessing from words instead ("does a car make's name appear in this text")
-    // misfires on any make that is also an ordinary word — RAM is a real vehicle brand and also
-    // what a "32GB SODIMM RAM" listing calls itself.
-    val isVehicleSearch: Boolean = false,
     // Alternate phrasings that count as this same search — a listing matching any one of these as
     // well as [text] is a match (e.g. text="Fujifilm X-T5", aliases=["XT5"]). Structured data, not
     // embedded "OR" syntax: the field the user searches stays exactly what they typed or what a
