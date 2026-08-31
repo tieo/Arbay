@@ -65,9 +65,8 @@ object MarketSets {
     }
 
     /** The country whose listings a market carries, for grouping it under. The home markets carry
-     *  no country of their own; AutoScout24's own site spans several. */
-    fun countryOf(platform: PlatformId): String = when (platform) {
-        PlatformId.AUTOSCOUT24 -> "EU"
-        else -> platform.country ?: "DE"
-    }
+     *  no country of their own, so this reads as "DE" for AutoScout24's own .de site too — the
+     *  cross-border split is already its own set of platforms (AUTOSCOUT24_IT/_FR/_ES/_BE/_CH,
+     *  each with its own real country), not something this needs to invent an "EU" bucket for. */
+    fun countryOf(platform: PlatformId): String = platform.country ?: "DE"
 }
