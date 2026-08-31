@@ -64,18 +64,9 @@ private data class CrawlerTestResult(
     val results: List<Listing>,
 )
 
-/** Default platforms for general product searches (excludes car/real-estate sites) */
-private val GENERAL_PLATFORMS = listOf(
-    PlatformId.EBAY_DE, PlatformId.EBAY_COM, PlatformId.KLEINANZEIGEN, PlatformId.AMAZON_DE,
-    PlatformId.IDEALO,
-    PlatformId.BACKMARKET_DE, PlatformId.REBUY, PlatformId.REFURBED,
-    PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.MARKTPLAATS,
-    // Cross-border sourcing: the query is translated into each site's language (localizedQuery)
-    // before searching, so a German product term reaches Italian/French/Spanish/Dutch listings.
-    PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.TWEEDEHANDS,
-    // Switzerland's largest general marketplace; German-language, so the query needs no translation.
-    PlatformId.RICARDO, PlatformId.SUBITO,
-)
+/** Default platforms for general product searches (excludes car/real-estate sites). Shared with
+ *  the client so a typed custom search defaults the same way, not to every crawlable platform. */
+private val GENERAL_PLATFORMS = PlatformCategories.GENERAL
 
 /** How common a word is across every listing crawled so far, so a search's own results can be
  *  judged against it when looking for the market's other names for the thing. */
@@ -246,16 +237,9 @@ private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<
 
 /** Default platforms when the query resolves to a car make/model. Covers Germany
  *  plus cross-border sourcing markets: AutoScout24 spans Western/Central Europe via
- *  its country filter, the national sites reach markets it covers thinly. */
-private val CAR_PLATFORMS = listOf(
-    PlatformId.AUTOSCOUT24, PlatformId.MOBILE_DE, PlatformId.KLEINANZEIGEN,
-    PlatformId.EBAY_DE, PlatformId.TRUCKSCOUT24,
-    PlatformId.OTOMOTO, PlatformId.DBA, PlatformId.BILBASEN,
-    PlatformId.BYTBIL, PlatformId.SAUTO, PlatformId.MARKTPLAATS,
-    PlatformId.WILLHABEN,
-    PlatformId.AUTOSCOUT24_IT, PlatformId.AUTOSCOUT24_FR, PlatformId.AUTOSCOUT24_ES,
-    PlatformId.AUTOSCOUT24_BE, PlatformId.AUTOVIT, PlatformId.RICARDO, PlatformId.SUBITO, PlatformId.TWEEDEHANDS, PlatformId.AUTOPLIUS, PlatformId.NETTIAUTO, PlatformId.FINN, PlatformId.OLX_PT, PlatformId.KUPUJEM,
-)
+ *  its country filter, the national sites reach markets it covers thinly. Shared with the
+ *  client for the same reason as [GENERAL_PLATFORMS]. */
+private val CAR_PLATFORMS = PlatformCategories.CAR
 
 /** Identity a scrape is throttled against: the Authelia-forwarded user when present, else
  *  the client IP. So one account is one bucket regardless of source address. */

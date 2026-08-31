@@ -34,6 +34,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.model.FreeItemProfile
 import io.github.tieo.arbay.model.FreeItemStats
+import io.github.tieo.arbay.model.PlatformCategories
+import io.github.tieo.arbay.model.PlatformCategory
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SearchQuery
@@ -731,7 +733,12 @@ fun MainScreen(
                     productViewModel.createProduct(
                         name = view.name.ifBlank { view.query },
                         searchText = view.query,
-                        platforms = view.platforms ?: PlatformId.entries,
+                        // A plain search (no catalogue/car platform list of its own) is bookmarked
+                        // with the same general marketplaces it was actually searched with — never
+                        // "every platform including car-only and real-estate sites", which the
+                        // saved-search monitor would then re-run forever regardless of relevance.
+                        platforms = view.platforms
+                            ?: (if (view.isCar) PlatformCategories.CAR else PlatformCategories.GENERAL),
                         carFilters = view.filters,
                         excludeKeywords = resultsBlockedTerms,
                         isVehicleSearch = view.isCar,
@@ -1027,7 +1034,14 @@ private fun AddProductSheet(
     }
     val selectedPlatforms = remember {
         mutableStateListOf<PlatformId>().apply {
-            addAll(editProduct?.searchQuery?.platforms ?: prefill?.effectivePlatforms ?: markets)
+            // A fresh custom search (no catalogue prefill) defaults to general marketplaces, not
+            // every crawlable platform — car-only and real-estate sites would otherwise get
+            // queried for a search they could never match. Still there to add by hand below.
+            addAll(
+                editProduct?.searchQuery?.platforms
+                    ?: prefill?.effectivePlatforms
+                    ?: markets.filter { it in PlatformCategories.GENERAL },
+            )
         }
     }
 
@@ -1141,23 +1155,48 @@ private fun AddProductSheet(
 
             Spacer(Modifier.height(4.dp))
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                markets.forEach { platform ->
-                    FilterChip(
-                        selected = platform in selectedPlatforms,
-                        onClick = {
-                            if (platform in selectedPlatforms) selectedPlatforms.remove(platform)
-                            else selectedPlatforms.add(platform)
-                        },
-                        label = { Text(platform.displayName, style = MaterialTheme.typography.labelSmall) },
-                        leadingIcon = {
-                            if (platform in selectedPlatforms) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                    )
+            // Grouped by what each platform actually is, not one flat wall of ~35 unlabeled
+            // chips — a platform in more than one category (Kleinanzeigen: general and cars)
+            // shows once, under the first group it belongs to.
+            val groupedMarkets = remember(markets) {
+                val assigned = mutableSetOf<PlatformId>()
+                buildList {
+                    for (category in PlatformCategory.entries) {
+                        val inGroup = markets.filter { it !in assigned && category in it.categories }
+                        if (inGroup.isNotEmpty()) {
+                            assigned += inGroup
+                            add(category.label to inGroup)
+                        }
+                    }
+                    val leftover = markets.filterNot { it in assigned }
+                    if (leftover.isNotEmpty()) add("Other" to leftover)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                groupedMarkets.forEach { (label, platforms) ->
+                    Column {
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            platforms.forEach { platform ->
+                                FilterChip(
+                                    selected = platform in selectedPlatforms,
+                                    onClick = {
+                                        if (platform in selectedPlatforms) selectedPlatforms.remove(platform)
+                                        else selectedPlatforms.add(platform)
+                                    },
+                                    label = { Text(platform.displayName, style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = {
+                                        if (platform in selectedPlatforms) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp))
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
