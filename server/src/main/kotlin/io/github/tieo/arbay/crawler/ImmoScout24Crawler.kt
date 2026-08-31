@@ -10,10 +10,14 @@ class ImmoScout24Crawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.immobilienscout24.de/Suche/de/wohnung-mieten?enteredFrom=result_list&searchQuery=${query.positiveText.encodeUrl()}"
-        val html = fetchWithFallback(
-            client, url, "ImmobilienScout24",
-            waitSelector = "[data-testid=result-list-entry], .result-list__listing, article[data-id]",
-        )
+        // The generic HTTP/curl_cffi/Playwright-Chromium/Firefox tiers all get detected here
+        // (401s and timeouts across the board) — the page itself is not actually behind a hard
+        // block, since the zendriver real-Chrome stealth tier loads it cleanly (verified live: real
+        // title, real listing cards, no captcha/access-denied text). Go straight to it rather than
+        // burning through four tiers known to fail first. "headline" is the card title's own
+        // data-testid — unlike "/expose/" (also a substring of a CSS background-image path,
+        // matching before any real card has rendered), it appears only inside an actual card.
+        val html = StealthBrowserClient.fetchRendered(url, waitMarker = "data-testid=\"headline\"", waitSeconds = 25, minMatches = 3)
         return parseSearchResults(html)
     }
 
@@ -21,37 +25,30 @@ class ImmoScout24Crawler(private val client: HttpClient) : Crawler {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
-        val items = doc.select("[data-testid=result-list-entry]")
-            .ifEmpty { doc.select(".result-list__listing") }
-            .ifEmpty { doc.select("article[data-id]") }
-            .ifEmpty { doc.select("a[href*='/expose/']") }
+        // Each result card is a [data-obid] element (verified live 2026-08-31 — the site no
+        // longer uses data-testid=result-list-entry or a result-list__listing class at all).
+        val items = doc.select("[data-obid]")
 
         return items.mapNotNull { item ->
-            val linkEl = item.selectFirst("a[href*='/expose/']")
-                ?: (if (item.tagName() == "a") item else return@mapNotNull null)
-            val href = linkEl.attr("href")
+            val href = item.selectFirst("a[href*='/expose/']")?.attr("href") ?: return@mapNotNull null
             val url = if (href.startsWith("http")) href else "https://www.immobilienscout24.de$href"
 
-            val externalId = Regex("""/expose/(\d+)""").find(href)?.groupValues?.get(1)
-                ?: item.attr("data-id").takeIf { it.isNotBlank() }
-                ?: return@mapNotNull null
+            val externalId = item.attr("data-obid").takeIf { it.isNotBlank() } ?: return@mapNotNull null
 
-            val title = item.selectFirst("[data-testid=listing-title]")?.text()
-                ?: item.selectFirst("h2, h3")?.text()
-                ?: item.selectFirst("[class*=title]")?.text()
-                ?: return@mapNotNull null
+            val title = item.selectFirst("[data-testid=headline]")?.text() ?: return@mapNotNull null
 
-            val priceText = item.selectFirst("[data-testid=listing-price]")?.text()
-                ?: item.selectFirst("[class*=price]")?.text()
-                ?: return@mapNotNull null
+            // The attributes block lists price, area and room count as sibling <dd>s in that
+            // order; the price is always first.
+            val priceText = item.selectFirst("[data-testid=attributes] dd")?.text() ?: return@mapNotNull null
             val price = Money.parse(priceText) ?: return@mapNotNull null
 
-            val locationText = item.selectFirst("[data-testid=listing-location]")?.text()
-                ?: item.selectFirst("[class*=location], [class*=address]")?.text()
+            val locationText = item.selectFirst("[data-testid=hybridViewAddress]")?.text()
             val location = locationText?.let { Location.parse(it) }
 
-            val imageUrl = item.selectFirst("img")?.let {
-                it.attr("src").ifBlank { it.attr("data-src") }
+            // Every slide but the first is lazy-loaded behind a 1x1 placeholder in src, the real
+            // URL sitting in data-lazy-src until it scrolls into view.
+            val imageUrl = item.selectFirst("img.gallery__image")?.let {
+                it.attr("data-lazy-src").ifBlank { it.attr("src") }
             }?.takeIf { it.startsWith("http") }
 
             Listing(
