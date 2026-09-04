@@ -16,13 +16,44 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
 
     private val carBase = "https://www.willhaben.at/iad/gebrauchtwagen/auto/gebrauchtwagenboerse"
 
+    // willhaben's numeric CAR_MODEL/MAKE id, keyed by CarQueryResolver's canonical make slug. Probed
+    // once from willhaben's own unfiltered car page and cached for the process lifetime — unlike a
+    // model catalog, the numeric id a site assigns to a make essentially never changes, so this
+    // needs no daily refresh. Replaces a hand-typed ~31-make list that silently degraded every make
+    // CarQueryResolver has since learned beyond those 31 (same shape of bug as the old model seed).
+    @Volatile
+    private var makeIdCache: Map<String, Int>? = null
+
+    private suspend fun makeIds(): Map<String, Int> {
+        makeIdCache?.let { return it }
+        val ids = try {
+            val html = fetchWithFallback(client, carBase, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
+            val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyMap()
+            Regex("\"label\":\"([^\"]{1,40})\"[^}]{0,140}?CAR_MODEL/MAKE\"[^}]{0,60}?\"value\":\"(\\d+)\"")
+                .findAll(data)
+                .mapNotNull { m ->
+                    val id = m.groupValues[2].toIntOrNull() ?: return@mapNotNull null
+                    val slug = CarQueryResolver.resolve(m.groupValues[1])?.makeSlug ?: return@mapNotNull null
+                    slug to id
+                }
+                .toMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+        // A parse that found almost nothing likely means the page shape changed, not that
+        // willhaben genuinely lists two makes — don't cache that as if it were the real answer.
+        if (ids.size < 20) return ids
+        makeIdCache = ids
+        return ids
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         // willhaben's used-car vertical ignores keyword search — it filters by numeric make/model IDs
         // (the `CAR_MODEL/MAKE` and `CAR_MODEL/MODEL` params). So a car query is resolved to those IDs:
-        // the make from a static map, the model from the make-filtered page's own filter navigator.
+        // the make from willhaben's own navigator, the model from the make-filtered page's navigator.
         // The general marktplatz (keyword) handles everything non-car.
         val carQuery = CarQueryResolver.resolve(query.positiveText)
-        val makeId = carQuery?.makeSlug?.let { WILLHABEN_MAKE_IDS[it] }
+        val makeId = carQuery?.makeSlug?.let { makeIds()[it] }
         if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug, query)
 
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
@@ -189,19 +220,4 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
         }
     }
 
-    companion object {
-        // CarQueryResolver make slug → willhaben's numeric CAR_MODEL/MAKE id (read from its own
-        // car filter navigator). Makes willhaben doesn't list, or that CarQueryResolver doesn't
-        // resolve, simply aren't searched on willhaben (it falls back to skipping cars there).
-        private val WILLHABEN_MAKE_IDS = mapOf(
-            "volkswagen" to 1065, "audi" to 1003, "bmw" to 1005, "mercedes-benz" to 1036,
-            "opel" to 1043, "ford" to 1017, "skoda" to 1057, "seat" to 1056, "cupra" to 10026,
-            "renault" to 1051, "peugeot" to 1045, "citroen" to 1010, "fiat" to 1016,
-            "toyota" to 1062, "hyundai" to 1020, "kia" to 1025, "mazda" to 1035, "nissan" to 1042,
-            "volvo" to 1064, "porsche" to 1048, "dacia" to 1011, "suzuki" to 1061,
-            "mitsubishi" to 1040, "honda" to 1018, "jeep" to 1024, "land-rover" to 1029,
-            "jaguar" to 1023, "alfa-romeo" to 1000, "chevrolet" to 1008, "lexus" to 1030,
-            "byd" to 10034, "iveco" to 1022,
-        )
-    }
 }

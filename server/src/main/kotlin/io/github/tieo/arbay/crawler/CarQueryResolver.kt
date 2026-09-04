@@ -4,6 +4,14 @@ package io.github.tieo.arbay.crawler
  * Resolves free-text queries like "Volkswagen Crafter 2020" into make and model for
  * car sites whose search works via path segments or make/model parameters instead of
  * a free-text query (AutoScout24 ignores its `query` parameter entirely).
+ *
+ * The make list itself comes from [CarTaxonomyProvider.current] — the same live, ~290-make
+ * AutoScout24 catalog the picker uses — not a second hand-typed list. A make this resolver
+ * cannot name is a make no site can be asked for anyway, so keeping one authoritative list
+ * means a make added to the picker is recognised here too, with no second place to update.
+ * [EXTRA_ALIASES] is deliberately the only hand-typed thing left: colloquial names and
+ * accented spellings ("VW", "Škoda") that AutoScout24's own label never contains, so they
+ * could never be derived from its catalog no matter how it's synced.
  */
 object CarQueryResolver {
 
@@ -19,49 +27,29 @@ object CarQueryResolver {
         val remainder: String,
     )
 
-    // Canonical slug → aliases as they appear in user queries. Multi-word aliases
-    // must be matched before shorter ones ("land rover" before a hypothetical "land").
-    private val MAKES: Map<String, List<String>> = mapOf(
-        "volkswagen" to listOf("volkswagen", "vw"),
-        "mercedes-benz" to listOf("mercedes-benz", "mercedes benz", "mercedes"),
-        "bmw" to listOf("bmw"),
-        "audi" to listOf("audi"),
-        "opel" to listOf("opel"),
-        "ford" to listOf("ford"),
-        "skoda" to listOf("skoda", "škoda"),
-        "seat" to listOf("seat"),
-        "cupra" to listOf("cupra"),
-        "renault" to listOf("renault"),
-        "peugeot" to listOf("peugeot"),
-        "citroen" to listOf("citroen", "citroën"),
-        "fiat" to listOf("fiat"),
-        "toyota" to listOf("toyota"),
-        "hyundai" to listOf("hyundai"),
-        "kia" to listOf("kia"),
-        "mazda" to listOf("mazda"),
-        "nissan" to listOf("nissan"),
-        "volvo" to listOf("volvo"),
-        "porsche" to listOf("porsche"),
-        "mini" to listOf("mini"),
-        "dacia" to listOf("dacia"),
-        "suzuki" to listOf("suzuki"),
-        "mitsubishi" to listOf("mitsubishi"),
-        "honda" to listOf("honda"),
-        "tesla" to listOf("tesla"),
-        "iveco" to listOf("iveco"),
-        "man" to listOf("man"),
-        "smart" to listOf("smart"),
-        "jeep" to listOf("jeep"),
-        "land-rover" to listOf("land rover", "landrover"),
-        "jaguar" to listOf("jaguar"),
-        "alfa-romeo" to listOf("alfa romeo", "alfa"),
-        "chevrolet" to listOf("chevrolet"),
-        "subaru" to listOf("subaru"),
-        "lexus" to listOf("lexus"),
-        "polestar" to listOf("polestar"),
-        "byd" to listOf("byd"),
-        "mg" to listOf("mg"),
+    // Canonical slug → colloquial/accented spellings that never appear in AutoScout24's own
+    // label for the make, so no amount of syncing its catalog would ever produce them.
+    private val EXTRA_ALIASES: Map<String, List<String>> = mapOf(
+        "volkswagen" to listOf("vw"),
+        "mercedes-benz" to listOf("mercedes"),
+        "land-rover" to listOf("landrover"),
+        "alfa-romeo" to listOf("alfa"),
+        "citroen" to listOf("citroën"),
+        "skoda" to listOf("škoda"),
     )
+
+    /** Canonical slug → every spelling a user might type it as, built fresh from whatever
+     *  [CarTaxonomyProvider.current] holds so a make added to the live catalog is recognised
+     *  here without a second list to remember to update. */
+    private fun makeAliases(): Map<String, List<String>> =
+        CarTaxonomyProvider.current.makes.associate { make ->
+            val label = make.name.lowercase()
+            // AutoScout24's own label sometimes hyphenates a multi-word make ("Mercedes-Benz");
+            // a query typed as two words ("mercedes benz") must match it too.
+            val spaced = label.replace("-", " ")
+            val forms = (listOf(label, spaced) + (EXTRA_ALIASES[make.id] ?: emptyList())).distinct()
+            make.id to forms
+        }
 
     /**
      * Matches a make only at the start of the query, so common words that are also
@@ -74,7 +62,7 @@ object CarQueryResolver {
             .map { it.lowercase() }
         if (tokens.isEmpty()) return null
 
-        for ((slug, aliases) in MAKES) {
+        for ((slug, aliases) in makeAliases()) {
             for (alias in aliases.sortedByDescending { it.count { c -> c == ' ' } }) {
                 val aliasTokens = alias.split(" ")
                 if (tokens.size >= aliasTokens.size &&
@@ -95,7 +83,7 @@ object CarQueryResolver {
      *  "Volkswagen" query still match a "VW" title (and vice versa). */
     fun makeSpellings(token: String): List<String>? {
         val t = token.lowercase().replace(" ", "").replace("-", "")
-        for ((slug, aliases) in MAKES) {
+        for ((slug, aliases) in makeAliases()) {
             val forms = (listOf(slug) + aliases).map { it.lowercase().replace(" ", "").replace("-", "") }.distinct()
             if (t in forms) return forms
         }
