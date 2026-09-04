@@ -53,7 +53,6 @@ import coil3.compose.AsyncImage
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
-import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
@@ -243,11 +242,12 @@ internal fun ListingCard(
     modifier: Modifier = Modifier,
 ) {
     var showBlockDialog by remember { mutableStateOf(false) }
+    var showDetail by remember { mutableStateOf(false) }
 
     // A flat, tappable row on the sheet surface, separated by a hairline divider — not a filled card
     // per item, which reads as clutter across a long list. The price is the strongest element.
     Surface(
-        onClick = { openBrowser(listing.url) },
+        onClick = { showDetail = true },
         color = Color.Transparent,
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -414,6 +414,9 @@ internal fun ListingCard(
             },
             onDismiss = { showBlockDialog = false },
         )
+    }
+    if (showDetail) {
+        ListingDetailSheet(listing = listing, onDismiss = { showDetail = false })
     }
 }
 

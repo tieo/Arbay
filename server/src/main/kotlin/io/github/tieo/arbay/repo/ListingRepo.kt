@@ -81,11 +81,12 @@ class ListingRepo {
         val clean = listing.tidied()
         listings[clean.id] = clean
         if (clean.sold) schedulePersist()
+        ListingArchive.archiveAsync(clean)
         return clean
     }
 
     fun upsertBatch(batch: List<Listing>): Int {
-        batch.forEach { val clean = it.tidied(); listings[clean.id] = clean }
+        batch.forEach { val clean = it.tidied(); listings[clean.id] = clean; ListingArchive.archiveAsync(clean) }
         if (batch.any { it.sold }) schedulePersist()
         return batch.size
     }

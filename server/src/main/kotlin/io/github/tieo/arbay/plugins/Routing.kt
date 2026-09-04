@@ -3,6 +3,7 @@ package io.github.tieo.arbay.plugins
 import io.github.tieo.arbay.crawler.SavedSearchMonitor
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
+import io.github.tieo.arbay.routes.archiveRoutes
 import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.listingRoutes
@@ -28,5 +29,6 @@ fun Application.configureRouting() {
         crawlerRoutes(listingRepo)
         freeItemRoutes(savedSearches)
         taxonomyRoutes()
+        archiveRoutes()
     }
 }
