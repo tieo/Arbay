@@ -7,6 +7,7 @@ import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SubfilterMatch
 import io.github.tieo.arbay.model.TrackedProduct
+import io.github.tieo.arbay.model.displayName
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.repo.ListingRepo
@@ -213,7 +214,7 @@ class SavedSearchMonitor(
                     pendingSubfilterMatches += SubfilterMatch(
                         listingId = l.id,
                         searchName = product.name,
-                        subfilterName = sf.name,
+                        subfilterName = sf.displayName,
                         title = l.title,
                         url = l.url,
                         priceText = eurCents(l.price)?.let { "€${it / 100}" },

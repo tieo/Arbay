@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.NotificationSubfilter
+import io.github.tieo.arbay.model.summaryText
 import io.github.tieo.arbay.ui.AdaptiveSheet
 
 /**
@@ -73,24 +74,15 @@ fun SearchAlertsSheet(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Notification subfilters", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    if (autoFetch.enabled) {
-                        "A push notification when a fresh find also matches one of these, named so you know why it arrived."
-                    } else {
-                        "Turn on auto-fetch above first — a subfilter only sees what auto-fetch finds."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                if (subfilters.isEmpty()) {
+                if (!autoFetch.enabled) {
                     Text(
-                        "No notification subfilters yet.",
+                        "Needs auto-fetch on above.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp),
                     )
-                } else {
+                }
+
+                if (subfilters.isNotEmpty()) {
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -162,14 +154,14 @@ private fun AutoFetchSection(autoFetch: AutoFetchSettings, onChange: (AutoFetchS
                 )
                 Switch(checked = autoFetch.enabled, onCheckedChange = { onChange(autoFetch.copy(enabled = it)) })
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Off by default. On re-runs this search in the background so it keeps finding new " +
-                    "stock without you reopening it — and, once on, a notification subfilter below " +
-                    "actually has something to check.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!autoFetch.enabled) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Re-runs this search in the background.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (autoFetch.enabled) {
                 Spacer(Modifier.height(12.dp))
                 Text("Check every", style = MaterialTheme.typography.labelMedium)
@@ -208,17 +200,27 @@ private fun SubfilterRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    subfilter.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    subfilterSummary(subfilter),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+                if (subfilter.name.isNotBlank()) {
+                    Text(
+                        subfilter.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        subfilter.summaryText(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    // No name given: the criteria are the whole point, so they get the title's
+                    // own size instead of playing subtitle to an empty title.
+                    Text(
+                        subfilter.summaryText(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Switch(checked = subfilter.enabled, onCheckedChange = onToggle)
             IconButton(onClick = onEdit) {
@@ -229,24 +231,6 @@ private fun SubfilterRow(
             }
         }
     }
-}
-
-/** The criteria in one line, in the order they'd narrow a listing down: price, condition, words. */
-private fun subfilterSummary(sf: NotificationSubfilter): String {
-    val parts = buildList {
-        when {
-            sf.minPriceEur != null && sf.maxPriceEur != null -> add("€${sf.minPriceEur}–${sf.maxPriceEur}")
-            sf.maxPriceEur != null -> add("up to €${sf.maxPriceEur}")
-            sf.minPriceEur != null -> add("€${sf.minPriceEur}+")
-        }
-        when (sf.condition) {
-            "NEW" -> add("new only")
-            "USED" -> add("used only")
-        }
-        if (sf.mustContainAnyOf.isNotEmpty()) add("has " + sf.mustContainAnyOf.joinToString(" or "))
-        if (sf.excludeKeywords.isNotEmpty()) add("not " + sf.excludeKeywords.joinToString(", "))
-    }
-    return if (parts.isEmpty()) "Any find in this search" else parts.joinToString(" · ")
 }
 
 @Composable
@@ -275,8 +259,8 @@ private fun SubfilterEditorDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Name") },
-                    placeholder = { Text("e.g. \"under 8000\"") },
+                    label = { Text("Name (optional)") },
+                    placeholder = { Text("leave blank to just show the filters") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -355,7 +339,6 @@ private fun SubfilterEditorDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank(),
                 onClick = {
                     onSave(
                         NotificationSubfilter(

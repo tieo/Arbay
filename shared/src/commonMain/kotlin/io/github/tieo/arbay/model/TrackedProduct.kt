@@ -30,7 +30,10 @@ data class AutoFetchSettings(
 @Serializable
 data class NotificationSubfilter(
     val id: String,
-    val name: String,
+    // Optional: the criteria themselves ([summaryText]) already say what the subfilter is,
+    // so naming one is for telling apart two similar subfilters on the same search, not required
+    // to have one at all.
+    val name: String = "",
     val enabled: Boolean = true,
     val minPriceEur: Int? = null,
     val maxPriceEur: Int? = null,
@@ -40,6 +43,31 @@ data class NotificationSubfilter(
     val mustContainAnyOf: List<String> = emptyList(),
     val excludeKeywords: List<String> = emptyList(),
 )
+
+/** The criteria in one line, in the order they'd narrow a listing down: price, condition, words.
+ *  Used as the notification/list display whenever [NotificationSubfilter.name] is blank — the
+ *  criteria already say what the subfilter is, so an unnamed one still reads as something specific
+ *  rather than "notification subfilter #2". */
+fun NotificationSubfilter.summaryText(): String {
+    val parts = buildList {
+        when {
+            minPriceEur != null && maxPriceEur != null -> add("€$minPriceEur–$maxPriceEur")
+            maxPriceEur != null -> add("up to €$maxPriceEur")
+            minPriceEur != null -> add("€$minPriceEur+")
+        }
+        when (condition) {
+            "NEW" -> add("new only")
+            "USED" -> add("used only")
+        }
+        if (mustContainAnyOf.isNotEmpty()) add("has " + mustContainAnyOf.joinToString(" or "))
+        if (excludeKeywords.isNotEmpty()) add("not " + excludeKeywords.joinToString(", "))
+    }
+    return if (parts.isEmpty()) "Any find in this search" else parts.joinToString(" · ")
+}
+
+/** What to call this subfilter when something needs one string — its own name, or its criteria
+ *  when it was never given one. */
+val NotificationSubfilter.displayName: String get() = name.ifBlank { summaryText() }
 
 @Serializable
 data class TrackedProduct(
