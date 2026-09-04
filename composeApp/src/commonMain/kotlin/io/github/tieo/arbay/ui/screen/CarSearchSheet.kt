@@ -105,21 +105,12 @@ fun CarSearchSheet(
     // Null = default to all markets. onPlatformsChange reports every toggle back to the caller.
     initialPlatforms: List<PlatformId>? = null,
     onPlatformsChange: (List<PlatformId>) -> Unit = {},
-    // Fetches the make's live model catalog from the server (probed from the site, cached). Returns
-    // null on failure, so the bundled models stay. Defaults to none for previews.
-    loadModels: suspend (makeId: String) -> List<CarModelNode>? = { null },
 ) {
     val taxonomy = CarTaxonomyStore.taxonomy
     var make by remember { mutableStateOf(initialMake) }
     var model by remember { mutableStateOf(initialModel) }
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
-    // Live models for the selected make, replacing the bundled seed once fetched.
-    var liveModels by remember { mutableStateOf<List<CarModelNode>?>(null) }
-    LaunchedEffect(make?.id) {
-        liveModels = null
-        make?.id?.let { liveModels = loadModels(it) }
-    }
     var yearFrom by remember { mutableStateOf(initialFilters?.firstRegFromYear?.toString() ?: "") }
     var yearTo by remember { mutableStateOf(initialFilters?.firstRegToYear?.toString() ?: "") }
     var maxKm by remember { mutableStateOf(initialFilters?.maxMileageKm?.toString() ?: "") }
@@ -483,7 +474,7 @@ fun CarSearchSheet(
         make?.let { mk ->
             SearchablePickerDialog(
                 title = "Select ${mk.name} model",
-                options = liveModels?.takeIf { it.isNotEmpty() } ?: mk.models,
+                options = mk.models,
                 labelOf = { it.name },
                 onDismiss = { showModelPicker = false },
                 onSelect = { picked ->

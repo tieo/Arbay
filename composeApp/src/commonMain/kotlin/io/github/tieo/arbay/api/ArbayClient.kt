@@ -111,9 +111,6 @@ class ArbayClient(
 
 
     @Serializable
-    data class MakeModelsDto(val makeId: String = "", val models: List<CarModelNode> = emptyList())
-
-    @Serializable
     data class CrawlerConfigDto(
         val maxResultsPerPlatform: Int = 60,
         val maxPages: Int = 8,
@@ -126,10 +123,14 @@ class ArbayClient(
     suspend fun getCarTaxonomy(): CarTaxonomy =
         client.get("$baseUrl/api/car-taxonomy").body()
 
-    /** Live model catalog for a make, probed from the site and cached server-side. Returns null
-     *  on any error so the caller keeps the bundled models. */
-    suspend fun getCarModels(makeId: String): List<CarModelNode>? = try {
-        client.get("$baseUrl/api/car-taxonomy/models/$makeId").body<MakeModelsDto>().models
+    /** The offline copy of a listing that may no longer exist on its own platform — its own
+     *  fields plus images mirrored on our server. Null when it was never archived.
+     *
+     *  Stored image paths are server-relative (deployment-agnostic on disk); resolved to this
+     *  device's configured server here, at the one place that already knows [baseUrl]. */
+    suspend fun getArchivedListing(id: String): Listing? = try {
+        val listing: Listing = client.get("$baseUrl/api/archive/listings/$id").body()
+        listing.copy(imageUrls = listing.imageUrls.map { if (it.startsWith("http")) it else "$baseUrl$it" })
     } catch (_: Exception) {
         null
     }

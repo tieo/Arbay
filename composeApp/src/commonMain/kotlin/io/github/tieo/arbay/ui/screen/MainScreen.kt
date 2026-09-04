@@ -578,7 +578,6 @@ fun MainScreen(
     // Car search form
     if (showCarSearch) {
         CarSearchSheet(
-            loadModels = { makeId -> client.getCarModels(makeId) },
             onDismiss = {
                 showCarSearch = false
                 cameFromDiscovery = false
