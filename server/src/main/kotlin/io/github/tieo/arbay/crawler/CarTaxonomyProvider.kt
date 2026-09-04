@@ -5,9 +5,11 @@ import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.CarTaxonomy
 import io.github.tieo.arbay.model.CarTaxonomySeed
 import kotlinx.coroutines.delay
+import kotlinx.serialization.encodeToString
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import kotlinx.serialization.json.*
+import java.io.File
 import kotlin.random.Random
 
 /**
@@ -15,6 +17,9 @@ import kotlin.random.Random
  * AutoScout24's own filter catalog. A daily background job (see Application.kt) is the only thing
  * that fetches this — the app just reads whatever [current] holds, on its own sync-on-start
  * schedule ([io.github.tieo.arbay.routes.taxonomyRoutes]). No client action ever triggers a fetch.
+ * [current] is also mirrored to disk after every successful refresh and reloaded from there at
+ * startup, so a restart (a deploy, in particular) serves the full catalog immediately rather than
+ * the thin bundled seed for the several minutes the next refresh takes to finish.
  *
  * AutoScout24 is pan-European and embeds its full make catalog
  * (props.pageProps.taxonomy.makesSorted, ~290 makes as {label, value}) in the __NEXT_DATA__ of
@@ -27,10 +32,31 @@ object CarTaxonomyProvider {
 
     private val log = LoggerFactory.getLogger(CarTaxonomyProvider::class.java)
     private const val CATALOG_URL = "https://www.autoscout24.de/lst?atype=C&cy=D&sort=standard"
+    private val json = Json { ignoreUnknownKeys = true }
+    private val persistFile = File(System.getProperty("user.home"), ".arbay/car_taxonomy.json")
 
+    // Loaded from yesterday's successful refresh when present, so a restart serves the full
+    // catalog immediately instead of the thin bundled seed for the ~10 minutes a fresh refresh
+    // takes — a deploy is exactly when this would otherwise bite hardest.
     @Volatile
-    var current: CarTaxonomy = CarTaxonomySeed.taxonomy
+    var current: CarTaxonomy = loadPersisted() ?: CarTaxonomySeed.taxonomy
         private set
+
+    private fun loadPersisted(): CarTaxonomy? = try {
+        if (persistFile.exists()) json.decodeFromString<CarTaxonomy>(persistFile.readText()) else null
+    } catch (e: Exception) {
+        log.warn("Could not load persisted car taxonomy: {}", e.message)
+        null
+    }
+
+    private fun persist(taxonomy: CarTaxonomy) {
+        try {
+            persistFile.parentFile.mkdirs()
+            persistFile.writeText(json.encodeToString(taxonomy))
+        } catch (e: Exception) {
+            log.warn("Could not persist car taxonomy: {}", e.message)
+        }
+    }
 
     /** Fetch AutoScout24's model catalog for one make. The make page embeds every make's models
      *  under taxonomy.models keyed by numeric make id; the selected make's list is the one to read. */
@@ -106,6 +132,7 @@ object CarTaxonomyProvider {
             it.id + ":" + it.models.joinToString(",") { m -> m.id }
         }.hashCode().toUInt().toString(16)
         current = CarTaxonomy(version = version, makes = nodes)
+        persist(current)
         log.info(
             "Car taxonomy refreshed: {} makes, {} total models (version {})",
             current.makes.size, current.makes.sumOf { it.models.size }, current.version,
