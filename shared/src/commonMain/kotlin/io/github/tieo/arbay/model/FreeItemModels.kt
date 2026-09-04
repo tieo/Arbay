@@ -131,6 +131,20 @@ data class DealMatch(
     val locationText: String? = null,
 )
 
+/** A listing that matched a notification subfilter someone set on a specific saved search —
+ *  "auto-fetch this, and tell me when one shows up under €8000" rather than a silent count on the
+ *  bookmark. Says which subfilter, by name, so the notification carries its own reason. */
+@Serializable
+data class SubfilterMatch(
+    val listingId: String,
+    val searchName: String,
+    val subfilterName: String,
+    val title: String,
+    val url: String,
+    val priceText: String? = null,
+    val locationText: String? = null,
+)
+
 /** What a background poll found, for the device to raise notifications from. */
 @Serializable
 data class PollResult(
@@ -139,5 +153,7 @@ data class PollResult(
     val urgentMatches: List<NewMatch> = emptyList(),
     // Listings in watched searches priced under that search's median.
     val deals: List<DealMatch> = emptyList(),
+    // Listings matching a notification subfilter someone set on a specific saved search.
+    val subfilterMatches: List<SubfilterMatch> = emptyList(),
     val lastPollTime: Instant? = null,
 )

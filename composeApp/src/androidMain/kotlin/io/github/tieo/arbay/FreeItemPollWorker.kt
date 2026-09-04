@@ -57,6 +57,22 @@ class FreeItemPollWorker(
                 )
             }
 
+            // A listing matching a notification subfilter someone set on a specific saved search.
+            // Says the subfilter's own name, since that is the reason it was worth interrupting for.
+            for (match in result.subfilterMatches) {
+                NotificationHelper.showSubfilterMatch(
+                    context = applicationContext,
+                    title = match.title,
+                    body = listOfNotNull(
+                        "${match.subfilterName} · ${match.searchName}",
+                        match.priceText,
+                        match.locationText,
+                    ).joinToString(", "),
+                    url = match.url,
+                    id = match.listingId.hashCode(),
+                )
+            }
+
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()

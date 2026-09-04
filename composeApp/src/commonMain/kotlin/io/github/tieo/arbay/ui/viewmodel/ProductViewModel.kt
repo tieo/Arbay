@@ -123,6 +123,16 @@ class ProductViewModel(
         )
     }
 
+    /** Set whether this bookmark re-runs itself in the background, and how often. */
+    fun setAutoFetch(product: TrackedProduct, autoFetch: AutoFetchSettings) {
+        updateProduct(product.copy(autoFetch = autoFetch))
+    }
+
+    /** Set this bookmark's notification subfilters and persist. */
+    fun setNotificationSubfilters(product: TrackedProduct, subfilters: List<NotificationSubfilter>) {
+        updateProduct(product.copy(notificationSubfilters = subfilters))
+    }
+
     private fun generateId(): String {
         val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
         return (1..12).map { chars.random() }.joinToString("")

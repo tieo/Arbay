@@ -582,7 +582,12 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
         // so the same deal is not raised twice.
         get("/notifications/poll") {
             val result = FreeItemMonitor.pollNow()
-            call.respond(result.copy(deals = savedSearches.drainDeals()))
+            call.respond(
+                result.copy(
+                    deals = savedSearches.drainDeals(),
+                    subfilterMatches = savedSearches.drainSubfilterMatches(),
+                ),
+            )
         }
 
         // Get last poll result without triggering a new poll

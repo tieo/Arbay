@@ -233,6 +233,8 @@ fun MainScreen(
     // Non-null while editing an existing bookmark: the save action updates this one instead of
     // creating a new bookmark. Set from the card's Edit button (and the edit-filters path).
     var editingProduct by remember { mutableStateOf<TrackedProduct?>(null) }
+    // Non-null while the auto-fetch/notification-subfilter sheet is open for this bookmark.
+    var alertsProduct by remember { mutableStateOf<TrackedProduct?>(null) }
     // The bookmark behind the open results, if the query is saved. Looked up live, so saving or
     // removing one takes effect without rebuilding the view.
     val resultsBookmark = results?.let { savedFor(it.query) }
@@ -479,6 +481,7 @@ fun MainScreen(
                                 // else in the add/edit sheet.
                                 if (view.isCar) openCarEditor(view, product) else showAddSheet = true
                             },
+                            onAlerts = { alertsProduct = product },
                         )
                     }
                 }
@@ -684,6 +687,20 @@ fun MainScreen(
         )
     }
 
+    alertsProduct?.let { product ->
+        // Read live off the product list, not the snapshot the sheet was opened with, so a toggle
+        // takes effect on screen the moment updateProduct's reload lands.
+        val current = products.firstOrNull { it.id == product.id } ?: product
+        SearchAlertsSheet(
+            productName = current.name,
+            autoFetch = current.autoFetch,
+            onAutoFetchChange = { productViewModel.setAutoFetch(current, it) },
+            subfilters = current.notificationSubfilters,
+            onSubfiltersChange = { productViewModel.setNotificationSubfilters(current, it) },
+            onDismiss = { alertsProduct = null },
+        )
+    }
+
     // Results, for every way in: a saved bookmark, a preview of something not saved yet, or a
     // fresh run of the car form. One sheet, wired once — saving, editing filters and blocking a
     // word mean the same thing whichever door the user came through.
@@ -820,6 +837,7 @@ internal fun ProductCard(
     onDelete: () -> Unit,
     onViewListings: () -> Unit,
     onEdit: () -> Unit,
+    onAlerts: () -> Unit,
     // What this search has found since it was last opened, when the server is watching it.
     status: SavedSearchStatus? = null,
 ) {
@@ -914,6 +932,15 @@ internal fun ProductCard(
 
                 Spacer(Modifier.width(4.dp))
 
+                IconButton(onClick = onAlerts) {
+                    Icon(
+                        if (product.autoFetch.enabled) Icons.Default.NotificationsActive else Icons.Outlined.Notifications,
+                        "Alerts",
+                        modifier = Modifier.size(20.dp),
+                        tint = if (product.autoFetch.enabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = onEdit) {
                     Icon(
                         Icons.Outlined.Edit, "Edit",

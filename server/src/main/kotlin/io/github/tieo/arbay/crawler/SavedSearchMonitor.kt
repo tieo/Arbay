@@ -3,7 +3,10 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.classifier.FreeItemMonitor
 import io.github.tieo.arbay.model.DealMatch
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SavedSearchStatus
+import io.github.tieo.arbay.model.SubfilterMatch
+import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.repo.ListingRepo
@@ -15,14 +18,16 @@ import org.slf4j.LoggerFactory
 import java.io.File
 
 /**
- * Re-runs each saved search (TrackedProduct) on a slow schedule, so a bookmark keeps finding new
- * stock without the user re-searching. What it finds shows on the saved search itself; only a
- * listing priced under that search's median is held for the phone to notify about.
+ * Re-runs a saved search (TrackedProduct) on the schedule set on that search, so a bookmark keeps
+ * finding new stock without the user re-searching. What it finds shows on the saved search itself;
+ * a listing matching one of the search's own notification subfilters, or priced under the search's
+ * median, is held for the phone to notify about.
  *
- * Off by default. Recurring crawls raise the flag risk the anti-block work manages, so this only
- * runs when ARBAY_SAVED_SEARCH_UPDATES=on is set. When it runs it reuses the same throttle,
- * per-platform pacing, block-cooldown and request budget as an interactive search (via
- * trackedSearch), and defaults to a long interval so it stays a background trickle, not a burst.
+ * Every search is off by default: [TrackedProduct.autoFetch] is opted into per search, not turned
+ * on for the whole account by one flag, so a search never crawls in the background unless someone
+ * specifically asked it to. A tick every [TICK_MS] checks every saved search's own interval rather
+ * than running them all in lockstep; a run reuses the same throttle, per-platform pacing,
+ * block-cooldown and request budget as an interactive search (via trackedSearch).
  */
 class SavedSearchMonitor(
     private val productRepo: ProductRepo,
@@ -33,9 +38,12 @@ class SavedSearchMonitor(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var job: Job? = null
 
-    private val enabled = System.getenv("ARBAY_SAVED_SEARCH_UPDATES")?.equals("on", true) == true
-    private val intervalMs =
-        (System.getenv("ARBAY_SAVED_SEARCH_INTERVAL_MIN")?.toLongOrNull() ?: 360L).coerceAtLeast(60L) * 60_000L
+    // How often a search's own interval is checked, not how often a search itself is re-crawled.
+    private val TICK_MS = 60_000L
+
+    // A floor under whatever interval a search is given, so a mistyped "5" does not turn into a
+    // five-minute crawl loop — the flag risk the anti-block work manages is per-crawl, not per-search.
+    private val MIN_INTERVAL_MIN = 30
 
     // Opportunistic-buying threshold: a fresh listing priced at or below this fraction of the
     // search's median counts as a deal worth interrupting for. The fraction and the switch are the
@@ -47,9 +55,18 @@ class SavedSearchMonitor(
     // the device, so this waits for the device to ask.
     private val pendingDeals = mutableListOf<DealMatch>()
 
+    // Subfilter matches found since the phone last polled, same reasoning as pendingDeals.
+    private val pendingSubfilterMatches = mutableListOf<SubfilterMatch>()
+
     /** Deals found since the last call, handed to the phone that will raise the notifications. */
     fun drainDeals(): List<DealMatch> = synchronized(pendingDeals) {
         pendingDeals.toList().also { pendingDeals.clear() }
+    }
+
+    /** Subfilter matches found since the last call, handed to the phone that will raise the
+     *  notifications. */
+    fun drainSubfilterMatches(): List<SubfilterMatch> = synchronized(pendingSubfilterMatches) {
+        pendingSubfilterMatches.toList().also { pendingSubfilterMatches.clear() }
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -67,7 +84,7 @@ class SavedSearchMonitor(
     fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
         SavedSearchStatus(
             productId = product.id,
-            watched = enabled,
+            watched = product.autoFetch.enabled,
             lastRunAtMillis = lastRun[product.id],
             newSinceOpened = unopened[product.id]?.size ?: 0,
         )
@@ -80,26 +97,18 @@ class SavedSearchMonitor(
     }
 
     fun start() {
-        if (!enabled) {
-            log.info("Saved-search updates off (set ARBAY_SAVED_SEARCH_UPDATES=on to enable).")
-            return
-        }
         if (job?.isActive == true) return
-        log.info("Saved-search updater on, every {} min", intervalMs / 60_000)
+        log.info("Saved-search updater on, checking every {} min which searches are due", TICK_MS / 60_000)
         job = scope.launch {
-            // A first run seeds the seen-set silently, so the user is not alerted for the whole
-            // existing backlog the moment the feature is turned on.
-            var first = true
             while (isActive) {
                 try {
-                    runOnce(silent = first)
-                    first = false
+                    tick()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    log.warn("Saved-search run failed: {}", e.message)
+                    log.warn("Saved-search tick failed: {}", e.message)
                 }
-                delay(intervalMs)
+                delay(TICK_MS)
             }
         }
     }
@@ -109,68 +118,115 @@ class SavedSearchMonitor(
         job = null
     }
 
-    /** One pass over every saved search. @param silent seeds the seen-set without alerting. */
-    private suspend fun runOnce(silent: Boolean) {
+    /** One pass over every saved search: run whichever ones are both watched and due. */
+    private suspend fun tick() {
+        val now = System.currentTimeMillis()
         for (product in productRepo.getAll()) {
-            val platforms = product.searchQuery.platforms
-                .filter { CrawlerRegistry.crawlerFor(it) != null }
-                .ifEmpty { continue }
-
-            val found = LinkedHashMap<String, Listing>() // listing id -> listing
-            for (platformId in platforms) {
-                if (BlockCooldown.isCoolingDown(platformId)) continue
-                val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
-                val query = product.searchQuery.copy(platforms = listOf(platformId))
-                val results = try {
-                    withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
-                } catch (e: Exception) {
-                    log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
-                    continue
-                }
-                RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
+            if (!product.autoFetch.enabled) continue
+            val intervalMs = product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN) * 60_000L
+            val last = lastRun[product.id] ?: 0L
+            if (now - last < intervalMs) continue
+            try {
+                runProduct(product)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("Saved-search run failed for {}: {}", product.name, e.message)
             }
-
-            val known = seen.getOrPut(product.id) { mutableSetOf() }
-            val fresh = found.keys.filter { it !in known }
-            known.addAll(found.keys)
-            lastRun[product.id] = System.currentTimeMillis()
-            if (fresh.isNotEmpty() && !silent) {
-                unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
-                saveStatus()
-            }
-            if (fresh.isEmpty() || silent) { saveSeen(); continue }
-
-            // Opportunistic buying: a fresh listing priced well below the search's typical price
-            // goes to the phone. New stock does not. Home shows what a saved search has found since
-            // it was last opened, so a notification saying the same thing every six hours is a
-            // second channel telling you what the first one already does.
-            val alerts = FreeItemMonitor.settings
-            val dealRatio = alerts.dealUnderMedianPct / 100.0
-            val median = medianEur(found.values)
-            val deals = if (median != null && alerts.dealAlerts) {
-                fresh.mapNotNull { found[it] }
-                    .mapNotNull { l -> eurCents(l.price)?.let { l to it } }
-                    .filter { (_, cents) -> cents <= median * dealRatio }
-                    .sortedBy { it.second }
-            } else emptyList()
-
-            if (deals.isNotEmpty() && median != null) {
-                synchronized(pendingDeals) {
-                    deals.take(5).forEach { (l, cents) ->
-                        pendingDeals += DealMatch(
-                            listingId = l.id,
-                            searchName = product.name,
-                            title = l.title,
-                            url = l.url,
-                            priceText = "€${cents / 100}",
-                            underMedianPct = (100 - cents * 100 / median).toInt(),
-                            locationText = l.location?.let { it.city ?: it.country },
-                        )
-                    }
-                }
-            }
-            log.info("saved-search {}: {} new, {} under median", product.name, fresh.size, deals.size)
         }
+    }
+
+    /** One saved search's own run. Seeds itself silently the first time it is ever run — the same
+     *  search re-enabled later does not re-alert on a backlog it already knows about, since [seen]
+     *  persists across restarts. */
+    private suspend fun runProduct(product: TrackedProduct) {
+        val silent = product.id !in seen
+        val platforms = product.searchQuery.platforms
+            .filter { CrawlerRegistry.crawlerFor(it) != null }
+            .ifEmpty { return }
+
+        val found = LinkedHashMap<String, Listing>() // listing id -> listing
+        for (platformId in platforms) {
+            if (BlockCooldown.isCoolingDown(platformId)) continue
+            val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
+            val query = product.searchQuery.copy(platforms = listOf(platformId))
+            val results = try {
+                withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
+            } catch (e: Exception) {
+                log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
+                continue
+            }
+            RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
+        }
+
+        val known = seen.getOrPut(product.id) { mutableSetOf() }
+        val fresh = found.keys.filter { it !in known }
+        known.addAll(found.keys)
+        lastRun[product.id] = System.currentTimeMillis()
+        if (fresh.isNotEmpty() && !silent) {
+            unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
+            saveStatus()
+        }
+        if (fresh.isEmpty() || silent) { saveSeen(); return }
+
+        val freshListings = fresh.mapNotNull { found[it] }
+
+        // Opportunistic buying: a fresh listing priced well below the search's typical price
+        // goes to the phone. New stock does not. Home shows what a saved search has found since
+        // it was last opened, so a notification saying the same thing every six hours is a
+        // second channel telling you what the first one already does.
+        val alerts = FreeItemMonitor.settings
+        val dealRatio = alerts.dealUnderMedianPct / 100.0
+        val median = medianEur(found.values)
+        val deals = if (median != null && alerts.dealAlerts) {
+            freshListings
+                .mapNotNull { l -> eurCents(l.price)?.let { l to it } }
+                .filter { (_, cents) -> cents <= median * dealRatio }
+                .sortedBy { it.second }
+        } else emptyList()
+
+        if (deals.isNotEmpty() && median != null) {
+            synchronized(pendingDeals) {
+                deals.take(5).forEach { (l, cents) ->
+                    pendingDeals += DealMatch(
+                        listingId = l.id,
+                        searchName = product.name,
+                        title = l.title,
+                        url = l.url,
+                        priceText = "€${cents / 100}",
+                        underMedianPct = (100 - cents * 100 / median).toInt(),
+                        locationText = l.location?.let { it.city ?: it.country },
+                    )
+                }
+            }
+        }
+
+        // Named notification subfilters someone set on this search specifically — a listing can
+        // match more than one, and each match is worth its own notification since each names a
+        // different reason the person cared enough to ask for it.
+        val subfilterMatches = product.notificationSubfilters
+            .filter { it.enabled }
+            .flatMap { sf -> freshListings.filter { matchesSubfilter(it, sf) }.map { sf to it } }
+        if (subfilterMatches.isNotEmpty()) {
+            synchronized(pendingSubfilterMatches) {
+                subfilterMatches.take(10).forEach { (sf, l) ->
+                    pendingSubfilterMatches += SubfilterMatch(
+                        listingId = l.id,
+                        searchName = product.name,
+                        subfilterName = sf.name,
+                        title = l.title,
+                        url = l.url,
+                        priceText = eurCents(l.price)?.let { "€${it / 100}" },
+                        locationText = l.location?.let { it.city ?: it.country },
+                    )
+                }
+            }
+        }
+
+        log.info(
+            "saved-search {}: {} new, {} under median, {} subfilter matches",
+            product.name, fresh.size, deals.size, subfilterMatches.size,
+        )
         saveSeen()
     }
 
@@ -181,10 +237,39 @@ class SavedSearchMonitor(
         return prices[prices.size / 2]
     }
 
-    /** Price in EUR cents, converting from the listing's own currency so cross-border deals compare. */
-    private fun eurCents(money: Money): Long? =
-        if (money.currency == Currency.EUR) money.amount
-        else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
+    companion object {
+        /** Whether a listing satisfies one search's own notification subfilter — narrower than the
+         *  search's own criteria, so a match here is always also a match on the search itself.
+         *  A plain function of its inputs (no crawl state), so a subfilter's rules can be verified
+         *  without spinning up a whole monitor. */
+        internal fun matchesSubfilter(listing: Listing, sf: NotificationSubfilter): Boolean {
+            val cents = eurCents(listing.price)
+            val minEur = sf.minPriceEur
+            val maxEur = sf.maxPriceEur
+            if (minEur != null && (cents == null || cents < minEur * 100L)) return false
+            if (maxEur != null && (cents == null || cents > maxEur * 100L)) return false
+            if (!conditionMatches(sf.condition, listing.condition)) return false
+            val title = listing.title.lowercase()
+            if (sf.mustContainAnyOf.isNotEmpty() && sf.mustContainAnyOf.none { title.contains(it.lowercase()) }) return false
+            if (sf.excludeKeywords.any { title.contains(it.lowercase()) }) return false
+            return true
+        }
+
+        /** The same plain New/Used/Any split the results screen filters by — "NEW", "USED" or null. */
+        internal fun conditionMatches(filter: String?, condition: io.github.tieo.arbay.model.Condition?): Boolean =
+            when (filter) {
+                null -> true
+                "NEW" -> condition == io.github.tieo.arbay.model.Condition.NEW
+                "USED" -> condition != null && condition != io.github.tieo.arbay.model.Condition.NEW
+                else -> true
+            }
+
+        /** Price in EUR cents, converting from the listing's own currency so cross-border deals
+         *  and subfilters compare on the same footing. */
+        internal fun eurCents(money: Money): Long? =
+            if (money.currency == Currency.EUR) money.amount
+            else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
+    }
 
     private fun loadStatus(): MutableMap<String, MutableSet<String>> = try {
         if (statusFile.exists()) {

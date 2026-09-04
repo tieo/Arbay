@@ -16,8 +16,8 @@ fun Application.configureRouting() {
     val productRepo = ProductRepo()
     val listingRepo = ListingRepo()
 
-    // Recurring saved-search updates. No-op unless ARBAY_SAVED_SEARCH_UPDATES=on, since periodic
-    // crawls raise the flag risk the anti-block work manages.
+    // Recurring saved-search updates. No-op for a search whose own autoFetch.enabled is false —
+    // opted into per search, not turned on for every bookmark by one server-wide flag.
     val savedSearches = SavedSearchMonitor(productRepo, listingRepo)
     savedSearches.start()
 
