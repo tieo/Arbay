@@ -88,6 +88,7 @@ class SavedSearchMonitor(
             watched = product.autoFetch.enabled,
             lastRunAtMillis = lastRun[product.id],
             newSinceOpened = unopened[product.id]?.size ?: 0,
+            newListingIds = unopened[product.id]?.toList().orEmpty(),
         )
     }
 

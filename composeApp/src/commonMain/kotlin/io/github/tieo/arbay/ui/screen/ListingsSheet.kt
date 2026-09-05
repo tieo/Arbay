@@ -149,6 +149,9 @@ fun ListingsSheet(
     onFiltersPersist: ((SearchQuery) -> Unit)? = null,
     blockedTerms: List<String> = emptyList(),
     onBlockedTermsChange: ((List<String>) -> Unit)? = null,
+    // What this saved search found since it was last opened. Drives the "new only" filter; empty
+    // for a search with no backlog, which hides that filter entirely.
+    newListingIds: Set<String> = emptySet(),
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
@@ -281,8 +284,20 @@ fun ListingsSheet(
         if (!priceFiltered) allActiveListings
         else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
     }
-    val displayedActiveListings = remember(activeListings, conditionFilter) {
-        activeListings.filter { conditionMatches(conditionFilter, it.condition) }
+    // Show only what turned up since this search was last opened. Not persisted onto the bookmark:
+    // the backlog it names is gone the moment the search is opened, so a remembered "new only"
+    // would come back as a filter matching nothing.
+    var newOnly by remember(newListingIds) { mutableStateOf(false) }
+    val displayedActiveListings = remember(activeListings, conditionFilter, newOnly, newListingIds) {
+        activeListings
+            .filter { conditionMatches(conditionFilter, it.condition) }
+            .filter { !newOnly || it.id in newListingIds }
+    }
+    // How many of the backlog this crawl actually returned. The monitor and this search ran at
+    // different times, so a listing counted as new can be gone by now; offering the filter on a
+    // count of zero would be offering an empty view.
+    val newHere = remember(allActiveListings, newListingIds) {
+        if (newListingIds.isEmpty()) 0 else allActiveListings.count { it.id in newListingIds }
     }
     val soldListings = remember(allSoldListings, priceRange) {
         allSoldListings
@@ -882,6 +897,16 @@ fun ListingsSheet(
                                     "$hidden more hidden by the filters",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (newHere > 0) {
+                                Spacer(Modifier.weight(1f))
+                                FilterChip(
+                                    selected = newOnly,
+                                    onClick = { newOnly = !newOnly },
+                                    label = { Text("New ($newHere)", style = MaterialTheme.typography.labelSmall) },
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(26.dp),
                                 )
                             }
                         }

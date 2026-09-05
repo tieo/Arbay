@@ -18,4 +18,7 @@ data class SavedSearchStatus(
     val lastRunAtMillis: Long? = null,
     // Listings found since the search was last opened.
     val newSinceOpened: Int = 0,
+    // Which listings those are, so opening the search can show just them instead of only counting
+    // them. Carried with the count rather than fetched separately: the count is this list's size.
+    val newListingIds: List<String> = emptyList(),
 )

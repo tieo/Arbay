@@ -57,6 +57,10 @@ object PreviewData {
         l("12", PlatformId.WILLHABEN, "Parkettschleifmaschine Set mit Kantenschleifer", 950_00, city = "Wien", country = "AT", condition = Condition.NEW),
     )
 
+    /** The listings a watched saved search turned up since it was last opened, for the views that
+     *  show a backlog. Named from [active] rather than typed out, so they stay real listings. */
+    val newListingIds: Set<String> = setOf(active[1].id, active[5].id, active[8].id)
+
     val sold: List<Listing> = listOf(
         l("s1", PlatformId.EBAY_DE, "Parkettschleifmaschine Lägler Hummel", 780_00, sold = true, soldDate = Instant.parse("2026-07-19T09:00:00Z")),
         l("s2", PlatformId.EBAY_DE, "Parkettschleifmaschine Trommelschleifer", 620_00, sold = true, soldDate = Instant.parse("2026-07-14T09:00:00Z")),

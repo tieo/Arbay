@@ -101,6 +101,9 @@ private data class ResultsView(
     /** Back leads to the car form it was run from, else to discovery, else nowhere. */
     val fromCarForm: Boolean = false,
     val fromDiscovery: Boolean = false,
+    // What this saved search had found since it was last opened, captured at the moment of opening
+    // because opening is what clears it. Empty for every other way in, which has no such backlog.
+    val newListingIds: Set<String> = emptySet(),
 ) {
     /** Whether this is the vehicle-search view — computed from [category] rather than stored
      *  alongside it, so the two can never disagree. */
@@ -109,7 +112,7 @@ private data class ResultsView(
     companion object {
         /** The results of a saved search. A vehicle bookmark gets the car view even with no
          *  filters set yet, so the filters can be added from there. */
-        fun of(product: TrackedProduct): ResultsView {
+        fun of(product: TrackedProduct, newListingIds: Set<String> = emptySet()): ResultsView {
             val category = product.searchQuery.category
             val isCar = category == MarketGroup.VEHICLES
             val (make, model) = if (isCar) resolveCarNodes(product.searchQuery.text) else null to null
@@ -123,6 +126,7 @@ private data class ResultsView(
                 filters = if (isCar) product.searchQuery.toCarFilters() ?: CarFilters() else null,
                 aliases = product.searchQuery.aliases,
                 excludeKeywords = product.searchQuery.excludeKeywords,
+                newListingIds = newListingIds,
             )
         }
 
@@ -471,7 +475,9 @@ fun MainScreen(
                             onDelete = { productViewModel.deleteProduct(product.id) },
                             status = productStatus[product.id],
                             onViewListings = {
-                                results = ResultsView.of(product)
+                                // Read the backlog before marking it opened, which clears it.
+                                val newIds = productStatus[product.id]?.newListingIds.orEmpty().toSet()
+                                results = ResultsView.of(product, newIds)
                                 productViewModel.markOpened(product.id)
                             },
                             onEdit = {
@@ -711,6 +717,7 @@ fun MainScreen(
             listingViewModel = listingViewModel,
             platforms = view.platforms,
             carFilters = view.filters,
+            newListingIds = view.newListingIds,
             aliases = (bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery)?.aliases ?: view.aliases,
             // A vehicle search can always reach the form, even with no filters set yet, so they
             // can be added from the results.
