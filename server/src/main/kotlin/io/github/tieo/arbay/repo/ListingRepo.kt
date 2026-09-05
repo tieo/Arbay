@@ -77,10 +77,6 @@ class ListingRepo {
         return all.count { it.title.contains(term, ignoreCase = true) }.toDouble() / all.size
     }
 
-    fun getByExternalId(platformId: PlatformId, externalId: String): Listing? {
-        return listings.values.find { it.platformId == platformId && it.externalId == externalId }
-    }
-
     fun upsert(listing: Listing): Listing {
         val clean = listing.tidied()
         listings[clean.id] = clean

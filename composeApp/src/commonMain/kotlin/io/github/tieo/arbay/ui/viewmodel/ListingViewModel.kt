@@ -226,12 +226,6 @@ class ListingViewModel(
     /** Show only markets whose listings are in these countries; empty shows every country. */
     fun showCountries(countries: Set<String>) { _shownCountries.value = countries }
 
-    /** Narrow to one market, from the Markets view's "show only this one". */
-    fun showOnly(market: PlatformId) {
-        _shownMarkets.value = setOf(market)
-        _shownCountries.value = emptySet()
-    }
-
     /**
      * Show listings the server already holds, without crawling for them: a saved search's own
      * backlog, served as the watch stored it. [refresh] still crawls from here, so this is a

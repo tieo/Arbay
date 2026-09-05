@@ -19,6 +19,7 @@ import java.io.File
 object ErrorSnapshotStore {
     private val log = LoggerFactory.getLogger(ErrorSnapshotStore::class.java)
     private val dir = File(System.getProperty("user.home"), ".arbay/error_snapshots")
+    private val sinceLastPrune = java.util.concurrent.atomic.AtomicInteger(0)
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
     init { dir.mkdirs() }
@@ -88,6 +89,15 @@ object ErrorSnapshotStore {
             log.info("Error snapshot saved: {} ({})", id, errorType)
         } catch (e: Exception) {
             log.warn("Failed to save error snapshot: {}", e.message)
+        }
+
+        // [prune] sets the size of this directory and nothing was calling it: 1,688 snapshots had
+        // collected against a limit of 250, and each one now keeps the page it was refused with.
+        // Every 50th capture, since pruning reads each snapshot back and there is no sense doing
+        // that on every single one.
+        if (sinceLastPrune.incrementAndGet() >= 50) {
+            sinceLastPrune.set(0)
+            runCatching { prune() }
         }
 
         return id
