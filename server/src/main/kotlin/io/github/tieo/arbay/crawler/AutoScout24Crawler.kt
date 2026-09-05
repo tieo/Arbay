@@ -18,8 +18,8 @@ class AutoScout24Crawler(
     private val countryParam: String get() = countries.joinToString("%2C")
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val carQuery = CarQueryResolver.resolve(query.positiveText)
-            ?: return searchByQueryParam(query)
+        val carQuery = CarQueryResolver.resolveForCarSite(query.positiveText)
+            ?: return emptyList()
 
         val basePath = buildString {
             append("https://www.autoscout24.de/lst/")
@@ -35,16 +35,11 @@ class AutoScout24Crawler(
         }
     }
 
-    /**
-     * Fallback for queries that do not start with a known car make. The site ignores the
-     * `query` parameter and serves its default feed; RelevanceFilter downstream detects
-     * and discards such a result set, so a single page is enough.
-     */
-    private suspend fun searchByQueryParam(query: SearchQuery): List<Listing> {
-        val url = "https://www.autoscout24.de/lst?atype=C&cy=$countryParam&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}&query=${query.positiveText.encodeUrl()}"
-        val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
-        return parseFromNextData(html) ?: parseFromHtml(html)
-    }
+    // A query that names no make this site knows used to be sent anyway, with the text in a
+    // `query` parameter the site ignores: it answered with its default feed, and the relevance
+    // filter threw the whole page away. Fetching a page in order to discard it is a request that
+    // costs the same as a useful one and counts the same against this address, so the search is
+    // simply not made. It was the single largest error class in the logs.
 
     /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
      *  only matching cars and far less needs scraping. Parameter names verified live. */

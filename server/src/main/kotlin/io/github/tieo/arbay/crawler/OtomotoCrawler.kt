@@ -37,14 +37,15 @@ class OtomotoCrawler(
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val carQuery = CarQueryResolver.resolve(query.positiveText)
+        // The make and model are the whole filter here: without them the URL is the category's
+        // front page, which answers every query with the same catalogue. Nothing to ask, so
+        // nothing is asked.
+        val carQuery = CarQueryResolver.resolveForCarSite(query.positiveText) ?: return emptyList()
 
         val basePath = buildString {
             append("$host/$categoryPath")
-            if (carQuery != null) {
-                append("/").append(carQuery.makeSlug)
-                carQuery.modelSlug?.let { append("/").append(it) }
-            }
+            append("/").append(carQuery.makeSlug)
+            carQuery.modelSlug?.let { append("/").append(it) }
         }
 
         val filters = filterParams(query)

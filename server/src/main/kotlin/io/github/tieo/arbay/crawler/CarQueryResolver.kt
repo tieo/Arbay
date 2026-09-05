@@ -78,6 +78,37 @@ object CarQueryResolver {
         return null
     }
 
+    /**
+     * The same resolution, plus a model named without its make ("crafter", "sprinter 314").
+     *
+     * Only for a site that is already being crawled as a car site and needs a make in its URL.
+     * [resolve] stays strict because it is also what decides whether a query is about cars at all,
+     * and a model list is full of ordinary words — "focus", "polo", "captur" — that would drag
+     * plain product searches onto car platforms.
+     *
+     * A model name shared by two makes stays unresolved: "sprinter" is both a Mercedes-Benz and a
+     * Toyota, and choosing between them is guessing. Unresolved is the honest answer, and the
+     * caller can then decline to crawl rather than fetch a page of the site's whole catalogue.
+     */
+    fun resolveForCarSite(text: String): CarQuery? {
+        resolve(text)?.let { return it }
+        val tokens = text.split(" ")
+            .filter { it.isNotBlank() && !it.startsWith("-") }
+            .map { it.lowercase() }
+        val first = tokens.firstOrNull()?.takeIf { it.length >= 3 } ?: return null
+        fun named(model: io.github.tieo.arbay.model.CarModelNode) =
+            model.id.lowercase() == first || model.name.lowercase() == first
+        val owner = CarTaxonomyProvider.current.makes
+            .filter { make -> make.models.any { named(it) } }
+            .singleOrNull() ?: return null
+        val model = owner.models.first { named(it) }
+        return CarQuery(
+            makeSlug = owner.id,
+            modelSlug = model.id,
+            remainder = tokens.drop(1).joinToString(" "),
+        )
+    }
+
     /** Every spelling of the make that [token] names — canonical slug plus its aliases,
      *  lowercased without spaces/hyphens — or null if [token] is not a known make. Lets a
      *  "Volkswagen" query still match a "VW" title (and vice versa). */

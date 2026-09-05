@@ -19,7 +19,7 @@ class AutopliusCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.AUTOPLIUS
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
         // The make/model path is what applies the filter; a free-text query has no equivalent here.
         val path = if (car != null) {
             buildString {
