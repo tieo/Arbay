@@ -1,7 +1,5 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.classifier.FreeItemMonitor
-import io.github.tieo.arbay.model.DealMatch
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SavedSearchStatus
@@ -21,9 +19,10 @@ import java.io.File
 
 /**
  * Re-runs a saved search (TrackedProduct) on the schedule set on that search, so a bookmark keeps
- * finding new stock without the user re-searching. What it finds shows on the saved search itself;
- * a listing matching one of the search's own notification subfilters, or priced under the search's
- * median, is held for the phone to notify about.
+ * finding new stock without the user re-searching. What it finds shows on the saved search itself,
+ * silently; the only thing held for the phone to notify about is a listing matching one of that
+ * search's own notification subfilters. A search with no subfilter therefore never interrupts —
+ * saying "something turned up" without being asked to is what the bookmark's own count is for.
  *
  * Every search is off by default: [TrackedProduct.autoFetch] is opted into per search, not turned
  * on for the whole account by one flag, so a search never crawls in the background unless someone
@@ -47,23 +46,9 @@ class SavedSearchMonitor(
     // five-minute crawl loop — the flag risk the anti-block work manages is per-crawl, not per-search.
     private val MIN_INTERVAL_MIN = 30
 
-    // Opportunistic-buying threshold: a fresh listing priced at or below this fraction of the
-    // search's median counts as a deal worth interrupting for. The fraction and the switch are the
-    // notification settings the phone shows, so what the app promises is what runs here. Needs at
-    // least dealMinSample priced listings for the median to mean anything.
-    private val dealMinSample = 5
-
-    // Deals found since the phone last polled. Held rather than sent: the notification is raised on
-    // the device, so this waits for the device to ask.
-    private val pendingDeals = mutableListOf<DealMatch>()
-
-    // Subfilter matches found since the phone last polled, same reasoning as pendingDeals.
+    // Subfilter matches found since the phone last polled. Held rather than sent: the notification
+    // is raised on the device, so this waits for the device to ask.
     private val pendingSubfilterMatches = mutableListOf<SubfilterMatch>()
-
-    /** Deals found since the last call, handed to the phone that will raise the notifications. */
-    fun drainDeals(): List<DealMatch> = synchronized(pendingDeals) {
-        pendingDeals.toList().also { pendingDeals.clear() }
-    }
 
     /** Subfilter matches found since the last call, handed to the phone that will raise the
      *  notifications. */
@@ -199,36 +184,6 @@ class SavedSearchMonitor(
 
         val freshListings = fresh.mapNotNull { found[it] }
 
-        // Opportunistic buying: a fresh listing priced well below the search's typical price
-        // goes to the phone. New stock does not. Home shows what a saved search has found since
-        // it was last opened, so a notification saying the same thing every six hours is a
-        // second channel telling you what the first one already does.
-        val alerts = FreeItemMonitor.settings
-        val dealRatio = alerts.dealUnderMedianPct / 100.0
-        val median = medianEur(found.values)
-        val deals = if (median != null && alerts.dealAlerts) {
-            freshListings
-                .mapNotNull { l -> eurCents(l.price)?.let { l to it } }
-                .filter { (_, cents) -> cents <= median * dealRatio }
-                .sortedBy { it.second }
-        } else emptyList()
-
-        if (deals.isNotEmpty() && median != null) {
-            synchronized(pendingDeals) {
-                deals.take(5).forEach { (l, cents) ->
-                    pendingDeals += DealMatch(
-                        listingId = l.id,
-                        searchName = product.name,
-                        title = l.title,
-                        url = l.url,
-                        priceText = "€${cents / 100}",
-                        underMedianPct = (100 - cents * 100 / median).toInt(),
-                        locationText = l.location?.let { it.city ?: it.country },
-                    )
-                }
-            }
-        }
-
         // Named notification subfilters someone set on this search specifically — a listing can
         // match more than one, and each match is worth its own notification since each names a
         // different reason the person cared enough to ask for it.
@@ -252,17 +207,10 @@ class SavedSearchMonitor(
         }
 
         log.info(
-            "saved-search {}: {} new, {} under median, {} subfilter matches",
-            product.name, fresh.size, deals.size, subfilterMatches.size,
+            "saved-search {}: {} new, {} subfilter matches",
+            product.name, fresh.size, subfilterMatches.size,
         )
         saveSeen()
-    }
-
-    /** Median listing price in EUR cents, or null if too few priced listings for a stable baseline. */
-    private fun medianEur(listings: Collection<Listing>): Long? {
-        val prices = listings.mapNotNull { eurCents(it.price) }.filter { it > 0 }.sorted()
-        if (prices.size < dealMinSample) return null
-        return prices[prices.size / 2]
     }
 
     companion object {

@@ -26,15 +26,12 @@ object NotificationHelper {
     /** A free item near you, scoring above the threshold set in the app. */
     const val CHANNEL_FREE_ITEM = "free_item_match"
 
-    /** A listing in a watched search priced under that search's median. */
-    const val CHANNEL_DEAL = "under_market_deal"
-
     /** A listing matching a notification subfilter someone set on a specific saved search. */
     const val CHANNEL_SUBFILTER = "saved_search_alert"
 
     private var channelsCreated = false
 
-    /** Create both channels. Called on app start and before any notification. */
+    /** Create the channels. Called on app start and before any notification. */
     fun ensureChannels(context: Context) {
         if (channelsCreated) return
 
@@ -47,16 +44,6 @@ object NotificationHelper {
         ).apply {
             description = "Someone is giving away something that matches what you look for. " +
                 "Free items are usually gone within the hour."
-            enableVibration(true)
-        })
-
-        mgr.createNotificationChannel(NotificationChannel(
-            CHANNEL_DEAL,
-            "Under the usual price",
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = "A listing in one of your saved searches is priced well under what that " +
-                "search usually costs."
             enableVibration(true)
         })
 
@@ -109,10 +96,6 @@ object NotificationHelper {
     /** A free item worth fetching now. */
     fun showFreeItem(context: Context, title: String, body: String, url: String?, id: Int) =
         show(context, CHANNEL_FREE_ITEM, id, title, body, url)
-
-    /** A listing under the median of the search that found it. */
-    fun showDeal(context: Context, title: String, body: String, url: String?, id: Int) =
-        show(context, CHANNEL_DEAL, id, title, body, url)
 
     /** A listing matching a notification subfilter on a specific saved search. */
     fun showSubfilterMatch(context: Context, title: String, body: String, url: String?, id: Int) =

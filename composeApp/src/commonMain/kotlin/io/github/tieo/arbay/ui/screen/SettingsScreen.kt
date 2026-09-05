@@ -280,28 +280,14 @@ fun SettingsSheet(
 
                 Spacer(Modifier.height(10.dp))
 
-                AlertTypeCard(
-                    icon = Icons.Default.TrendingDown,
-                    tint = MaterialTheme.colorScheme.primary,
-                    title = "Under the usual price",
-                    trigger = "a listing turns up in one of your saved searches at or under " +
-                        "${notifSettings.dealUnderMedianPct}% of what that search normally costs.",
-                    why = "an underpriced listing is sold within a day, and the median only exists " +
-                        "because the search has already been run many times.",
-                    enabled = notifSettings.dealAlerts,
-                    onToggle = { notifSettings = notifSettings.copy(dealAlerts = it) },
-                ) {
-                    Text(
-                        "At or under ${notifSettings.dealUnderMedianPct}% of the search median",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    Slider(
-                        value = notifSettings.dealUnderMedianPct.toFloat(),
-                        onValueChange = { notifSettings = notifSettings.copy(dealUnderMedianPct = it.toInt()) },
-                        valueRange = 40f..95f,
-                        steps = 10,
-                    )
-                }
+                // A saved search interrupts through its own notification subfilters and nothing
+                // else, so what it takes to be notified about a search is set on that search.
+                Text(
+                    "A saved search only notifies through the subfilters you set on it, under its " +
+                        "own bell on Home. Everything else it finds waits on the bookmark.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 Spacer(Modifier.height(16.dp))
 

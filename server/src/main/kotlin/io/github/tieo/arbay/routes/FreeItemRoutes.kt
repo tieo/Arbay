@@ -578,16 +578,10 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
             call.respond(HttpStatusCode.OK, mapOf("ok" to true))
         }
 
-        // What the device asks for on its schedule: the two things worth a notification, drained
-        // so the same deal is not raised twice.
+        // What the device asks for on its schedule, drained so the same match is not raised twice.
         get("/notifications/poll") {
             val result = FreeItemMonitor.pollNow()
-            call.respond(
-                result.copy(
-                    deals = savedSearches.drainDeals(),
-                    subfilterMatches = savedSearches.drainSubfilterMatches(),
-                ),
-            )
+            call.respond(result.copy(subfilterMatches = savedSearches.drainSubfilterMatches()))
         }
 
         // Get last poll result without triggering a new poll

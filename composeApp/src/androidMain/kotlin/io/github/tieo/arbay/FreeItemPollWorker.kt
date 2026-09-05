@@ -42,21 +42,6 @@ class FreeItemPollWorker(
                 )
             }
 
-            // A listing under the median of the saved search that found it. Says which search and
-            // how far under, so the notification carries the reason it was sent.
-            for (deal in result.deals) {
-                NotificationHelper.showDeal(
-                    context = applicationContext,
-                    title = "${deal.underMedianPct}% under: ${deal.title}",
-                    body = listOfNotNull(
-                        "${deal.priceText} in ${deal.searchName}",
-                        deal.locationText,
-                    ).joinToString(", "),
-                    url = deal.url,
-                    id = deal.listingId.hashCode(),
-                )
-            }
-
             // A listing matching a notification subfilter someone set on a specific saved search.
             // Says the subfilter's own name, since that is the reason it was worth interrupting for.
             for (match in result.subfilterMatches) {

@@ -109,26 +109,6 @@ data class NotificationSettings(
     /** A free item near you scoring at least [freeItemScorePct] against your profile. */
     val freeItemAlerts: Boolean = true,
     val freeItemScorePct: Int = 85,
-    /** A listing in a watched search priced at or under [dealUnderMedianPct] of that search's
-     *  median, counted only where enough listings carry a price for a median to mean anything. */
-    val dealAlerts: Boolean = true,
-    val dealUnderMedianPct: Int = 75,
-)
-
-/**
- * One listing in a watched search priced far enough under that search's median to be worth
- * hearing about before the app is next opened. [underMedianPct] is how far under, so the
- * notification can say why it counts as a deal.
- */
-@Serializable
-data class DealMatch(
-    val listingId: String,
-    val searchName: String,
-    val title: String,
-    val url: String,
-    val priceText: String,
-    val underMedianPct: Int,
-    val locationText: String? = null,
 )
 
 /** A listing that matched a notification subfilter someone set on a specific saved search —
@@ -151,8 +131,6 @@ data class PollResult(
     val totalNew: Int = 0,
     // Items worth interrupting for: near you, free, and scoring above your threshold.
     val urgentMatches: List<NewMatch> = emptyList(),
-    // Listings in watched searches priced under that search's median.
-    val deals: List<DealMatch> = emptyList(),
     // Listings matching a notification subfilter someone set on a specific saved search.
     val subfilterMatches: List<SubfilterMatch> = emptyList(),
     val lastPollTime: Instant? = null,
