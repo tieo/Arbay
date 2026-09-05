@@ -609,6 +609,21 @@ fun MainScreen(
         )
     }
 
+    // Settings. The gear and Ctrl+, both set this, and nothing drew the sheet: the whole screen —
+    // which server to talk to, the display currency, search depth, what may raise a notification —
+    // could not be reached from the running app at all.
+    if (showSettings) {
+        SettingsSheet(
+            client = client,
+            onDismiss = { showSettings = false },
+            // A different server means different saved searches, so nothing on screen still holds.
+            onServerUrlChanged = {
+                productViewModel.loadProducts()
+                freeItemViewModel.loadProfile()
+            },
+        )
+    }
+
     // Car search form
     if (showCarSearch) {
         CarSearchSheet(
