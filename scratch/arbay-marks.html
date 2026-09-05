@@ -1,0 +1,766 @@
+<title>Nineteen Marks for Arbay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@110,500;110,600;110,700&family=JetBrains+Mono:wght@500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<style>
+  :root {
+    --bg: #EFF0EA;
+    --surface: #FAFAF6;
+    --text: #161A14;
+    --muted: #6B7064;
+    --line: #DCDED2;
+    --line-strong: #C4C7B8;
+    --accent: #2E7D32;
+    --ground-dark: #14161A;
+    --ground-light: #F2F0EA;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101310;
+      --surface: #171B16;
+      --text: #E7E9E1;
+      --muted: #949A8C;
+      --line: #262B24;
+      --line-strong: #39402F;
+      --accent: #7CC98A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101310;
+    --surface: #171B16;
+    --text: #E7E9E1;
+    --muted: #949A8C;
+    --line: #262B24;
+    --line-strong: #39402F;
+    --accent: #7CC98A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Newsreader", Georgia, serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 32px 96px; }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header { display: flex; flex-direction: column; gap: 14px; }
+  header h1 {
+    font-family: "Archivo", "Helvetica Neue", sans-serif;
+    font-variation-settings: "wdth" 110;
+    font-weight: 700;
+    font-size: clamp(34px, 5.2vw, 56px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  header .lede { margin: 0; max-width: 64ch; font-size: 18px; font-weight: 300; color: var(--muted); }
+  header .lede b { color: var(--text); font-weight: 400; }
+
+  /* ---- contact sheet ---- */
+  .sheet-head {
+    margin-top: 48px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--line-strong);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .sheet-head h2 { margin: 0; }
+  h2 {
+    font-family: "Archivo", "Helvetica Neue", sans-serif;
+    font-variation-settings: "wdth" 110;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.015em;
+  }
+  .sheet-head .note { font-size: 14px; color: var(--muted); font-weight: 300; }
+
+  .contact {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 20px 16px;
+  }
+  .contact figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .contact figcaption {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+  .contact figcaption b { display: block; color: var(--text); font-weight: 700; letter-spacing: 0.06em; }
+
+  .tile { border-radius: 23%; overflow: hidden; flex: none; display: block; }
+  .tile svg { width: 100%; height: 100%; display: block; }
+  .t72 { width: 72px; height: 72px; }
+  .t56 { width: 56px; height: 56px; }
+  .t120 { width: 120px; height: 120px; }
+  .t44 { width: 44px; height: 44px; }
+  .on-dark { background: #14161A; }
+  .on-light { background: #F2F0EA; box-shadow: inset 0 0 0 1px var(--line); }
+
+  /* ---- families ---- */
+  .family { margin-top: 72px; }
+  .family-head { border-bottom: 2px solid var(--line-strong); padding-bottom: 12px; }
+  .family-head h2 { margin: 6px 0 0; }
+  .family-head p { margin: 8px 0 0; max-width: 62ch; color: var(--muted); font-weight: 300; font-size: 16px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: minmax(210px, 262px) 1fr;
+    gap: 32px;
+    align-items: start;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row-text h3 {
+    font-family: "Archivo", "Helvetica Neue", sans-serif;
+    font-variation-settings: "wdth" 110;
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+  }
+  .row-text h3 .id {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  .row-text p { margin: 7px 0 0; font-size: 15.5px; font-weight: 300; color: var(--muted); }
+  .row-text .risk {
+    margin-top: 9px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--muted);
+    border-left: 2px solid var(--line-strong);
+    padding-left: 9px;
+  }
+
+  .bands { display: flex; gap: 26px; align-items: flex-end; flex-wrap: wrap; }
+  .band { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .variants { display: flex; gap: 20px; flex-wrap: wrap; }
+  .variant { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .variant .pair { display: flex; flex-direction: column; gap: 6px; }
+
+  .band .label, .variant .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  /* ---- lockups ---- */
+  .lockups { margin-top: 30px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .lockup {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 26px 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .lockup .art { display: flex; align-items: center; gap: 14px; min-height: 52px; }
+  .wordmark {
+    font-family: "Archivo", "Helvetica Neue", sans-serif;
+    font-variation-settings: "wdth" 110;
+    font-weight: 700;
+    font-size: 34px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--text);
+  }
+  .wordmark.caps { letter-spacing: 0.02em; font-size: 30px; }
+  .wordmark .sub { color: var(--accent); }
+  .inline-mark { height: 40px; width: 40px; display: block; margin-right: -2px; }
+  .inline-mark svg { width: 100%; height: 100%; display: block; }
+  .lockup .cap {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .lockup .cap b { color: var(--text); font-weight: 700; }
+
+  /* ---- closing notes ---- */
+  .notes { margin-top: 68px; border-top: 2px solid var(--line-strong); padding-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 30px; }
+  .notes section h4 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  .notes p { margin: 0 0 10px; font-size: 15px; font-weight: 300; color: var(--muted); }
+  .notes p b { color: var(--text); font-weight: 400; }
+
+  @media (max-width: 760px) {
+    .wrap { padding: 36px 20px 64px; }
+    .row { grid-template-columns: 1fr; gap: 18px; }
+    .lockups { grid-template-columns: 1fr; }
+    .bands { gap: 18px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Arbay identity &middot; concept round</span>
+    <h1>Nineteen marks, five arguments</h1>
+    <p class="lede">Arbay watches a dozen marketplaces across borders and tells you where the same thing costs less. Five different arguments about what that deserves to look like: <b>the name itself</b>, <b>the spread</b>, <b>many into one</b>, <b>the listing</b>, and <b>watching and reaching</b>. Every mark is drawn from solid shapes with one accent, tested at launcher size, and shown as a one-color silhouette on both grounds &mdash; because a mark that only survives in full color is not a logo yet.</p>
+  </header>
+
+  <div class="sheet-head">
+    <h2>Contact sheet</h2>
+    <span class="note">All nineteen at 72&thinsp;px, the size a launcher actually gives you.</span>
+  </div>
+  <div class="contact" id="contact"></div>
+
+  <div id="families"></div>
+
+  <div class="family">
+    <div class="family-head">
+      <span class="eyebrow">Lockups</span>
+      <h2>What it looks like with the name attached</h2>
+      <p>Archivo at width 110 &mdash; a wide industrial grotesque, closer to a freight stencil than a startup sans. Four ways the mark and the word can sit together, including one where the mark <em>is</em> the A.</p>
+    </div>
+    <div class="lockups" id="lockups"></div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h4>How to read the bands</h4>
+      <p><b>App tile</b> is the mark on its own colour, rounded like an adaptive icon. <b>One-colour</b> drops the palette: the accent becomes a knockout, stays solid, or hands its job to the form — a tint, a dotted fill, a shape held apart — so the one thing being pointed at survives without colour. That band is the honest one &mdash; it is what a monochrome status bar, an embroidered patch, and a favicon all get.</p>
+    </section>
+    <section>
+      <h4>Construction rules held</h4>
+      <p>No hairlines, no glyph floating unattached on a tile, one accent per mark, and every silhouette closed. Offset shadows are used only where two shapes need separating in depth, never as decoration.</p>
+    </section>
+    <section>
+      <h4>Next step</h4>
+      <p>Name the <b>argument</b> you want first, not the drawing &mdash; the drawing is cheap to redo, the argument is what the app has to live with. Then that one gets refined: real optical corrections, an adaptive-icon safe zone, a monochrome Android 13 layer, and the full mipmap set.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  // Two-pass draw: a fat halo in the tile ground colour, then the shape. Keeps an
+  // overlapping shape readable as a separate object even in one colour.
+  function halo(svg, attrs, width) {
+    el("path", Object.assign({}, attrs, {
+      fill: "var(--halo)", stroke: "var(--halo)", "stroke-width": width || 3.2, "stroke-linejoin": "round",
+    }), svg);
+    el("path", attrs, svg);
+  }
+  function shadowed(svg, tag, attrs) {
+    el(tag, Object.assign({}, attrs, { fill: "var(--accentShadow)", transform: "translate(1.5,1.5)" }), svg);
+    el(tag, Object.assign({}, attrs, { fill: "var(--accent)" }), svg);
+  }
+  const circleHole = (cx, cy, r) =>
+    ` M${cx - r} ${cy} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
+
+  const families = [
+    {
+      key: "name",
+      eyebrow: "Family A",
+      title: "The name itself",
+      blurb: "Arbay carries two gifts: an A that is already a triangle, and the word bay — a harbour, the place goods arrive from somewhere cheaper. A mark built from the name never has to be explained twice.",
+      concepts: [
+        {
+          id: "A1", name: "Delta", mono: "knock",
+          why: "The A is a Δ: the mathematical sign for a difference, filled to the level of the spread you found. Letter and thesis in one shape.",
+          risk: "Reads as a plain A at a glance until you notice the fill. That may be the point.",
+          bg: "#14261C", mark: "#EDF3EE", accent: "#F0A33C", accentShadow: "#0A1710",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", "fill-rule": "evenodd",
+              d: "M24 6 L42 40 H6 Z M24 18.5 L34 37 H14 Z" }, svg);
+            shadowed(svg, "path", { d: "M18.4 29 H29.6 L32 33.6 H16 Z" });
+          },
+        },
+        {
+          id: "A2", name: "Bay", mono: "keep",
+          why: "The literal second half of the name. A shoreline bitten open into a harbour, with a hull standing in it.",
+          risk: "Wants a rounded tile to read as land and water; loses the metaphor on a white page.",
+          bg: "#123A44", mark: "#E7F2F4", accent: "#F2B441", accentShadow: "#08222A",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)",
+              d: "M3 43 V27 L11 21 A10 10 0 0 0 31 21 L45 16 V43 Z" }, svg);
+            shadowed(svg, "path", { d: "M21 29.6 L14.8 22.4 H27.2 Z" });
+          },
+        },
+        {
+          id: "A3", name: "Harbour", mono: "keep",
+          why: "An anchor for the bay: sourcing, freight, a thing held. The stock crossing the shank doubles as the A's crossbar.",
+          risk: "The most conventional silhouette here — anchors are everywhere. Earns its place only through the name.",
+          bg: "#1B2233", mark: "#ECEEF5", accent: "#E2574C", accentShadow: "#0D1120",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", "fill-rule": "evenodd",
+              d: "M19.6 10.5 a4.4 4.4 0 1 1 8.8 0 a4.4 4.4 0 1 1 -8.8 0 Z" + circleHole(24, 10.5, 1.9) }, svg);
+            el("rect", { x: "21.6", y: "12", width: "4.8", height: "24", fill: "var(--mark)" }, svg);
+            el("path", { fill: "var(--mark)",
+              d: "M8 26 C8 36.4 15.2 42.4 24 42.4 C32.8 42.4 40 36.4 40 26 H34.6 C34.6 33 30.2 36.6 24 36.6 C17.8 36.6 13.4 33 13.4 26 Z" }, svg);
+            shadowed(svg, "rect", { x: "13.6", y: "17", width: "20.8", height: "4.6" });
+          },
+        },
+      ],
+    },
+    {
+      key: "spread",
+      eyebrow: "Family B",
+      title: "The spread",
+      blurb: "What the app actually sells is the gap: the same object, two prices, and the distance between them. These marks put that distance on the tile instead of hinting at it.",
+      concepts: [
+        {
+          id: "B1", name: "Spread", mono: "knock",
+          why: "Two prices for one thing, and the difference drawn as its own block. Nothing symbolic — this is the product, plotted.",
+          risk: "Bar-chart shorthand is crowded territory; the asymmetry is what keeps it from looking like an analytics app.",
+          bg: "#191D23", mark: "#EDEFF3", accent: "#F2703D", accentShadow: "#0E1116",
+          build: (svg) => {
+            el("rect", { x: "9", y: "10", width: "13", height: "31", fill: "var(--mark)" }, svg);
+            el("rect", { x: "26", y: "22", width: "13", height: "19", fill: "var(--mark)" }, svg);
+            shadowed(svg, "rect", { x: "26", y: "10", width: "13", height: "11" });
+          },
+        },
+        {
+          id: "B2", name: "Tipped", mono: "keep",
+          why: "A balance that refuses to balance. Arbitrage is an imbalance held open long enough to act on.",
+          risk: "Scales carry legal and justice baggage; the tilt has to be extreme enough to say market, not court.",
+          bg: "#20301C", mark: "#EEF3E7", accent: "#E8B23D", accentShadow: "#0F1A0C",
+          build: (svg) => {
+            el("rect", { x: "21.9", y: "12.5", width: "4.2", height: "26", fill: "var(--mark)" }, svg);
+            el("path", { fill: "var(--mark)", d: "M13 38 H35 L37.5 43 H10.5 Z" }, svg);
+            el("path", { fill: "var(--mark)", d: "M6.5 17.6 L40.5 8.6 L41.8 13.4 L7.8 22.4 Z" }, svg);
+            el("rect", { x: "10.2", y: "20.5", width: "3.6", height: "8", fill: "var(--mark)" }, svg);
+            el("rect", { x: "34.2", y: "11.2", width: "3.6", height: "8", fill: "var(--mark)" }, svg);
+            el("path", { fill: "var(--mark)", d: "M28.8 18.6 H43.2 L40.4 25 H31.6 Z" }, svg);
+            shadowed(svg, "path", { d: "M4.8 27.6 H19.2 L16.4 34 H7.6 Z" });
+          },
+        },
+        {
+          id: "B3", name: "Swap", mono: "keep",
+          why: "Buy on that side, sell on this one. Two heavy arrows running against each other: the whole trade in one glyph.",
+          risk: "Close to a generic sync or refresh icon. Needs the flat cut ends to stay a trade, not a reload.",
+          bg: "#141F2E", mark: "#E9EEF5", accent: "#4FBF9A", accentShadow: "#08121C",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", d: "M6 11 H30 V6 L43 14.5 L30 23 V18 H6 Z" }, svg);
+            shadowed(svg, "path", { d: "M42 30 H18 V25 L5 33.5 L18 42 V37 H42 Z" });
+          },
+        },
+        {
+          id: "B4", name: "Rebound", mono: "keep",
+          why: "The price walks down to the one bar worth acting on, then goes back up without you. The accent sits on the trough, because the low price is what the app finds.",
+          risk: "Four bars is a chart, and charts read as finance. The last bar has to overshoot the first, or the trough is not a trough.",
+          bg: "#2B1B33", mark: "#F1EAF4", accent: "#6FD3B0", accentShadow: "#170C1D",
+          variantNote: "Six ways to single out the trough without leaning on colour. Every one of these still works as an Android monochrome layer: the system tints the drawable and keeps its alpha, and notification icons are alpha masks to begin with. Only true one-bit output — embroidery, a stamp, a bad fax — flattens a tint, which is where the dotted and outline builds earn their keep.",
+          variants: [
+            { key: "ghost", label: "ghost — rest faded" },
+            { key: "tint", label: "tint — trough faded" },
+            { key: "dotted", label: "dotted" },
+            { key: "outline", label: "outline" },
+            { key: "solid", label: "solid" },
+            { key: "cut", label: "cut" },
+          ],
+          build: (svg, variant) => {
+            const t = variant || "ghost";
+            const X = 24.8, W = 7.8, Y = 28, H = 13;
+            const plain = [[6, 10, 31], [15.4, 19, 22], [34.2, 6, 35]];
+            plain.forEach(([x, y, h]) => {
+              const a = { x: x, y: y, width: W, height: h, fill: "var(--mark)" };
+              if (t === "ghost") a["fill-opacity"] = "0.34";
+              el("rect", a, svg);
+            });
+            if (t === "tint") {
+              el("rect", { x: X, y: Y, width: W, height: H, fill: "var(--accent)", "fill-opacity": "0.45" }, svg);
+            } else if (t === "dotted") {
+              [0, 4.8, 9.6].forEach((dy) =>
+                el("rect", { x: X, y: Y + dy, width: W, height: 3.4, fill: "var(--accent)" }, svg));
+            } else if (t === "outline") {
+              el("rect", { x: X, y: Y, width: W, height: H, fill: "var(--accent)" }, svg);
+              el("rect", { x: X + 1.9, y: Y + 1.9, width: W - 3.8, height: H - 3.8, fill: "var(--halo)" }, svg);
+            } else if (t === "cut") {
+              el("rect", { x: X, y: Y, width: W, height: 5.2, fill: "var(--accent)" }, svg);
+              el("rect", { x: X, y: Y + 7.8, width: W, height: 5.2, fill: "var(--accent)" }, svg);
+            } else {
+              el("rect", { x: X, y: Y, width: W, height: H, fill: "var(--accent)" }, svg);
+            }
+          },
+        },
+      ],
+    },
+    {
+      key: "many",
+      eyebrow: "Family C",
+      title: "Many into one",
+      blurb: "Twelve crawlers, one feed. This family argues the interesting thing is not the search but the convergence — everything the web is selling, pulled to a single point.",
+      concepts: [
+        {
+          id: "C1", name: "Magnet", mono: "knock",
+          why: "One object pulling every marketplace's listings toward it. Aggregation as a force, not a funnel.",
+          risk: "Magnets say attraction generally — marketing, dating, anything. The poles have to carry the specificity.",
+          bg: "#1B2233", mark: "#ECEEF5", accent: "#E2574C", accentShadow: "#0D1120",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)",
+              d: "M8 42 V22 A16 16 0 0 1 40 22 V42 H30 V22 A6 6 0 0 0 18 22 V42 Z" }, svg);
+            shadowed(svg, "rect", { x: "8", y: "36", width: "10", height: "6" });
+            shadowed(svg, "rect", { x: "30", y: "36", width: "10", height: "6" });
+          },
+        },
+        {
+          id: "C2", name: "Funnel", mono: "keep",
+          why: "Everything the crawlers see, narrowed to the one listing worth your evening. The drop is the deal clearing the spout.",
+          risk: "Funnels belong to sales dashboards. Reversing the meaning — filtering for the buyer — takes context the icon lacks.",
+          bg: "#173A2E", mark: "#EFF6F1", accent: "#E8B23D", accentShadow: "#0A2019",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", d: "M5 7 H43 L27 27 V36 H21 V27 Z" }, svg);
+            shadowed(svg, "circle", { cx: "24", cy: "41", r: "3.4" });
+          },
+        },
+        {
+          id: "C3", name: "Confluence", mono: "keep",
+          why: "Three feeds running into one body. Not a funnel's squeeze — a river system, where the sources stay visible in the result.",
+          risk: "Abstract. Beautiful at 128 px, possibly just a shape at 48.",
+          bg: "#0E3B3A", mark: "#E9F4F2", accent: "#F2B441", accentShadow: "#052120",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", d: "M3 8 L29 20.5 V26 L3 15 Z" }, svg);
+            el("rect", { x: "3", y: "21", width: "26", height: "6", fill: "var(--mark)" }, svg);
+            el("path", { fill: "var(--mark)", d: "M3 40 L29 27.5 V22 L3 33 Z" }, svg);
+            shadowed(svg, "circle", { cx: "32", cy: "24", r: "10.5" });
+          },
+        },
+        {
+          id: "C4", name: "Aperture", mono: "keep",
+          why: "Six separate blades — six platforms — closing into one opening. One blade stands off from the ring: the site today's find came from, and it stays picked out in one colour.",
+          risk: "Camera-shaped. Photo apps own this silhouette, and the six-fold symmetry is decorative before it is meaningful.",
+          bg: "#1A1C19", mark: "#E8EAE4", accent: "#63C48C", accentShadow: "#0C0E0B",
+          build: (svg) => {
+            const blade = "M24 4.5 L39.5 13.4 L31.6 18 L24 13.6 Z";
+            for (let i = 0; i < 6; i++) {
+              const off = i === 1 ? " translate(0 -3.2)" : "";
+              const attrs = { d: blade, transform: `rotate(${i * 60} 24 24)${off}` };
+              el("path", Object.assign({}, attrs, { fill: i === 1 ? "var(--accent)" : "var(--mark)" }), svg);
+            }
+          },
+        },
+      ],
+    },
+    {
+      key: "listing",
+      eyebrow: "Family D",
+      title: "The listing",
+      blurb: "No metaphor at all: the thing the app handles by the thousand. A tag, a receipt, a row in a feed. The least clever family, and the hardest to misread.",
+      concepts: [
+        {
+          id: "D1", name: "Kept", mono: "keep",
+          why: "Two tags, one behind the other: the listing the platform will delete, and the copy Arbay keeps. Archiving, as a shape.",
+          risk: "The doubling can read as generic duplication rather than preservation.",
+          bg: "#4A2418", mark: "#F7EDE5", accent: "#F0A44A", accentShadow: "#2A1209",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", "fill-rule": "evenodd",
+              d: "M4 11 H23 L31 21 L23 31 H4 Z" + circleHole(13, 21, 3.1) }, svg);
+            halo(svg, { fill: "var(--accent)", "fill-rule": "evenodd",
+              d: "M13 17 H32 L40 27 L32 37 H13 Z" + circleHole(22, 27, 3.1) }, 3.4);
+          },
+        },
+        {
+          id: "D2", name: "Receipt", mono: "knock",
+          why: "The document every one of these deals ends in, with the line that matters lit up. Torn edge, no explanation needed.",
+          risk: "Receipts read as expenses and accounting — the opposite emotional register from finding a bargain.",
+          bg: "#20242B", mark: "#EEF0F3", accent: "#F2703D", accentShadow: "#12151A",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", "fill-rule": "evenodd",
+              d: "M8 5 H40 V38 L36 43 L32 38 L28 43 L24 38 L20 43 L16 38 L12 43 L8 38 Z"
+                + " M13 12 H35 V16.5 H13 Z"
+                + " M13 20 H29 V24.5 H13 Z"
+                + " M13 28 H35 V33.5 H13 Z" }, svg);
+            shadowed(svg, "rect", { x: "13", y: "28", width: "22", height: "5.5" });
+          },
+        },
+        {
+          id: "D3", name: "Feed", mono: "knock",
+          why: "A list of results with the one that surfaced picked out. The product's own screen, reduced until it fits in 48 pixels.",
+          risk: "Row-stack icons mean list, menu, or news everywhere else. The accent row is the only thing making it Arbay's.",
+          bg: "#1D2B4A", mark: "#EDF1FA", accent: "#4FBF9A", accentShadow: "#0C1424",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", "fill-rule": "evenodd",
+              d: "M6 6 H42 V42 H6 Z M6 15.5 H42 V20 H6 Z M6 27 H42 V31.5 H6 Z" }, svg);
+            shadowed(svg, "rect", { x: "6", y: "31.5", width: "36", height: "10.5" });
+          },
+        },
+        {
+          id: "D4", name: "Outlier", mono: "keep",
+          why: "A barcode where one bar is not like the others. Every listing scanned, one of them wrong in your favour.",
+          risk: "Barcodes are texture — at small sizes this becomes stripes, and the outlier is the only thing carrying meaning.",
+          bg: "#23301A", mark: "#EEF2E6", accent: "#E8B23D", accentShadow: "#111806",
+          build: (svg) => {
+            const bars = [[7, 3.4], [12, 2.6], [16.4, 4.6], [22.4, 2.6], [31.6, 3.4], [36.4, 4.6]];
+            bars.forEach(([x, w]) => el("rect", { x: String(x), y: "8", width: String(w), height: "28", fill: "var(--mark)" }, svg));
+            shadowed(svg, "rect", { x: "26.4", y: "8", width: "3.8", height: "34" });
+          },
+        },
+      ],
+    },
+    {
+      key: "reach",
+      eyebrow: "Family E",
+      title: "Watching and reaching",
+      blurb: "The app runs while you sleep and buys across a border. This family is about the two verbs nobody sees: the standing watch, and the reach into another country's market.",
+      concepts: [
+        {
+          id: "E1", name: "Ping", mono: "keep",
+          why: "A watch that fires. One origin point and the signal leaving it — the alert arriving before anyone else has looked.",
+          risk: "Wi-Fi, broadcast, location: this shape is heavily spoken for. Anchoring it bottom-left helps only a little.",
+          bg: "#141F2E", mark: "#E9EEF5", accent: "#4FBF9A", accentShadow: "#08121C",
+          build: (svg) => {
+            el("circle", { cx: "14", cy: "35", r: "5.4", fill: "var(--mark)" }, svg);
+            el("path", { fill: "none", stroke: "var(--mark)", "stroke-width": "4.6", "stroke-linecap": "round",
+              d: "M23.5 35 A9.5 9.5 0 0 0 14 25.5" }, svg);
+            el("path", { fill: "none", stroke: "var(--accentShadow)", "stroke-width": "4.6", "stroke-linecap": "round",
+              transform: "translate(1.5,1.5)", d: "M34 35 A20 20 0 0 0 14 15" }, svg);
+            el("path", { fill: "none", stroke: "var(--accent)", "stroke-width": "4.6", "stroke-linecap": "round",
+              d: "M34 35 A20 20 0 0 0 14 15" }, svg);
+          },
+        },
+        {
+          id: "E2", name: "Crossing", mono: "keep",
+          why: "The border as a broken line and the buy going straight through it. Germany is cheap; the arrow is the whole business model.",
+          risk: "Political reading is unavoidable — borders and arrows are loaded. Keep it geometric, never map-shaped.",
+          bg: "#191D23", mark: "#EDEFF3", accent: "#F2703D", accentShadow: "#0E1116",
+          build: (svg) => {
+            el("rect", { x: "21.5", y: "4", width: "5", height: "11", fill: "var(--mark)" }, svg);
+            el("rect", { x: "21.5", y: "18.5", width: "5", height: "11", fill: "var(--mark)" }, svg);
+            el("rect", { x: "21.5", y: "33", width: "5", height: "11", fill: "var(--mark)" }, svg);
+            halo(svg, { fill: "var(--accent)", d: "M5 20 H33 V14 L44 24 L33 34 V28 H5 Z" }, 3.6);
+          },
+        },
+        {
+          id: "E3", name: "Sweep", mono: "knock",
+          why: "A disc with a wedge cut out of it: the scan in progress. The crawler is always mid-rotation, never finished.",
+          risk: "A cut circle also reads as a pie chart or a loading state. Angle and weight decide which.",
+          bg: "#0E3B3A", mark: "#E9F4F2", accent: "#F2B441", accentShadow: "#052120",
+          build: (svg) => {
+            el("circle", { cx: "24", cy: "24", r: "18", fill: "var(--mark)" }, svg);
+            shadowed(svg, "path", { d: "M24 24 V6 A18 18 0 0 1 39.6 15 Z" });
+          },
+        },
+        {
+          id: "E4", name: "Route", mono: "keep",
+          why: "Two points and the run between them: bought there, landed here. The smaller dot is what you paid; the larger is what it is worth at home.",
+          risk: "Reads as a rising trend line, which is close but not the same claim.",
+          bg: "#14261C", mark: "#EDF3EE", accent: "#F0A33C", accentShadow: "#0A1710",
+          build: (svg) => {
+            el("path", { fill: "var(--mark)", d: "M9.8 30.6 L32.6 12.4 L37 17.9 L14.2 36.1 Z" }, svg);
+            el("circle", { cx: "12", cy: "34", r: "6.2", fill: "var(--mark)" }, svg);
+            shadowed(svg, "circle", { cx: "35", cy: "15", r: "8.4" });
+          },
+        },
+      ],
+    },
+  ];
+
+  const all = families.flatMap((f) => f.concepts);
+
+  // mode: "color" | "dark" | "light"
+  function buildSvg(c, mode, variant) {
+    const svg = el("svg", { viewBox: "0 0 48 48", role: "img", "aria-label": `${c.id} ${c.name}` });
+    const s = svg.style;
+    if (mode === "color") {
+      s.setProperty("--mark", c.mark);
+      s.setProperty("--accent", c.accent);
+      s.setProperty("--accentShadow", c.accentShadow);
+      s.setProperty("--halo", c.bg);
+    } else {
+      const ink = mode === "dark" ? "#FFFFFF" : "#14161A";
+      const ground = mode === "dark" ? "#14161A" : "#F2F0EA";
+      s.setProperty("--mark", ink);
+      s.setProperty("--accent", c.mono === "knock" ? ground : ink);
+      s.setProperty("--accentShadow", "transparent");
+      s.setProperty("--halo", ground);
+    }
+    c.build(svg, variant);
+    return svg;
+  }
+
+  function tile(c, mode, sizeClass, variant) {
+    const d = document.createElement("div");
+    d.className = "tile " + sizeClass + (mode === "dark" ? " on-dark" : mode === "light" ? " on-light" : "");
+    if (mode === "color") d.style.background = c.bg;
+    d.appendChild(buildSvg(c, mode, variant));
+    return d;
+  }
+
+  function band(c, mode, sizeClass, label) {
+    const b = document.createElement("div");
+    b.className = "band";
+    b.appendChild(tile(c, mode, sizeClass));
+    const l = document.createElement("div");
+    l.className = "label";
+    l.textContent = label;
+    b.appendChild(l);
+    return b;
+  }
+
+  // contact sheet
+  const contact = document.getElementById("contact");
+  all.forEach((c) => {
+    const fig = document.createElement("figure");
+    fig.appendChild(tile(c, "color", "t72"));
+    const cap = document.createElement("figcaption");
+    cap.innerHTML = `<b>${c.id}</b>${c.name}`;
+    fig.appendChild(cap);
+    contact.appendChild(fig);
+  });
+
+  // families
+  const famRoot = document.getElementById("families");
+  families.forEach((f) => {
+    const sec = document.createElement("div");
+    sec.className = "family";
+    const head = document.createElement("div");
+    head.className = "family-head";
+    head.innerHTML =
+      `<span class="eyebrow">${f.eyebrow}</span><h2>${f.title}</h2><p>${f.blurb}</p>`;
+    sec.appendChild(head);
+
+    f.concepts.forEach((c) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const text = document.createElement("div");
+      text.className = "row-text";
+      text.innerHTML =
+        `<h3><span class="id">${c.id}</span>${c.name}</h3><p>${c.why}</p><div class="risk">${c.risk}</div>`;
+      row.appendChild(text);
+
+      const bands = document.createElement("div");
+      bands.className = "bands";
+      bands.appendChild(band(c, "color", "t56", "app tile"));
+      bands.appendChild(band(c, "dark", "t56", "one colour, dark"));
+      bands.appendChild(band(c, "light", "t56", "one colour, light"));
+      bands.appendChild(band(c, "color", "t120", "large"));
+      row.appendChild(bands);
+      sec.appendChild(row);
+
+      if (c.variants) {
+        const vrow = document.createElement("div");
+        vrow.className = "row";
+        const vtext = document.createElement("div");
+        vtext.className = "row-text";
+        vtext.innerHTML =
+          `<h3><span class="id">${c.id}</span>Trough treatment</h3><p>${c.variantNote}</p>`;
+        vrow.appendChild(vtext);
+
+        const strip = document.createElement("div");
+        strip.className = "variants";
+        c.variants.forEach((v) => {
+          const block = document.createElement("div");
+          block.className = "variant";
+          const pair = document.createElement("div");
+          pair.className = "pair";
+          pair.appendChild(tile(c, "color", "t56", v.key));
+          pair.appendChild(tile(c, "dark", "t56", v.key));
+          block.appendChild(pair);
+          const l = document.createElement("div");
+          l.className = "label";
+          l.textContent = v.label;
+          block.appendChild(l);
+          strip.appendChild(block);
+        });
+        vrow.appendChild(strip);
+        sec.appendChild(vrow);
+      }
+    });
+
+    famRoot.appendChild(sec);
+  });
+
+  // lockups
+  const byId = Object.fromEntries(all.map((c) => [c.id, c]));
+  const lockups = [
+    { id: "A1", kind: "inline", cap: "<b>Mark as letter.</b> The Δ stands in for the A — the word is only complete when the logo is present." },
+    { id: "B1", kind: "beside", caps: true, cap: "<b>Beside, uppercase.</b> Wide caps against a plotted spread; reads as infrastructure, not a consumer app." },
+    { id: "D1", kind: "beside", cap: "<b>Beside, mixed case.</b> Softer and more marketplace-like; the tag does the talking." },
+    { id: "E2", kind: "stacked", cap: "<b>Stacked.</b> For the launcher's sibling — a splash screen or a store header where the mark leads." },
+  ];
+  const lockRoot = document.getElementById("lockups");
+  lockups.forEach((spec) => {
+    const c = byId[spec.id];
+    const box = document.createElement("div");
+    box.className = "lockup";
+    const art = document.createElement("div");
+    art.className = "art";
+
+    if (spec.kind === "inline") {
+      const m = document.createElement("span");
+      m.className = "inline-mark";
+      m.appendChild(buildSvg(c, "color"));
+      const s = m.querySelector("svg").style;
+      s.setProperty("--mark", "var(--text)");
+      s.setProperty("--accent", c.accent);
+      s.setProperty("--accentShadow", "transparent");
+      s.setProperty("--halo", "var(--surface)");
+      const word = document.createElement("span");
+      word.className = "wordmark caps";
+      word.textContent = "RBAY";
+      art.appendChild(m);
+      art.appendChild(word);
+    } else if (spec.kind === "stacked") {
+      art.style.flexDirection = "column";
+      art.style.alignItems = "flex-start";
+      art.style.gap = "12px";
+      art.appendChild(tile(c, "color", "t44"));
+      const word = document.createElement("span");
+      word.className = "wordmark caps";
+      word.textContent = "ARBAY";
+      art.appendChild(word);
+    } else {
+      art.appendChild(tile(c, "color", "t44"));
+      const word = document.createElement("span");
+      word.className = "wordmark" + (spec.caps ? " caps" : "");
+      word.textContent = spec.caps ? "ARBAY" : "Arbay";
+      art.appendChild(word);
+    }
+
+    box.appendChild(art);
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = `${c.id} &middot; ${c.name} &mdash; ${spec.cap}`;
+    box.appendChild(cap);
+    lockRoot.appendChild(box);
+  });
+</script>

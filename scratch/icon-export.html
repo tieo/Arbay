@@ -1,0 +1,39 @@
+<title>Arbay icon export</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  svg { display: block; width: 100vw; height: 100vw; }
+</style>
+<svg id="s" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+  // Legacy launcher PNGs for D2 "Receipt". Shape comes from the query string:
+  // square (rounded tile), round (circle), or full (edge to edge, iOS masks itself).
+  const NS = "http://www.w3.org/2000/svg";
+  const shape = new URLSearchParams(location.search).get("shape") || "square";
+  const BG = "#20242B", MARK = "#EEF0F3", ACCENT = "#F2703D", SHADOW = "#12151A";
+  const svg = document.getElementById("s");
+  const add = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    svg.appendChild(e);
+    return e;
+  };
+
+  if (shape === "round") add("circle", { cx: 24, cy: 24, r: 24, fill: BG });
+  else if (shape === "full") add("rect", { x: 0, y: 0, width: 48, height: 48, fill: BG });
+  else add("rect", { x: 0, y: 0, width: 48, height: 48, rx: 10.5, ry: 10.5, fill: BG });
+
+  const g = add("g", {});
+  // Round and iOS masks eat the corners, so pull the art in a little for those.
+  const s = shape === "square" ? 1 : 0.88;
+  g.setAttribute("transform", `translate(${24 - 24 * s} ${24 - 24 * s}) scale(${s})`);
+  const put = (attrs) => {
+    const e = document.createElementNS(NS, "path");
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    g.appendChild(e);
+  };
+  put({ fill: MARK, "fill-rule": "evenodd",
+    d: "M8 5 H40 V38 L36 43 L32 38 L28 43 L24 38 L20 43 L16 38 L12 43 L8 38 Z"
+      + " M13 12 H35 V16.5 H13 Z M13 20 H29 V24.5 H13 Z M13 28 H35 V33.5 H13 Z" });
+  put({ fill: SHADOW, d: "M14.5 29.5 H36.5 V35 H14.5 Z" });
+  put({ fill: ACCENT, d: "M13 28 H35 V33.5 H13 Z" });
+</script>

@@ -1,0 +1,218 @@
+<title>Arbay Icon Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #F6F4EE;
+    --surface: #FFFFFF;
+    --text: #1A1D1B;
+    --text-muted: #6D6A62;
+    --border: #E3DFD3;
+    --accent: #1F6F5C;
+    --shadow: 0 1px 2px rgba(26,29,27,0.04), 0 6px 16px rgba(26,29,27,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181A; --surface: #1C2124; --text: #ECEAE4; --text-muted: #9B978D;
+      --border: #2B3134; --accent: #4FBFA3;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181A; --surface: #1C2124; --text: #ECEAE4; --text-muted: #9B978D;
+    --border: #2B3134; --accent: #4FBFA3;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Manrope", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 28px 80px; }
+  header { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: clamp(28px, 4vw, 38px); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  header p { margin: 0; max-width: 68ch; color: var(--text-muted); font-size: 15px; line-height: 1.6; }
+  header p b { color: var(--text); font-weight: 700; }
+
+  .candidates { margin-top: 32px; display: flex; flex-direction: column; gap: 28px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; box-shadow: var(--shadow); }
+  .card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-head .id { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 13px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 6px; }
+  .card-head .name { font-size: 17px; font-weight: 700; }
+  .card-head .why { font-size: 13px; color: var(--text-muted); margin-left: 2px; }
+
+  .bands { display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; }
+  .band { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .band .label { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .tile { border-radius: 22%; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tile svg { width: 100%; height: 100%; display: block; }
+  .tile.small { width: 48px; height: 48px; }
+  .tile.large { width: 128px; height: 128px; }
+  .on-dark { background: #14161A; }
+  .on-light { background: #F2F0EA; }
+
+  .ref-card { border: 2px solid var(--accent); }
+  .card-head .changed { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; color: var(--accent); margin-left: 2px; }
+  .card-head .pin { font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .card-head .why { font-size: 13px; color: var(--text-muted); margin-left: 2px; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-muted); line-height: 1.7; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Concept round &middot; construction kept, idea thrown out</span>
+    <h1>Four ideas, not one recolored</h1>
+    <p>H06's construction was right &mdash; disc/silhouette, one bold accent, an offset shadow, no floating glyph. Its content wasn't: a lightning bolt is Tasker's idea, not Arbay's. This round keeps the construction and changes what the mark actually says &mdash; aggregation, convergence, an archived listing, reach across borders. Four different ideas, each shown small on its own ground, on plain dark, on plain light, and large. Say which idea to take forward.</p>
+  </header>
+
+  <div class="candidates" id="candidates"></div>
+
+  <footer id="pageFooter"></footer>
+</div>
+
+<script>
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // Same construction family as H06 (solid shape(s), a bold accent, an offset shadow copy —
+  // no floating glyph, no thin strokes) but four DIFFERENT ideas, not one idea recolored.
+  // Each concept supplies its own build(svg) — some are a single silhouette, some are a
+  // shadow+accent pair — but never mixes both patterns in one mark.
+  const concepts = [
+    {
+      id: "C1", name: "Magnet", why: "Aggregation: one thing pulling every site's listings toward it.",
+      bg: "#1B2233", mark: "#ECEEF5", accent: "#E2574C", accentShadow: "#121628",
+      build: (svg) => {
+        // one continuous outline, no holes — a thick horseshoe magnet.
+        el("path", {
+          fill: "var(--mark)",
+          d: "M8 40 V20 A16 16 0 0 1 40 20 V40 H30 V20 A6 6 0 0 0 18 20 V40 Z",
+        }, svg);
+        // pole caps, the one accent detail, each with its own offset shadow
+        el("rect", { x: "8", y: "34", width: "10", height: "6", fill: "var(--accentShadow)", transform: "translate(1.4,1.4)" }, svg);
+        el("rect", { x: "30", y: "34", width: "10", height: "6", fill: "var(--accentShadow)", transform: "translate(1.4,1.4)" }, svg);
+        el("rect", { x: "8", y: "34", width: "10", height: "6", fill: "var(--accent)" }, svg);
+        el("rect", { x: "30", y: "34", width: "10", height: "6", fill: "var(--accent)" }, svg);
+      },
+    },
+    {
+      id: "C2", name: "Funnel", why: "Convergence: every marketplace's results narrowed into one feed.",
+      bg: "#173A2E", mark: "#EFF6F1", accent: "#E8B23D", accentShadow: "#0D1F19",
+      build: (svg) => {
+        el("path", {
+          fill: "var(--mark)",
+          d: "M6 8 L42 8 L27 28 L27 38 L21 38 L21 28 Z",
+        }, svg);
+        // one drop clearing the spout — the deal that made it through
+        el("circle", { cx: "24", cy: "43.5", r: "3.2", fill: "var(--accentShadow)", transform: "translate(1.2,1.2)" }, svg);
+        el("circle", { cx: "24", cy: "43.5", r: "3.2", fill: "var(--accent)" }, svg);
+      },
+    },
+    {
+      id: "C3", name: "Kept Tag", why: "Archiving: the listing's own tag, held even after the platform drops it.",
+      bg: "#5B2E1E", mark: "#F8EFE6", accent: "#F0A44A", accentShadow: "#2B1409",
+      build: (svg) => {
+        // back tag: shadow-toned, offset — the original that can vanish
+        el("path", {
+          "fill-rule": "evenodd", fill: "var(--accentShadow)",
+          d: "M4 12 H24 L32 22 L24 32 H4 Z M14 22 A3.2 3.2 0 1 0 14.01 22 Z",
+        }, svg);
+        // front tag: the kept copy, drawn solid over it
+        el("path", {
+          "fill-rule": "evenodd", fill: "var(--mark)",
+          d: "M12 18 H32 L40 28 L32 38 H12 Z M22 28 A3.2 3.2 0 1 0 22.01 28 Z",
+        }, svg);
+      },
+    },
+    {
+      id: "C4", name: "Reach", why: "Cross-border sourcing: a search pushed forward, past the first result.",
+      bg: "#1D2B4A", mark: "#EDF1FA", accent: "#4FBF9A", accentShadow: "#0C1424",
+      build: (svg) => {
+        // back chevron, offset — the near result
+        el("path", {
+          fill: "var(--accentShadow)", transform: "translate(-5,3)",
+          d: "M14 10 L30 24 L14 38 L22 24 Z",
+        }, svg);
+        // front chevron — the one reached further out
+        el("path", { fill: "var(--mark)", d: "M18 8 L36 24 L18 40 L27 24 Z" }, svg);
+      },
+    },
+    {
+      id: "C5", name: "List Stack", why: "The product, literally: a feed of listings, with the one you found picked out.",
+      bg: "#20242B", mark: "#EEF0F3", accent: "#F2703D", accentShadow: "#141821",
+      build: (svg) => {
+        // one silhouette: a card with two gaps and the bottom row punched clean through
+        el("path", {
+          "fill-rule": "evenodd", fill: "var(--mark)",
+          d: "M6 6 H42 V42 H6 Z M6 16 H42 V20 H6 Z M6 28 H42 V32 H6 Z M6 32 H42 V42 H6 Z",
+        }, svg);
+        // the bottom row, laid back in as the one accent — the result that surfaced
+        el("rect", { x: "6", y: "32", width: "36", height: "10", fill: "var(--accentShadow)", transform: "translate(1.2,1.2)" }, svg);
+        el("rect", { x: "6", y: "32", width: "36", height: "10", fill: "var(--accent)" }, svg);
+      },
+    },
+  ];
+
+  const container = document.getElementById("candidates");
+
+  function buildSvg(cand, markOverride, accentShadowOverride) {
+    const svg = el("svg", { viewBox: "0 0 48 48" });
+    svg.style.setProperty("--mark", markOverride || cand.mark);
+    svg.style.setProperty("--accent", cand.accent);
+    svg.style.setProperty("--accentShadow", accentShadowOverride || cand.accentShadow);
+    cand.build(svg);
+    return svg;
+  }
+
+  function renderCard(cand) {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const head = document.createElement("div");
+    head.className = "card-head";
+    head.innerHTML = `<span class="id">${cand.id}</span><span class="name">${cand.name}</span><span class="why">— ${cand.why}</span>`;
+    card.appendChild(head);
+
+    const bands = document.createElement("div");
+    bands.className = "bands";
+
+    const b1 = document.createElement("div"); b1.className = "band";
+    const t1 = document.createElement("div"); t1.className = "tile small";
+    t1.style.background = cand.bg;
+    t1.appendChild(buildSvg(cand));
+    const l1 = document.createElement("div"); l1.className = "label"; l1.textContent = "48px, own tile";
+    b1.appendChild(t1); b1.appendChild(l1);
+
+    const b2 = document.createElement("div"); b2.className = "band";
+    const t2 = document.createElement("div"); t2.className = "tile small on-dark";
+    t2.appendChild(buildSvg(cand, "#FFFFFF", "#000000"));
+    const l2 = document.createElement("div"); l2.className = "label"; l2.textContent = "on dark, no bg";
+    b2.appendChild(t2); b2.appendChild(l2);
+
+    const b3 = document.createElement("div"); b3.className = "band";
+    const t3 = document.createElement("div"); t3.className = "tile small on-light";
+    t3.appendChild(buildSvg(cand, "#14161A", "#00000055"));
+    const l3 = document.createElement("div"); l3.className = "label"; l3.textContent = "on light, no bg";
+    b3.appendChild(t3); b3.appendChild(l3);
+
+    const b4 = document.createElement("div"); b4.className = "band";
+    const t4 = document.createElement("div"); t4.className = "tile large";
+    t4.style.background = cand.bg;
+    t4.appendChild(buildSvg(cand));
+    const l4 = document.createElement("div"); l4.className = "label"; l4.textContent = "large detail";
+    b4.appendChild(t4); b4.appendChild(l4);
+
+    bands.appendChild(b1); bands.appendChild(b2); bands.appendChild(b3); bands.appendChild(b4);
+    card.appendChild(bands);
+    container.appendChild(card);
+  }
+
+  concepts.forEach(renderCard);
+
+  document.getElementById("pageFooter").textContent =
+    "C5 added: a literal feed of listings, not another metaphor for search. Say which concept's idea is right, or keep naming ideas and I'll keep building them.";
+</script>
