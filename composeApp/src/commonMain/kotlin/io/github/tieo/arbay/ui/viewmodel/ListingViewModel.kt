@@ -541,7 +541,13 @@ class ListingViewModel(
                     }
                 }
                 } // withTimeoutOrNull
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Closing the results, or starting another search, cancels this one. Nothing
+                // failed: saying the server could not be reached would be untrue, and the two
+                // fallback fetches below would be work done for a screen already gone.
+                throw e
             } catch (e: Exception) {
+                if (e.message?.contains("Cancel", ignoreCase = true) == true) return@launch
                 // The server refuses a search it has no capacity for. Falling back to what is
                 // stored is right, but silently is not: without this the markets look like they
                 // were asked and said nothing, when in truth none of them was asked at all.

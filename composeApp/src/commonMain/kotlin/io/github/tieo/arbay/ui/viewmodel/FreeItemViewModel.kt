@@ -327,7 +327,18 @@ class FreeItemViewModel(
                     else -> {}
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Leaving the screen, or a newer search replacing this one. Not a failure, and the
+            // message ("StandaloneCoroutine was cancelled") is machinery nobody should be shown.
+            _loading.value = false
+            throw e
         } catch (e: Exception) {
+            // A cancelling parent surfaces here as an ordinary exception whose message only
+            // mentions cancelling — same non-event, same silence.
+            if (e.message?.contains("Cancel", ignoreCase = true) == true) {
+                _loading.value = false
+                return
+            }
             _error.value = e.message ?: "Search failed"
             _loading.value = false
             logTelemetry("EXCEPTION", e.message ?: "unknown")
