@@ -26,9 +26,13 @@ class ListingRepo {
             stored.forEach { listings[it.id] = it }
             log.info("Loaded ${stored.size} persisted sold listings")
         } catch (e: Exception) {
-            log.warn("Failed to load persisted listings: ${e.message}")
+            loadFailed = true
+            log.error("Could not read {}; leaving it alone rather than writing over it: {}", persistFile, e.message)
         }
     }
+
+    // Sold listings on disk that could not be read are still the only copy there is.
+    private var loadFailed = false
 
     private fun schedulePersist() {
         if (persistPending.compareAndSet(false, true)) {
@@ -36,9 +40,9 @@ class ListingRepo {
                 Thread.sleep(2000)
                 persistPending.set(false)
                 try {
-                    persistFile.parentFile.mkdirs()
+                    if (loadFailed) return@Thread
                     val sold = listings.values.filter { it.sold }
-                    persistFile.writeText(json.encodeToString(sold))
+                    persistFile.writeTextAtomically(json.encodeToString(sold))
                 } catch (e: Exception) {
                     log.warn("Failed to persist sold listings: ${e.message}")
                 }

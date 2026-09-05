@@ -1,5 +1,9 @@
 package io.github.tieo.arbay
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
 expect fun openBrowser(url: String)
 
 /**
@@ -44,15 +48,19 @@ expect fun cancelPolling()
 
 /** Global display currency + exchange rates for the app */
 object DisplayCurrency {
-    var current: String = loadDeviceSettings()["currency"] ?: "EUR"
+    // Observable, because both of these change while prices are on screen: the currency when it is
+    // switched in settings, and the rates when the live ones arrive from the server a moment after
+    // start. Held as plain fields, a screen kept showing amounts worked out from the old ones and
+    // relabelled them with the new symbol.
+    var current: String by mutableStateOf(loadDeviceSettings()["currency"] ?: "EUR")
     // Units per 1 EUR. Covers every currency the crawlers can return, so a listing from a
     // cross-border market converts sensibly even before the live rates load (or if that fetch
     // fails) — a missing rate would otherwise render, say, 169 900 PLN as "€169,900".
     // Overwritten at startup by the server's live rates.
-    var rates: Map<String, Double> = mapOf(
+    var rates: Map<String, Double> by mutableStateOf(mapOf(
         "EUR" to 1.0, "USD" to 1.10, "GBP" to 0.86, "CHF" to 0.95,
         "PLN" to 4.32, "SEK" to 11.0, "DKK" to 7.46, "CZK" to 24.2, "NOK" to 11.07,
-    )
+    ))
 
     /** True when the amount can be shown in [current] without mislabelling — both currencies
      *  have a known rate (or they are the same). */

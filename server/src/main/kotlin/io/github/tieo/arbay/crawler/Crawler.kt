@@ -95,10 +95,15 @@ suspend fun Crawler.trackedSearch(
             val irrelevance = RelevanceFilter.irrelevanceReport(results, query)
             if (irrelevance != null) {
                 CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                // What came back is the evidence here — a market answering a query with its
+                // catalogue is diagnosed from the titles it returned, not from a page of HTML
+                // that was parsed successfully.
                 val snapId = ErrorSnapshotStore.capture(
                     platform = platformId.name, query = query.text,
                     error = CrawlerBlockedException(irrelevance, ErrorType.IRRELEVANT_RESULTS),
                     errorType = ErrorType.IRRELEVANT_RESULTS,
+                    url = results.firstOrNull()?.url,
+                    html = results.take(25).joinToString("\n") { "${it.title}\t${it.url}" },
                 )
                 log.warn("{}: {} [snapshot:{}]", platformId.displayName, irrelevance, snapId)
             } else {
@@ -112,6 +117,7 @@ suspend fun Crawler.trackedSearch(
         if (BlockCooldown.isBlock(e.errorType)) BlockCooldown.record(platformId)
         val snapId = ErrorSnapshotStore.capture(
             platform = platformId.name, query = query.text, error = e, errorType = e.errorType,
+            url = e.url, html = e.html, finalUrl = e.url, statusCode = e.statusCode,
         )
         log.warn("{}: blocked — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
         emptyList()
@@ -138,7 +144,17 @@ suspend fun Crawler.trackedSearch(
     }
 }
 
+/**
+ * A crawl that reached the market and was turned away.
+ *
+ * Carries the page it was turned away with. Without it a snapshot records only the sentence the
+ * detector printed, which says a block happened and nothing about what the market actually served
+ * — and telling a real block from a changed layout needs the page, not the verdict.
+ */
 class CrawlerBlockedException(
     message: String,
     val errorType: ErrorType,
+    val url: String? = null,
+    val html: String? = null,
+    val statusCode: Int? = null,
 ) : RuntimeException(message)

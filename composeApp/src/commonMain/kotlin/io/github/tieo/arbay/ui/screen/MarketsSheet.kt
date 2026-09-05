@@ -247,10 +247,10 @@ private fun shortError(error: String?): String? {
     return if (first.length <= 60) first else first.take(57) + "…"
 }
 
-private fun PlatformStatus.tint(): Color? = when (status) {
-    PlatformSearchStatus.DONE -> null
-    PlatformSearchStatus.PENDING, PlatformSearchStatus.SEARCHING -> null
-    else -> Color(0xFFE03131)
+/** Whether this market's answer is the kind worth marking: refused, timed out, failed. */
+private fun PlatformStatus.isProblem(): Boolean = when (status) {
+    PlatformSearchStatus.DONE, PlatformSearchStatus.PENDING, PlatformSearchStatus.SEARCHING -> false
+    else -> true
 }
 
 @Composable
@@ -263,10 +263,10 @@ private fun MarketRow(
     pickable: Boolean,
     onPick: () -> Unit,
 ) {
-    val accent = status.tint()
+    val problem = status.isProblem()
     val note = status.saidWhat(kept)
     Surface(
-        color = if (accent != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        color = if (problem) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth(),
@@ -291,7 +291,9 @@ private fun MarketRow(
                 Text(
                     it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    // On the error container, not a fixed red that only reads on a light ground.
+                    color = if (problem) MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 12.dp),
                 )
             }

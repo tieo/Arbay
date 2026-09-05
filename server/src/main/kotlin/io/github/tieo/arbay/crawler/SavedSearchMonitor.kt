@@ -10,6 +10,8 @@ import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
+import io.github.tieo.arbay.repo.writeTextAtomically
+import kotlinx.serialization.Serializable
 import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
@@ -61,18 +63,38 @@ class SavedSearchMonitor(
     // Listing ids already reported, keyed by saved-search id, so only genuinely new stock alerts.
     private val seen: MutableMap<String, MutableSet<String>> = loadSeen()
 
-    // What each saved search has found since someone last opened it, and when it last ran. Held
-    // here because this is what knows; the app reads it so a bookmark can say what is waiting.
-    private val statusFile = File(System.getProperty("user.home"), ".arbay/saved_search_status.json")
-    private val unopened: MutableMap<String, MutableSet<String>> = loadIds(statusFile)
-    private val lastRun: MutableMap<String, Long> = mutableMapOf()
+    /**
+     * What each saved search has found and when, in one file.
+     *
+     * [unopened] is what it has turned up since someone last opened it, which is the count on the
+     * bookmark. [lastNew] is the most recent batch it found, kept past the point where opening
+     * clears [unopened], so "show me what you found" still has something to show the second time.
+     * [lastRunAtMillis] is persisted because it is what decides when a search is next due: held
+     * only in memory, every watched search came up due at once on the first tick after a restart
+     * and they all crawled together, which is exactly the traffic shape that gets an address
+     * blocked.
+     */
+    @Serializable
+    private data class SearchState(
+        val unopened: Map<String, Set<String>> = emptyMap(),
+        val lastNew: Map<String, Set<String>> = emptyMap(),
+        val lastRunAtMillis: Map<String, Long> = emptyMap(),
+    )
 
-    // What the most recent run that found anything found, kept after the search is opened. Opening
-    // a search clears what is unseen, and that used to take with it the only record of which
-    // listings the watch had turned up — so "show me what you found" had nothing to show the
-    // second time it was asked.
-    private val lastNewFile = File(System.getProperty("user.home"), ".arbay/saved_search_last_new.json")
-    private val lastNew: MutableMap<String, MutableSet<String>> = loadIds(lastNewFile)
+    private val stateFile = File(System.getProperty("user.home"), ".arbay/saved_search_state.json")
+    private val legacyStatusFile = File(System.getProperty("user.home"), ".arbay/saved_search_status.json")
+    private val legacyLastNewFile = File(System.getProperty("user.home"), ".arbay/saved_search_last_new.json")
+
+    private val unopened: MutableMap<String, MutableSet<String>>
+    private val lastNew: MutableMap<String, MutableSet<String>>
+    private val lastRun: MutableMap<String, Long>
+
+    init {
+        val state = loadState()
+        unopened = state.unopened.mapValuesTo(HashMap()) { it.value.toMutableSet() }
+        lastNew = state.lastNew.mapValuesTo(HashMap()) { it.value.toMutableSet() }
+        lastRun = HashMap(state.lastRunAtMillis)
+    }
 
     /** What every saved search has been doing, for the app's list of them. */
     fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
@@ -102,7 +124,10 @@ class SavedSearchMonitor(
      */
     fun newListings(productId: String): List<Listing> {
         val ids = unopened[productId]?.takeIf { it.isNotEmpty() } ?: lastNew[productId].orEmpty()
-        return ids.mapNotNull { listingRepo.getById(it) ?: ListingArchive.get(it) }
+        // The archived copy first: it is the one whose images are mirrored here, so it still shows
+        // a photo after the platform drops the listing. The repo copy stands in while archiving is
+        // still in flight, since that runs in the background after a crawl.
+        return ids.mapNotNull { ListingArchive.get(it) ?: listingRepo.getById(it) }
     }
 
     fun start() {
@@ -168,10 +193,20 @@ class SavedSearchMonitor(
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
         }
 
+        lastRun[product.id] = System.currentTimeMillis()
+
+        // Every market refused or failed. Recording that as this search's first, silent run would
+        // spend the one chance to seed quietly on nothing, and the next run that does reach a
+        // market would then announce its entire result set as new stock. Blocks are routine, so
+        // this is the common case, not a corner: leave [seen] untouched and try again next tick.
+        if (found.isEmpty()) {
+            saveStatus()
+            return
+        }
+
         val known = seen.getOrPut(product.id) { mutableSetOf() }
         val fresh = found.keys.filter { it !in known }
         known.addAll(found.keys)
-        lastRun[product.id] = System.currentTimeMillis()
         if (fresh.isNotEmpty() && !silent) {
             unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
             lastNew[product.id] = fresh.toMutableSet()
@@ -247,20 +282,39 @@ class SavedSearchMonitor(
             else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
     }
 
-    private fun loadIds(file: File): MutableMap<String, MutableSet<String>> = try {
-        if (file.exists()) {
-            json.decodeFromString<Map<String, Set<String>>>(file.readText())
-                .mapValuesTo(HashMap()) { it.value.toMutableSet() }
-        } else HashMap()
-    } catch (_: Exception) { HashMap() }
+    /** The state file, or whatever the two files it replaced still hold. */
+    private fun loadState(): SearchState = try {
+        if (stateFile.exists()) json.decodeFromString<SearchState>(stateFile.readText())
+        else SearchState(unopened = loadIds(legacyStatusFile), lastNew = loadIds(legacyLastNewFile))
+    } catch (e: Exception) {
+        log.warn("Could not read saved-search state, starting from empty: {}", e.message)
+        SearchState()
+    }
 
+    private fun loadIds(file: File): Map<String, Set<String>> = try {
+        if (file.exists()) json.decodeFromString<Map<String, Set<String>>>(file.readText()) else emptyMap()
+    } catch (_: Exception) { emptyMap() }
+
+    /** Persist what the watches know, dropping anything belonging to a bookmark that is gone —
+     *  a deleted search left its whole listing-id history behind on every previous version. */
     private fun saveStatus() {
+        val live = productRepo.getAll().map { it.id }.toSet()
+        unopened.keys.retainAll(live)
+        lastNew.keys.retainAll(live)
+        lastRun.keys.retainAll(live)
+        seen.keys.retainAll(live)
         try {
-            statusFile.parentFile.mkdirs()
-            statusFile.writeText(json.encodeToString(unopened.mapValues { it.value.toSet() }))
-            lastNewFile.writeText(json.encodeToString(lastNew.mapValues { it.value.toSet() }))
+            stateFile.writeTextAtomically(
+                json.encodeToString(
+                    SearchState(
+                        unopened = unopened.mapValues { it.value.toSet() },
+                        lastNew = lastNew.mapValues { it.value.toSet() },
+                        lastRunAtMillis = lastRun.toMap(),
+                    ),
+                ),
+            )
         } catch (e: Exception) {
-            log.debug("could not write saved-search status: {}", e.message)
+            log.debug("could not write saved-search state: {}", e.message)
         }
     }
 
@@ -276,8 +330,7 @@ class SavedSearchMonitor(
 
     private fun saveSeen() {
         try {
-            seenFile.parentFile.mkdirs()
-            seenFile.writeText(json.encodeToString(seen.mapValues { it.value.toList() }))
+            seenFile.writeTextAtomically(json.encodeToString(seen.mapValues { it.value.toList() }))
         } catch (e: Exception) {
             log.warn("Could not save saved-search state: {}", e.message)
         }

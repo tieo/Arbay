@@ -202,13 +202,19 @@ fun ListingsSheet(
             .sortedByDescending { it.soldDate ?: it.scrapedAt }
     }
 
+    // Every figure below is a listing's price converted into the display currency, so the currency
+    // and the rates it converts with are inputs to the figure itself, not only to the symbol in
+    // front of it. Cached on the listings alone, switching currency relabelled amounts that were
+    // still worked out in the old one.
+    val money = DisplayCurrency.current to DisplayCurrency.rates
+
     // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
     // The true min and max — not a percentile trim. A trimmed bound looked like an active filter
     // (a "from"/"to" narrower than what was actually there) while doing nothing, since a listing
     // outside a slider bound that was never dragged still showed anyway; the number on screen and
     // what was actually filterable just disagreed. The slider still only filters once it is
     // actually moved inward from these true ends.
-    val allActivePrices = remember(allActiveListings) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
+    val allActivePrices = remember(allActiveListings, money) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
     val priceMin = remember(allActivePrices) { (allActivePrices.firstOrNull() ?: 0L) / 100f }
     val priceMax = remember(allActivePrices) {
         ((allActivePrices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
@@ -284,7 +290,7 @@ fun ListingsSheet(
         return minOk && maxOk
     }
 
-    val activeListings = remember(allActiveListings, priceRange) {
+    val activeListings = remember(allActiveListings, priceRange, money) {
         if (!priceFiltered) allActiveListings
         else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
     }
@@ -303,22 +309,22 @@ fun ListingsSheet(
     val newHere = remember(allActiveListings, newListingIds) {
         if (newListingIds.isEmpty()) 0 else allActiveListings.count { it.id in newListingIds }
     }
-    val soldListings = remember(allSoldListings, priceRange) {
+    val soldListings = remember(allSoldListings, priceRange, money) {
         allSoldListings
             .let { if (priceFiltered) it.filter { l -> inPriceRange(DisplayCurrency.convert(l.effectivePrice.amount, l.effectivePrice.currency.name)) } else it }
     }
 
     // All stats computed from FILTERED data; converted prices make cross-currency listings comparable.
     fun Listing.convertedPrice(): Long = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
-    val allPrices = remember(activeListings) { activeListings.map { it.convertedPrice() }.sorted() }
+    val allPrices = remember(activeListings, money) { activeListings.map { it.convertedPrice() }.sorted() }
     val displayCur = Currency.valueOf(DisplayCurrency.current)
-    val medianPrice = remember(allPrices) { medianMoney(allPrices, displayCur) }
-    val minPrice = remember(activeListings) {
+    val medianPrice = remember(allPrices, money) { medianMoney(allPrices, displayCur) }
+    val minPrice = remember(activeListings, money) {
         activeListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
     // Upper reference for the summary — the true highest price among what's shown, matching
     // minPrice above: whatever number is on screen is an actual listing, not a trimmed estimate.
-    val maxPrice = remember(activeListings) {
+    val maxPrice = remember(activeListings, money) {
         activeListings.maxByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
 
@@ -328,17 +334,17 @@ fun ListingsSheet(
     val newListings = remember(activeListings) {
         activeListings.filter { it.condition == Condition.NEW }
     }
-    val minUsedPrice = remember(usedListings) {
+    val minUsedPrice = remember(usedListings, money) {
         usedListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    val medianUsedPrice = remember(usedListings) { medianMoney(usedListings.map { it.convertedPrice() }, displayCur) }
-    val minNewPrice = remember(newListings) {
+    val medianUsedPrice = remember(usedListings, money) { medianMoney(usedListings.map { it.convertedPrice() }, displayCur) }
+    val minNewPrice = remember(newListings, money) {
         newListings.minByOrNull { it.convertedPrice() }?.let { Money(it.convertedPrice(), displayCur) }
     }
-    val medianNewPrice = remember(newListings) { medianMoney(newListings.map { it.convertedPrice() }, displayCur) }
-    val medianSoldPrice = remember(soldListings) { medianMoney(soldListings.map { it.convertedPrice() }, displayCur) }
+    val medianNewPrice = remember(newListings, money) { medianMoney(newListings.map { it.convertedPrice() }, displayCur) }
+    val medianSoldPrice = remember(soldListings, money) { medianMoney(soldListings.map { it.convertedPrice() }, displayCur) }
 
-    val platformOffers = remember(activeListings) {
+    val platformOffers = remember(activeListings, money) {
         activeListings.groupBy { it.platformId }
             .map { (platform, items) ->
                 val sortedByConverted = items.sortedBy { it.convertedPrice() }
@@ -374,7 +380,7 @@ fun ListingsSheet(
     // Built from the offers alone, the list was the markets that happened to find something: a
     // reader could not tell mobile.de had been asked and had nothing from mobile.de never having
     // been asked at all, and the two mean opposite things about the thing being searched for.
-    val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditionFilter) {
+    val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditionFilter, money) {
         val offered = marketBasis
             .filter { !it.sold }
             .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }

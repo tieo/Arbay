@@ -64,7 +64,7 @@ class ArbayClient(
     /** The listings a saved search turned up since it was last looked at, as the watch stored them.
      *  No crawl runs to answer this, and listings the platform has since removed still come back. */
     suspend fun getNewListings(id: String): List<Listing> =
-        client.get("$baseUrl/api/products/$id/new").body()
+        client.get("$baseUrl/api/products/$id/new").body<List<Listing>>().withServerImages()
 
     /** Tell the server a saved search was opened, so what was waiting counts as seen. */
     suspend fun markSavedSearchOpened(id: String) {
@@ -100,19 +100,19 @@ class ArbayClient(
         sold?.let { parameter("sold", it) }
         parameter("limit", limit)
         parameter("offset", offset)
-    }.body()
+    }.body<List<Listing>>().withServerImages()
 
     suspend fun searchListings(query: String, limit: Int = 50): List<Listing> =
         client.get("$baseUrl/api/listings/search") {
             parameter("q", query)
             parameter("limit", limit)
-        }.body()
+        }.body<List<Listing>>().withServerImages()
 
     suspend fun getPriceHistory(query: String, platform: PlatformId? = null): List<Listing> =
         client.get("$baseUrl/api/listings/price-history") {
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
-        }.body()
+        }.body<List<Listing>>().withServerImages()
 
 
     @Serializable
@@ -129,16 +129,25 @@ class ArbayClient(
         client.get("$baseUrl/api/car-taxonomy").body()
 
     /** The offline copy of a listing that may no longer exist on its own platform — its own
-     *  fields plus images mirrored on our server. Null when it was never archived.
-     *
-     *  Stored image paths are server-relative (deployment-agnostic on disk); resolved to this
-     *  device's configured server here, at the one place that already knows [baseUrl]. */
+     *  fields plus images mirrored on our server. Null when it was never archived. */
     suspend fun getArchivedListing(id: String): Listing? = try {
-        val listing: Listing = client.get("$baseUrl/api/archive/listings/$id").body()
-        listing.copy(imageUrls = listing.imageUrls.map { if (it.startsWith("http")) it else "$baseUrl$it" })
+        client.get("$baseUrl/api/archive/listings/$id").body<Listing>().withServerImages()
     } catch (_: Exception) {
         null
     }
+
+    /**
+     * An archived listing carries its mirrored images as paths on the server ("/api/archive/…"),
+     * stored that way so the files survive the server moving or changing address. A path is not
+     * something an image loader can fetch, and one that reaches a screen renders as a blank frame,
+     * so every listing coming back from the server is pointed at [baseUrl] here — the one place
+     * that knows which server this device is talking to.
+     */
+    private fun Listing.withServerImages(): Listing =
+        if (imageUrls.none { it.startsWith("/") }) this
+        else copy(imageUrls = imageUrls.map { if (it.startsWith("/")) "$baseUrl$it" else it })
+
+    private fun List<Listing>.withServerImages(): List<Listing> = map { it.withServerImages() }
 
     suspend fun getCrawlerConfig(): CrawlerConfigDto =
         client.get("$baseUrl/api/crawler/config").body()

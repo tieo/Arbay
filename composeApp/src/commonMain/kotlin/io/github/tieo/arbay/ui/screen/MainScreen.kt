@@ -446,15 +446,22 @@ fun MainScreen(
                             tint = MaterialTheme.colorScheme.outlineVariant,
                         )
                         Spacer(Modifier.height(12.dp))
+                        // An unreachable server is not an empty account. Saying "no bookmarks yet"
+                        // to someone whose bookmarks are sitting on a server that did not answer
+                        // reads as having lost them.
                         Text(
-                            "No bookmarks yet",
+                            if (error != null) "Bookmarks could not be loaded" else "No bookmarks yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            if (isDesktop) "Click the search bar below or press Ctrl+K"
-                            else "Tap the search bar below to get started",
+                            when {
+                                error != null -> "The server did not answer. Yours are still there; " +
+                                    "this screen fills in as soon as it can be reached."
+                                isDesktop -> "Click the search bar below or press Ctrl+K"
+                                else -> "Tap the search bar below to get started"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

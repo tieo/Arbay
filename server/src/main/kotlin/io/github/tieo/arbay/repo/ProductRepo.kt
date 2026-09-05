@@ -18,6 +18,11 @@ class ProductRepo {
     private val persistFile = File(System.getProperty("user.home"), ".arbay/tracked_products.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    // A load that threw left this empty while the file on disk still holds every saved search.
+    // Persisting from that state would write the emptiness over them, so nothing may be written
+    // until someone has looked at why the file could not be read.
+    private var loadFailed = false
+
     init { load() }
 
     private fun load() {
@@ -33,15 +38,23 @@ class ProductRepo {
             // re-migrating from the same stale JSON on every restart.
             if (migrated != raw) persist()
         } catch (e: Exception) {
-            log.warn("Failed to load saved searches: ${e.message}")
+            loadFailed = true
+            log.error(
+                "Could not read {} — saved searches are not editable until this is fixed, so the " +
+                    "file is not overwritten: {}",
+                persistFile, e.message,
+            )
         }
     }
 
     @Synchronized
     private fun persist() {
+        if (loadFailed) {
+            log.error("Refusing to write saved searches over a file that could not be read")
+            return
+        }
         try {
-            persistFile.parentFile.mkdirs()
-            persistFile.writeText(json.encodeToString(products.values.toList()))
+            persistFile.writeTextAtomically(json.encodeToString(products.values.toList()))
         } catch (e: Exception) {
             log.warn("Failed to persist saved searches: ${e.message}")
         }

@@ -404,7 +404,7 @@ internal fun PriceDistributionChart(
                     if (i % 2 == 0 || i == bucketCount - 1) {
                         val price = minPriceAll + (priceRange * i / bucketCount)
                         val labelStr = "\u20AC${price / 100}"
-                        val tr = textMeasurer.measure(labelStr, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
+                        val tr = textMeasurer.measure(labelStr, TextStyle(fontSize = 9.sp, color = onSurface.copy(alpha = 0.78f)))
                         val lx = (bucketX + bw / 2 - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width)
                         drawText(tr, topLeft = Offset(lx, size.height - tr.size.height))
                     }
@@ -605,7 +605,7 @@ internal fun PriceHistoryChart(
                     val y = py(p)
                     drawLine(onSurface.copy(alpha = 0.08f), Offset(padL, y), Offset(size.width - padR, y), strokeWidth = 0.5f)
                     val lbl = "$currencySymbol${p / 100}"
-                    val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
+                    val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 9.sp, color = onSurface.copy(alpha = 0.78f)))
                     drawText(tr, topLeft = Offset(0f, y - tr.size.height / 2f))
                 }
 
@@ -617,7 +617,7 @@ internal fun PriceHistoryChart(
                         val x = padL + ((t - minT).toFloat() / timeRange) * chartW
                         val date = Instant.fromEpochSeconds(t).toLocalDateTime(TimeZone.currentSystemDefault())
                         val lbl = "${date.dayOfMonth}.${date.monthNumber}"
-                        val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 8.sp, color = onSurface.copy(alpha = 0.5f)))
+                        val tr = textMeasurer.measure(lbl, TextStyle(fontSize = 9.sp, color = onSurface.copy(alpha = 0.78f)))
                         drawText(tr, topLeft = Offset((x - tr.size.width / 2).coerceIn(0f, size.width - tr.size.width), size.height - tr.size.height))
                     }
                 }

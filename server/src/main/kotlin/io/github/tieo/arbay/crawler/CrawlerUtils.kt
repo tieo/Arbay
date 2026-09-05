@@ -135,25 +135,45 @@ internal suspend fun paginate(
 
 /** Validate HTML — throws if it's a block/captcha page */
 internal fun validateHtml(html: String, platformName: String) {
-    if (html.length < 500) throw CrawlerBlockedException("$platformName: empty response", ErrorType.BLOCKED_403)
-    val finalUrl = "" // only available from browser fetches
-    if (detectCaptcha(html)) throw CrawlerBlockedException("$platformName captcha", ErrorType.CAPTCHA)
+    if (html.length < 500)
+        throw CrawlerBlockedException("$platformName: empty response", ErrorType.BLOCKED_403, html = html)
+    if (detectCaptcha(html))
+        throw CrawlerBlockedException("$platformName captcha", ErrorType.CAPTCHA, html = html)
     if (html.length < 1000 && (html.contains("bot") || html.contains("challenge") || html.contains("blocked")))
-        throw CrawlerBlockedException("$platformName likely blocked (small response)", ErrorType.BLOCKED_403)
-    detectBlockPage(html, platformName)?.let { throw it }
+        throw CrawlerBlockedException("$platformName likely blocked (small response)", ErrorType.BLOCKED_403, html = html)
+    detectBlockPage(html, platformName)?.let { throw it.withEvidence(html = html) }
 }
+
+/** The same refusal, carrying the page that showed it. */
+internal fun CrawlerBlockedException.withEvidence(
+    url: String? = null,
+    html: String? = null,
+    statusCode: Int? = null,
+): CrawlerBlockedException = CrawlerBlockedException(
+    message = message ?: "blocked",
+    errorType = errorType,
+    url = url ?: this.url,
+    html = html ?: this.html,
+    statusCode = statusCode ?: this.statusCode,
+)
 
 /** Validate browser result — checks both final URL and HTML */
 internal fun validateBrowserResult(result: FetchResult, platformName: String): String {
     val html = result.html
     val finalUrl = result.finalUrl
     if (finalUrl.contains("/splashui/") || finalUrl.contains("/challenge?") || finalUrl.contains("challenge=1"))
-        throw CrawlerBlockedException("$platformName: challenge redirect ($finalUrl)", ErrorType.CAPTCHA)
+        throw CrawlerBlockedException(
+            "$platformName: challenge redirect ($finalUrl)", ErrorType.CAPTCHA, url = finalUrl, html = html,
+        )
     if (detectCaptcha(html))
-        throw CrawlerBlockedException("$platformName: captcha in browser response", ErrorType.CAPTCHA)
-    detectBlockPage(html, platformName)?.let { throw it }
+        throw CrawlerBlockedException(
+            "$platformName: captcha in browser response", ErrorType.CAPTCHA, url = finalUrl, html = html,
+        )
+    detectBlockPage(html, platformName)?.let { throw it.withEvidence(url = finalUrl, html = html) }
     if (html.length < 500)
-        throw CrawlerBlockedException("$platformName: browser returned empty page", ErrorType.BLOCKED_403)
+        throw CrawlerBlockedException(
+            "$platformName: browser returned empty page", ErrorType.BLOCKED_403, url = finalUrl, html = html,
+        )
     return html
 }
 

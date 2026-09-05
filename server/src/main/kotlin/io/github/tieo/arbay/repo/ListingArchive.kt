@@ -83,8 +83,17 @@ object ListingArchive {
 
     /** The archived copy of one listing, or null if it was never archived (or archiving is still
      *  in flight for it). */
+    /**
+     * A listing id names one file in the archive, so it has to look like a listing id and nothing
+     * else. Both lookups here take theirs straight from a URL path, where "../" is as easy to
+     * type as anything.
+     */
+    private fun safeId(id: String): String? =
+        id.takeIf { it.isNotBlank() && it.length <= 200 && it.all { c -> c.isLetterOrDigit() || c in "_-.:" } && !it.contains("..") }
+
     fun get(id: String): Listing? {
-        val file = File(listingsDir, "$id.json")
+        val safe = safeId(id) ?: return null
+        val file = File(listingsDir, "$safe.json")
         if (!file.exists()) return null
         return try {
             json.decodeFromString<Listing>(file.readText())
@@ -97,7 +106,7 @@ object ListingArchive {
     /** One of a listing's mirrored images, addressed by the filename [get] handed back in its
      *  imageUrls. Guards against a filename walking out of that listing's own directory. */
     fun imageFile(id: String, filename: String): File? {
-        val listingDir = File(imagesDir, id)
+        val listingDir = File(imagesDir, safeId(id) ?: return null)
         val file = File(listingDir, filename)
         if (!file.exists()) return null
         val listingCanonical = listingDir.canonicalFile

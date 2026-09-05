@@ -85,7 +85,12 @@ class EbayDeCrawler(
             val firstPage = curlFirstPage
             allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
             val maxPages = query.pageLimit()
-            if (firstPage.size >= 20) {
+            // One page already carries _ipg items (120 by default), so at the usual cap there is
+            // nothing on page 2 that this search is going to keep. Asking for it anyway is not
+            // free: eBay refuses every paged URL with a 403, which counts against this address
+            // like any other refusal.
+            val cap = CrawlerConfig.current.maxResultsPerPlatform
+            if (firstPage.size >= 20 && allResults.size < cap) {
                 for (page in 2..maxPages) {
                     val html = try {
                         val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
@@ -93,7 +98,7 @@ class EbayDeCrawler(
                     } catch (_: Exception) { break }
                     val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
                     allResults.addAll(results)
-                    if (results.size < 20) break
+                    if (results.size < 20 || allResults.size >= cap) break
                 }
             }
             // Only fetch sold pages if explicitly requested (saves rate limit)
@@ -153,7 +158,8 @@ class EbayDeCrawler(
         val firstPage = parseSearchResults(firstHtml)
         allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
         val maxPages = query.pageLimit()
-        if (firstPage.size >= 20) {
+        val cap = CrawlerConfig.current.maxResultsPerPlatform
+        if (firstPage.size >= 20 && allResults.size < cap) {
             for (page in 2..maxPages) {
                 val html = try {
                     val h = fetchHttp(client, buildSearchUrl(query, page), "eBay")
@@ -161,7 +167,7 @@ class EbayDeCrawler(
                 } catch (_: Exception) { break }
                 val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
                 allResults.addAll(results)
-                if (results.size < 20) break
+                if (results.size < 20 || allResults.size >= cap) break
             }
         }
         if (query.soldOnly) {
