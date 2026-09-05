@@ -20,6 +20,9 @@ if [ $# -gt 0 ]; then
   "$here/gradlew" :composeApp:renderGallery -q --console=plain "-Ponly=$1"
 else
   echo "Rendering every view…"
+  # Emptied first, so what is in there afterwards is exactly what the gallery still defines. Left
+  # to accumulate, a scene deleted months ago keeps its picture and keeps being read as current.
+  rm -f "$gallery"/*.png
   "$here/gradlew" :composeApp:renderGallery -q --console=plain
 fi
 
@@ -35,5 +38,21 @@ for source in "$gallery"/*-phone-*.png "$gallery"/*-wide-*.png "$gallery"/*-card
     *) cp "$source" "$model/$name"; count=$((count + 1)) ;;
   esac
 done
+
+# A whole run draws every scene there is, so anything in the model that this run did not draw is a
+# picture of a screen the app no longer has. Left behind, those keep being read as current: three
+# findings in one review came from renders of states that had been deleted from the gallery. A run
+# for a single view says nothing about the others, so it prunes nothing.
+if [ $# -eq 0 ]; then
+  removed=0
+  for stale in "$model"/*.png "$model"/card/*.png; do
+    [ -e "$stale" ] || continue
+    if [ ! -e "$gallery/$(basename "$stale")" ]; then
+      rm "$stale"
+      removed=$((removed + 1))
+    fi
+  done
+  [ "$removed" -gt 0 ] && echo "removed $removed render(s) of scenes that no longer exist"
+fi
 
 echo "$count renders in docs/model/img, cards in docs/model/img/card"
