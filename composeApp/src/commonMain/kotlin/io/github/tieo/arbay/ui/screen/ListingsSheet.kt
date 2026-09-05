@@ -712,15 +712,17 @@ fun ListingsSheet(
                 // Three numbers and their grounds, on one line: a paragraph of it pushed the first
                 // offer off the screen, which is the one thing this view exists to show.
                 item("hidden-count") {
-                    val hiddenHere = marketBasis.count { !it.sold } - displayedActiveListings.size
-                    val droppedBeforeArrival = platformStatuses.sumOf {
-                        (it.rawCount - it.resultCount).coerceAtLeast(0)
-                    }
+                    // Each number counts a step of the same funnel, so they add up to what is
+                    // missing and never to more than there was. What the markets sent that never
+                    // matched the search is not on this line: it is not something the reader chose,
+                    // and counting it here put "19 criteria" under a Filters chip reading "none".
+                    val hiddenByPrice = allActiveListings.size - activeListings.size
+                    val hiddenByChoices = activeListings.size - displayedActiveListings.size
                     val blockedByWords = fetchedListings.size - marketBasis.size
                     val parts = buildList {
-                        if (hiddenHere > 0) add(hiddenHere to "price")
+                        if (hiddenByPrice > 0) add(hiddenByPrice to "price")
+                        if (hiddenByChoices > 0) add(hiddenByChoices to if (newOnly) "not new" else "condition")
                         if (blockedByWords > 0) add(blockedByWords to "words")
-                        if (droppedBeforeArrival > 0) add(droppedBeforeArrival to "criteria")
                     }
                     if (parts.isNotEmpty()) {
                         Row(
