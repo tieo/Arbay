@@ -39,7 +39,7 @@ class BytbilCrawler(private val client: HttpClient) : Crawler {
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
 
         val basePath = buildString {
             append("https://www.bytbil.com/transportbil?")

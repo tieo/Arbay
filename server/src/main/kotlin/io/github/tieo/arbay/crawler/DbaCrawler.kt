@@ -36,7 +36,7 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val searchText = CarQueryResolver.resolve(query.positiveText)?.let { car ->
+        val searchText = CarQueryResolver.resolveForCarSite(query.positiveText)?.let { car ->
             buildString {
                 append(car.makeSlug.replace("-", " "))
                 car.modelSlug?.let { append(' ').append(it) }

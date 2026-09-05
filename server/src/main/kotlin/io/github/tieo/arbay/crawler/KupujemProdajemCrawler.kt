@@ -22,7 +22,7 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
         val keyword = if (car != null) {
             listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
         } else {

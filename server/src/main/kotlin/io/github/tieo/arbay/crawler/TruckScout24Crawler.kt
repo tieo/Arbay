@@ -25,7 +25,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         // Vehicle filters (year, mileage, power, gearbox) use PHP bracket notation that the
         // /transporter/gebraucht path rejects with HTTP 500. The /main/search/index path
         // accepts all params including properties[], so it is used whenever any filter is set.
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
         val hasFilters = filterParams(query).isNotEmpty()
         val basePath = if (hasFilters)
             "https://www.truckscout24.de/main/search/index"

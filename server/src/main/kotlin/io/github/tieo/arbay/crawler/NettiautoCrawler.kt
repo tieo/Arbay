@@ -18,7 +18,7 @@ class NettiautoCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.NETTIAUTO
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
         // The make/model path applies the filter; anything else falls back to the site search.
         val path = if (car != null) {
             buildString {

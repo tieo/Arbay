@@ -18,7 +18,7 @@ class FinnCrawler(private val client: HttpClient) : Crawler {
     private val host = "www.finn.no"
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val car = CarQueryResolver.resolve(query.positiveText)
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
         val text = if (car != null) {
             listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
         } else {

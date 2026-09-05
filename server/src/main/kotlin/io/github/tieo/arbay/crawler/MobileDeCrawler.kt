@@ -19,7 +19,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         // Each category is a separate, slow stealth crawl, so only add the VanUpTo7500 category when
         // the query is actually after a large van (Crafter, Sprinter, …) — which does list there,
         // not under Car. A normal car search stays a single Car crawl (half the browser time).
-        val resolved = CarQueryResolver.resolve(query.positiveText)
+        val resolved = CarQueryResolver.resolveForCarSite(query.positiveText)
         val categories = when {
             resolved == null -> listOf("Car")
             isVanQuery(resolved, query.toCarFilters()) -> listOf("Car", "VanUpTo7500")
