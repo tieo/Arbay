@@ -19,7 +19,9 @@ import java.io.File
 object ErrorSnapshotStore {
     private val log = LoggerFactory.getLogger(ErrorSnapshotStore::class.java)
     private val dir = File(System.getProperty("user.home"), ".arbay/error_snapshots")
-    private val sinceLastPrune = java.util.concurrent.atomic.AtomicInteger(0)
+    // Starts at the threshold so the first capture after a restart prunes: whatever collected while
+    // no version of this pruned is cleared then, rather than fifty captures later.
+    private val sinceLastPrune = java.util.concurrent.atomic.AtomicInteger(50)
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
     init { dir.mkdirs() }
