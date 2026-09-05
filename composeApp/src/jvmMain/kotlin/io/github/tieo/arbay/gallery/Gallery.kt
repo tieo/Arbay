@@ -83,6 +83,10 @@ private val SCENES: List<Scene> = buildList {
     add(scene("results", "with-a-backlog") {
         Results(PreviewData.active, PreviewData.marketAnswers, newIds = PreviewData.newListingIds)
     })
+    add(scene("results", "what-the-watch-found") {
+        val found = PreviewData.active.filter { it.id in PreviewData.newListingIds }
+        Results(found, emptyList(), stored = found)
+    })
     add(scene("results", "empty") { Results(emptyList(), PreviewData.nobodyHadAnything) })
     add(scene("results", "failed") { Results(emptyList(), PreviewData.everyoneFailed) })
     add(scene("results", "some-markets-failed") {
@@ -180,6 +184,7 @@ private fun Results(
     completed: Int = 0,
     blocked: List<String> = emptyList(),
     newIds: Set<String> = emptySet(),
+    stored: List<Listing>? = null,
 ) = inline {
     io.github.tieo.arbay.ui.screen.ListingsSheet(
         productName = "Parkettschleifmaschine",
@@ -195,6 +200,7 @@ private fun Results(
         platforms = PreviewData.active.map { it.platformId }.distinct(),
         blockedTerms = blocked,
         newListingIds = newIds,
+        storedListings = stored,
         isBookmarked = true,
         onToggleBookmark = {},
         onDismiss = {},

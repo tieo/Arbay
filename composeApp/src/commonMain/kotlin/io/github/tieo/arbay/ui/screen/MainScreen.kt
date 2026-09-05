@@ -38,6 +38,8 @@ import io.github.tieo.arbay.model.FreeItemStats
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
+import kotlinx.coroutines.launch
+import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.ProductIdentifier
@@ -104,6 +106,10 @@ private data class ResultsView(
     // What this saved search had found since it was last opened, captured at the moment of opening
     // because opening is what clears it. Empty for every other way in, which has no such backlog.
     val newListingIds: Set<String> = emptySet(),
+    // Those findings themselves, as the watch stored them, when the results were opened from the
+    // "n new" badge. Non-null means this view does not crawl to fill itself. Carried here so that
+    // every way of closing the results drops them with the view.
+    val stored: List<Listing>? = null,
 ) {
     /** Whether this is the vehicle-search view — computed from [category] rather than stored
      *  alongside it, so the two can never disagree. */
@@ -200,6 +206,7 @@ fun MainScreen(
 ) {
     val products by productViewModel.products.collectAsState()
     val productStatus by productViewModel.status.collectAsState()
+    val scope = rememberCoroutineScope()
     // Only markets a crawler exists for are worth offering: selecting one without adds nothing to
     // a search and says nothing about why.
     val marketCapabilities by listingViewModel.capabilities.collectAsState()
@@ -480,6 +487,20 @@ fun MainScreen(
                                 results = ResultsView.of(product, newIds)
                                 productViewModel.markOpened(product.id)
                             },
+                            // The "n new" badge opens the findings themselves, fetched from what
+                            // the watch stored rather than searched for again. Nothing stored (an
+                            // older server, an unreachable one) falls through to the ordinary
+                            // view, so the badge never becomes a tap that does nothing.
+                            onViewNew = {
+                                val newIds = productStatus[product.id]?.newListingIds.orEmpty().toSet()
+                                scope.launch {
+                                    val stored = runCatching { client.getNewListings(product.id) }
+                                        .getOrDefault(emptyList())
+                                    results = ResultsView.of(product, newIds)
+                                        .copy(stored = stored.ifEmpty { null })
+                                    productViewModel.markOpened(product.id)
+                                }
+                            },
                             onEdit = {
                                 editingProduct = product
                                 val view = ResultsView.of(product)
@@ -718,6 +739,7 @@ fun MainScreen(
             platforms = view.platforms,
             carFilters = view.filters,
             newListingIds = view.newListingIds,
+            storedListings = view.stored,
             aliases = (bookmark?.searchQuery ?: resultsHistoryEntry?.searchQuery)?.aliases ?: view.aliases,
             // A vehicle search can always reach the form, even with no filters set yet, so they
             // can be added from the results.
@@ -846,6 +868,9 @@ internal fun ProductCard(
     onAlerts: () -> Unit,
     // What this search has found since it was last opened, when the server is watching it.
     status: SavedSearchStatus? = null,
+    // Open just what the watch found, from what it stored. Separate from [onViewListings], which
+    // runs the search again.
+    onViewNew: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     if (confirmDelete) {
@@ -924,6 +949,7 @@ internal fun ProductCard(
 
                 if ((status?.newSinceOpened ?: 0) > 0) {
                     Surface(
+                        onClick = onViewNew,
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.primary,
                     ) {

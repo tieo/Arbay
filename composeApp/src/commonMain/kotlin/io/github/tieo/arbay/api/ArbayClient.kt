@@ -61,6 +61,11 @@ class ArbayClient(
     suspend fun getSavedSearchStatus(): List<SavedSearchStatus> =
         client.get("$baseUrl/api/products/status").body()
 
+    /** The listings a saved search turned up since it was last looked at, as the watch stored them.
+     *  No crawl runs to answer this, and listings the platform has since removed still come back. */
+    suspend fun getNewListings(id: String): List<Listing> =
+        client.get("$baseUrl/api/products/$id/new").body()
+
     /** Tell the server a saved search was opened, so what was waiting counts as seen. */
     suspend fun markSavedSearchOpened(id: String) {
         client.post("$baseUrl/api/products/$id/opened")

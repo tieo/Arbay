@@ -152,6 +152,10 @@ fun ListingsSheet(
     // What this saved search found since it was last opened. Drives the "new only" filter; empty
     // for a search with no backlog, which hides that filter entirely.
     newListingIds: Set<String> = emptySet(),
+    // The watch's own findings, handed over already fetched. Non-null puts this view in that mode:
+    // no crawl on open, and what is shown is what was stored when the listings were found, down to
+    // the ones the platform has since taken down. Refreshing from here still crawls.
+    storedListings: List<Listing>? = null,
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
@@ -419,8 +423,9 @@ fun ListingsSheet(
     // Keyed on searchQuery/carFilters/aliases only, same as before — blockedTerms is read at
     // whatever value it holds when one of those actually changes, but blocking/unblocking a word
     // live must not itself trigger a re-crawl: it only re-filters what was already fetched.
-    LaunchedEffect(searchQuery, carFilters, aliases) {
-        listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases)
+    LaunchedEffect(searchQuery, carFilters, aliases, storedListings) {
+        if (storedListings != null) listingViewModel.showStored(searchQuery, storedListings)
+        else listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases)
     }
 
     AdaptiveSheet(onDismiss = onDismiss) {
@@ -899,7 +904,14 @@ fun ListingsSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            if (newHere > 0) {
+                            if (storedListings != null) {
+                                Text(
+                                    "What the watch found since you last looked, kept as it found it",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (newHere > 0 && storedListings == null) {
                                 Spacer(Modifier.weight(1f))
                                 FilterChip(
                                     selected = newOnly,

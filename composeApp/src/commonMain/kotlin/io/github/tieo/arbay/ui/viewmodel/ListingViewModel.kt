@@ -232,6 +232,27 @@ class ListingViewModel(
         _shownCountries.value = emptySet()
     }
 
+    /**
+     * Show listings the server already holds, without crawling for them: a saved search's own
+     * backlog, served as the watch stored it. [refresh] still crawls from here, so this is a
+     * starting point rather than a dead end.
+     */
+    fun showStored(query: String, stored: List<Listing>) {
+        if (rendersASample) return
+        searchJob?.cancel()
+        _searchQuery.value = query
+        _loading.value = false
+        _error.value = null
+        refusedBy = null
+        _notSearched.value = null
+        _platformStatuses.value = emptyList()
+        _totalPlatforms.value = 0
+        _completedPlatforms.value = 0
+        _facets.value = emptyMap()
+        _priceHistory.value = emptyList()
+        _allListings.value = stored
+    }
+
     fun refresh(platforms: List<PlatformId>? = null) {
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return

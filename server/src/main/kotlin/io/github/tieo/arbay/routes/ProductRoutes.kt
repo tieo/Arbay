@@ -22,6 +22,14 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             call.respond(savedSearches.statuses())
         }
 
+        // What this saved search turned up since it was last looked at, as it was when the watch
+        // found it. Answered from what was stored at crawl time, so opening it costs no crawl and
+        // still shows listings the platform has since taken down.
+        get("/{id}/new") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            call.respond(savedSearches.newListings(id))
+        }
+
         // The saved search was opened, so what was waiting in it has been seen.
         post("/{id}/opened") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")

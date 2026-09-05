@@ -10,6 +10,7 @@ import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.displayName
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
@@ -78,8 +79,15 @@ class SavedSearchMonitor(
     // What each saved search has found since someone last opened it, and when it last ran. Held
     // here because this is what knows; the app reads it so a bookmark can say what is waiting.
     private val statusFile = File(System.getProperty("user.home"), ".arbay/saved_search_status.json")
-    private val unopened: MutableMap<String, MutableSet<String>> = loadStatus()
+    private val unopened: MutableMap<String, MutableSet<String>> = loadIds(statusFile)
     private val lastRun: MutableMap<String, Long> = mutableMapOf()
+
+    // What the most recent run that found anything found, kept after the search is opened. Opening
+    // a search clears what is unseen, and that used to take with it the only record of which
+    // listings the watch had turned up — so "show me what you found" had nothing to show the
+    // second time it was asked.
+    private val lastNewFile = File(System.getProperty("user.home"), ".arbay/saved_search_last_new.json")
+    private val lastNew: MutableMap<String, MutableSet<String>> = loadIds(lastNewFile)
 
     /** What every saved search has been doing, for the app's list of them. */
     fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
@@ -96,6 +104,20 @@ class SavedSearchMonitor(
     fun markOpened(productId: String) {
         unopened.remove(productId)
         saveStatus()
+    }
+
+    /**
+     * The listings this saved search turned up, as they were when it found them — what is still
+     * unseen, or the last batch it found once that has been opened.
+     *
+     * Served from what was stored at crawl time rather than looked up again: a listing found
+     * overnight can be sold or deleted by morning, and asking the platform for it then answers
+     * "gone" rather than showing what the watch actually saw. Falls back to the archive, which
+     * outlives a restart and mirrors the images too.
+     */
+    fun newListings(productId: String): List<Listing> {
+        val ids = unopened[productId]?.takeIf { it.isNotEmpty() } ?: lastNew[productId].orEmpty()
+        return ids.mapNotNull { listingRepo.getById(it) ?: ListingArchive.get(it) }
     }
 
     fun start() {
@@ -167,7 +189,11 @@ class SavedSearchMonitor(
         lastRun[product.id] = System.currentTimeMillis()
         if (fresh.isNotEmpty() && !silent) {
             unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
+            lastNew[product.id] = fresh.toMutableSet()
             saveStatus()
+            // Stored as found, so the app can show this batch later without asking the platform
+            // again — which by then may no longer have it. Archiving mirrors the images too.
+            listingRepo.upsertBatch(fresh.mapNotNull { found[it] })
         }
         if (fresh.isEmpty() || silent) { saveSeen(); return }
 
@@ -273,9 +299,9 @@ class SavedSearchMonitor(
             else runCatching { ExchangeRates.convert(money.amount, money.currency.name, "EUR") }.getOrNull()
     }
 
-    private fun loadStatus(): MutableMap<String, MutableSet<String>> = try {
-        if (statusFile.exists()) {
-            json.decodeFromString<Map<String, Set<String>>>(statusFile.readText())
+    private fun loadIds(file: File): MutableMap<String, MutableSet<String>> = try {
+        if (file.exists()) {
+            json.decodeFromString<Map<String, Set<String>>>(file.readText())
                 .mapValuesTo(HashMap()) { it.value.toMutableSet() }
         } else HashMap()
     } catch (_: Exception) { HashMap() }
@@ -284,6 +310,7 @@ class SavedSearchMonitor(
         try {
             statusFile.parentFile.mkdirs()
             statusFile.writeText(json.encodeToString(unopened.mapValues { it.value.toSet() }))
+            lastNewFile.writeText(json.encodeToString(lastNew.mapValues { it.value.toSet() }))
         } catch (e: Exception) {
             log.debug("could not write saved-search status: {}", e.message)
         }
