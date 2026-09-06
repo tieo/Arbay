@@ -25,6 +25,7 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.debug.DebugSlice
 import io.github.tieo.arbay.debug.debugJson
+import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.defaultServerUrl
 import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.schedulePolling
@@ -237,6 +238,73 @@ fun SettingsSheet(
                     onClick = {
                         scope.launch {
                             try { client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500)) } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("Save") }
+            }
+
+            SettingSection(
+                icon = Icons.Outlined.Public,
+                title = "Buying from abroad",
+                subtitle = "A market outside your VAT area quotes its price without the import VAT " +
+                    "charged on the way in. Counted here, prices from those markets can be compared " +
+                    "with the ones at home; left out, they look cheaper than they are.",
+            ) {
+                var rules by remember { mutableStateOf(ImportRules.current) }
+                LaunchedEffect(Unit) {
+                    try {
+                        rules = client.getImportSettings()
+                        ImportRules.current = rules
+                    } catch (_: Exception) {}
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Add import VAT to prices from abroad",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = rules.enabled,
+                        onCheckedChange = { rules = rules.copy(enabled = it) },
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = rules.homeCountry,
+                        onValueChange = { rules = rules.copy(homeCountry = it.uppercase().filter { c -> c.isLetter() }.take(2)) },
+                        label = { Text("You are in") },
+                        supportingText = { Text("ISO code, e.g. DE") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    OutlinedTextField(
+                        value = rules.importVatPercent.toString(),
+                        onValueChange = {
+                            rules = rules.copy(importVatPercent = it.filter { c -> c.isDigit() }.take(2).toIntOrNull() ?: 0)
+                        },
+                        label = { Text("Import VAT %") },
+                        supportingText = { Text("Germany: 19") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                ImportRules.current = client.updateImportSettings(rules)
+                            } catch (_: Exception) {}
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

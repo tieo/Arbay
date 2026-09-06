@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.landedPrice
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SubfilterMatch
@@ -8,6 +10,7 @@ import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.displayName
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.repo.ImportSettingsStore
 import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.writeTextAtomically
@@ -253,8 +256,15 @@ class SavedSearchMonitor(
          *  search's own criteria, so a match here is always also a match on the search itself.
          *  A plain function of its inputs (no crawl state), so a subfilter's rules can be verified
          *  without spinning up a whole monitor. */
-        internal fun matchesSubfilter(listing: Listing, sf: NotificationSubfilter): Boolean {
-            val cents = eurCents(listing.price)
+        internal fun matchesSubfilter(
+            listing: Listing,
+            sf: NotificationSubfilter,
+            importSettings: ImportSettings = ImportSettingsStore.current,
+        ): Boolean {
+            // What it costs to have, not what the market quotes: shipping and the import VAT on a
+            // listing from outside the buyer's VAT area are part of the price a limit is about.
+            // Otherwise a notification for "under €149" arrives about something that lands at €154.
+            val cents = eurCents(listing.landedPrice(importSettings))
             val minEur = sf.minPriceEur
             val maxEur = sf.maxPriceEur
             if (minEur != null && (cents == null || cents < minEur * 100L)) return false

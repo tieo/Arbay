@@ -125,6 +125,17 @@ class ArbayClient(
     suspend fun getExchangeRates(): Map<String, Double> =
         client.get("$baseUrl/api/crawler/exchange-rates").body()
 
+    /** Where the buyer is and what import VAT they pay. Held by the server so the app's prices and
+     *  the server's own notification subfilters are worked out the same way. */
+    suspend fun getImportSettings(): ImportSettings =
+        client.get("$baseUrl/api/settings/import").body()
+
+    suspend fun updateImportSettings(settings: ImportSettings): ImportSettings =
+        client.post("$baseUrl/api/settings/import") {
+            contentType(ContentType.Application.Json)
+            setBody(settings)
+        }.body()
+
     suspend fun getCarTaxonomy(): CarTaxonomy =
         client.get("$baseUrl/api/car-taxonomy").body()
 

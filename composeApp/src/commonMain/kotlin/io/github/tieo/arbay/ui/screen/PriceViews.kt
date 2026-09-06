@@ -50,6 +50,7 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
@@ -233,7 +234,7 @@ internal fun PriceDistributionChart(
 
     val allActive = newListings + usedListings
     val hasActive = allActive.isNotEmpty()
-    val allPrices = allActive.map { it.effectivePrice.amount }.sorted()
+    val allPrices = allActive.map { it.comparablePrice.amount }.sorted()
     // Axis bounds are the 5th/95th percentile, not the extremes: a single dear outlier otherwise
     // stretches the axis so every real listing collapses into one spike at the left. Prices outside
     // the band still count — bucket() clamps them into the first/last bucket.
@@ -254,8 +255,8 @@ internal fun PriceDistributionChart(
     val buckets = Array(bucketCount) { BucketData() }
     fun bucket(price: Long) = ((price - minPriceAll).toDouble() / priceRange * bucketCount).toInt().coerceIn(0, bucketCount - 1)
     if (hasActive) {
-        newListings.forEach { buckets[bucket(it.effectivePrice.amount)].newCount++ }
-        usedListings.forEach { buckets[bucket(it.effectivePrice.amount)].usedCount++ }
+        newListings.forEach { buckets[bucket(it.comparablePrice.amount)].newCount++ }
+        usedListings.forEach { buckets[bucket(it.comparablePrice.amount)].usedCount++ }
     }
     val maxBarCount = buckets.maxOf { maxOf(it.newCount, it.usedCount) }.coerceAtLeast(1)
 
@@ -457,8 +458,8 @@ internal fun PriceDistributionChart(
             tappedBucket?.let { b ->
                 val priceFrom = minPriceAll + (priceRange * b / bucketCount)
                 val priceTo = minPriceAll + (priceRange * (b + 1) / bucketCount)
-                val inNew = newListings.count { it.effectivePrice.amount in priceFrom..priceTo }
-                val inUsed = usedListings.count { it.effectivePrice.amount in priceFrom..priceTo }
+                val inNew = newListings.count { it.comparablePrice.amount in priceFrom..priceTo }
+                val inUsed = usedListings.count { it.comparablePrice.amount in priceFrom..priceTo }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "\u20AC${priceFrom / 100}–\u20AC${priceTo / 100}: ${if (inNew > 0) "$inNew new" else ""}${if (inNew > 0 && inUsed > 0) " · " else ""}${if (inUsed > 0) "$inUsed used" else ""}",
@@ -525,7 +526,7 @@ internal fun PriceHistoryChart(
         Currency.DKK, Currency.SEK, Currency.NOK -> "kr"
         Currency.RSD -> "din"
     }
-    fun Listing.priceIn() = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
+    fun Listing.priceIn() = DisplayCurrency.convert(comparablePrice.amount, comparablePrice.currency.name)
 
     // A time axis is only honest for listings that carry a real sold date. When too few do,
     // fall back to a price distribution (points ranked by price) rather than faking dates.
@@ -694,7 +695,7 @@ internal fun SoldHistoryRow(
         ) {
             // Price, most prominent
             Text(
-                listing.effectivePrice.format(),
+                listing.comparablePrice.format(),
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.widthIn(min = 64.dp),

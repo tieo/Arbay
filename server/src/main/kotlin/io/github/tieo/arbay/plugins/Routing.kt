@@ -6,6 +6,7 @@ import io.github.tieo.arbay.repo.ProductRepo
 import io.github.tieo.arbay.routes.archiveRoutes
 import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
+import io.github.tieo.arbay.routes.importSettingsRoutes
 import io.github.tieo.arbay.routes.listingRoutes
 import io.github.tieo.arbay.routes.marketRoutes
 import io.github.tieo.arbay.routes.productRoutes
@@ -30,5 +31,6 @@ fun Application.configureRouting() {
         freeItemRoutes(savedSearches)
         taxonomyRoutes()
         archiveRoutes()
+        importSettingsRoutes()
     }
 }

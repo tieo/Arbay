@@ -44,6 +44,11 @@ fun App() {
             try {
                 DisplayCurrency.rates = client.getExchangeRates()
             } catch (_: Exception) {}
+            // What a listing from outside the buyer's VAT area really costs, so the app and the
+            // server's own notification filters use the same number.
+            try {
+                ImportRules.current = client.getImportSettings()
+            } catch (_: Exception) {}
             try {
                 CarTaxonomyStore.update(client.getCarTaxonomy())
             } catch (_: Exception) {}

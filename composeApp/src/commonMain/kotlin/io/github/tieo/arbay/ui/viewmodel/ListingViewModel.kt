@@ -2,6 +2,7 @@ package io.github.tieo.arbay.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.loadBannedIds
@@ -325,7 +326,7 @@ class ListingViewModel(
     }
 
     private fun priceOf(listing: Listing): Long =
-        DisplayCurrency.convert(listing.effectivePrice.amount, listing.effectivePrice.currency.name)
+        DisplayCurrency.convert(listing.comparablePrice.amount, listing.comparablePrice.currency.name)
 
     /** Order results by the mode the user picked from the sort menu, after measuring each one
      *  against the device position. */

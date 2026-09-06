@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.ImportRules
+import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.debug.DebugSlice
@@ -206,7 +208,7 @@ fun ListingsSheet(
     // and the rates it converts with are inputs to the figure itself, not only to the symbol in
     // front of it. Cached on the listings alone, switching currency relabelled amounts that were
     // still worked out in the old one.
-    val money = DisplayCurrency.current to DisplayCurrency.rates
+    val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
 
     // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
     // The true min and max — not a percentile trim. A trimmed bound looked like an active filter
@@ -214,7 +216,7 @@ fun ListingsSheet(
     // outside a slider bound that was never dragged still showed anyway; the number on screen and
     // what was actually filterable just disagreed. The slider still only filters once it is
     // actually moved inward from these true ends.
-    val allActivePrices = remember(allActiveListings, money) { allActiveListings.map { DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name) }.sorted() }
+    val allActivePrices = remember(allActiveListings, money) { allActiveListings.map { DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name) }.sorted() }
     val priceMin = remember(allActivePrices) { (allActivePrices.firstOrNull() ?: 0L) / 100f }
     val priceMax = remember(allActivePrices) {
         ((allActivePrices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
@@ -292,7 +294,7 @@ fun ListingsSheet(
 
     val activeListings = remember(allActiveListings, priceRange, money) {
         if (!priceFiltered) allActiveListings
-        else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
+        else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name)) }
     }
     // Show only what turned up since this search was last opened. Not persisted onto the bookmark:
     // the backlog it names is gone the moment the search is opened, so a remembered "new only"
@@ -311,11 +313,11 @@ fun ListingsSheet(
     }
     val soldListings = remember(allSoldListings, priceRange, money) {
         allSoldListings
-            .let { if (priceFiltered) it.filter { l -> inPriceRange(DisplayCurrency.convert(l.effectivePrice.amount, l.effectivePrice.currency.name)) } else it }
+            .let { if (priceFiltered) it.filter { l -> inPriceRange(DisplayCurrency.convert(l.comparablePrice.amount, l.comparablePrice.currency.name)) } else it }
     }
 
     // All stats computed from FILTERED data; converted prices make cross-currency listings comparable.
-    fun Listing.convertedPrice(): Long = DisplayCurrency.convert(effectivePrice.amount, effectivePrice.currency.name)
+    fun Listing.convertedPrice(): Long = DisplayCurrency.convert(comparablePrice.amount, comparablePrice.currency.name)
     val allPrices = remember(activeListings, money) { activeListings.map { it.convertedPrice() }.sorted() }
     val displayCur = Currency.valueOf(DisplayCurrency.current)
     val medianPrice = remember(allPrices, money) { medianMoney(allPrices, displayCur) }
@@ -383,7 +385,7 @@ fun ListingsSheet(
     val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditionFilter, money) {
         val offered = marketBasis
             .filter { !it.sold }
-            .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.effectivePrice.amount, it.effectivePrice.currency.name)) }
+            .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name)) }
             .filter { conditionMatches(conditionFilter, it.condition) }
         val nearest = offered
             .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }

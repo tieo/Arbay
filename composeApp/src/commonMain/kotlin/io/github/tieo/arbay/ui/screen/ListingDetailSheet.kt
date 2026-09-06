@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.imageModel
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.openBrowser
@@ -101,7 +102,7 @@ fun ListingDetailSheet(
 
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    listing.effectivePrice.format(),
+                    listing.comparablePrice.format(),
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 )
                 listing.oldPrice?.let {

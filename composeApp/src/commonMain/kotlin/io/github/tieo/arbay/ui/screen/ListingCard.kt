@@ -50,6 +50,9 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.github.tieo.arbay.ImportRules
+import io.github.tieo.arbay.comparablePrice
+import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
@@ -300,12 +303,29 @@ internal fun ListingCard(
                     Spacer(Modifier.width(10.dp))
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            listing.effectivePrice.format(),
+                            listing.comparablePrice.format(),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = if (listing.sold) MaterialTheme.colorScheme.onSurfaceVariant
                             else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                         )
+                        // The price above includes import VAT where it is due, which is not what
+                        // the market's own page will say — so say what was added and what they ask.
+                        val vat = listing.importVat(ImportRules.current)
+                        if (vat != null) {
+                            Text(
+                                "incl. ${ImportRules.current.importVatPercent}% import VAT",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                            Text(
+                                "${listing.effectivePrice.format()} there",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                         val shippingCost = listing.shipping?.cost
                         when {
                             shippingCost != null -> Text(
