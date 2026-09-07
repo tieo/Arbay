@@ -106,6 +106,9 @@ suspend fun Crawler.trackedSearch(
                     html = results.take(25).joinToString("\n") { "${it.title}\t${it.url}" },
                 )
                 log.warn("{}: {} [snapshot:{}]", platformId.displayName, irrelevance, snapId)
+                // A market that answered something else has not answered. Handing its results on
+                // anyway is how a search for a belay device filled up with grey office folders.
+                return emptyList()
             } else {
                 CrawlerStatusTracker.recordSuccess(platformId, results.size)
                 log.info("{}: {} results for '{}'", platformId.displayName, results.size, query.text)

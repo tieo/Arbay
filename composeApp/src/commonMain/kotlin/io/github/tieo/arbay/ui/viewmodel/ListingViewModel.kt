@@ -163,16 +163,49 @@ class ListingViewModel(
         // narrow each other: picking Germany and ricardo.ch shows both, where requiring both at
         // once would show nothing. Nothing picked means everything.
         val narrowed = markets.isNotEmpty() || countries.isNotEmpty()
-        kept.filter { listing ->
+        val picked = kept.filter { listing ->
             !narrowed ||
                 listing.platformId in markets ||
                 MarketSets.countryOf(listing.platformId) in countries
         }
+        collapseRepeats(picked)
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         sample.filter { kept(it, emptySet(), sampleBlocked) },
     )
+
+    /**
+     * One row per thing offered, not one per market offering it.
+     *
+     * The same seller lists the same item on every eBay locale, so a search comes back with the
+     * identical title three or six times over — in one measured search, 106 of 400 results were
+     * repeats of 42 titles. Which of the copies to keep is not a matter of taste here: the point of
+     * the app is the cheapest way to get the thing, so the cheapest copy stays and the rest go. The
+     * comparison across borders is not lost, it is the thing being decided.
+     */
+    private fun collapseRepeats(listings: List<Listing>): List<Listing> {
+        if (listings.size < 2) return listings
+        val seen = HashMap<String, Listing>(listings.size)
+        val order = ArrayList<String>(listings.size)
+        for (l in listings) {
+            val key = l.title.lowercase().filter { it.isLetterOrDigit() }
+            if (key.length < 12) {
+                // Too short to be sure two listings with it are the same thing.
+                order.add(l.id)
+                seen[l.id] = l
+                continue
+            }
+            val existing = seen[key]
+            if (existing == null) {
+                order.add(key)
+                seen[key] = l
+            } else if (priceOf(l) < priceOf(existing)) {
+                seen[key] = l
+            }
+        }
+        return order.mapNotNull { seen[it] }
+    }
 
     /** Everything the markets returned, before any filter of ours. What the empty results screen
      *  needs to tell "nobody had one" apart from "the filters hide all of them". */
@@ -330,20 +363,43 @@ class ListingViewModel(
 
     /** Order results by the mode the user picked from the sort menu, after measuring each one
      *  against the device position. */
+    /**
+     * Listings that do not contain the searched word, when only one word was searched.
+     *
+     * A market's own search matches more loosely than the word given to it — eBay answered "grigri"
+     * with "gris perle" and belt buckles, all of them a euro, all of them ahead of the actual belay
+     * devices once the list is ordered by price. They are not removed, because a single word is
+     * often a category a listing need not repeat: a ThinkPad X1 is a laptop without saying so. They
+     * go last instead, so cheapest-first cannot put what the market guessed above what was asked
+     * for.
+     */
+    private fun offQuery(listing: Listing): Boolean {
+        val token = _searchQuery.value.trim().lowercase()
+            .takeIf { it.isNotEmpty() && !it.contains(' ') }
+            ?.filter { it.isLetterOrDigit() }
+            ?.takeIf { it.length >= 3 } ?: return false
+        return !"${listing.title} ${listing.description ?: ""}".lowercase()
+            .filter { it.isLetterOrDigit() }
+            .contains(token)
+    }
+
     private fun sortListings(raw: List<Listing>): List<Listing> = withDistances(raw).let { list ->
+        // Whatever the order asked for, what the market only guessed at comes after what was
+        // actually asked for. Otherwise cheapest-first is an order over the guesses.
+        val asked = compareBy<Listing> { offQuery(it) }
         when (_sortMode.value) {
         SortMode.NEAREST -> list.sortedWith(
-            compareBy<Listing> { it.distanceKm ?: Double.MAX_VALUE }.thenBy { priceOf(it) })
-        SortMode.PRICE_ASC -> list.sortedBy { priceOf(it) }
-        SortMode.PRICE_DESC -> list.sortedByDescending { priceOf(it) }
+            asked.thenBy { it.distanceKm ?: Double.MAX_VALUE }.thenBy { priceOf(it) })
+        SortMode.PRICE_ASC -> list.sortedWith(asked.thenBy { priceOf(it) })
+        SortMode.PRICE_DESC -> list.sortedWith(asked.thenByDescending { priceOf(it) })
         // Newest means when the ad was posted, not when this app happened to fetch it — which is
         // roughly now for everything and made this sort do nothing. A market that publishes no
         // date cannot be ordered, so those keep their order and go last.
         SortMode.NEWEST -> list.sortedWith(
-            compareByDescending<Listing> { it.listingDate ?: it.soldDate }
+            asked.thenByDescending<Listing> { it.listingDate ?: it.soldDate }
                 .thenByDescending { it.listingDate != null || it.soldDate != null })
         SortMode.BEST_MATCH -> list.sortedWith(
-            compareByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
+            asked.thenByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
                 .thenBy { priceOf(it) })
         }
     }

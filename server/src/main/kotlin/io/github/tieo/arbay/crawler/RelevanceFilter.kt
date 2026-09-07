@@ -385,14 +385,29 @@ object RelevanceFilter {
      * almost none containing any query token. Happens when a site silently ignores an
      * unsupported search parameter and serves its default feed (e.g. AutoScout24 `?query=`).
      * Returns a human-readable report, or null when the results look genuine.
-     * Single-token queries are exempt: platform-side search may match beyond the title
-     * (a ThinkPad X1 is a "laptop" without the word in its title).
+     *
+     * A one-word query is judged too, on whether the word itself appears anywhere in the listing
+     * rather than on [score]: a market that returns nothing containing the word did not search for
+     * it. eBay answered "grigri" with grey folders and belt buckles, having matched the French
+     * "gris"; reBuy answered it with "Grieche sucht Griechin". The one-in-five floor is what keeps
+     * a genuine answer safe — a market where a ThinkPad X1 comes back for "laptop" still has plenty
+     * of listings that do say laptop, and stays.
      */
     fun irrelevanceReport(listings: List<Listing>, query: SearchQuery): String? {
         val parsed = parseQuery(query)
         val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
-        if (tokenCount < 2 || listings.size < 5) return null
-        val matching = listings.count { score(it, parsed) > 0.0 }
+        if (tokenCount < 1 || listings.size < 5) return null
+        val matching = if (tokenCount == 1) {
+            val token = (parsed.positiveTokens.firstOrNull() ?: parsed.orGroups.firstOrNull()?.firstOrNull())
+                ?.lowercase()?.replace(NON_ALNUM, "") ?: return null
+            if (token.length < 3) return null
+            listings.count { listing ->
+                "${listing.title} ${listing.description ?: ""}".lowercase()
+                    .replace(NON_ALNUM, "").contains(token)
+            }
+        } else {
+            listings.count { score(it, parsed) > 0.0 }
+        }
         if (matching.toDouble() / listings.size >= 0.2) return null
         val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
         return "${listings.size} results, only $matching contain query tokens — search likely ignored (sample: $sample)"

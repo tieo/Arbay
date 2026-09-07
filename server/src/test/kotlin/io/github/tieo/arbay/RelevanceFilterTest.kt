@@ -176,9 +176,26 @@ class RelevanceFilterTest {
     }
 
     @Test
-    fun `irrelevanceReport exempts single-token queries`() {
+    fun `a one-word query is judged too, when the word is nowhere in the answer`() {
+        // Ten cars back from a search for "Laptop" is a market that searched for something else.
         val report = RelevanceFilter.irrelevanceReport(garbageListings, SearchQuery(text = "Laptop", category = MarketGroup.GENERAL))
-        assertNull(report, "Single-token queries may match beyond the title and are exempt")
+        assertNotNull(report, "A market answering 'Laptop' with cars has not answered")
+    }
+
+    @Test
+    fun `a one-word query survives an answer that mostly names the thing`() {
+        // The case the blanket exemption was protecting: a laptop listing need not say "laptop",
+        // and as long as enough of them do, the market plainly searched for it.
+        val laptops = listOf(
+            listing("Lenovo ThinkPad X1 Carbon i7"),
+            listing("Dell XPS 13 9310"),
+            listing("Laptop HP EliteBook 840 G8"),
+            listing("Laptop Acer Aspire 5"),
+            listing("MacBook Air M2"),
+            listing("Gaming Laptop Lenovo Legion 5"),
+        )
+        val report = RelevanceFilter.irrelevanceReport(laptops, SearchQuery(text = "Laptop", category = MarketGroup.GENERAL))
+        assertNull(report, "Half of them say laptop; that market answered")
     }
 
     @Test

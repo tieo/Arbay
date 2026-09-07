@@ -574,7 +574,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 } else {
                                     CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
                                 }
-                                val relevantResults = RelevanceFilter.filter(rawResults, pq)
+                                // A market whose answer is about something else is dropped whole,
+                                // rather than filtered listing by listing: the pages it streamed
+                                // while it was still being judged are replaced by this set.
+                                val answered = if (irrelevance == null) rawResults else emptyList()
+                                val relevantResults = RelevanceFilter.filter(answered, pq)
                                 val classified = relevantResults.map { SoldDetector.classify(it) }
                                 // Cache the raw relevance-filtered crawl; car post-filtering (card
                                 // filter → detail-verify → final filter) runs after, so a later
