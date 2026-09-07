@@ -82,14 +82,14 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             )
 
             val html = try {
-                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article.aditem")
+                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article[data-adid]")
             } catch (e: CrawlerBlockedException) {
                 if (page == query.startPage) throw e
                 break
             }
 
             val doc = Jsoup.parse(html)
-            val rawItemCount = doc.select("article.aditem").size
+            val rawItemCount = doc.select("article[data-adid]").size
             if (rawItemCount == 0) break
 
             val pageResults = parseSearchResults(html, freeOnly = true)
@@ -179,14 +179,14 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             }
 
             val html = try {
-                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article.aditem")
+                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article[data-adid]")
             } catch (e: CrawlerBlockedException) {
                 if (page == query.startPage) throw e
                 break
             }
 
             val doc = Jsoup.parse(html)
-            val rawItemCount = doc.select("article.aditem").size
+            val rawItemCount = doc.select("article[data-adid]").size
             if (rawItemCount == 0) break
 
             if (page == query.startPage) emitSuggestedTerms(parseSuggestedTerms(doc))
@@ -209,6 +209,13 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             .filter { it.isNotBlank() }
             .distinct()
 
+    // The rewritten cards carry no class that names what a line is, so these say what each one
+    // looks like: a price ("46 €", "45 € VB", "Zu verschenken", "VB"), a German postcode and place,
+    // and the date form Kleinanzeigen prints on a card.
+    private val PRICE_LINE = Regex("""^\s*(\d[\d.]*(?:,\d+)?\s*€(\s*VB)?|VB|Zu verschenken|Verschenken)\s*$""", RegexOption.IGNORE_CASE)
+    private val POSTCODE_PLACE = Regex("""^\d{4,5}\s+\p{L}[\p{L} .\-/()]*$""")
+    private val DATE_LINE = Regex("""^(Heute|Gestern|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)(,\s*\d{1,2}:\d{2})?$|^\d{1,2}\.\d{1,2}\.\d{4}$""")
+
     internal fun parseSearchResults(html: String, freeOnly: Boolean = false): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
@@ -218,13 +225,24 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
         // vehicle enricher the whole spec text, at no extra request.
         val fullDescriptions = parseJsonLdDescriptions(doc)
 
-        val items = doc.select("article.aditem")
+        // Kleinanzeigen rebuilt its result cards: the class names the old selectors named
+        // ("aditem", "aditem-main--middle--price-shipping--price") are gone, replaced by utility
+        // classes that say nothing about what they hold. What survived the rewrite is the ad's own
+        // identity — every card is still an <article> carrying data-adid — so that is what is
+        // selected, and each field below falls back from the old class to the shape of the thing.
+        // The failure this fixes was silent: every Kleinanzeigen search answered "0 results".
+        val items = doc.select("article[data-adid]")
 
         return items.mapNotNull { item ->
             val adId = item.attr("data-adid").takeIf { it.isNotBlank() } ?: return@mapNotNull null
 
             val titleEl = item.selectFirst("h2.text-module-begin a.ellipsis")
                 ?: item.selectFirst("a.ellipsis")
+                // The card links to the ad twice: once around the photo, once around the title.
+                // The photo's link is not empty either — it holds the little "how many pictures"
+                // badge — so the one without an image in it is the title.
+                ?: item.select("a[href*=/s-anzeige/]")
+                    .firstOrNull { it.selectFirst("img") == null && it.text().isNotBlank() }
                 ?: return@mapNotNull null
             val title = titleEl.text().trim()
             if (title.isBlank()) return@mapNotNull null
@@ -241,6 +259,9 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             }
 
             val priceText = item.selectFirst("p.aditem-main--middle--price-shipping--price")?.text()
+                // No class names to lean on: the price is the one line that reads like a price.
+                ?: item.select("p, span").map { it.text().trim() }
+                    .firstOrNull { PRICE_LINE.matches(it) }
             if (priceText == null && !freeOnly) return@mapNotNull null
             val negotiable = priceText?.contains("VB", ignoreCase = true) ?: false
             val isFreeItem = priceText.isNullOrBlank() ||
@@ -252,21 +273,29 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             if (freeOnly && !isFreeItem) return@mapNotNull null
             val price = if (isFreeItem) Money.cents(0) else Money.parse(priceText ?: "") ?: return@mapNotNull null
 
+            val spanTexts = item.select("span").map { it.text().trim() }
             val locationText = item.selectFirst("div.aditem-main--top--left")?.text()?.trim()
+                // "24887 Silberstedt" — a postcode and a place.
+                ?: spanTexts.firstOrNull { POSTCODE_PLACE.matches(it) }
             val location = locationText?.let { Location.parse(it) }
 
             // Posting date: cards show "Heute, HH:MM" / "Gestern, HH:MM" / "TT.MM.YYYY" top-right.
             val listingDate = ListingDateParser.parse(
-                item.selectFirst("div.aditem-main--top--right")?.text(),
+                item.selectFirst("div.aditem-main--top--right")?.text()
+                    ?: spanTexts.firstOrNull { DATE_LINE.matches(it) },
             )
 
-            val imageUrl = item.selectFirst("div.aditem-image img")?.let {
-                val src = it.attr("src")
-                val srcset = it.attr("srcset")
-                srcset.takeIf { s -> s.isNotBlank() } ?: src.takeIf { s -> s.startsWith("http") }
-            }
+            val imageUrl = (item.selectFirst("div.aditem-image img") ?: item.selectFirst("img[src*=kleinanzeigen]"))
+                ?.let {
+                    val src = it.attr("src")
+                    val srcset = it.attr("srcset")
+                    srcset.takeIf { s -> s.isNotBlank() } ?: src.takeIf { s -> s.startsWith("http") }
+                }
 
             val snippet = item.selectFirst("p.aditem-main--middle--description")?.text()
+                // The other paragraph on the card, the one that is not the price.
+                ?: item.select("p").map { it.text().trim() }
+                    .firstOrNull { it.length > 20 && !PRICE_LINE.matches(it) }
             val descriptionSnippet = fullDescriptions[title] ?: snippet
 
             // Car cards carry attribute chips ("228.076 km", "EZ 11/2012") in .simpletag spans.
@@ -279,6 +308,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
 
             val shippingText = item.selectFirst("p.aditem-main--middle--price-shipping--shipping")?.text()
                 ?: item.selectFirst("[class*=shipping]")?.text()
+                ?: spanTexts.firstOrNull { it.contains("Versand", ignoreCase = true) }
             val shipping = when {
                 shippingText == null -> null
                 shippingText.contains("Versand", true) -> {
