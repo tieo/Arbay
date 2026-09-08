@@ -1352,6 +1352,66 @@
     },
     {
       "tag": "STATE",
+      "uid": "STATE-RESULTS-WITHABACKLOG",
+      "title": "With a backlog",
+      "statement": "The watch found listings since this search was last opened, so the results carry a New chip that narrows to them.",
+      "relations": [
+        {
+          "to": "VIEW-RESULTS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "results-with-a-backlog-phone-light.png",
+          "label": "phone light"
+        },
+        {
+          "file": "results-with-a-backlog-phone-dark.png",
+          "label": "phone dark"
+        },
+        {
+          "file": "results-with-a-backlog-wide-light.png",
+          "label": "wide light"
+        },
+        {
+          "file": "results-with-a-backlog-wide-dark.png",
+          "label": "wide dark"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
+      "uid": "STATE-RESULTS-WHATTHEWATCHFOUND",
+      "title": "What the watch found",
+      "statement": "Opened from the bookmark's own count, showing what the watch stored when it found it: no crawl runs, and a listing the market has since taken down is still here.",
+      "relations": [
+        {
+          "to": "VIEW-RESULTS",
+          "role": "State of"
+        }
+      ],
+      "renders": [
+        {
+          "file": "results-what-the-watch-found-phone-light.png",
+          "label": "phone light"
+        },
+        {
+          "file": "results-what-the-watch-found-phone-dark.png",
+          "label": "phone dark"
+        },
+        {
+          "file": "results-what-the-watch-found-wide-light.png",
+          "label": "wide light"
+        },
+        {
+          "file": "results-what-the-watch-found-wide-dark.png",
+          "label": "wide dark"
+        }
+      ]
+    },
+    {
+      "tag": "STATE",
       "uid": "STATE-MARKETS-LOADING",
       "title": "Loading",
       "statement": "Markets have been asked and some have not replied.",
