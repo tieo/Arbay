@@ -43,7 +43,14 @@ done
 # picture of a screen the app no longer has. Left behind, those keep being read as current: three
 # findings in one review came from renders of states that had been deleted from the gallery. A run
 # for a single view says nothing about the others, so it prunes nothing.
-if [ $# -eq 0 ]; then
+#
+# The count guards the case the exit status does not: a renderer that succeeds having drawn nothing
+# would otherwise have every picture in the book compared against an empty directory and deleted.
+# A sweep is only allowed to remove what a run that actually drew says is absent.
+if [ $# -eq 0 ] && [ "$count" -eq 0 ]; then
+  echo "drew nothing, so nothing is swept — the book on disk is still the good one" >&2
+fi
+if [ $# -eq 0 ] && [ "$count" -gt 0 ]; then
   removed=0
   for stale in "$model"/*.png "$model"/card/*.png; do
     [ -e "$stale" ] || continue
