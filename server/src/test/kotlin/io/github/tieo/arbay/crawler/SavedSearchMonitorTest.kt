@@ -5,6 +5,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
+import io.github.tieo.arbay.model.SaleType
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -113,5 +114,48 @@ class SavedSearchMonitorTest {
         assertEquals("up to €550", NotificationSubfilter(id = "a", name = ".", maxPriceEur = 550).displayName)
         assertEquals("up to €550", NotificationSubfilter(id = "a", name = "  ", maxPriceEur = 550).displayName)
         assertEquals("under 600", NotificationSubfilter(id = "a", name = "under 600", maxPriceEur = 550).displayName)
+    }
+
+    // === auctions interrupt only when they are nearly over ===
+
+    private val now = Instant.parse("2026-09-10T12:00:00Z")
+
+    private fun auction(endsInMinutes: Long?) = listing("Crucial 32GB CT32G4SFD832A", 1050).copy(
+        saleType = SaleType.AUCTION,
+        auctionEndsAt = endsInMinutes?.let { now.plus(kotlin.time.Duration.parse("${it}m")) },
+    )
+
+    @Test
+    fun `an auction ending before the next look is worth interrupting for`() {
+        // A search that looks every three hours: an auction ending in two is the last chance to see
+        // it before the bidding is over.
+        assertTrue(SavedSearchMonitor.worthInterrupting(auction(120), intervalMinutes = 180, now = now))
+    }
+
+    @Test
+    fun `an auction with hours to run waits on the bookmark`() {
+        // The price is a bid that has not finished rising, so there is nothing to say yet.
+        assertFalse(SavedSearchMonitor.worthInterrupting(auction(600), intervalMinutes = 180, now = now))
+    }
+
+    @Test
+    fun `an auction that never says when it ends cannot be timed`() {
+        assertFalse(SavedSearchMonitor.worthInterrupting(auction(null), intervalMinutes = 180, now = now))
+    }
+
+    @Test
+    fun `a fixed price listing is unaffected`() {
+        val fixed = listing("Crucial 32GB CT32G4SFD832A", 14000).copy(saleType = SaleType.FIXED_PRICE)
+        assertTrue(SavedSearchMonitor.worthInterrupting(fixed, intervalMinutes = 180, now = now))
+        val unknown = listing("Crucial 32GB CT32G4SFD832A", 14000)
+        assertTrue(SavedSearchMonitor.worthInterrupting(unknown, intervalMinutes = 180, now = now))
+    }
+
+    @Test
+    fun `a search that looks more often is told later`() {
+        // Same auction, two searches: the half-hourly one has another look before it ends, the
+        // six-hourly one does not.
+        assertFalse(SavedSearchMonitor.worthInterrupting(auction(120), intervalMinutes = 30, now = now))
+        assertTrue(SavedSearchMonitor.worthInterrupting(auction(120), intervalMinutes = 360, now = now))
     }
 }

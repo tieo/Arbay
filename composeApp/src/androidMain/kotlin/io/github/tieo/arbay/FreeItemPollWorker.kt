@@ -1,6 +1,7 @@
 package io.github.tieo.arbay
 
 import android.content.Context
+import io.github.tieo.arbay.model.SaleType
 import androidx.work.*
 import io.github.tieo.arbay.api.ArbayClient
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +51,12 @@ class FreeItemPollWorker(
                     title = match.title,
                     body = listOfNotNull(
                         "${match.subfilterName} · ${match.searchName}",
-                        match.priceText,
+                        // An auction says what its price really is and how long is left, since it
+                        // is only sent at all when there is not much.
+                        match.priceText?.let { p ->
+                            if (match.saleType == SaleType.AUCTION) "bid $p" else p
+                        },
+                        match.auctionEndsAt?.let { endsIn(it) },
                         match.locationText,
                     ).joinToString(", "),
                     url = match.url,
@@ -93,5 +99,15 @@ class FreeItemPollWorker(
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
+    }
+}
+
+/** "ends in 40 min" / "ends in 3 h", or nothing once it is over. */
+private fun endsIn(endsAt: kotlinx.datetime.Instant): String? {
+    val minutes = (endsAt - kotlinx.datetime.Clock.System.now()).inWholeMinutes
+    return when {
+        minutes < 0 -> null
+        minutes < 60 -> "ends in $minutes min"
+        else -> "ends in ${minutes / 60} h"
     }
 }

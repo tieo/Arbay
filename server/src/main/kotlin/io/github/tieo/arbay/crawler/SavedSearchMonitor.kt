@@ -2,6 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.landedPrice
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SavedSearchStatus
@@ -14,6 +15,9 @@ import io.github.tieo.arbay.repo.ImportSettingsStore
 import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.writeTextAtomically
+import kotlinx.datetime.Clock
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 import kotlinx.serialization.Serializable
 import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
@@ -227,7 +231,14 @@ class SavedSearchMonitor(
         // different reason the person cared enough to ask for it.
         val subfilterMatches = product.notificationSubfilters
             .filter { it.enabled }
-            .flatMap { sf -> freshListings.filter { matchesSubfilter(it, sf) }.map { sf to it } }
+            .flatMap { sf ->
+                freshListings
+                    .filter { matchesSubfilter(it, sf) && worthInterrupting(
+                        it,
+                        product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN),
+                    ) }
+                    .map { sf to it }
+            }
         if (subfilterMatches.isNotEmpty()) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
@@ -242,6 +253,8 @@ class SavedSearchMonitor(
                         priceText = eurCents(l.landedPrice(ImportSettingsStore.current))
                             ?.let { "€${it / 100}" },
                         locationText = l.location?.let { it.city ?: it.country },
+                        saleType = l.saleType,
+                        auctionEndsAt = l.auctionEndsAt,
                     )
                 }
             }
@@ -267,7 +280,32 @@ class SavedSearchMonitor(
         saveSeen()
     }
 
+
+
     companion object {
+        /**
+         * Whether this listing is worth a notification now, as opposed to being worth seeing.
+         *
+         * An auction's price is the highest bid so far, so it says nothing about what the thing
+         * will cost — a Crucial module alerted at €10.50 was €21.50 the next day and still rising,
+         * and the alert had been about a number that was never an offer. Being told early is no use
+         * either: what makes a bid worth knowing is that there is no time left to raise it.
+         *
+         * The window is the search's own interval rather than a figure picked here. A search that
+         * looks every three hours hears about an auction ending within three hours, because that is
+         * the last time it will see it before the bidding is over. An auction whose end is unknown
+         * cannot be timed, so it waits on the bookmark with everything else.
+         */
+        internal fun worthInterrupting(
+            listing: Listing,
+            intervalMinutes: Int,
+            now: kotlinx.datetime.Instant = Clock.System.now(),
+        ): Boolean {
+            if (listing.saleType != SaleType.AUCTION) return true
+            val endsAt = listing.auctionEndsAt ?: return false
+            return endsAt <= now.plus(intervalMinutes.toDuration(DurationUnit.MINUTES))
+        }
+
         /** Whether a listing satisfies one search's own notification subfilter — narrower than the
          *  search's own criteria, so a match here is always also a match on the search itself.
          *  A plain function of its inputs (no crawl state), so a subfilter's rules can be verified

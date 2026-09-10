@@ -219,6 +219,40 @@ class EbayDeCrawler(
         return "https://www.$domain/sch/i.html?${params.joinToString("&")}"
     }
 
+
+    // eBay says on the card whether a price is a bid and how long is left, in whatever wording and
+    // class names the current layout uses. Read from the card's own text rather than a class, since
+    // the class names have changed under this parser before and the words have not.
+    private val BID_MARKER = Regex("""\b(\d+)\s*(gebote?|bids?)\b""", RegexOption.IGNORE_CASE)
+    private val TIME_LEFT = Regex(
+        """(?:noch|left|restzeit)?\s*(?:(\d+)\s*(?:t|d|tage?|days?)\b)?\s*""" +
+            """(?:(\d+)\s*(?:std|h|hours?|hrs?)\b)?\s*(?:(\d+)\s*(?:min|m|mins?)\b)?""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** The card's own words about bidding: how many bids, and when it ends. */
+    internal fun parseAuction(item: org.jsoup.nodes.Element, now: kotlinx.datetime.Instant): Triple<SaleType?, kotlinx.datetime.Instant?, Int?> {
+        val texts = item.select("span, div").filter { it.children().isEmpty() }.map { it.text().trim() }
+        val bids = texts.firstNotNullOfOrNull { BID_MARKER.find(it) }?.groupValues?.get(1)?.toIntOrNull()
+        val timeText = texts.firstOrNull { t ->
+            (t.contains("Noch", true) || t.contains("left", true) || t.contains("Restzeit", true)) &&
+                Regex("""\d""").containsMatchIn(t)
+        }
+        val endsAt = timeText?.let { t ->
+            val m = TIME_LEFT.find(t) ?: return@let null
+            val d = m.groupValues[1].toLongOrNull() ?: 0L
+            val h = m.groupValues[2].toLongOrNull() ?: 0L
+            val min = m.groupValues[3].toLongOrNull() ?: 0L
+            val seconds = d * 86400 + h * 3600 + min * 60
+            if (seconds <= 0L) null else now.plus(kotlin.time.Duration.parse("${seconds}s"))
+        }
+        val type = when {
+            bids != null || endsAt != null -> SaleType.AUCTION
+            else -> SaleType.FIXED_PRICE
+        }
+        return Triple(type, endsAt, bids)
+    }
+
     private fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
@@ -284,6 +318,7 @@ class EbayDeCrawler(
                 .firstOrNull { SOLD_MARKER.containsMatchIn(it) }
             val soldDate = parseSoldDate(soldDateText)
             val isSold = soldDateText != null
+            val (saleType, auctionEndsAt, bidCount) = parseAuction(item, now)
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -298,6 +333,9 @@ class EbayDeCrawler(
                 shipping = shipping,
                 sold = isSold,
                 soldDate = soldDate,
+                saleType = saleType,
+                auctionEndsAt = auctionEndsAt,
+                bidCount = bidCount,
                 scrapedAt = now,
             )
         }
@@ -338,6 +376,7 @@ class EbayDeCrawler(
             val soldDateText = soldEl?.text()
                 ?: item.selectFirst(".s-item__endedDate")?.text()
             val soldDate = parseSoldDate(soldDateText)
+            val (saleType, auctionEndsAt, bidCount) = parseAuction(item, now)
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -352,6 +391,9 @@ class EbayDeCrawler(
                 shipping = shipping,
                 sold = sold,
                 soldDate = soldDate,
+                saleType = saleType,
+                auctionEndsAt = auctionEndsAt,
+                bidCount = bidCount,
                 scrapedAt = now,
             )
         }

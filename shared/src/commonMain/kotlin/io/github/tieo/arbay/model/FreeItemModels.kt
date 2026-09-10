@@ -123,6 +123,10 @@ data class SubfilterMatch(
     val url: String,
     val priceText: String? = null,
     val locationText: String? = null,
+    // An auction is only sent when it is nearly over, and the notification has to say so: the price
+    // is a bid, and what makes it worth reading now is how little time is left to act on it.
+    val saleType: SaleType? = null,
+    val auctionEndsAt: Instant? = null,
 )
 
 /** What a background poll found, for the device to raise notifications from. */

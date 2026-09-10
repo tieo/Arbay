@@ -14,6 +14,14 @@ data class Listing(
     val price: Money,
     val oldPrice: Money? = null,
     val negotiable: Boolean = false,
+    // How this is sold, when the market says. An auction's price is the bid so far, which is not
+    // what the thing costs: a Crucial module alerted at €10.50 was €21.50 the next day and still
+    // rising. Null where the market does not distinguish, or the listing predates this being read.
+    val saleType: SaleType? = null,
+    // When the bidding ends, for an auction that says. What makes a bid worth being told about is
+    // that it is nearly over — before that, the number means nothing yet.
+    val auctionEndsAt: Instant? = null,
+    val bidCount: Int? = null,
     val condition: Condition? = null,
     val imageUrls: List<String> = emptyList(),
     val location: Location? = null,
@@ -56,3 +64,13 @@ fun String.tidyTitle(): String =
         .replace('\uFFFC', ' ')
         .replace(Regex("\\s+"), " ")
         .trim()
+
+/** How a listing is sold, where the market says so. */
+@Serializable
+enum class SaleType {
+    /** A price the seller is asking, which is what it costs to buy it now. */
+    FIXED_PRICE,
+
+    /** A price that is only the highest bid so far, and rises until the auction ends. */
+    AUCTION,
+}
