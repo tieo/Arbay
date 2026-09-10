@@ -345,6 +345,25 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a drive that never writes its form factor is still that drive`() {
+        // Vinted, Ricardo and Amazon, live: half the M.2 drives on them never write "M.2", and
+        // asking for the words they leave out lost the very listings searched for. The size is a
+        // different matter, and every one of these carries it.
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Lexar Nm790 Ssd 2Tb, Marke: Lexar, Zustand: Neu"),
+            listing("WD Blue SN5000 powered by SANDISK 2TB NVMe SSD"),
+            listing("Samsung 980 Pro 2TB SSD"),
+            listing("WD_BLACK SN850X NVMe SSD 2 TB, bis zu 7.300 MB/s Lesen"),
+            listing("SK Hynix PC801 1TB NVMe PCIe 4.0 M.2 SSD"),
+            listing("Kioxia 512GB Festplatte M.2 SSD 2280 NVMe PCIe"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Lexar Nm790") }, "a 2TB drive written without the slot")
+        assertTrue(kept.any { it.startsWith("Samsung 980 Pro") }, "so is this one")
+        assertEquals(4, kept.size, "every 2TB one of them")
+        assertTrue(kept.none { it.contains("1TB") || it.contains("512GB") }, "a different size is a different drive")
+    }
+
+    @Test
     fun `a size asked for by number is not negotiable`() {
         // reBuy, live, for the same search: it carries "SSD" in one listing of its own shelf, which
         // used to be enough to let the whole shelf through unjudged.

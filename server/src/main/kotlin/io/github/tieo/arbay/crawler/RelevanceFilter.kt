@@ -449,16 +449,23 @@ object RelevanceFilter {
         fun shareCarrying(token: String): Double {
             if (listings.isEmpty()) return 0.0
             val t = token.lowercase().replace(NON_ALNUM, "")
-            if (t.length < 3) return 1.0
+            if (t.isEmpty()) return 1.0
             return listings.count { listing ->
-                "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "").contains(t)
+                val text = "${listing.title} ${listing.description ?: ""}"
+                // A short word is looked for as a word of its own, the way it is matched: "m2"
+                // inside "nm790" is the model number of a different drive, not the slot.
+                if (t.length <= 2) {
+                    normalize(text.lowercase()).split(" ").any { it.replace(NON_ALNUM, "") == t }
+                } else {
+                    text.lowercase().replace(NON_ALNUM, "").contains(t)
+                }
             }.toDouble() / listings.size
         }
         // Aliases are alternate phrasings of the whole search, scored as competing wholes, so only a
         // plain token list is narrowed this way.
         val asked = if (parsed.orGroups.isNotEmpty()) parsed else {
             val required = parsed.positiveTokens.filter { token ->
-                token.any { it.isDigit() } || shareCarrying(token) >= WORDS_ARE_WRITTEN
+                isASize(token) || shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             parsed.copy(positiveTokens = required)
         }
@@ -518,6 +525,24 @@ object RelevanceFilter {
 
     /** The leading part compared, long enough to name the thing the compound is about. */
     private const val STEM_LENGTH = 7
+
+    /**
+     * Whether the word is a size: digits glued to a unit, as a listing writes one.
+     *
+     * A size is the one part of a search that cannot be traded away — 2TB is not 1TB, and a market
+     * whose answer is full of other sizes is answering about other things. Every other word, model
+     * codes included, is required only where the market's own answer writes it: half the drives on
+     * Vinted and Ricardo never write "M.2" and are M.2 drives, and asking for the words they leave
+     * out lost the very listings searched for.
+     */
+    private fun isASize(token: String): Boolean {
+        val t = token.lowercase().replace(NON_ALNUM, "")
+        return unitSuffixes.any { unit ->
+            t.endsWith(unit) && t.dropLast(unit.length).let { pre ->
+                pre.isNotEmpty() && pre.all { it.isDigit() || it == 'x' }
+            }
+        }
+    }
 
     /** The share of a market's answer that has to carry a word of the search before a listing
      *  without one is treated as the exception rather than the rule. Half: measured against the two
