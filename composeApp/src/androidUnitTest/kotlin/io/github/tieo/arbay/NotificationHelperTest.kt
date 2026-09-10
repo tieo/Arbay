@@ -45,6 +45,26 @@ class NotificationHelperTest {
         )
 
     @Test
+    fun `an auction reminder says how long is left and what the bid is`() {
+        // What the poll hands the phone for an auction someone asked to be told about, rendered
+        // the way the worker renders it: the time left leads, because that is why it arrives now.
+        val endsAt = kotlinx.datetime.Clock.System.now().plus(kotlin.time.Duration.parse("40m"))
+        val minutes = (endsAt - kotlinx.datetime.Clock.System.now()).inWholeMinutes
+        NotificationHelper.showSubfilterMatch(
+            context = context,
+            title = "Bona Belt Parkettschleifmaschine",
+            body = listOf("ends in $minutes min", "bid 1126,70 EUR", "ricardo.ch").joinToString(", "),
+            url = "https://www.ricardo.ch/de/a/1",
+            id = 99,
+        )
+        val child = manager.activeNotifications.map { it.notification }.first { !it.isGroupSummary() }
+        val text = child.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertTrue(text.startsWith("ends in "), "the time left is the reason it is being shown: $text")
+        assertTrue(text.contains("bid "), "the price is a bid, not an asking price: $text")
+        assertNotNull(child.contentIntent, "it has to open the auction")
+    }
+
+    @Test
     fun `a match is grouped and leaves the noise to the summary`() {
         postOne()
         val posted = manager.activeNotifications.map { it.notification }
