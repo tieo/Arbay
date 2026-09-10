@@ -303,8 +303,11 @@ object RelevanceFilter {
     // sandpaper, sanding belts, dust bags and filters far cheaper than any machine, which then poses
     // as the "best price". Dropped only when the query itself does not ask for the consumable.
     private val consumableNoun = Regex(
-        """\b(schleifpapier|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
-            """schleifmittel|staubbeutel|staubfangsack|staubsack|filterbeutel|filtersack|""" +
+        // German plurals, because the word boundary after the singular is what let an eight euro
+        // pack of "Schleifpapiere" through as a floor sander: an ad names what it is selling in
+        // whatever number it has of them.
+        """\b(schleifpapiere?|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
+            """schleifmittel|staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
             """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
             // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
             // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.

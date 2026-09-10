@@ -258,4 +258,23 @@ class RelevanceFilterTest {
         // A search for the consumable keeps it.
         assertEquals(1, search("schleifpapier parkett", listOf(listings[0])).size)
     }
+
+    @Test
+    fun `sanding paper is a consumable in the plural too`() {
+        // Straight off the phone: a watched search for parkettschleifmaschine notified about an
+        // eight euro pack of sandpaper, because the rule said "schleifpapier" with a word boundary
+        // and the ad said "Schleifpapiere".
+        val listings = listOf(
+            listing("Schleifpapiere Parkett für Walzenschleifmaschine NEU", price = 800),
+            listing("Schleifpapier für Parkettschleifmaschine", price = 900),
+            listing("Parkett Schleifmaschine Walzenschleifmaschine", price = 40000),
+            listing("Parkett-, Bodenschleifmaschine von Scheer", price = 9000),
+        )
+        val kept = search("parkettschleifmaschine", listings).map { it.title }
+        assertEquals(
+            listOf("Parkett Schleifmaschine Walzenschleifmaschine", "Parkett-, Bodenschleifmaschine von Scheer"),
+            kept,
+            "the machines stay and the paper goes",
+        )
+    }
 }

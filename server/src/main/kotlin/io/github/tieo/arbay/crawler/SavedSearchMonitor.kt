@@ -251,6 +251,19 @@ class SavedSearchMonitor(
             "saved-search {}: {} new, {} subfilter matches",
             product.name, fresh.size, subfilterMatches.size,
         )
+        // Which listing, not just how many. A count answers "did it fire"; deciding whether a
+        // notification was worth having needs the thing it fired about, and asking afterwards what
+        // an alert had been for could only be guessed at from what happened to still be stored.
+        subfilterMatches.forEach { (sf, l) ->
+            log.info(
+                "  alert: {} · {} — {} · {} · {}",
+                sf.displayName,
+                product.name,
+                eurCents(l.landedPrice(ImportSettingsStore.current))?.let { "€${it / 100}" } ?: "no price",
+                l.title.take(70),
+                l.url,
+            )
+        }
         saveSeen()
     }
 
