@@ -26,8 +26,12 @@ import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.debug.DebugSlice
 import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.ImportRules
+import io.github.tieo.arbay.SearchCountries
 import io.github.tieo.arbay.defaultServerUrl
+import io.github.tieo.arbay.model.MarketSets
+import io.github.tieo.arbay.model.MarketSettings
 import io.github.tieo.arbay.model.NotificationSettings
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.schedulePolling
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import kotlinx.coroutines.launch
@@ -238,6 +242,59 @@ fun SettingsSheet(
                     onClick = {
                         scope.launch {
                             try { client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500)) } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("Save") }
+            }
+
+            SettingSection(
+                icon = Icons.Outlined.TravelExplore,
+                title = "Countries a search covers",
+                subtitle = "Every search asks the markets in these countries, unless the search " +
+                    "itself names markets of its own. A country with no market the app can crawl " +
+                    "contributes nothing, so what each one adds is named beside it.",
+            ) {
+                var countries by remember { mutableStateOf(SearchCountries.current.countries) }
+                LaunchedEffect(Unit) {
+                    try {
+                        countries = client.getMarketSettings().countries
+                        SearchCountries.current = MarketSettings(countries)
+                    } catch (_: Exception) {}
+                }
+                // Every country any market in the app sells in, so the choice is the real one
+                // rather than a list someone typed.
+                val available = remember {
+                    PlatformId.entries.map { MarketSets.countryOf(it) }.distinct().sorted()
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    available.forEach { country ->
+                        val on = country in countries
+                        val markets = PlatformId.entries.count { MarketSets.countryOf(it) == country }
+                        FilterChip(
+                            selected = on,
+                            onClick = {
+                                countries = if (on) countries - country else countries + country
+                            },
+                            label = {
+                                Text("$country · $markets", style = MaterialTheme.typography.labelSmall)
+                            },
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                SearchCountries.current = client.updateMarketSettings(MarketSettings(countries))
+                            } catch (_: Exception) {}
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

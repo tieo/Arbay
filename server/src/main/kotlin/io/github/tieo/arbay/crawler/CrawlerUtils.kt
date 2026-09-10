@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SuggestedTerm
 import io.github.tieo.arbay.model.SearchQuery
 import io.ktor.client.*
 import io.ktor.client.request.*
@@ -55,6 +56,31 @@ class SuggestedTermsEmitter(val emit: (terms: List<String>) -> Unit) : Coroutine
 internal suspend fun emitSuggestedTerms(terms: List<String>) {
     if (terms.isEmpty()) return
     coroutineContext[SuggestedTermsEmitter]?.emit(terms)
+}
+
+/** CoroutineContext element collecting the terms a market was actually searched with: the one
+ *  handed to it, plus every other name for the thing that the search was allowed to follow up on.
+ *  Reported to the app, which shows them per market — a term nobody can see is a term nobody can
+ *  hold the answer to. */
+class TermsUsedEmitter(val emit: (term: String) -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<TermsUsedEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+internal suspend fun emitTermUsed(term: String) {
+    coroutineContext[TermsUsedEmitter]?.emit(term)
+}
+
+/** CoroutineContext element collecting the app's verdict on each other word a market printed:
+ *  what it is, why, and — once a word has actually been searched — what it added. A word emitted
+ *  twice is the same word with its outcome filled in, so a collector keeps the last of each. */
+class TermVerdictEmitter(val emit: (term: SuggestedTerm) -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<TermVerdictEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+internal suspend fun emitTermVerdict(term: SuggestedTerm) {
+    coroutineContext[TermVerdictEmitter]?.emit(term)
 }
 
 /** CoroutineContext element notified when a stealth fetch exposes its live browser for a human to

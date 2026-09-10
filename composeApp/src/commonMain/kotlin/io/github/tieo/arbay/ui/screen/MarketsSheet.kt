@@ -18,6 +18,8 @@ import io.github.tieo.arbay.model.MarketCapability
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
+import io.github.tieo.arbay.model.SearchReach
+import io.github.tieo.arbay.model.TermSuggestions
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
@@ -48,6 +50,12 @@ fun MarketsSheet(
     onShowMarkets: (Set<PlatformId>) -> Unit = {},
     shownCountries: Set<String> = emptySet(),
     onShowCountries: (Set<String>) -> Unit = {},
+    // What this search asks a market that searches in another language, and the terms offered for
+    // it. Editing either re-runs the search, since it changes what the markets are asked.
+    reach: SearchReach = SearchReach(),
+    onReach: (SearchReach) -> Unit = {},
+    suggestions: TermSuggestions? = null,
+    onSuggest: (List<String>) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val answered = statuses.count { it.status == PlatformSearchStatus.DONE }
@@ -89,7 +97,98 @@ fun MarketsSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            item("every-market") {
+            // What each market is asked, before anything about which market answered: a market
+            // searched in words other than the typed ones is a different question, and the answer
+            // cannot be read without it.
+            item("in-their-language") {
+                val languages = remember(statuses) {
+                    statuses.mapNotNull { runCatching { PlatformId.valueOf(it.platformId) }.getOrNull() }
+                        .map { it.searchLanguage }
+                        .filter { it != "de" }
+                        .distinct()
+                        .sorted()
+                }
+                if (languages.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "Ask each market in its own language",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        "Off: every market is asked exactly what you typed.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Switch(
+                                    checked = reach.otherLanguages,
+                                    onCheckedChange = { on ->
+                                        onReach(reach.copy(otherLanguages = on))
+                                        if (on && reach.termByLanguage.isEmpty()) onSuggest(languages)
+                                    },
+                                )
+                            }
+                            if (reach.otherLanguages) {
+                                Spacer(Modifier.height(6.dp))
+                                languages.forEach { language ->
+                                    val term = reach.termByLanguage[language]
+                                    val offered = suggestions?.suggestions?.get(language)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            language.uppercase(),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.width(30.dp),
+                                        )
+                                        Text(
+                                            term ?: offered ?: "asked in your own words",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (term != null) MaterialTheme.colorScheme.onSurface
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        when {
+                                            term != null -> TextButton(onClick = {
+                                                onReach(reach.copy(
+                                                    termByLanguage = reach.termByLanguage - language,
+                                                ))
+                                            }) { Text("Remove", style = MaterialTheme.typography.labelSmall) }
+                                            offered != null -> TextButton(onClick = {
+                                                onReach(reach.copy(
+                                                    termByLanguage = reach.termByLanguage + (language to offered),
+                                                ))
+                                            }) { Text("Use", style = MaterialTheme.typography.labelSmall) }
+                                            else -> TextButton(onClick = { onSuggest(languages) }) {
+                                                Text("Suggest", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
+                                }
+                                if (suggestions != null && suggestions.unavailable.isNotEmpty()) {
+                                    Text(
+                                        "No suggestion for " +
+                                            suggestions.unavailable.joinToString(", ") { it.uppercase() } +
+                                            " — those markets keep your own words until you type a term.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+                        item("every-market") {
                 PickRow(
                     label = "Every market",
                     trailing = "${offers.values.sum()}",

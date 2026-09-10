@@ -164,6 +164,11 @@ fun ListingsSheet(
     val notSearched by listingViewModel.notSearched.collectAsState()
     val marketBasis by listingViewModel.marketBasis.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
+    val droppedBySearch by listingViewModel.droppedBySearch.collectAsState()
+    val otherWords by listingViewModel.otherWords.collectAsState()
+    val searchReach by listingViewModel.searchReach.collectAsState()
+    val termSuggestions by listingViewModel.termSuggestions.collectAsState()
+    val pickedWords by listingViewModel.pickedWords.collectAsState()
     val loading by listingViewModel.loading.collectAsState()
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
     LaunchedEffect(blockedTerms) { listingViewModel.setBlockedTerms(blockedTerms) }
@@ -242,6 +247,8 @@ fun ListingsSheet(
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
+    var showDropped by remember { mutableStateOf(false) }
+    var showOtherWords by remember { mutableStateOf(false) }
 
     DebugSlice("resultsScreen") {
         debugJson.encodeToString(
@@ -433,7 +440,12 @@ fun ListingsSheet(
     // live must not itself trigger a re-crawl: it only re-filters what was already fetched.
     LaunchedEffect(searchQuery, carFilters, aliases, storedListings) {
         if (storedListings != null) listingViewModel.showStored(searchQuery, storedListings)
-        else listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases)
+        else listingViewModel.search(
+            searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases,
+            // A saved search reruns with the reach it was saved with, so the words it was last
+            // asking the markets are the words it asks them again.
+            reach = savedFilters?.reach ?: SearchReach(),
+        )
     }
 
     AdaptiveSheet(onDismiss = onDismiss) {
@@ -765,6 +777,103 @@ fun ListingsSheet(
                     }
                 }
 
+                // The markets' own other words for the thing, as pills: tap one and it is searched
+                // too. Each costs a crawl per market, so none of them is taken without the tap, and
+                // a word that has been searched carries what it actually added.
+                if (otherWords.isNotEmpty()) {
+                    item("other-words") {
+                        val shown = remember(otherWords, pickedWords) {
+                            otherWords.filter { it.worthTrying || it.added != null ||
+                                pickedWords.any { p -> p.equals(it.term, ignoreCase = true) } }
+                                .take(4)
+                        }
+                        val rest = otherWords.size - shown.size
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 20.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            shown.forEach { word ->
+                                val on = pickedWords.any { it.equals(word.term, ignoreCase = true) }
+                                FilterChip(
+                                    selected = on,
+                                    onClick = { listingViewModel.toggleWord(word.term, platforms) },
+                                    leadingIcon = if (on) null else ({
+                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                                    }),
+                                    label = {
+                                        Text(
+                                            word.added?.let { n ->
+                                                if (n > 0) "${word.term} +$n" else word.term
+                                            } ?: word.term,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(28.dp),
+                                )
+                            }
+                            if (rest > 0) {
+                                AssistChip(
+                                    onClick = { showOtherWords = true },
+                                    label = {
+                                        Text("$rest more", style = MaterialTheme.typography.labelSmall)
+                                    },
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(28.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // What the search itself removed, which is not the reader's doing and so is not
+                // on the line above. It is still theirs to check: a rule that is wrong about a
+                // listing is only findable if the listings it took are reachable.
+                if (droppedBySearch.isNotEmpty()) {
+                    item("dropped-count") {
+                        val topReason = droppedBySearch.groupingBy { it.reason }.eachCount()
+                            .maxByOrNull { it.value }
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { showDropped = true }
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.FilterAltOff,
+                                null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                buildAnnotatedString {
+                                    append("Removed by the search: ")
+                                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                                        append("${droppedBySearch.size}")
+                                    }
+                                    topReason?.let { append(" · mostly ${it.key.label}") }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 notSearched?.let { why ->
                     item("not-searched") {
                         Surface(
@@ -785,7 +894,11 @@ fun ListingsSheet(
                                     )
                                 }
                                 TextButton(onClick = {
-                                    listingViewModel.search(searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases, force = true)
+                                    listingViewModel.search(
+                                        searchQuery, platforms, carFilters,
+                                        excludeKeywords = blockedTerms, aliases = aliases,
+                                        reach = savedFilters?.reach ?: SearchReach(), force = true,
+                                    )
                                 }) { Text("Try again") }
                             }
                         }
@@ -1067,6 +1180,24 @@ fun ListingsSheet(
             )
         }
 
+        if (showOtherWords) {
+            OtherWordsSheet(
+                words = otherWords,
+                picked = pickedWords,
+                searchQuery = searchQuery,
+                onToggle = { listingViewModel.toggleWord(it, platforms) },
+                onDismiss = { showOtherWords = false },
+            )
+        }
+
+        if (showDropped) {
+            DroppedSheet(
+                dropped = droppedBySearch,
+                searchQuery = searchQuery,
+                onDismiss = { showDropped = false },
+            )
+        }
+
         if (showMarkets) {
             MarketsSheet(
                 statuses = platformStatuses,
@@ -1084,6 +1215,13 @@ fun ListingsSheet(
                     listingViewModel.showCountries(chosen)
                     persistFilters { it.copy(showOnlyCountries = chosen) }
                 },
+                reach = searchReach,
+                onReach = { next ->
+                    listingViewModel.setReach(next, platforms)
+                    persistFilters { it.copy(reach = next) }
+                },
+                suggestions = termSuggestions,
+                onSuggest = { languages -> listingViewModel.suggestTerms(languages) },
                 onDismiss = { showMarkets = false },
             )
         }

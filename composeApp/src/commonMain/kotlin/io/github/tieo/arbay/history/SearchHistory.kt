@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.history
 
+import io.github.tieo.arbay.SearchCountries
+import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.loadSearchHistory
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Condition
@@ -99,7 +101,12 @@ object SearchHistoryStore {
      *  parkettschleifmaschine against car and real-estate sites forever turned out to mean. */
     fun baseQuery(query: String, platforms: List<PlatformId>?, carFilters: CarFilters?, category: MarketGroup): SearchQuery =
         entryFor(query)?.searchQuery
-            ?: SearchQuery(text = query, platforms = platforms ?: MarketSets.platformsFor(category), carFilters = carFilters, category = category)
+            ?: SearchQuery(
+                text = query,
+                platforms = platforms ?: MarketSets.platformsIn(category, SearchCountries.current.countries),
+                carFilters = carFilters,
+                category = category,
+            )
 
     /** A search was opened. Keeps whatever it was narrowed to last time; only the display name and
      *  freshly-known platforms/vehicle criteria are refreshed, so reopening the same search does not
@@ -119,7 +126,8 @@ object SearchHistoryStore {
         val existing = entryFor(query)
         val resolvedCategory = existing?.searchQuery?.category ?: category
         val q = (existing?.searchQuery ?: SearchQuery(text = query, category = resolvedCategory)).copy(
-            platforms = platforms ?: existing?.searchQuery?.platforms ?: MarketSets.platformsFor(resolvedCategory),
+            platforms = platforms ?: existing?.searchQuery?.platforms
+                ?: MarketSets.platformsIn(resolvedCategory, SearchCountries.current.countries),
             carFilters = carFilters ?: existing?.searchQuery?.carFilters,
             category = resolvedCategory,
             aliases = aliases ?: existing?.searchQuery?.aliases ?: emptyList(),

@@ -199,6 +199,138 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `an M dot 2 drive matches a query that spells the slot the same way`() {
+        // Every market writes the slot "M.2". The query does too, and the two have to end up in
+        // the same shape: split into "m" and "2", the title matched nothing and the search came
+        // back empty on every market at once.
+        val results = search("2tb m.2 ssd", listOf(
+            listing("Lexar NM990 2TB M.2 SSD"),
+            listing("SSD Samsung 990 EVO Plus M.2 2TB"),
+            listing("Kioxia Exceria G3 1TB M.2 SSD"),
+            listing("Sandisk Extreme Portable SSD 2TB USB-C"),
+        ))
+        assertTrue(results.any { it.title.contains("NM990") }, "an M.2 2TB drive is what was asked for")
+        assertTrue(results.any { it.title.contains("990 EVO") }, "size written after the slot still matches")
+        assertTrue(results.none { it.title.contains("1TB") }, "a 1TB drive is a different size")
+        assertTrue(results.none { it.title.contains("Portable") }, "an external USB drive has no M.2 slot")
+    }
+
+    @Test
+    fun `a market answering part of a multi-token query keeps that part`() {
+        // Most of what a market returns for a specific query is near-misses, so the share of
+        // listings containing a token is routinely low. The report says so and nothing acts on it:
+        // every listing is judged on its own, so the ones that matched survive the ones that did not.
+        val mixed = listOf(
+            listing("Lexar NM790 2TB M.2 SSD"),
+            listing("Gaming PC Ryzen 7 7800X3D RTX 5080 32GB RAM"),
+            listing("Netac NV3000 NVMe M.2 SSD 500GB"),
+            listing("PlayStation 5 Pro 2TB Bundle"),
+            listing("Hikvision Kamera Set 16x Dome +2TB HDD"),
+            listing("Lenovo ThinkCentre M710q Tiny 250GB"),
+        )
+        val query = SearchQuery(text = "2tb m.2 ssd", category = MarketGroup.GENERAL)
+        assertNotNull(
+            RelevanceFilter.irrelevanceReport(mixed, query),
+            "one in six containing the tokens is what the report is built to flag",
+        )
+        val kept = RelevanceFilter.filter(mixed, query)
+        assertEquals(listOf("Lexar NM790 2TB M.2 SSD"), kept.map { it.title })
+    }
+
+    @Test
+    fun `a market that sent back none of the search's words answered something else`() {
+        // reBuy, live, for "grigri": six listings, not one of them carrying the word, because the
+        // site dropped the search and served its own shelf.
+        val shelf = listOf(
+            listing("Graubünden: Grischun - Grigioni - Dino Sassi"),
+            listing("Grün ist die Heide - Löns,Hermann"),
+            listing("Grün Blau Grau"),
+            listing("Mosaik (Grundkurs)"),
+            listing("Power Semiconductor Drives"),
+            listing("Solid-State-Drives (SSDs) Modeling"),
+        )
+        assertNotNull(
+            RelevanceFilter.answeredSomethingElse(shelf, SearchQuery(text = "grigri", category = MarketGroup.GENERAL)),
+            "not one listing carries the word, so nothing here was an answer to it",
+        )
+    }
+
+    @Test
+    fun `a market that mostly missed still keeps what it matched`() {
+        // eBay Italy, live, for "2tb m.2 ssd": a hundred drives of every size, a few of them the
+        // one asked for. It ran the search, so its answer is filtered listing by listing.
+        val mostlyOtherSizes = listOf(
+            listing("Netac SSD NVME M2 1TB SSD 250GB 500GB M2 Solid State"),
+            listing("Fanxiang M.2 SSD PCIe 4.0 1TB dissipatore disco"),
+            listing("Intel SSD 660p Series 512GB M.2 NVME PCIe"),
+            listing("Crucial P3 Plus 1TB M.2 NVMe"),
+            listing("Kingston NV3 500GB M.2 2280"),
+            listing("Lexar NM790 2TB M.2 SSD"),
+        )
+        val query = SearchQuery(text = "2tb m.2 ssd", category = MarketGroup.GENERAL)
+        assertNull(
+            RelevanceFilter.answeredSomethingElse(mostlyOtherSizes, query),
+            "the words are all over this answer; the market plainly ran the search",
+        )
+        assertEquals(listOf("Lexar NM790 2TB M.2 SSD"), RelevanceFilter.filter(mostlyOtherSizes, query).map { it.title })
+    }
+
+    @Test
+    fun `what a compound is about has to be in the listing`() {
+        // Straight off the live answer for "parkettschleifmaschine": Geizhals and Amazon send
+        // sanding belts and belt sanders, which share the tail of the word and nothing else. What
+        // the search is about is its leading part, and none of them is about parquet.
+        val answer = listOf(
+            listing("Holzmann SBPSM Schleifband K80, 200x650mm, 1 Stück"),
+            listing("Einhell Bandschleifer TC-BS 8038 (800 W)"),
+            listing("Lägler Hummel Parkettschleifmaschine Bandschleifer"),
+            listing("Parkett-, Bodenschleifmaschine von Scheer"),
+            listing("Makita Exzenterschleifer BO5041J"),
+            listing("Bosch Professional Bandschleifer GBS 75 AE"),
+        )
+        val kept = search("parkettschleifmaschine", answer).map { it.title }
+        assertTrue(kept.any { it.contains("Lägler Hummel") }, "the machine itself")
+        assertTrue(kept.any { it.startsWith("Parkett-,") }, "the same machine, written as a list")
+        assertTrue(kept.none { it.contains("Schleifband") }, "a belt is not a machine for parquet")
+        assertTrue(kept.none { it.contains("Bandschleifer TC-BS") }, "a belt sander is a different machine")
+        assertTrue(kept.none { it.contains("Exzenterschleifer") }, "so is an orbital sander")
+    }
+
+    @Test
+    fun `a listing without the word goes where the market's sellers write it`() {
+        // Vinted, live, for "grigri": the word is in nearly every title it sent, so the two that
+        // never say it are the exception, not the market's own vocabulary.
+        val vinted = listOf(
+            listing("Grigri de sac ou de chaussure"),
+            listing("Mini grigri amitié"),
+            listing("Grigri de téléphone"),
+            listing("Porte-clés grigri tulipes rose"),
+            listing("Collier avec grigri poisson étoile de mer"),
+            listing("Porte clé, Marke: Accessories"),
+            listing("Sac élégant, Marke: Pimkie"),
+        )
+        val kept = search("grigri", vinted).map { it.title }
+        assertTrue(kept.none { it.startsWith("Porte clé,") }, "no word of the search anywhere in it")
+        assertTrue(kept.none { it.startsWith("Sac élégant") }, "no word of the search anywhere in it")
+        assertEquals(5, kept.size)
+    }
+
+    @Test
+    fun `a category word its sellers never write leaves the market to judge`() {
+        // The other side of the same measurement: a laptop listing names the machine, not the
+        // category, so demanding the word would throw away the market's whole answer.
+        val laptops = listOf(
+            listing("Lenovo ThinkPad X1 Carbon i7"),
+            listing("Dell XPS 13 9310"),
+            listing("HP EliteBook 840 G8"),
+            listing("Acer Aspire 5"),
+            listing("MacBook Air M2"),
+            listing("Laptop Lenovo Legion 5"),
+        )
+        assertEquals(6, search("laptop", laptops).size, "the market ran the search; it is the judge here")
+    }
+
+    @Test
     fun `irrelevanceReport skips small result sets`() {
         val report = RelevanceFilter.irrelevanceReport(garbageListings.take(4), SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES))
         assertNull(report, "Fewer than 5 results is too small a sample to flag")

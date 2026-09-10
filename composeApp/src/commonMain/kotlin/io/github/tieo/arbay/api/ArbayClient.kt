@@ -136,6 +136,15 @@ class ArbayClient(
             setBody(settings)
         }.body()
 
+    suspend fun getMarketSettings(): MarketSettings =
+        client.get("$baseUrl/api/settings/markets").body()
+
+    suspend fun updateMarketSettings(settings: MarketSettings): MarketSettings =
+        client.post("$baseUrl/api/settings/markets") {
+            contentType(ContentType.Application.Json)
+            setBody(settings)
+        }.body()
+
     suspend fun getCarTaxonomy(): CarTaxonomy =
         client.get("$baseUrl/api/car-taxonomy").body()
 
@@ -344,6 +353,15 @@ class ArbayClient(
 
     private val streamJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    /** Terms this search could be sent to markets in other languages, for the searcher to look at
+     *  and accept. Nothing here reaches a market: what a market is asked is what the search
+     *  carries, and it carries only what someone put there. */
+    suspend fun termSuggestions(query: String, languages: List<String>): TermSuggestions =
+        client.get("$baseUrl/api/crawler/term-suggestions") {
+            parameter("q", query)
+            if (languages.isNotEmpty()) parameter("languages", languages.joinToString(","))
+        }.body()
+
     fun crawlerSearchStream(
         query: String,
         platform: PlatformId? = null,
@@ -351,6 +369,9 @@ class ArbayClient(
         filters: CarFilters? = null,
         excludeKeywords: List<String> = emptyList(),
         aliases: List<String> = emptyList(),
+        // How far this search may travel from the typed words. Sent per search, so the server
+        // never decides on its own what a market gets asked.
+        reach: SearchReach = SearchReach(),
         lat: Double? = null,
         lon: Double? = null,
     ): Flow<CrawlerSearchEvent> = flow {
@@ -369,6 +390,9 @@ class ArbayClient(
             }
             if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
             if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
+            if (!reach.isDefault) {
+                parameter("reach", streamJson.encodeToString(SearchReach.serializer(), reach))
+            }
         }.execute { response ->
             if (!response.status.isSuccess()) throw ArbayApiException(response.bodyAsText().ifBlank { response.status.description })
             val channel = response.bodyAsChannel()

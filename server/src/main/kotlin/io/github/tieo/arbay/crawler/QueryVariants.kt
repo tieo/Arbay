@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SuggestedTerm
 import kotlin.math.ln
 
 /**
@@ -172,6 +173,44 @@ object QueryVariants {
             .map { Candidate(it, namesSameThing(query, it)) }
             .sortedByDescending { it.sharesStem }
             .take(MAX_VARIANTS)
+    }
+
+    /**
+     * Every word the market printed under this search, each with the app's verdict and the reason
+     * for it, whether or not the app would spend a request on it.
+     *
+     * [candidates] answers what to search; this answers what to show. The rules are high precision
+     * and low recall by measurement — right about 93% of the words they accept, but reaching fewer
+     * than a third of the real other names — so the words they reject are not noise to be thrown
+     * away. They are shown with the reason, and anyone can search one anyway.
+     */
+    fun verdicts(
+        suggestions: List<String>,
+        queryText: String,
+        offeredUnder: (String) -> Int = { 0 },
+    ): List<SuggestedTerm> {
+        val query = queryText.trim().lowercase()
+        val worthTrying = candidates(suggestions, queryText, offeredUnder).map { it.term }.toSet()
+        return suggestions
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .map { term ->
+                val why = when {
+                    term in worthTrying -> "another name for it"
+                    query.length < MIN_QUERY_LENGTH -> "the search is a common word, so its other names are too"
+                    term == query -> "the search itself"
+                    term.contains(' ') -> "a phrase, which every time measured named a rental or a service"
+                    normalise(term).contains(normalise(query)) ||
+                        normalise(query).contains(normalise(term)) -> "spelled inside the search already"
+                    namesAnAction(term) -> "names the job, not the thing"
+                    !namesSameKind(term, query) -> "names a part or what it works on"
+                    !namesAMachine(term) -> "names who built it, not what it is"
+                    offeredUnder(term) > MAX_SEARCHES_OFFERING_IT -> "offered under many other searches too"
+                    else -> "further down the market's list than the app follows"
+                }
+                SuggestedTerm(term = term, worthTrying = term in worthTrying, why = why)
+            }
     }
 
     /** How alike two related-search lists are, as the share of terms they hold in common. Two names

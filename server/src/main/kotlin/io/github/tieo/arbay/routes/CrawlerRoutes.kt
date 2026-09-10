@@ -21,6 +21,9 @@ import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.RequestMonitor
+import io.github.tieo.arbay.crawler.localizedQuery
+import io.github.tieo.arbay.crawler.TermVerdictEmitter
+import io.github.tieo.arbay.crawler.TermsUsedEmitter
 import io.github.tieo.arbay.crawler.Translator
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.toCarFilters
@@ -33,6 +36,7 @@ import io.github.tieo.arbay.crawler.trackedSearch
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.ListingRepo
+import io.github.tieo.arbay.repo.MarketSettingsStore
 import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.http.ContentType
@@ -80,8 +84,17 @@ private fun isCarQuery(query: String): Boolean = CarQueryResolver.resolve(query)
 
 /** The markets a query is searched on when the request names none: the vehicle sites for a car,
  *  the general marketplaces otherwise, minus any without a crawler. */
-private fun defaultPlatforms(isCar: Boolean): List<PlatformId> =
-    (if (isCar) CAR_PLATFORMS else GENERAL_PLATFORMS).filter { CrawlerRegistry.crawlerFor(it) != null }
+private fun defaultPlatforms(isCar: Boolean): List<PlatformId> {
+    val group = if (isCar) MarketGroup.VEHICLES else MarketGroup.GENERAL
+    val countries = MarketSettingsStore.current.countries
+    val inCountries = MarketSets.platformsIn(group, countries)
+        .filter { CrawlerRegistry.crawlerFor(it) != null }
+    // A country set nothing can be crawled in would silently search nothing at all, which reads as
+    // every market failing. The full set answers instead, and the markets view names the countries.
+    return inCountries.ifEmpty {
+        (if (isCar) CAR_PLATFORMS else GENERAL_PLATFORMS).filter { CrawlerRegistry.crawlerFor(it) != null }
+    }
+}
 
 /** A platform's finished result set: the car post-filter over the raw relevance-filtered crawl,
  *  with every listing measured against the searcher, plus the facet counts. The same step whether
@@ -144,25 +157,16 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
 private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQuery): SearchQuery {
     val excludeKeywords = queryParameters["excludeKeywords"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
     val aliases = queryParameters["aliases"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    // How far this search may travel from the typed words, sent per search rather than configured
+    // once on the server: what one search is allowed to ask a market is not a property of the box
+    // the words were typed into.
+    val reach = queryParameters["reach"]
+        ?.let { runCatching { json.decodeFromString<SearchReach>(it) }.getOrNull() }
     return base.copy(
         excludeKeywords = excludeKeywords ?: base.excludeKeywords,
         aliases = aliases ?: base.aliases,
+        reach = reach ?: base.reach,
     )
-}
-
-/** The search query localized to a platform's language — a cross-border market (e.g. eBay.it) is
- *  searched with the translated term ("Parkettschleifmaschine" → "levigatrice per parquet") so its
- *  own search returns local listings; the home language passes through unchanged. Both the crawl
- *  and the relevance filter then use this same localized query. Aliases travel the same way, so a
- *  catalog entry's alternate spelling still matches a translated title. */
-private suspend fun localizedQuery(base: SearchQuery, platform: PlatformId): SearchQuery {
-    if (platform.searchLanguage == "de" || base.text.isBlank()) return base
-    val translated = Translator.translate(base.text, "de", platform.searchLanguage)
-    val translatedAliases = base.aliases.map { alias ->
-        Translator.translate(alias, "de", platform.searchLanguage)
-    }
-    return if (translated == base.text && translatedAliases == base.aliases) base
-    else base.copy(text = translated, aliases = translatedAliases)
 }
 
 /** A price in EUR cents, converting from the listing's own currency so cross-border results
@@ -273,6 +277,27 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
         get("/status") {
             call.respond(CrawlerStatusTracker.getAll())
+        }
+
+        // A suggested term per language, for the searcher to look at, edit and accept. Suggesting
+        // is all this does: what a market is asked is what the search carries, so a translation
+        // reaches a market only after someone has seen it.
+        get("/term-suggestions") {
+            val text = call.request.queryParameters["q"].orEmpty()
+            if (text.isBlank()) throw BadRequestException("Missing query parameter 'q'")
+            val languages = call.request.queryParameters["languages"]
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
+                ?: CrawlerRegistry.supportedPlatforms().map { it.searchLanguage }.distinct()
+            val suggestions = languages.filter { it != "de" }.associateWith { language ->
+                Translator.translate(text, "de", language)
+            }
+            // A language whose suggestion came back as the text itself is one the translator could
+            // not answer for; saying so beats offering the same words as if they were a translation.
+            call.respond(TermSuggestions(
+                text = text,
+                suggestions = suggestions.filterValues { it != text },
+                unavailable = suggestions.filterValues { it == text }.keys.toList(),
+            ))
         }
 
         // Outbound request telemetry: counts, block rate, fetch tier used per platform.
@@ -456,9 +481,18 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 return@crawl
                             }
 
-                            // Cross-border markets are searched in their own language; surface the
-                            // translated term so the user sees what each foreign site was queried with.
+                            // A market is asked in its own language only when the search carries a
+                            // term for that language; the term is reported so the app shows what
+                            // each site was actually asked.
                             val pq = localizedQuery(searchQuery, platformId)
+                            val termsUsed = java.util.Collections.synchronizedList(mutableListOf<String>())
+                            val termsEmitter = TermsUsedEmitter { t ->
+                                if (t.isNotBlank() && t !in termsUsed) termsUsed += t
+                            }
+                            // Keyed by the word, so the entry a follow-up search fills in with what
+                            // it added replaces the one written before it ran.
+                            val verdicts = java.util.Collections.synchronizedMap(LinkedHashMap<String, SuggestedTerm>())
+                            val verdictEmitter = TermVerdictEmitter { v -> verdicts[v.term.lowercase()] = v }
 
                             // Send PLATFORM_STARTED
                             val startedEvent = CrawlerSearchEvent(
@@ -558,7 +592,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter) {
+                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter) {
                                         crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                     }
                                 }
@@ -568,18 +602,25 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // are deduped inside the emitter, so a per-page crawler emits nothing
                                 // extra.
                                 partialEmitter.emit(rawResults)
-                                val irrelevance = RelevanceFilter.irrelevanceReport(rawResults, pq)
-                                if (irrelevance != null) {
-                                    CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                                // A market that sent back a page without one word of the search on
+                                // it answered a different question, and its answer holds nothing to
+                                // filter. Anything else is judged listing by listing, so a market
+                                // that ran the search keeps whatever of it matched.
+                                val ignoredSearch = RelevanceFilter.answeredSomethingElse(rawResults, pq)
+                                if (ignoredSearch != null) {
+                                    CrawlerStatusTracker.recordError(platformId, ignoredSearch, ErrorType.IRRELEVANT_RESULTS)
                                 } else {
                                     CrawlerStatusTracker.recordSuccess(platformId, rawResults.size)
                                 }
-                                // A market whose answer is about something else is dropped whole,
-                                // rather than filtered listing by listing: the pages it streamed
-                                // while it was still being judged are replaced by this set.
-                                val answered = if (irrelevance == null) rawResults else emptyList()
-                                val relevantResults = RelevanceFilter.filter(answered, pq)
-                                val classified = relevantResults.map { SoldDetector.classify(it) }
+                                val partitioned = RelevanceFilter.partition(
+                                    if (ignoredSearch != null) emptyList() else rawResults, pq,
+                                )
+                                val dropped = if (ignoredSearch != null) {
+                                    rawResults.map { DroppedListing(it, DropReason.MARKET_IGNORED_SEARCH) }
+                                } else {
+                                    partitioned.dropped
+                                }
+                                val classified = partitioned.kept.map { SoldDetector.classify(it) }
                                 // Cache the raw relevance-filtered crawl; car post-filtering (card
                                 // filter → detail-verify → final filter) runs after, so a later
                                 // filter tweak re-filters from cache without re-crawling.
@@ -594,6 +635,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = results.size,
                                     rawCount = rawResults.size,
                                     listings = results,
+                                    // Capped: a market can return hundreds, and this rides the same
+                                    // stream as the results themselves. Kept in the order the
+                                    // market ranked them, so the ones it thought most relevant —
+                                    // the ones a wrong filter would be hiding — are the ones sent.
+                                    dropped = dropped.take(60),
+                                    termsUsed = termsUsed.toList(),
+                                    suggestedTerms = verdicts.values.toList(),
                                     facets = facets,
                                 )
                             } catch (e: TimeoutCancellationException) {

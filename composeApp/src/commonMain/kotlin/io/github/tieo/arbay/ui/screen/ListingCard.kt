@@ -309,6 +309,19 @@ internal fun ListingCard(
                             else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                         )
+                        // A bid is not an asking price, and the number is only worth reading
+                        // together with how long is left to raise it.
+                        if (listing.saleType == SaleType.AUCTION) {
+                            Text(
+                                listOfNotNull(
+                                    listing.bidCount?.let { if (it == 1) "1 bid" else "$it bids" } ?: "bid",
+                                    listing.auctionEndsAt?.let { endsInLabel(it) },
+                                ).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                maxLines = 1,
+                            )
+                        }
                         // The price above includes import VAT where it is due, which is not what
                         // the market's own page will say — so say what was added and what they ask.
                         val vat = listing.importVat(ImportRules.current)
@@ -553,3 +566,14 @@ internal fun BlockTermDialog(
 }
 
 // === Price distribution histogram (active listings, New vs Used bars) ===
+
+/** "ends in 40 min" / "ends in 3 h" / "ends in 2 d", or "ended" once it has. */
+private fun endsInLabel(endsAt: Instant): String {
+    val minutes = (endsAt - Clock.System.now()).inWholeMinutes
+    return when {
+        minutes < 0 -> "ended"
+        minutes < 60 -> "ends in $minutes min"
+        minutes < 60 * 24 -> "ends in ${minutes / 60} h"
+        else -> "ends in ${minutes / (60 * 24)} d"
+    }
+}

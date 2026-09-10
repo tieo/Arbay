@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.SuggestedTerm
 import io.github.tieo.arbay.model.VehicleInfo
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -17,9 +18,6 @@ interface Crawler {
      *  emission, colour…). Default null: the platform's card already holds everything it knows. */
     suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = null
 }
-
-private val queryExpansionEnabled =
-    System.getenv("ARBAY_QUERY_EXPANSION")?.equals("on", true) == true
 
 /**
  * Search the query, then — where enabled — the market's other names for the same thing, merged.
@@ -39,20 +37,33 @@ suspend fun Crawler.searchAllSpellings(
 ): List<Listing> {
     val log = LoggerFactory.getLogger("Crawler[${platformId.displayName}]")
     val suggested = mutableListOf<String>()
+    emitTermUsed(query.text)
     val primary = withContext(SuggestedTermsEmitter { suggested += it }) { search(query) }
-
-    // Off unless ARBAY_QUERY_EXPANSION=on. Widening finds listings the query's own wording cannot
-    // reach, at the cost of extra requests and of occasionally reaching the machine beside it.
-    if (!queryExpansionEnabled) return primary
 
     // The market's own related searches beat anything inferred from its results; inference is the
     // fallback for the markets that print none.
     SuggestionStats.record(query.text, suggested)
     val fromMarket = QueryVariants.candidates(suggested, query.text, SuggestionStats::searchesOfferingIt)
-    val terms = fromMarket.ifEmpty {
+
+    // Every word the market printed is reported whether or not it is searched, with the reason.
+    // Costs nothing — the words came off a page already fetched — and it is the only way anyone
+    // sees the rules deciding, since they reject far more than they accept.
+    QueryVariants.verdicts(suggested, query.text, SuggestionStats::searchesOfferingIt)
+        .forEach { emitTermVerdict(it) }
+
+    // What is actually searched: the words picked by hand, always, and the ones the rules accept
+    // only when this search asked for that. Each costs a crawl, which is why neither happens by
+    // itself.
+    val picked = query.reach.extraTerms
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.equals(query.text, ignoreCase = true) }
+        .map { QueryVariants.Candidate(it, sharesStem = true) }
+    val automatic = if (!query.reach.otherWords) emptyList() else fromMarket.ifEmpty {
         QueryVariants.candidatesFrom(primary, query.text, background)
             .map { QueryVariants.Candidate(it, sharesStem = true) }
     }
+    val terms = (picked + automatic).distinctBy { it.term.lowercase() }
+    if (terms.isEmpty()) return primary
 
     val extra = terms.flatMap { candidate ->
         // The follow-up carries its own related searches, so whether the market names this query
@@ -72,9 +83,17 @@ suspend fun Crawler.searchAllSpellings(
                 platformId.displayName, candidate.term, query.text)
             return@flatMap emptyList()
         }
+        emitTermUsed(candidate.term)
+        val added = followUp.count { l -> primary.none { it.id == l.id } }
+        emitTermVerdict(SuggestedTerm(
+            term = candidate.term,
+            worthTrying = true,
+            why = if (candidate.term in query.reach.extraTerms) "picked by hand" else "another name for it",
+            searched = true,
+            added = added,
+        ))
         log.info("{}: '{}' also searched as '{}' (+{} listings)",
-            platformId.displayName, query.text, candidate.term,
-            followUp.count { l -> primary.none { it.id == l.id } })
+            platformId.displayName, query.text, candidate.term, added)
         followUp
     }
     return (primary + extra).distinctBy { it.id }
@@ -92,9 +111,14 @@ suspend fun Crawler.trackedSearch(
             CrawlerStatusTracker.recordError(platformId, "Search returned 0 results", ErrorType.EMPTY_RESULTS)
             log.warn("{}: 0 results for '{}'", platformId.displayName, query.text)
         } else {
-            val irrelevance = RelevanceFilter.irrelevanceReport(results, query)
+            val ignoredSearch = RelevanceFilter.answeredSomethingElse(results, query)
+            val irrelevance = ignoredSearch ?: RelevanceFilter.irrelevanceReport(results, query)
             if (irrelevance != null) {
-                CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                if (ignoredSearch != null) {
+                    CrawlerStatusTracker.recordError(platformId, irrelevance, ErrorType.IRRELEVANT_RESULTS)
+                } else {
+                    CrawlerStatusTracker.recordSuccess(platformId, results.size)
+                }
                 // What came back is the evidence here — a market answering a query with its
                 // catalogue is diagnosed from the titles it returned, not from a page of HTML
                 // that was parsed successfully.
@@ -106,9 +130,10 @@ suspend fun Crawler.trackedSearch(
                     html = results.take(25).joinToString("\n") { "${it.title}\t${it.url}" },
                 )
                 log.warn("{}: {} [snapshot:{}]", platformId.displayName, irrelevance, snapId)
-                // A market that answered something else has not answered. Handing its results on
-                // anyway is how a search for a belay device filled up with grey office folders.
-                return emptyList()
+                // An answer carrying not one word of the search is about something else, and there
+                // is nothing in it to filter. An answer that merely matched badly is filtered
+                // listing by listing like any other, and keeps whatever did match.
+                if (ignoredSearch != null) return emptyList()
             } else {
                 CrawlerStatusTracker.recordSuccess(platformId, results.size)
                 log.info("{}: {} results for '{}'", platformId.displayName, results.size, query.text)

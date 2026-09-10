@@ -49,6 +49,11 @@ fun App() {
             try {
                 ImportRules.current = client.getImportSettings()
             } catch (_: Exception) {}
+            // Which countries a search covers — the same setting the server crawls by, so the app
+            // and the background watch cover the same ground.
+            try {
+                SearchCountries.current = client.getMarketSettings()
+            } catch (_: Exception) {}
             try {
                 CarTaxonomyStore.update(client.getCarTaxonomy())
             } catch (_: Exception) {}

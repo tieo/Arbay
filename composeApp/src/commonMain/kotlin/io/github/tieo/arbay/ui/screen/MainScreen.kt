@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui.screen
 
+import io.github.tieo.arbay.SearchCountries
+import io.github.tieo.arbay.model.MarketSettings
+import io.github.tieo.arbay.model.platformsIn
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -575,9 +578,20 @@ fun MainScreen(
             // The explicit override for a bare model name ("Sprinter", "Golf") that automatic
             // car detection misses because it has no make in it — chosen, not guessed.
             onLiveVehicleSearch = { query ->
-                openResults(ResultsView.of(query, query, MarketSets.vehicles, category = MarketGroup.VEHICLES))
+                openResults(ResultsView.of(
+                    query, query,
+                    MarketSets.platformsIn(MarketGroup.VEHICLES, SearchCountries.current.countries),
+                    category = MarketGroup.VEHICLES,
+                ))
             },
             onFreeItems = { showFreeItems = true },
+            countries = SearchCountries.current.countries,
+            onCountriesChange = { chosen ->
+                SearchCountries.current = MarketSettings(chosen)
+                scope.launch {
+                    runCatching { client.updateMarketSettings(MarketSettings(chosen)) }
+                }
+            },
             history = searchHistory,
             onOpenHistory = { entry -> openResults(ResultsView.of(entry)) },
             onRemoveHistory = { query -> SearchHistoryStore.remove(query) },
@@ -656,7 +670,8 @@ fun MainScreen(
                             name = name,
                             searchQuery = saved.searchQuery.withCarFilters(filters).copy(
                                 text = query,
-                                platforms = platforms ?: MarketSets.vehicles,
+                                platforms = platforms
+                                    ?: MarketSets.platformsIn(MarketGroup.VEHICLES, SearchCountries.current.countries),
                                 category = MarketGroup.VEHICLES,
                             ),
                         ),
@@ -834,7 +849,8 @@ fun MainScreen(
                         // with the same markets it was actually searched with — never "every
                         // platform including car-only and real-estate sites", which the
                         // saved-search monitor would then re-run forever regardless of relevance.
-                        platforms = view.platforms ?: MarketSets.platformsFor(view.category),
+                        platforms = view.platforms
+                            ?: MarketSets.platformsIn(view.category, SearchCountries.current.countries),
                         category = view.category,
                         carFilters = view.filters,
                         excludeKeywords = resultsBlockedTerms,

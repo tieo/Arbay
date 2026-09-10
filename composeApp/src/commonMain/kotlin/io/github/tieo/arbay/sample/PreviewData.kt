@@ -57,6 +57,46 @@ object PreviewData {
         l("12", PlatformId.WILLHABEN, "Parkettschleifmaschine Set mit Kantenschleifer", 950_00, city = "Wien", country = "AT", condition = Condition.NEW),
     )
 
+    /** What a search removed before showing anything, for the view that lists it. Every reason a
+     *  real crawl hits is represented, since the point of that view is that each one is named. */
+    val droppedBySearch: List<DroppedListing> = listOf(
+        DroppedListing(l("d1", PlatformId.EBAY_DE, "Schleifpapier für Parkettschleifmaschine 10 Stück", 24_00), DropReason.CONSUMABLE),
+        DroppedListing(l("d2", PlatformId.EBAY_DE, "Staubsack passend für Lägler Hummel", 39_00), DropReason.CONSUMABLE),
+        DroppedListing(l("d3", PlatformId.KLEINANZEIGEN, "Suche Parkettschleifmaschine zum Kaufen", 1_00, city = "Köln", country = "DE"), DropReason.WANTED_AD),
+        DroppedListing(l("d4", PlatformId.KLEINANZEIGEN, "Parkettschleifmaschine mieten ab 45 EUR pro Tag", 45_00, city = "Essen", country = "DE"), DropReason.RENTAL),
+        DroppedListing(l("d5", PlatformId.EBAY_IT, "Levigatrice orbitale per legno 300W", 89_00, city = "Torino", country = "IT"), DropReason.OFF_TARGET),
+        DroppedListing(l("d6", PlatformId.MARKTPLAATS, "Bosch accuboormachine 18V", 65_00, city = "Utrecht", country = "NL"), DropReason.OFF_TARGET),
+        DroppedListing(l("d7", PlatformId.SUBITO, "Frigorifero Bosch classe A++", 210_00, city = "Roma", country = "IT"), DropReason.OFF_TARGET),
+        DroppedListing(l("d8", PlatformId.SUBITO, "iPhone 13 128GB usato", 340_00, city = "Napoli", country = "IT"), DropReason.OFF_TARGET),
+        DroppedListing(l("d9", PlatformId.EBAY_DE, "Kantenschleifer Zubehörsatz für Parkettschleifer", 55_00), DropReason.ACCESSORY),
+        DroppedListing(l("d10", PlatformId.EBAY_DE, "Neues Angebot", 199_00), DropReason.NOT_A_SINGLE_OFFER),
+        DroppedListing(l("d11", PlatformId.WILLHABEN, "Parkettschleifmaschine Lägler", 9_999_999_00, city = "Linz", country = "AT"), DropReason.IMPLAUSIBLE_PRICE),
+    )
+
+    /** The other words the markets printed under this search, as the results view gets them: two
+     *  already searched and carrying what they added, the rest offered with the rule's reason. */
+    val otherWords: List<SuggestedTerm> = listOf(
+        SuggestedTerm("parkettschleifer", worthTrying = true, why = "picked by hand", searched = true, added = 23),
+        SuggestedTerm("bodenschleifer", worthTrying = true, why = "another name for it"),
+        SuggestedTerm("walzenschleifer", worthTrying = true, why = "another name for it"),
+        SuggestedTerm("kantenschleifer", worthTrying = true, why = "another name for it", searched = true, added = 0),
+        SuggestedTerm("schleifpapier", worthTrying = false, why = "names a part or what it works on"),
+        SuggestedTerm("parkett schleifen", worthTrying = false, why = "a phrase, which every time measured named a rental or a service"),
+        SuggestedTerm("laegler", worthTrying = false, why = "names who built it, not what it is"),
+        SuggestedTerm("parkettschleifmaschinen", worthTrying = false, why = "spelled inside the search already"),
+        SuggestedTerm("vertikutieren", worthTrying = false, why = "names the job, not the thing"),
+    )
+
+    /** An auction among the fixed prices, so a render shows what a bid looks like beside a price.
+     *  Ends soon enough to be the case that is allowed to interrupt. */
+    val withAuction: List<Listing> = active.mapIndexed { i, l ->
+        if (i == 2) l.copy(
+            saleType = SaleType.AUCTION,
+            bidCount = 7,
+            auctionEndsAt = now.plus(kotlin.time.Duration.parse("95m")),
+        ) else l
+    }
+
     /** The listings a watched saved search turned up since it was last opened, for the views that
      *  show a backlog. Named from [active] rather than typed out, so they stay real listings. */
     val newListingIds: Set<String> = setOf(active[1].id, active[5].id, active[8].id)

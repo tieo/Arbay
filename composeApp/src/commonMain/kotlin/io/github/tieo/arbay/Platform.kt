@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.tieo.arbay.model.ImportSettings
+import io.github.tieo.arbay.model.MarketSettings
 
 expect fun openBrowser(url: String)
 
@@ -56,6 +57,12 @@ expect fun cancelPolling()
  */
 object ImportRules {
     var current: ImportSettings by mutableStateOf(ImportSettings())
+}
+
+/** The countries a search covers when it names no markets of its own. Observable: changing it in
+ *  settings changes which markets the next search asks, and the search screens say so on screen. */
+object SearchCountries {
+    var current: MarketSettings by mutableStateOf(MarketSettings())
 }
 
 

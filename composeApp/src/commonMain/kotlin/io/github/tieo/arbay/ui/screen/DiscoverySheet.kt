@@ -1,6 +1,9 @@
 package io.github.tieo.arbay.ui.screen
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -11,6 +14,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,11 +25,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.tieo.arbay.SearchCountries
 import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.catalog.ProductCatalog
 import io.github.tieo.arbay.catalog.ProductCategory
 import io.github.tieo.arbay.debug.DebugSlice
 import io.github.tieo.arbay.history.SearchHistoryEntry
+import io.github.tieo.arbay.model.MarketSets
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.history.summary
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import kotlinx.coroutines.delay
@@ -65,8 +72,13 @@ fun DiscoverySheet(
     onOpenHistory: (SearchHistoryEntry) -> Unit = {},
     onRemoveHistory: (String) -> Unit = {},
     onClearHistory: () -> Unit = {},
+    // Which countries a search covers, and the sink that stores a change. Shown on the search
+    // itself rather than left in settings: it decides half of what a search can possibly find.
+    countries: List<String> = SearchCountries.current.countries,
+    onCountriesChange: (List<String>) -> Unit = {},
 ) {
     var typed by remember { mutableStateOf("") }
+    var pickCountries by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     // Matches from the bundled catalogue, which spare the typing rather than replace it.
     val known = remember(typed) { if (typed.isBlank()) emptyList() else ProductCatalog.search(typed) }
@@ -83,6 +95,14 @@ fun DiscoverySheet(
     LaunchedEffect(Unit) {
         delay(300)
         runCatching { focus.requestFocus() }
+    }
+
+    if (pickCountries) {
+        CountryPickerDialog(
+            picked = countries,
+            onPicked = onCountriesChange,
+            onDismiss = { pickCountries = false },
+        )
     }
 
     AdaptiveSheet(onDismiss = onDismiss) {
@@ -114,12 +134,45 @@ fun DiscoverySheet(
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
 
+            // The countries this search will cover, on the way in. A search that spans a continent
+            // and one that stays at home are different searches, and which one is about to run was
+            // only visible afterwards, in the list of markets that answered.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            ) {
+                Icon(
+                    Icons.Outlined.Public,
+                    null,
+                    modifier = Modifier.size(15.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (countries.isEmpty()) {
+                    AssistChip(
+                        onClick = { pickCountries = true },
+                        label = { Text("every country", style = MaterialTheme.typography.labelSmall) },
+                    )
+                } else {
+                    countries.forEach { country ->
+                        AssistChip(
+                            onClick = { pickCountries = true },
+                            label = { Text(country, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+                TextButton(onClick = { pickCountries = true }) {
+                    Text("Change", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
             if (typed.isNotBlank()) {
                 Button(onClick = { search() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Search every market for “${typed.trim()}”",
+                        if (countries.isEmpty()) "Search every market for “${typed.trim()}”"
+                        else "Search ${countries.joinToString(", ")} for “${typed.trim()}”",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -311,4 +364,45 @@ private fun KnownProductRow(product: KnownProduct, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/** Which countries a search covers. Every country any market in the app sells in, each saying how
+ *  many markets it brings, so a country that adds nothing is visibly empty rather than a guess. */
+@Composable
+private fun CountryPickerDialog(
+    picked: List<String>,
+    onPicked: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val available = remember {
+        PlatformId.entries.map { MarketSets.countryOf(it) }.distinct().sorted()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = {
+            TextButton(onClick = { onPicked(emptyList()) }) { Text("Every country") }
+        },
+        title = { Text("Countries to search") },
+        text = {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                available.forEach { country ->
+                    val on = country in picked
+                    val markets = PlatformId.entries.count { MarketSets.countryOf(it) == country }
+                    FilterChip(
+                        selected = on,
+                        onClick = {
+                            onPicked(if (on) picked - country else picked + country)
+                        },
+                        label = {
+                            Text("$country · $markets", style = MaterialTheme.typography.labelSmall)
+                        },
+                    )
+                }
+            }
+        },
+    )
 }

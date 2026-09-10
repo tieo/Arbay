@@ -133,6 +133,69 @@ fun SearchQuery.withPriceRangeEur(minEur: Int?, maxEur: Int?): SearchQuery = cop
     maxPrice = maxEur?.let { Money(it * 100L, Currency.EUR) },
 )
 
+/**
+ * The two ways a search is allowed to ask for something other than the words typed into it, each
+ * off until it is switched on, and each showing what it will send before it sends it.
+ *
+ * Both exist because a marketplace matches a title as literal text: the same machine is titled
+ * "Parkettschleifer" on one listing and "levigatrice per parquet" on an Italian one, and a search
+ * for neither of those finds neither of them. Both used to happen on their own — one behind a
+ * server environment variable, one behind a translation call — so the term a market was asked
+ * was something the app had decided and never said.
+ */
+@Serializable
+data class SearchReach(
+    /** Also search the market's own other names for the thing, taken from the related searches it
+     *  prints for this query. The extra terms are reported back per market. */
+    val otherWords: Boolean = false,
+    /** Also ask a market in its own language, using [termByLanguage] — and only that: a language
+     *  with no term here is asked in the words that were typed. */
+    val otherLanguages: Boolean = false,
+    /** The exact term to send a market that searches in this language, keyed by ISO-639-1 code.
+     *  Filled by accepting a suggested translation, and editable, so nothing is ever sent that has
+     *  not been seen first. */
+    val termByLanguage: Map<String, String> = emptyMap(),
+    /** Words picked by hand off the market's own list of other names for the thing. Searched
+     *  alongside the typed words whatever [otherWords] says: a word someone chose is not a guess
+     *  the app is making. */
+    val extraTerms: List<String> = emptyList(),
+) {
+    val isDefault: Boolean get() = !otherWords && !otherLanguages && extraTerms.isEmpty()
+}
+
+/** One of the other words a market printed under a search, with what the app makes of it.
+ *
+ *  There is no probability here on purpose. Five ways to score how likely a word is to mean the
+ *  same thing were measured against hand-labelled pairs — embedding distance, result overlap,
+ *  price ratio, reciprocity, learned heads — and none of them separated a synonym from an
+ *  accessory. What survives is a set of rules about how the word is built, which is right about
+ *  93% of the words it accepts and reaches fewer than a third of the real ones. A number would be
+ *  invented; the reason is real. */
+@Serializable
+data class SuggestedTerm(
+    val term: String,
+    /** Whether the app would spend a search on this word on its own. */
+    val worthTrying: Boolean,
+    /** Why, in the words of what the rule looked at. */
+    val why: String,
+    /** Whether this run actually searched it. */
+    val searched: Boolean = false,
+    /** How many listings searching it added that the typed words had not already found. Known only
+     *  once it has been searched, which costs a crawl — so it is what a word turned out to be
+     *  worth, never a promise made before the request. */
+    val added: Int? = null,
+)
+
+/** Terms offered for a search, one per language, for someone to look at before any of them is
+ *  sent anywhere. [unavailable] names the languages nothing could be suggested for, which is a
+ *  different thing from a translation that happens to equal the original. */
+@Serializable
+data class TermSuggestions(
+    val text: String,
+    val suggestions: Map<String, String> = emptyMap(),
+    val unavailable: List<String> = emptyList(),
+)
+
 @Serializable
 data class SearchQuery(
     val text: String,
@@ -180,6 +243,10 @@ data class SearchQuery(
     // embedded "OR" syntax: the field the user searches stays exactly what they typed or what a
     // catalog entry names as its one canonical phrase; an alternate spelling is its own thing.
     val aliases: List<String> = emptyList(),
+    // How far the search may travel from the words that were typed. Off on both counts unless
+    // someone turns it on: a search that quietly asks a market something other than what was typed
+    // makes a wrong answer unexplainable, since the two sides can no longer be compared.
+    val reach: SearchReach = SearchReach(),
 ) {
     /** The one phrase to hand a platform search box that only takes a single term — [text] itself,
      *  or the most descriptive of [aliases] when [text] is less specific than one of them. */

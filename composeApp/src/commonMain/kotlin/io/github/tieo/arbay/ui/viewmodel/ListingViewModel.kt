@@ -54,9 +54,16 @@ class ListingViewModel(
     // single frame a render draws, so a render of "the filters admit none" quietly
     // showed everything.
     sampleBlocked: List<String> = emptyList(),
+    // What the search removed, for drawing the view that shows it with no server to ask.
+    sampleDropped: List<DroppedListing> = emptyList(),
+    sampleOtherWords: List<SuggestedTerm> = emptyList(),
+    samplePicked: List<String> = emptyList(),
+    sampleReach: SearchReach = SearchReach(),
 ) : ViewModel() {
 
-    private val rendersASample = sample.isNotEmpty() || sampleStatuses.isNotEmpty() || sampleLoading
+    private val rendersASample =
+        sample.isNotEmpty() || sampleStatuses.isNotEmpty() || sampleLoading ||
+            sampleDropped.isNotEmpty() || sampleOtherWords.isNotEmpty()
 
     // All results from the search (unfiltered by platform)
     private val _allListings = MutableStateFlow(sample)
@@ -107,6 +114,22 @@ class ListingViewModel(
 
     private val _soldLoading = MutableStateFlow(false)
     val soldLoading: StateFlow<Boolean> = _soldLoading
+
+    // What the markets sent that the search itself removed, with the reason for each. Kept so the
+    // reader can look at what was taken away: a filter that is wrong about a listing has to be
+    // findable, and a card that appears and then vanishes tells nobody anything.
+    private val _droppedBySearch = MutableStateFlow(sampleDropped)
+    val droppedBySearch: StateFlow<List<DroppedListing>> = _droppedBySearch
+
+    // The other words the markets printed under this search, merged across markets: the same word
+    // offered by two markets is one word, and the one that was actually searched carries what it
+    // added. Offered, never taken: each costs a crawl.
+    private val _otherWords = MutableStateFlow(sampleOtherWords)
+    val otherWords: StateFlow<List<SuggestedTerm>> = _otherWords
+
+    /** The words this search is running with on top of the typed one. */
+    val pickedWords: StateFlow<List<String>> get() = _pickedWords
+    private val _pickedWords = MutableStateFlow(samplePicked)
 
     // Per active car filter, how many more results dropping it would add — summed across platforms.
     private val _facets = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -211,6 +234,47 @@ class ListingViewModel(
      *  needs to tell "nobody had one" apart from "the filters hide all of them". */
     val fetched: StateFlow<List<Listing>> = _allListings
 
+    // What this search may ask beyond the typed words, and the terms offered for the languages it
+    // reaches. Both are shown before anything is sent: the search asks a market in another language
+    // only with a term someone has looked at.
+    val searchReach: StateFlow<SearchReach> get() = _searchReach
+    private val _searchReach = MutableStateFlow(sampleReach)
+
+    private val _termSuggestions = MutableStateFlow<TermSuggestions?>(null)
+    val termSuggestions: StateFlow<TermSuggestions?> = _termSuggestions
+
+    /** Ask the server what this search could be called in the languages it reaches. Suggestions
+     *  only: nothing is sent to a market until it is put into [SearchReach.termByLanguage]. */
+    fun suggestTerms(languages: List<String>) {
+        val query = _searchQuery.value
+        if (query.isBlank() || rendersASample) return
+        viewModelScope.launch {
+            _termSuggestions.value = runCatching { client.termSuggestions(query, languages) }.getOrNull()
+        }
+    }
+
+    /** Change how far this search may travel from the typed words, and run it again on the new
+     *  terms. A change here changes what the markets are asked, so it is a fresh crawl. */
+    fun setReach(next: SearchReach, platforms: List<PlatformId>? = null) {
+        _searchReach.value = next
+        _pickedWords.value = next.extraTerms
+        val query = _searchQuery.value
+        if (query.isBlank() || rendersASample) return
+        search(query, platforms, carFilters, excludeKeywords, aliases, next, force = true)
+    }
+
+    /** Search one of the market's other words for the thing alongside the typed one, or stop.
+     *  Costs a crawl per market, which is why it happens on a tap and not on its own. */
+    fun toggleWord(term: String, platforms: List<PlatformId>? = null) {
+        val current = _pickedWords.value
+        val next = if (current.any { it.equals(term, ignoreCase = true) })
+            current.filterNot { it.equals(term, ignoreCase = true) } else current + term
+        _pickedWords.value = next
+        val query = _searchQuery.value
+        if (query.isBlank() || rendersASample) return
+        setReach(reach.copy(extraTerms = next), platforms)
+    }
+
     /** Set the active blocked-keyword list (from the bookmark being viewed). */
     fun setBlockedTerms(terms: List<String>) { _blockedTerms.value = terms }
 
@@ -254,6 +318,10 @@ class ListingViewModel(
     private var excludeKeywords: List<String> = emptyList()
     private var aliases: List<String> = emptyList()
 
+    // How far this search may travel from the typed words. Held here so a re-crawl after a filter
+    // tweak keeps whatever the searcher turned on, and so a change to it counts as a new search.
+    private var reach: SearchReach = SearchReach()
+
     /** Show only these markets; empty shows every market that answered. */
     fun showMarkets(markets: Set<PlatformId>) { _shownMarkets.value = markets }
 
@@ -277,6 +345,7 @@ class ListingViewModel(
         _totalPlatforms.value = 0
         _completedPlatforms.value = 0
         _facets.value = emptyMap()
+        _droppedBySearch.value = emptyList()
         _priceHistory.value = emptyList()
         _allListings.value = stored
     }
@@ -285,7 +354,7 @@ class ListingViewModel(
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
-        search(query, platforms, carFilters, excludeKeywords, aliases, force = true)
+        search(query, platforms, carFilters, excludeKeywords, aliases, reach, force = true)
     }
 
     fun searchSold() {
@@ -474,17 +543,22 @@ class ListingViewModel(
         filters: CarFilters? = null,
         excludeKeywords: List<String> = emptyList(),
         aliases: List<String> = emptyList(),
+        reach: SearchReach = SearchReach(),
         force: Boolean = false,
     ) {
         if (query.isBlank() || rendersASample) return
         if (!force && query == _searchQuery.value && filters == carFilters &&
             excludeKeywords == this.excludeKeywords && aliases == this.aliases &&
+            reach == this.reach &&
             (_allListings.value.isNotEmpty() || _loading.value)
         ) return
         _searchQuery.value = query
         carFilters = filters
         this.excludeKeywords = excludeKeywords
         this.aliases = aliases
+        this.reach = reach
+        _searchReach.value = reach
+        _pickedWords.value = reach.extraTerms
         _priceHistory.value = emptyList()
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
@@ -497,12 +571,14 @@ class ListingViewModel(
             _completedPlatforms.value = 0
             _totalPlatforms.value = 0
             _facets.value = emptyMap()
+            _droppedBySearch.value = emptyList()
+            _otherWords.value = emptyList()
 
             try {
                 withTimeoutOrNull(360_000L) {
                 client.crawlerSearchStream(
                     query, platforms = platforms, filters = filters,
-                    excludeKeywords = excludeKeywords, aliases = aliases,
+                    excludeKeywords = excludeKeywords, aliases = aliases, reach = reach,
                     lat = userLat, lon = userLon,
                 ).collect { event ->
                     when (event.type) {
@@ -537,6 +613,20 @@ class ListingViewModel(
                             _allListings.value = sortListings(
                                 (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
                                     .distinctBy { it.id })
+                            // Same reconcile for what this market had removed, so re-crawling a
+                            // market replaces its drops instead of stacking a second copy.
+                            _droppedBySearch.value =
+                                (_droppedBySearch.value.filterNot { it.listing.platformId.name == event.platform } +
+                                    event.dropped).distinctBy { it.listing.id }
+                            // A word two markets both printed is one word here, and a word one of
+                            // them searched carries what it added, so the searched entry wins.
+                            _otherWords.value = (_otherWords.value + event.suggestedTerms)
+                                .groupBy { it.term.lowercase() }
+                                .map { (_, entries) -> entries.maxByOrNull { e -> if (e.searched) 1 else 0 }!! }
+                                .sortedWith(
+                                    compareByDescending<SuggestedTerm> { it.added ?: -1 }
+                                        .thenByDescending { it.worthTrying },
+                                )
                             if (event.facets.isNotEmpty()) {
                                 _facets.value = (_facets.value.keys + event.facets.keys).associateWith { k ->
                                     (_facets.value[k] ?: 0) + (event.facets[k] ?: 0)

@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.DropReason
+import io.github.tieo.arbay.model.DroppedListing
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SearchQuery
 
@@ -352,45 +354,142 @@ object RelevanceFilter {
         return wantedOrJobAd.containsMatchIn(listing.title)
     }
 
-    fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> {
+    fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> =
+        partition(listings, query).kept
+
+    /** What a market sent, split into what the search keeps and what it drops, each drop carrying
+     *  the reason it was dropped. [filter] is the kept half; the dropped half is what the app shows
+     *  when someone asks what the search removed. */
+    fun partition(listings: List<Listing>, query: SearchQuery): Partitioned {
         val parsed = parseQuery(query)
-        val listings = listings
-            .filter(::hasSanePrice)
-            .filterNot { isWantedOrJobAd(it, query.text) }
-            .filterNot { isRentalOffer(it, query.text) }
-            .filterNot { isAccessoryFor(it, parsed, query.text) }
-            .filterNot { isConsumableFor(it, query.text) }
-        val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
-        // Single-token queries ("laptop", "monitor"): the platform's own search already filtered
-        // results. A product called "Lenovo ThinkPad X1" IS a laptop even without the word —
-        // applying lexical filtering would drop 95%+ of results. Skip filtering entirely.
-        if (tokenCount <= 1) {
-            // Trusting the platform's own search breaks down for a long compound term: reBuy answers
-            // "parkettschleifmaschine" with novels that merely end in "-maschine". A specific compound
-            // must therefore still share its leading stem ("parkett") with the listing. Short generic
-            // category words ("laptop", "monitor") stay exempt — a ThinkPad X1 IS a laptop without
-            // saying so, and stem-matching them would drop nearly everything.
-            val token = parsed.positiveTokens.firstOrNull()?.lowercase()
-            val stem = token?.replace(NON_ALNUM, "")?.takeIf { it.length >= 10 }?.take(7)
-            return listings.mapNotNull { listing ->
-                val s = score(listing, parsed)
-                if (s < 0) return@mapNotNull null
-                // Compared with separators stripped from both sides, so a normalised token
-                // ("mfcl2750dw") still matches the title's punctuated form ("MFC-L2750DW").
-                if (stem != null &&
-                    !"${listing.title} ${listing.description ?: ""}".lowercase()
-                        .replace(NON_ALNUM, "").contains(stem)
-                ) return@mapNotNull null
-                listing to s
-            }.sortedByDescending { it.second }.map { it.first }
+        val dropped = mutableListOf<DroppedListing>()
+        val listings = listings.filter { listing ->
+            val reason = when {
+                !hasSanePrice(listing) -> DropReason.IMPLAUSIBLE_PRICE
+                isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
+                isRentalOffer(listing, query.text) -> DropReason.RENTAL
+                isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
+                isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE
+                else -> null
+            }
+            if (reason != null) dropped += DroppedListing(listing, reason)
+            reason == null
         }
-        return listings.mapNotNull { listing ->
+        // Whether the words searched for are words this market's sellers actually write. Read off
+        // the answer in hand rather than assumed: a search for "grigri" comes back from Vinted with
+        // the word in nearly every title, so a listing without it is the odd one out; a search for
+        // "laptop" comes back as ThinkPads and MacBooks that never say "laptop", and demanding the
+        // word there would throw the market away. Nothing here counts how many words were typed —
+        // the same measurement decides for a one-word search and a five-word one.
+        val carryingAWord = listings.count { listing ->
+            val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
+            (parsed.positiveTokens + parsed.orGroups.flatten())
+                .map { it.lowercase().replace(NON_ALNUM, "") }
+                .filter { it.length >= 3 }
+                .any { text.contains(it) }
+        }
+        val sellersWriteTheseWords =
+            listings.isNotEmpty() && carryingAWord.toDouble() / listings.size >= WORDS_ARE_WRITTEN
+
+        val kept = listings.mapNotNull { listing ->
             val s = score(listing, parsed)
-            if (s < 0) return@mapNotNull null
-            if (s < 0.76) return@mapNotNull null
+            if (s < 0) {
+                dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
+                return@mapNotNull null
+            }
+            // A compound names what it is about in its leading part, and that part is the test: a
+            // search for a Parkettschleifmaschine reaches "Parkett-, Bodenschleifmaschine" and not
+            // the sanding belts and belt sanders a market answers with, which share the tail and
+            // nothing else.
+            val stems = compoundStems(parsed)
+            if (stems.isNotEmpty()) {
+                if (!carriesAStem(listing, stems)) {
+                    dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                    return@mapNotNull null
+                }
+            } else if (sellersWriteTheseWords && s < ENOUGH_OF_THE_SEARCH) {
+                // Otherwise a listing has to carry the search well enough, and only where the
+                // market's own answer shows these are words its sellers write. Where they are not,
+                // the market's search is the only judge there is, and it already ran.
+                dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                return@mapNotNull null
+            }
             listing to s
         }.sortedByDescending { it.second }.map { it.first }
+        return Partitioned(kept, dropped)
     }
+
+    /**
+     * Whether the listing carries what a compound the search names is made of.
+     *
+     * German writes one thing as one word and then splits it back apart across a list:
+     * "Parkett-, Bodenschleifmaschine von Scheer" is a Parkettschleifmaschine, and matching the
+     * glued spelling finds neither half of it. The leading part is what separates it from the
+     * novels a market returns that merely end in "-maschine", so that is what is compared. A word
+     * too short to be built of parts has none to compare, and is matched whole like any other.
+     */
+    private fun compoundStems(parsed: ParsedQuery): List<String> =
+        (parsed.positiveTokens + parsed.orGroups.flatten())
+            .map { it.lowercase().replace(NON_ALNUM, "") }
+            .filter { it.length >= COMPOUND_LENGTH }
+            .map { it.take(STEM_LENGTH) }
+            .distinct()
+
+    private fun carriesAStem(listing: Listing, stems: List<String>): Boolean {
+        val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
+        return stems.any { text.contains(it) }
+    }
+
+    /** From this many characters a word is built of parts rather than being one. */
+    private const val COMPOUND_LENGTH = 10
+
+    /** The leading part compared, long enough to name the thing the compound is about. */
+    private const val STEM_LENGTH = 7
+
+    /** The share of a market's answer that has to carry a word of the search before a listing
+     *  without one is treated as the exception rather than the rule. Half: measured against the two
+     *  answers this decides between — Vinted for "grigri" carries the word in 46 of 48, eBay for a
+     *  category word carries it in about half, and a market that ran the search and returned
+     *  mostly other things still sits well above nothing. */
+    private const val WORDS_ARE_WRITTEN = 0.5
+
+    /** How much of a multi-word search a listing has to carry: three of four words, four of five. */
+    private const val ENOUGH_OF_THE_SEARCH = 0.76
+
+    /**
+     * Whether a market answered a different question than the one asked: it returned a page of
+     * listings and not one of them carries a word from the search.
+     *
+     * Measured on the two cases this exists for. reBuy answers "grigri" with "Grün ist die Heide"
+     * and "Mosaik (Grundkurs)" — six listings, none containing the word, because the site dropped
+     * the search and served its own shelf. eBay Italy answers "2tb m.2 ssd" with a hundred drives
+     * and five exact matches: it ran the search, and those five are real.
+     *
+     * So the line is at nothing, not at a share. A market that ran the search and mostly missed is
+     * handled listing by listing like every other market; one that never ran it has nothing to
+     * filter, since what it sent is about something else entirely.
+     */
+    fun answeredSomethingElse(listings: List<Listing>, query: SearchQuery): String? {
+        val parsed = parseQuery(query)
+        val tokens = (parsed.positiveTokens + parsed.orGroups.flatten())
+            .map { it.lowercase().replace(NON_ALNUM, "") }
+            .filter { it.length >= 3 }
+        if (tokens.isEmpty() || listings.size < MIN_ANSWER_TO_JUDGE) return null
+        val matching = listings.count { listing ->
+            val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
+            tokens.any { text.contains(it) }
+        }
+        if (matching > 0) return null
+        val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
+        return "${listings.size} results, not one carrying a word of the search (sample: $sample)"
+    }
+
+    /** Below this, an answer is too small to tell a market that ignored the search from one that
+     *  genuinely had nothing close. */
+    private const val MIN_ANSWER_TO_JUDGE = 5
+
+    /** The two halves of [partition]: what the search shows, and what it removed. */
+    data class Partitioned(val kept: List<Listing>, val dropped: List<DroppedListing>)
 
     /**
      * Detects a result set the platform returned without applying the query: many listings,
@@ -437,6 +536,11 @@ object RelevanceFilter {
         // so that umlaut replacements like "ä"→"ae" work on titles from all crawlers.
         val nfc = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFC)
         return nfc
+            // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".
+            // Joined before periods become spaces, so a title's "M.2" and a query's "m.2" end up
+            // in the same shape ("m2") — split, the title says "m 2" and the query token "m2"
+            // never matches it, which dropped every M.2 drive on every market.
+            .replace(Regex("""\b([a-z])\.(\d)""", RegexOption.IGNORE_CASE), "$1$2")
             .replace(".", " ")  // Strip period (e.g. "Hüllen." → "Huellen", "z.B." → "z B")
             .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
             // French/Spanish accents (Vinted DE, Marktplaats, etc.)

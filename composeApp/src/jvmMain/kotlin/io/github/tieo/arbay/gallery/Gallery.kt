@@ -74,6 +74,7 @@ private val SCENES: List<Scene> = buildList {
     // ── Search ────────────────────────────────────────────────────────────────
     add(scene("search", "as-it-is") { Search() })
     add(scene("search", "no-history") { Search(history = emptyList()) })
+    add(scene("search", "every-country") { Search(countries = emptyList()) })
 
     // ── Results ───────────────────────────────────────────────────────────────
     add(scene("results", "as-it-is") { Results(PreviewData.active + PreviewData.sold, PreviewData.marketAnswers) })
@@ -87,6 +88,9 @@ private val SCENES: List<Scene> = buildList {
         val found = PreviewData.active.filter { it.id in PreviewData.newListingIds }
         Results(found, emptyList(), stored = found)
     })
+    add(scene("results", "an-auction-among-the-prices") {
+        Results(PreviewData.withAuction, PreviewData.marketAnswers)
+    })
     add(scene("results", "empty") { Results(emptyList(), PreviewData.nobodyHadAnything) })
     add(scene("results", "failed") { Results(emptyList(), PreviewData.everyoneFailed) })
     add(scene("results", "some-markets-failed") {
@@ -94,6 +98,31 @@ private val SCENES: List<Scene> = buildList {
     })
     add(scene("results", "a-market-offers-its-captcha") {
         Results(PreviewData.active.take(3), PreviewData.captchaHeld)
+    })
+    add(scene("results", "other-words-to-add") {
+        Results(
+            PreviewData.active, PreviewData.marketAnswers,
+            otherWords = PreviewData.otherWords, picked = listOf("parkettschleifer"),
+        )
+    })
+    add(scene("other-words", "every-word-the-markets-printed") {
+        io.github.tieo.arbay.ui.screen.OtherWordsSheet(
+            words = PreviewData.otherWords,
+            picked = listOf("parkettschleifer"),
+            searchQuery = "parkettschleifmaschine",
+            onToggle = {},
+            onDismiss = {},
+        )
+    })
+    add(scene("removed", "what-the-search-took-out") {
+        io.github.tieo.arbay.ui.screen.DroppedSheet(
+            dropped = PreviewData.droppedBySearch,
+            searchQuery = "parkettschleifmaschine",
+            onDismiss = {},
+        )
+    })
+    add(scene("results", "what-the-search-removed") {
+        Results(PreviewData.active, PreviewData.marketAnswers, dropped = PreviewData.droppedBySearch)
     })
     add(scene("results", "the-filters-admit-none") {
         Results(PreviewData.active, PreviewData.allAnswered, blocked = PreviewData.active.map { it.title })
@@ -108,6 +137,24 @@ private val SCENES: List<Scene> = buildList {
     // ── Markets ───────────────────────────────────────────────────────────────
     add(scene("markets", "as-it-is") { Markets(PreviewData.marketAnswers) })
     add(scene("markets", "loading") { Markets(PreviewData.stillAsking) })
+    add(scene("markets", "asked-in-their-own-language", tall = true) {
+        Markets(
+            PreviewData.marketAnswers,
+            reach = io.github.tieo.arbay.model.SearchReach(
+                otherLanguages = true,
+                termByLanguage = mapOf("it" to "levigatrice per parquet"),
+            ),
+            suggestions = io.github.tieo.arbay.model.TermSuggestions(
+                text = "parkettschleifmaschine",
+                suggestions = mapOf(
+                    "it" to "levigatrice per parquet",
+                    "nl" to "parketschuurmachine",
+                    "es" to "lijadora de parquet",
+                ),
+                unavailable = listOf("fr"),
+            ),
+        )
+    })
     add(scene("markets", "empty") { Markets(PreviewData.nobodyHadAnything) })
     add(scene("markets", "failed") { Markets(PreviewData.everyoneFailed) })
     add(scene("markets", "cooling-down") { Markets(PreviewData.everyoneFailed.take(3)) })
@@ -167,11 +214,15 @@ private fun Home(
 }()
 
 @Composable
-private fun Search(history: List<io.github.tieo.arbay.history.SearchHistoryEntry> = PreviewData.searchHistory) = inline {
+private fun Search(
+    history: List<io.github.tieo.arbay.history.SearchHistoryEntry> = PreviewData.searchHistory,
+    countries: List<String> = listOf("DE", "AT", "CH"),
+) = inline {
     io.github.tieo.arbay.ui.screen.DiscoverySheet(
         onDismiss = {}, onProductSelected = {}, onCustomSearch = {},
         onLiveSearch = {}, onFreeItems = {}, onCarSearch = {},
         history = history,
+        countries = countries,
     )
 }()
 
@@ -185,6 +236,9 @@ private fun Results(
     blocked: List<String> = emptyList(),
     newIds: Set<String> = emptySet(),
     stored: List<Listing>? = null,
+    dropped: List<io.github.tieo.arbay.model.DroppedListing> = emptyList(),
+    otherWords: List<io.github.tieo.arbay.model.SuggestedTerm> = emptyList(),
+    picked: List<String> = emptyList(),
 ) = inline {
     io.github.tieo.arbay.ui.screen.ListingsSheet(
         productName = "Parkettschleifmaschine",
@@ -196,6 +250,9 @@ private fun Results(
             sampleTotal = total,
             sampleCompleted = completed,
             sampleBlocked = blocked,
+            sampleDropped = dropped,
+            sampleOtherWords = otherWords,
+            samplePicked = picked,
         ),
         platforms = PreviewData.active.map { it.platformId }.distinct(),
         blockedTerms = blocked,
@@ -236,8 +293,12 @@ private fun Markets(
     statuses: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus>,
     shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
     shownCountries: Set<String> = emptySet(),
+    reach: io.github.tieo.arbay.model.SearchReach = io.github.tieo.arbay.model.SearchReach(),
+    suggestions: io.github.tieo.arbay.model.TermSuggestions? = null,
 ) = inline {
     io.github.tieo.arbay.ui.screen.MarketsSheet(
+        reach = reach,
+        suggestions = suggestions,
         statuses = statuses,
         offers = PreviewData.active.groupBy { it.platformId }.mapValues { it.value.size },
         capabilities = PreviewData.marketAbilities,
