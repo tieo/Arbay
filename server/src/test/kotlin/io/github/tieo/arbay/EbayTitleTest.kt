@@ -42,6 +42,24 @@ class EbayTitleTest {
     }
 
     @Test
+    fun `the line eBay writes for screen readers is not a title`() {
+        // Off the phone: real Crafters at 10,000 to 25,000 euro, every one of them titled "Wird in
+        // neuem Fenster oder Tab geöffnet" and then dropped for carrying none of the search.
+        assertEquals(
+            "VW Crafter 35 Kasten Hochdach",
+            titleOf(
+                """<div class="s-item__title"><span class="clipped">Wird in neuem Fenster oder Tab geöffnet</span>""" +
+                    """<span role="heading">VW Crafter 35 Kasten Hochdach</span></div>""",
+            ),
+        )
+        assertEquals(
+            "",
+            titleOf("""<div class="s-item__title"><span class="clipped">Opens in a new window or tab</span></div>"""),
+            "an element holding nothing but that line holds no title",
+        )
+    }
+
+    @Test
     fun `a title with no flag is left alone`() {
         assertEquals(
             "Lexar NM790 2TB M.2 SSD",

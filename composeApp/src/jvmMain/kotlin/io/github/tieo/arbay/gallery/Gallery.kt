@@ -102,6 +102,9 @@ private val SCENES: List<Scene> = buildList {
     add(scene("results", "nearest-first-with-nowhere-to-measure-from") {
         Results(PreviewData.active, PreviewData.marketAnswers, sort = io.github.tieo.arbay.model.SortMode.NEAREST)
     })
+    add(scene("results", "edit-a-vehicle-search-term") {
+        Results(PreviewData.active, PreviewData.marketAnswers, openEditor = true, car = true)
+    })
     add(scene("results", "other-words-to-add") {
         Results(
             PreviewData.active, PreviewData.marketAnswers,
@@ -243,6 +246,8 @@ private fun Results(
     otherWords: List<io.github.tieo.arbay.model.SuggestedTerm> = emptyList(),
     picked: List<String> = emptyList(),
     sort: io.github.tieo.arbay.model.SortMode? = null,
+    openEditor: Boolean = false,
+    car: Boolean = false,
 ) = inline {
     io.github.tieo.arbay.ui.screen.ListingsSheet(
         productName = "Parkettschleifmaschine",
@@ -269,6 +274,9 @@ private fun Results(
         storedListings = stored,
         isBookmarked = true,
         onToggleBookmark = {},
+        onEditQuery = if (openEditor) ({ _: String -> }) else null,
+        onEditFilters = if (car) ({ }) else null,
+        openTermEditor = openEditor,
         onDismiss = {},
     )
 }()

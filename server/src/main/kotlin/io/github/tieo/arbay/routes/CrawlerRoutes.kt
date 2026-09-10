@@ -341,6 +341,17 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             call.respond(CrawlerStatusTracker.getStatus(platform))
         }
 
+        /** The page a market actually served, through the same fetch a crawl uses. A parser is
+         *  fixed against the markup in front of it, and a market that answers a crawl while
+         *  refusing everything else leaves no other way to see it. */
+        get("/page") {
+            val url = call.request.queryParameters["url"] ?: throw BadRequestException("Missing url")
+            val html = io.github.tieo.arbay.crawler.fetchHttp(
+                io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
+            )
+            call.respondText(html, ContentType.Text.Plain)
+        }
+
         // Error snapshots — list, view, resolve
         get("/errors") {
             val resolved = call.queryParameters["resolved"]?.toBooleanStrictOrNull()

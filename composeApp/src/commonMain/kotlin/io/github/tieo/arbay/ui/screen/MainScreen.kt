@@ -783,8 +783,11 @@ fun MainScreen(
             onEditFilters = if (view.isCar) {
                 { openCarEditor(view, bookmark) }
             } else null,
-            // A vehicle search edits its term through the car form's make/model fields, not here.
-            onEditQuery = if (view.isCar) null else { newQuery ->
+            // Every search's term is editable from its own results, vehicle or not. Sending a
+            // vehicle search to the form instead left the pencil opening a dialog with nothing in
+            // it to edit; the form is still there for year, mileage and the rest, and a rewritten
+            // term is resolved back to a make and a model the same way a typed one is.
+            onEditQuery = { newQuery ->
                 // The name followed the term until someone gave it its own — keep following it.
                 val followsTerm = view.name.equals(view.query, ignoreCase = true)
                 val newName = if (followsTerm) newQuery else view.name

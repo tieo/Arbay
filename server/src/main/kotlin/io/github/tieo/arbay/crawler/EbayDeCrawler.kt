@@ -480,6 +480,20 @@ class EbayDeCrawler(
     companion object {
         /** eBay's "new listing" flag, which it writes into the title element as a span of its own and
          *  in the language of whichever eBay this is. */
+        /** Text eBay puts inside the title element for screen readers, in every language it runs
+         *  in. Read as a title, a real van came back called "Wird in neuem Fenster oder Tab
+         *  geöffnet" and was then dropped for carrying none of the words searched for. */
+        private val screenReaderText = Regex(
+            """^\s*(wird\s+in\s+neuem\s+fenster\s+oder\s+tab\s+ge(ö|oe)ffnet|""" +
+                """opens\s+in\s+a\s+new\s+window\s+or\s+tab|""" +
+                """si\s+apre\s+in\s+una\s+nuova\s+finestra\s+o\s+scheda|""" +
+                """viene\s+aperta\s+una\s+nuova\s+finestra\s+o\s+scheda|""" +
+                """se\s+abre\s+en\s+una\s+nueva\s+ventana\s+o\s+pesta(ñ|n)a|""" +
+                """s.ouvre\s+dans\s+une\s+nouvelle\s+fen(ê|e)tre\s+ou\s+un\s+nouvel\s+onglet|""" +
+                """wordt\s+geopend\s+in\s+een\s+nieuw\s+venster\s+of\s+tabblad)\s*$""",
+            RegexOption.IGNORE_CASE,
+        )
+
         private val newListingBadge = Regex(
             """^\s*(neues\s+angebot|new\s+listing|nuovo\s+annuncio|nuova\s+inserzione|""" +
                 """nuevo\s+anuncio|nueva\s+publicaci(ó|o)n|nouvelle\s+annonce|nieuwe\s+aanbieding)\s*""",
@@ -495,9 +509,14 @@ class EbayDeCrawler(
          */
         internal fun listingTitle(titleEl: org.jsoup.nodes.Element): String {
             val spans = titleEl.select("span").map { it.text().trim() }.filter { it.isNotBlank() }
-            val withoutBadge = spans.filterNot { newListingBadge.matches(it) }
+            val withoutBadge = spans
+                .filterNot { newListingBadge.matches(it) }
+                .filterNot { screenReaderText.matches(it) }
             val text = withoutBadge.maxByOrNull { it.length } ?: titleEl.text()
-            return newListingBadge.replace(text, "").trim()
+            val title = newListingBadge.replace(text, "").trim()
+            // Nothing but the flag and the screen-reader line: this element holds no title, and
+            // saying so lets the caller look elsewhere rather than pass one of them on.
+            return if (screenReaderText.matches(title)) "" else title
         }
     }
 

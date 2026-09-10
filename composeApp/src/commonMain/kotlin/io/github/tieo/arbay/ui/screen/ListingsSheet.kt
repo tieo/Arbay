@@ -160,6 +160,9 @@ fun ListingsSheet(
     // no crawl on open, and what is shown is what was stored when the listings were found, down to
     // the ones the platform has since taken down. Refreshing from here still crawls.
     storedListings: List<Listing>? = null,
+    // Draws the term editor open, for the renderer: a dialog nobody can tap on is a dialog nobody
+    // ever looks at.
+    openTermEditor: Boolean = false,
 ) {
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
@@ -576,7 +579,7 @@ fun ListingsSheet(
                         // shows for a car search too whenever onAliasesChange is offered, just
                         // without the Term field.
                         if (onEditQuery != null || onAliasesChange != null) {
-                            var showEditQuery by remember { mutableStateOf(false) }
+                            var showEditQuery by remember { mutableStateOf(openTermEditor) }
                             var editQueryText by remember(searchQuery) { mutableStateOf(searchQuery) }
                             // Seeded fresh each time the dialog opens, not tied to the aliases
                             // param directly — editing is a draft until Save.
@@ -603,6 +606,26 @@ fun ListingsSheet(
                                                     singleLine = true,
                                                     modifier = Modifier.fillMaxWidth(),
                                                 )
+                                            }
+                                            // A vehicle search keeps its year, mileage and the rest
+                                            // on the form, and this is the nearest way there from
+                                            // the words it is searching.
+                                            if (onEditFilters != null) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        showEditQuery = false
+                                                        onEditFilters.invoke()
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Icon(
+                                                        Icons.Outlined.DirectionsCar,
+                                                        null,
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text("Open the vehicle form")
+                                                }
                                             }
                                             if (onAliasesChange != null) {
                                                 // A listing matching any one of these counts as a match —
