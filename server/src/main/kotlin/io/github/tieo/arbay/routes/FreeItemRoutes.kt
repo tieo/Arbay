@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.classifier.ClipImageModel
+import io.github.tieo.arbay.repo.AuctionReminderStore
 import io.github.tieo.arbay.classifier.EmbeddingModel
 import io.github.tieo.arbay.classifier.FeedbackAction
 import io.github.tieo.arbay.classifier.FreeItemFeedbackStore
@@ -581,7 +582,10 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
         // What the device asks for on its schedule, drained so the same match is not raised twice.
         get("/notifications/poll") {
             val result = FreeItemMonitor.pollNow()
-            call.respond(result.copy(subfilterMatches = savedSearches.drainSubfilterMatches()))
+            call.respond(result.copy(
+                subfilterMatches = savedSearches.drainSubfilterMatches(),
+                auctionReminders = AuctionReminderStore.drainDue(),
+            ))
         }
 
         // Get last poll result without triggering a new poll

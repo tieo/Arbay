@@ -236,6 +236,9 @@ private fun UncheckedDialog(unchecked: List<String>, onClose: () -> Unit) {
 internal fun ListingCard(
     listing: Listing,
     onBan: (() -> Unit)? = null,
+    // Ask to be told this many minutes before this auction ends, or null to stop asking. Only ever
+    // called for an auction: everything else has no end to count back from.
+    onAuctionReminder: ((Int?) -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,
     searchQuery: String = "",
     // The vehicle criteria in force, so a listing can say which of them it was never checked
@@ -245,6 +248,10 @@ internal fun ListingCard(
     modifier: Modifier = Modifier,
 ) {
     var showBlockDialog by remember { mutableStateOf(false) }
+    var showReminder by remember { mutableStateOf(false) }
+    // Set here rather than read back from the server: what matters on the card is whether this
+    // auction has been asked about, and asking is the only thing that changes it.
+    var remindsAt by remember(listing.id) { mutableStateOf<Int?>(null) }
     var showDetail by remember { mutableStateOf(false) }
 
     // A flat, tappable row on the sheet surface, separated by a hairline divider — not a filled card
@@ -401,8 +408,27 @@ internal fun ListingCard(
                 )
             }
 
-            if (onBan != null || onBlockWord != null) {
+            val auctionEnd = listing.auctionEndsAt.takeIf { listing.saleType == SaleType.AUCTION }
+            if (onBan != null || onBlockWord != null || auctionEnd != null) {
                 Column {
+                    // An auction runs out whether or not the app is open, so the useful thing is to
+                    // be told a chosen stretch before it does, while a bid can still be made.
+                    if (auctionEnd != null) {
+                        IconButton(
+                            onClick = { showReminder = true },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                if (remindsAt != null) Icons.Filled.NotificationsActive
+                                else Icons.Outlined.NotificationsNone,
+                                if (remindsAt != null) "Change when this auction is announced"
+                                else "Tell me before this auction ends",
+                                modifier = Modifier.size(16.dp),
+                                tint = if (remindsAt != null) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
                     if (onBan != null) {
                         IconButton(
                             onClick = onBan,
@@ -435,6 +461,49 @@ internal fun ListingCard(
             thickness = 1.dp,
         )
       }
+    }
+
+    if (showReminder) {
+        val endsAt = listing.auctionEndsAt
+        AlertDialog(
+            onDismissRequest = { showReminder = false },
+            confirmButton = {},
+            dismissButton = {
+                if (remindsAt != null) {
+                    TextButton(onClick = {
+                        remindsAt = null
+                        showReminder = false
+                        onAuctionReminder?.invoke(null)
+                    }) { Text("Don't tell me") }
+                }
+            },
+            title = { Text("Before this auction ends") },
+            text = {
+                Column {
+                    Text(
+                        endsAt?.let { "It ends ${endsInLabel(it) ?: "shortly"}." }
+                            ?: "This market does not say when it ends.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    AUCTION_LEAD_CHOICES.forEach { (minutes, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                remindsAt = minutes
+                                showReminder = false
+                                onAuctionReminder?.invoke(minutes)
+                            }.padding(vertical = 8.dp),
+                        ) {
+                            RadioButton(selected = remindsAt == minutes, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+        )
     }
 
     if (showBlockDialog && onBlockWord != null) {

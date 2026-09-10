@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.SortMode
+import io.github.tieo.arbay.ui.screen.format
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
@@ -273,6 +274,27 @@ class ListingViewModel(
         val query = _searchQuery.value
         if (query.isBlank() || rendersASample) return
         setReach(reach.copy(extraTerms = next), platforms)
+    }
+
+    /** Ask to be told [leadMinutes] before this auction ends, or null to stop asking. Held by the
+     *  server, since the auction runs out whether or not the app is open. */
+    fun remindBeforeAuction(listing: Listing, leadMinutes: Int?) {
+        if (rendersASample) return
+        val endsAt = listing.auctionEndsAt ?: return
+        viewModelScope.launch {
+            runCatching {
+                if (leadMinutes == null) client.clearAuctionReminder(listing.id)
+                else client.setAuctionReminder(AuctionReminder(
+                    listingId = listing.id,
+                    title = listing.title,
+                    url = listing.url,
+                    endsAt = endsAt,
+                    leadMinutes = leadMinutes,
+                    priceText = listing.price.format(),
+                    platformName = listing.platformId.displayName,
+                ))
+            }
+        }
     }
 
     /** Set the active blocked-keyword list (from the bookmark being viewed). */

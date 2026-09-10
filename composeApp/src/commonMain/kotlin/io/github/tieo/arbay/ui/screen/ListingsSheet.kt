@@ -1074,6 +1074,7 @@ fun ListingsSheet(
                             listing = listing,
                             carFilters = carFilters,
                             onBan = { listingViewModel.ban(listing) },
+                            onAuctionReminder = { lead -> listingViewModel.remindBeforeAuction(listing, lead) },
                             onBlockWord = blockWord,
                             searchQuery = searchQuery,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 3.dp),

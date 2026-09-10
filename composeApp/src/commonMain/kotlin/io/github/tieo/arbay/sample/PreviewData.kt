@@ -93,7 +93,9 @@ object PreviewData {
         if (i == 2) l.copy(
             saleType = SaleType.AUCTION,
             bidCount = 7,
-            auctionEndsAt = now.plus(kotlin.time.Duration.parse("95m")),
+            // Counted off the clock the render runs on, not off the sample's own fixed date: the
+            // card says how long is left, and a fixed date makes every drawing of it say "ended".
+            auctionEndsAt = kotlinx.datetime.Clock.System.now().plus(kotlin.time.Duration.parse("95m")),
         ) else l
     }
 

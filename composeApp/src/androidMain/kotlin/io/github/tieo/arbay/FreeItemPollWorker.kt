@@ -64,6 +64,22 @@ class FreeItemPollWorker(
                 )
             }
 
+            // An auction someone asked about, now that their chosen stretch before the end has come.
+            // The wording leads with the time left, since that is the whole reason it arrives now.
+            for (reminder in result.auctionReminders) {
+                NotificationHelper.showSubfilterMatch(
+                    context = applicationContext,
+                    title = reminder.title,
+                    body = listOfNotNull(
+                        endsIn(reminder.endsAt) ?: "ending now",
+                        reminder.priceText?.let { "bid $it" },
+                        reminder.platformName,
+                    ).joinToString(", "),
+                    url = reminder.url,
+                    id = reminder.listingId.hashCode(),
+                )
+            }
+
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()

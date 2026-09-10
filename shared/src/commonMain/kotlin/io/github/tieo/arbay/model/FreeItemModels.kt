@@ -137,5 +137,7 @@ data class PollResult(
     val urgentMatches: List<NewMatch> = emptyList(),
     // Listings matching a notification subfilter someone set on a specific saved search.
     val subfilterMatches: List<SubfilterMatch> = emptyList(),
+    // Auctions someone asked to hear about, now that their chosen moment before the end has come.
+    val auctionReminders: List<AuctionReminder> = emptyList(),
     val lastPollTime: Instant? = null,
 )

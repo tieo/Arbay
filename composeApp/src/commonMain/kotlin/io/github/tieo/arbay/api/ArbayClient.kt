@@ -136,6 +136,17 @@ class ArbayClient(
             setBody(settings)
         }.body()
 
+    /** Ask to be told before one auction ends, or stop asking. */
+    suspend fun setAuctionReminder(reminder: AuctionReminder): AuctionReminder =
+        client.post("$baseUrl/api/auctions/reminders") {
+            contentType(ContentType.Application.Json)
+            setBody(reminder)
+        }.body()
+
+    suspend fun clearAuctionReminder(listingId: String) {
+        client.delete("$baseUrl/api/auctions/reminders/${listingId.encodeURLPathPart()}")
+    }
+
     suspend fun getMarketSettings(): MarketSettings =
         client.get("$baseUrl/api/settings/markets").body()
 
