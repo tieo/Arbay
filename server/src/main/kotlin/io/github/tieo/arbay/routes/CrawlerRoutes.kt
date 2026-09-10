@@ -618,6 +618,19 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // it answered a different question, and its answer holds nothing to
                                 // filter. Anything else is judged listing by listing, so a market
                                 // that ran the search keeps whatever of it matched.
+                                // A market answering with one title over and over is a parser
+                                // reading the wrong node, which otherwise shows up only as results
+                                // quietly going missing.
+                                io.github.tieo.arbay.crawler.repeatedTitleReport(rawResults)?.let { report ->
+                                    CrawlerStatusTracker.recordError(platformId, report, ErrorType.PARSE_ERROR)
+                                    ErrorSnapshotStore.capture(
+                                        platform = platformId.name, query = pq.text,
+                                        error = CrawlerBlockedException(report, ErrorType.PARSE_ERROR),
+                                        errorType = ErrorType.PARSE_ERROR,
+                                        url = rawResults.firstOrNull()?.url,
+                                        html = rawResults.take(25).joinToString("\n") { "${it.title}\t${it.url}" },
+                                    )
+                                }
                                 val ignoredSearch = RelevanceFilter.answeredSomethingElse(
                                     rawResults, pq, askedInItsOwnLanguage(pq, platformId),
                                 )

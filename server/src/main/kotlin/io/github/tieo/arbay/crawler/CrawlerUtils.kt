@@ -71,6 +71,30 @@ internal suspend fun emitTermUsed(term: String) {
     coroutineContext[TermsUsedEmitter]?.emit(term)
 }
 
+/**
+ * Whether a market's answer looks like a parser reading the wrong thing.
+ *
+ * Two of these ran for months: eBay's "New Listing" flag and its "opens in a new window or tab"
+ * line, each read as the title of every listing that carried it. Nothing noticed, because a title
+ * that is not the listing's title still parses, and the listings were then dropped one by one for
+ * carrying none of the words searched for. A market answering with the same title over and over is
+ * the shape of that, whatever the cause, and it is worth saying out loud.
+ */
+fun repeatedTitleReport(listings: List<Listing>): String? {
+    if (listings.size < MIN_ANSWER_TO_JUDGE_TITLES) return null
+    val (title, count) = listings
+        .groupingBy { it.title.trim().lowercase() }
+        .eachCount()
+        .maxByOrNull { it.value } ?: return null
+    if (count < MIN_ANSWER_TO_JUDGE_TITLES) return null
+    if (count.toDouble() / listings.size < SAME_TITLE_SHARE) return null
+    return "$count of ${listings.size} listings are titled \"$title\" — the title is being read " +
+        "off the wrong part of the card"
+}
+
+private const val MIN_ANSWER_TO_JUDGE_TITLES = 5
+private const val SAME_TITLE_SHARE = 0.5
+
 /** CoroutineContext element collecting the app's verdict on each other word a market printed:
  *  what it is, why, and — once a word has actually been searched — what it added. A word emitted
  *  twice is the same word with its outcome filled in, so a collector keeps the last of each. */
