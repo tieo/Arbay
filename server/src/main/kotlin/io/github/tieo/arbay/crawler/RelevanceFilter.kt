@@ -286,8 +286,17 @@ object RelevanceFilter {
         val tail = listing.title.substring(match.range.last + 1).lowercase()
         // Compared with separators stripped, since query tokens are normalised the same way — a
         // title's "MFC-L2750DW" must still match the token "mfcl2750dw".
-        fun holds(text: String, token: String) =
-            text.contains(token) || text.replace(NON_ALNUM, "").contains(token.replace(NON_ALNUM, ""))
+        fun holds(text: String, token: String): Boolean {
+            if (text.contains(token)) return true
+            val compact = text.replace(NON_ALNUM, "")
+            val tokenCompact = token.replace(NON_ALNUM, "")
+            if (compact.contains(tokenCompact)) return true
+            // A German compound names the same machine several ways: an ad for a capacitor says
+            // "für Parkettschleifer" where the search says "parkettschleifmaschine", and requiring
+            // the whole word meant the capacitor read as a machine. The shared stem is what the two
+            // have in common, and it is what the phrase after "für" is pointing at.
+            return tokenCompact.length >= 10 && compact.contains(tokenCompact.take(8))
+        }
         // Only fires when the head names none of the query and the tail names it — otherwise the
         // product itself leads the title and the phrase is a normal qualifier.
         val headHasQuery = tokens.any { holds(head, it.lowercase()) }

@@ -277,4 +277,22 @@ class RelevanceFilterTest {
             "the machines stay and the paper goes",
         )
     }
+
+    @Test
+    fun `a part sold for the machine goes, even when the ad calls the machine something else`() {
+        // Straight off the phone again: these were stored for a parkettschleifmaschine watch. The
+        // ads say "für Parkettschleifer", the search says "parkettschleifmaschine", and requiring
+        // the whole word meant a capacitor and a roller read as machines.
+        val listings = listOf(
+            listing("Kondensator 31,5uf für Parkettschleifer Kunzle & Tasin, Dismac", price = 6499),
+            listing("Lägler Hummel Walze für Parkettschleifmaschinen - Neubezug", price = 23900),
+            listing("Lägler Parkettschleifmaschine", price = 30000),
+            listing("Künzle & Tasin Arlequin Parkettschleifmaschine 230 V", price = 50000),
+        )
+        val kept = search("parkettschleifmaschine", listings).map { it.title }
+        assertEquals(
+            listOf("Lägler Parkettschleifmaschine", "Künzle & Tasin Arlequin Parkettschleifmaschine 230 V"),
+            kept,
+        )
+    }
 }
