@@ -87,6 +87,19 @@ object PreviewData {
         SuggestedTerm("vertikutieren", worthTrying = false, why = "names the job, not the thing"),
     )
 
+    /** The markets a search covers that this crawl did not ask, which the picker lists so they can
+     *  be ticked back in. */
+    val notAsked: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+        PlatformId.MOBILE_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN, PlatformId.RICARDO,
+    ).map {
+        io.github.tieo.arbay.ui.viewmodel.PlatformStatus(
+            platformId = it.name,
+            platformName = it.displayName,
+            status = PlatformSearchStatus.PENDING,
+            fetchStage = "not asked — tick to ask it",
+        )
+    }
+
     /** Every way a listing can be missing from the results, for the one view that shows them. */
     val hiddenGroups: List<io.github.tieo.arbay.ui.screen.HiddenGroup> = listOf(
         io.github.tieo.arbay.ui.screen.HiddenGroup(

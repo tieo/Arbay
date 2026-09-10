@@ -143,6 +143,9 @@ private val SCENES: List<Scene> = buildList {
     // ── Markets ───────────────────────────────────────────────────────────────
     add(scene("markets", "as-it-is") { Markets(PreviewData.marketAnswers) })
     add(scene("markets", "loading") { Markets(PreviewData.stillAsking) })
+    add(scene("markets", "one-asked-the-rest-listed", tall = true) {
+        Markets(PreviewData.marketAnswers.take(2) + PreviewData.notAsked)
+    })
     add(scene("markets", "asked-in-their-own-language", tall = true) {
         Markets(
             PreviewData.marketAnswers,

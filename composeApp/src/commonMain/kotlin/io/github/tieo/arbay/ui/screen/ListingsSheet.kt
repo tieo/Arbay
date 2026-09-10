@@ -528,16 +528,24 @@ fun ListingsSheet(
     // otherwise. Narrowing used to hide what had already been fetched, so a search kept for two
     // German markets still crawled eleven — which costs the time of the slowest of them and earns
     // the blocks of the ones nobody asked to see.
-    val platformsToAsk: List<PlatformId>? = remember(platforms, shownMarkets, shownCountries) {
-        val all = platforms ?: MarketSets.platformsIn(
+    // Every market of this search's kind, whatever this crawl asked and whatever is ticked. The
+    // only thing that narrows the list itself is the kind of search: a vehicle search has no
+    // business offering Vinted. Which of them get asked is a separate question, answered below.
+    val coveredPlatforms: List<PlatformId> = remember(carFilters) {
+        MarketSets.platformsFor(if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL)
+    }
+    val platformsToAsk: List<PlatformId> = remember(platforms, coveredPlatforms, shownMarkets, shownCountries) {
+        val askable = platforms ?: MarketSets.platformsIn(
             if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL,
             SearchCountries.current.countries,
         )
-        val narrowed = all.filter { platform ->
+        // A market ticked by hand is asked even where the search was not covering it: ticking one
+        // is the way to have it asked, so the tick has to reach the crawl.
+        val narrowed = (askable + shownMarkets).distinct().filter { platform ->
             (shownMarkets.isEmpty() || platform in shownMarkets) &&
                 (shownCountries.isEmpty() || MarketSets.countryOf(platform) in shownCountries)
         }
-        narrowed.ifEmpty { all }
+        narrowed.ifEmpty { askable }
     }
 
     // Keyed on what defines the crawl, by value: a list rebuilt with the same contents is the same
@@ -1234,7 +1242,19 @@ fun ListingsSheet(
 
         if (showMarkets) {
             MarketsSheet(
-                statuses = platformStatuses,
+                // Every market this search covers, whether or not it was asked this time. Asking
+                // only the ones it is kept for is right; dropping the rest off the picker is not,
+                // since ticking one is how they get asked again.
+                statuses = platformStatuses + coveredPlatforms
+                    .filter { covered -> platformStatuses.none { it.platformId == covered.name } }
+                    .map {
+                        PlatformStatus(
+                            platformId = it.name,
+                            platformName = it.displayName,
+                            status = PlatformSearchStatus.PENDING,
+                            fetchStage = "not asked — tick to ask it",
+                        )
+                    },
                 // What each market has to give, counted before the market picks so a market does
                 // not read as empty because another one is picked.
                 offers = marketChoices.associate { it.platform to it.count },

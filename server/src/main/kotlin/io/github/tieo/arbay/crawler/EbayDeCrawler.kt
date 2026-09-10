@@ -259,13 +259,39 @@ class EbayDeCrawler(
 
         // New eBay layout uses li.s-card, old uses li.s-item
         val newCards = doc.select("li.s-card")
-        if (newCards.isNotEmpty()) return parseNewLayout(newCards, now)
-
-        val oldCards = doc.select("li.s-item")
-        if (oldCards.isNotEmpty()) return parseOldLayout(oldCards, now)
-
-        return emptyList()
+        val parsed = when {
+            newCards.isNotEmpty() -> parseNewLayout(newCards, now)
+            else -> doc.select("li.s-item").takeIf { it.isNotEmpty() }?.let { parseOldLayout(it, now) }
+                ?: emptyList()
+        }
+        // A whole page of listings and not one of them says where it is: the card still carries a
+        // location and this parser is no longer finding it. eBay answers a plain client and
+        // curl_cffi with a challenge, so the page a crawl actually got is the only place the
+        // markup can be read, and it is kept here rather than thrown away.
+        if (parsed.size >= 5 && parsed.none { it.location != null }) {
+            noLocationsSeen(html, parsed.size)
+        }
+        return parsed
     }
+
+    private fun noLocationsSeen(html: String, count: Int) {
+        if (!reportedMissingLocations.compareAndSet(false, true)) return
+        runCatching {
+            ErrorSnapshotStore.capture(
+                platform = platformId.name,
+                query = "(page parse)",
+                error = CrawlerBlockedException(
+                    "$count listings parsed, none with a location", ErrorType.PARSE_ERROR,
+                ),
+                errorType = ErrorType.PARSE_ERROR,
+                url = "https://www.$domain",
+                html = html,
+            )
+        }
+    }
+
+    /** Once per run of the server: the page is a megabyte and one copy answers the question. */
+    private val reportedMissingLocations = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
         return items.mapNotNull { item ->

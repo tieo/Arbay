@@ -255,7 +255,9 @@ fun MarketsSheet(
                         sentBeforeWords = offersBeforeWords[platform] ?: kept,
                         can = capabilities[platform],
                         picked = kept > 0 && (wholeCountry || platform in shownMarkets),
-                        pickable = kept > 0,
+                        // A market nobody asked has nothing to give yet, and ticking it is exactly
+                        // how it gets asked.
+                        pickable = kept > 0 || status.status == PlatformSearchStatus.PENDING,
                         onPick = {
                             if (platform != null) {
                                 when {
@@ -331,7 +333,8 @@ private val PlatformStatus.isFailure: Boolean
  * from into a wall of prose nobody reads.
  */
 private fun PlatformStatus.saidWhat(kept: Int, hiddenByWords: Boolean = false): String? = when (status) {
-    PlatformSearchStatus.PENDING -> "waiting its turn"
+    // A market that was not part of this crawl says so, and says how to have it asked.
+    PlatformSearchStatus.PENDING -> fetchStage ?: "waiting its turn"
     PlatformSearchStatus.SEARCHING -> fetchStage ?: "being asked"
     PlatformSearchStatus.CAPTCHA -> "asked for a captcha instead of answering"
     // A market that was still sending when it was given up on has usually sent some of it. Saying

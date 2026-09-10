@@ -346,9 +346,14 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
          *  refusing everything else leaves no other way to see it. */
         get("/page") {
             val url = call.request.queryParameters["url"] ?: throw BadRequestException("Missing url")
-            val html = io.github.tieo.arbay.crawler.fetchHttp(
-                io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
-            )
+            // Through the same TLS impersonation a crawl uses: eBay answers a plain client with a
+            // 1.8 KB challenge, which is no use to anyone fixing a parser against its markup.
+            val html = runCatching { io.github.tieo.arbay.crawler.CurlCffiClient.fetch(url) }
+                .getOrElse {
+                    io.github.tieo.arbay.crawler.fetchHttp(
+                        io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
+                    )
+                }
             call.respondText(html, ContentType.Text.Plain)
         }
 

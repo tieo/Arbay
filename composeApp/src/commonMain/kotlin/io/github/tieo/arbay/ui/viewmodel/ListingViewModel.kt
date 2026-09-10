@@ -621,6 +621,9 @@ class ListingViewModel(
             _droppedBySearch.value = emptyList()
             _otherWords.value = emptyList()
 
+            // Whether this search finished on its own terms, as against being cancelled by the
+            // screen closing or by the next search starting.
+            var ranToTheEnd = false
             try {
                 withTimeoutOrNull(360_000L) {
                 client.crawlerSearchStream(
@@ -729,6 +732,9 @@ class ListingViewModel(
                     }
                 }
                 } // withTimeoutOrNull
+                // Reached either by the stream ending or by the 360 s cap, and both are this
+                // search finishing rather than something else stopping it.
+                ranToTheEnd = true
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Closing the results, or starting another search, cancels this one. Nothing
                 // failed: saying the server could not be reached would be untrue, and the two
@@ -766,11 +772,16 @@ class ListingViewModel(
                 }
             } finally {
                 _loading.value = false
-                // Mark any still-searching platforms as timed out
-                _platformStatuses.value = _platformStatuses.value.map {
-                    if (it.status == PlatformSearchStatus.SEARCHING)
-                        it.copy(status = PlatformSearchStatus.TIMEOUT, error = null)
-                    else it
+                // A market still working when the search itself ran out of time was too slow. One
+                // still working when the screen was closed, or when another search replaced this
+                // one, was not: this block runs on cancellation too, so leaving the app mid-fetch
+                // used to mark whatever was in flight as having been given up on.
+                if (ranToTheEnd) {
+                    _platformStatuses.value = _platformStatuses.value.map {
+                        if (it.status == PlatformSearchStatus.SEARCHING)
+                            it.copy(status = PlatformSearchStatus.TIMEOUT, error = null)
+                        else it
+                    }
                 }
                 accountForListingsWithoutAStatus(platforms)
             }
