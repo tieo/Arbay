@@ -264,34 +264,16 @@ class EbayDeCrawler(
             else -> doc.select("li.s-item").takeIf { it.isNotEmpty() }?.let { parseOldLayout(it, now) }
                 ?: emptyList()
         }
-        // A whole page of listings and not one of them says where it is: the card still carries a
-        // location and this parser is no longer finding it. eBay answers a plain client and
-        // curl_cffi with a challenge, so the page a crawl actually got is the only place the
-        // markup can be read, and it is kept here rather than thrown away.
-        if (parsed.size >= 5 && parsed.none { it.location != null }) {
-            noLocationsSeen(html, parsed.size)
-        }
         return parsed
     }
 
-    private fun noLocationsSeen(html: String, count: Int) {
-        if (!reportedMissingLocations.compareAndSet(false, true)) return
-        runCatching {
-            ErrorSnapshotStore.capture(
-                platform = platformId.name,
-                query = "(page parse)",
-                error = CrawlerBlockedException(
-                    "$count listings parsed, none with a location", ErrorType.PARSE_ERROR,
-                ),
-                errorType = ErrorType.PARSE_ERROR,
-                url = "https://www.$domain",
-                html = html,
-            )
-        }
-    }
-
-    /** Once per run of the server: the page is a megabyte and one copy answers the question. */
-    private val reportedMissingLocations = java.util.concurrent.atomic.AtomicBoolean(false)
+    // eBay listings carry no location, and there is none to read: its card layout does not publish
+    // one. Checked against a page a crawl actually fetched (the parser's own HTML, kept through an
+    // error snapshot, since eBay answers both a plain client and curl_cffi with a challenge): its
+    // 130 attribute rows say "Sofort-Kaufen", "Kostenlose Abholung", "Marke: Volkswagen", a price,
+    // a watcher count and a seller rating. The old s-item layout had `.s-item__location` and the
+    // selector for it is still read above, for the pages that still come back that way. Getting a
+    // location for the rest would cost one item-page fetch per listing.
 
     private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
         return items.mapNotNull { item ->
