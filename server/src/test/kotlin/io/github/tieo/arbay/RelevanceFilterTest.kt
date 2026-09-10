@@ -317,6 +317,36 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `one times a size is one of them, not a lot of them`() {
+        // Off the phone: "Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB, DDR4" — the exact product —
+        // was read as a bulk lot of 32 and thrown away, while a real lot says how many it is.
+        val kept = search("CT32G4SFD832A", listOf(
+            listing("Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB, DDR4, 3200 MHz, 260-pin SO-DIMM"),
+            listing("Konvolut 20x Crucial CT32G4SFD832A Module"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Crucial CT32G4SFD832A,") }, "one module of 32 GB")
+        assertTrue(kept.none { it.startsWith("Konvolut") }, "twenty of them is a lot")
+    }
+
+    @Test
+    fun `a module named for the machines it fits is the module`() {
+        // Straight off the phone, all of them removed as accessories: the memory itself, an
+        // equivalent module sold as a replacement for it, and the same in three languages.
+        val kept = search("CT32G4SFD832A", listOf(
+            listing("Crucial DDR4 RAM 32GB 3200MHz SODIMM CL22, Arbeitsspeicher für Laptop CT32G4SFD832A"),
+            listing("32GB DDR4 PC4-25600 SODIMM (Replacement for Crucial CT32G4SFD832A)"),
+            listing("32 GB DDR4 PC4-25600 SODIMM (sostituzione per Crucial CT32G4SFD832A)"),
+            listing("OWC 32GB Replacement for Crucial CT32G4SFD832A"),
+            listing("RAM para portátil Crucial CT32G4SFD832A 32 GB DDR4 3200 MHz"),
+            listing("32 GB DDR4 PC4-25600 SODIMM (Reemplazo para Crucial CT32G4SFD832A)"),
+            listing("Schutzhülle für Crucial CT32G4SFD832A"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Crucial DDR4 RAM") }, "which laptops it fits is not what it is")
+        assertEquals(6, kept.size, "a replacement for the module is a module, in any language")
+        assertTrue(kept.none { it.startsWith("Schutzhülle") }, "a case for it is still a case")
+    }
+
+    @Test
     fun `a case for the headphones is not the headphones`() {
         // Live, for "WH-1000XM5": a storage case at 15 euro, a replacement headband at 18 and an
         // aftermarket battery at 20 led a list whose headphones sit around 160, all of them
@@ -342,22 +372,27 @@ class RelevanceFilterTest {
         // without the number at all.
         // Each market is judged on its own answer, which is how the filter is called, so eBay —
         // where every listing writes the number — and Geizhals — where none does — are two sets.
+        // A part number on its own says nothing about where the words sit, so a title naming a
+        // machine cannot be told from one naming what the module goes into. Both are kept: losing
+        // "Crucial 32GB Notebook DDR4-SODIMM CT32G4SFD832A" — the module itself — is the worse of
+        // the two mistakes, and it is what asking with one word used to do.
         val ebay = search("CT32G4SFD832A", listOf(
             listing("Crucial 32GB DDR4-3200 SO-DIMM Laptop RAM CT32G4SFD832A"),
-            listing("Crucial 32GB DDR4 3200MHz SODIMM Laptop Memory PC4-25600 CT32G4SFD832A"),
-            listing("Gaming PC Ryzen 7, 32GB RAM CT32G4SFD832A verbaut"),
+            listing("Crucial 32GB Notebook DDR4-SODIMM CT32G4SFD832A"),
+            listing("Nueva Laptop Crucial 32GB DDR4 3200Mhz SODIMM CL22 260Pin CT32G4SFD832A"),
         )).map { it.title }
-        assertTrue(ebay.any { it.endsWith("Laptop RAM CT32G4SFD832A") }, "a laptop module is a module")
-        assertTrue(ebay.none { it.startsWith("Gaming PC") }, "a PC with one in it is a PC")
+        assertEquals(3, ebay.size, "every one of them is the module that was searched for")
 
         // A number is what the search is: the modules a market lists without it may well be the
         // same part, but nothing in their titles says so, and a 16GB module plainly is not.
+        // A market that lists the same module without ever printing the number searched its own
+        // catalogue, where the number is a field rather than a word, and is left to it.
         val geizhals = search("CT32G4SFD832A", listOf(
             listing("Crucial SO-DIMM 32GB, DDR4-3200, CL22-22-22, 2RX8"),
             listing("Crucial SO-DIMM 16GB, DDR4-3200, CL22"),
             listing("Kingston SO-DIMM 32GB, DDR4-3200, CL22"),
         )).map { it.title }
-        assertEquals(emptyList(), geizhals, "none of them carries the number that was searched for")
+        assertEquals(3, geizhals.size, "nothing in these titles contradicts the search")
     }
 
     @Test

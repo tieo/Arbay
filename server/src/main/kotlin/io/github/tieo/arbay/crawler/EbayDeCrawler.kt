@@ -269,10 +269,10 @@ class EbayDeCrawler(
 
     private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
         return items.mapNotNull { item ->
-            val titleEl = item.selectFirst("div.s-card__title span")
-                ?: item.selectFirst("a.s-card__link div span")
+            val titleEl = item.selectFirst("div.s-card__title")
+                ?: item.selectFirst("a.s-card__link div")
                 ?: return@mapNotNull null
-            val title = titleEl.text().trim()
+            val title = listingTitle(titleEl)
             if (title == "Shop on eBay" || title.isBlank()) return@mapNotNull null
 
             val linkEl = item.selectFirst("a.s-card__link") ?: return@mapNotNull null
@@ -344,7 +344,7 @@ class EbayDeCrawler(
     private fun parseOldLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
         return items.mapNotNull { item ->
             val titleEl = item.selectFirst(".s-item__title") ?: return@mapNotNull null
-            val title = titleEl.text()
+            val title = listingTitle(titleEl)
             if (title == "Shop on eBay" || title.isBlank()) return@mapNotNull null
 
             val linkEl = item.selectFirst(".s-item__link") ?: return@mapNotNull null
@@ -476,4 +476,29 @@ class EbayDeCrawler(
         Condition.PARTS_ONLY -> "7000"
         Condition.USED -> null
     }
+
+    companion object {
+        /** eBay's "new listing" flag, which it writes into the title element as a span of its own and
+         *  in the language of whichever eBay this is. */
+        private val newListingBadge = Regex(
+            """^\s*(neues\s+angebot|new\s+listing|nuovo\s+annuncio|nuova\s+inserzione|""" +
+                """nuevo\s+anuncio|nueva\s+publicaci(ó|o)n|nouvelle\s+annonce|nieuwe\s+aanbieding)\s*""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /**
+         * The listing's own title, without the flag eBay puts in front of it.
+         *
+         * Reading the first span of the title element read that flag instead: every newly listed item
+         * came back titled "Neues Angebot" or "New Listing", which then read as a placeholder title
+         * and was thrown away, taking the newest listings on the market with it.
+         */
+        internal fun listingTitle(titleEl: org.jsoup.nodes.Element): String {
+            val spans = titleEl.select("span").map { it.text().trim() }.filter { it.isNotBlank() }
+            val withoutBadge = spans.filterNot { newListingBadge.matches(it) }
+            val text = withoutBadge.maxByOrNull { it.length } ?: titleEl.text()
+            return newListingBadge.replace(text, "").trim()
+        }
+    }
+
 }

@@ -88,8 +88,12 @@ object RelevanceFilter {
         // Reject placeholder titles
         if (isPlaceholderTitle(titleNorm, titleWords)) return -1.0
 
-        // Reject bulk/lot listings: "15x", "x15", "15 Stück", "lot of 3" etc.
-        if (Regex("""(?:^|\s)\d{2,}\s*x\s|\s+x\s*\d{2,}(?:\s|$)""").containsMatchIn(titleNorm)) return -1.0
+        // Reject bulk lots: "15x", "x15", "15 Stück". A count of one is not a lot, and a number
+        // after the x is a size where a unit follows it — "Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB"
+        // is one module, and reading it as a lot of 32 threw the exact product off the search.
+        if (Regex("""(?:^|\s)(?!1\s*x)\d{2,}\s*x\s""").containsMatchIn(titleNorm) ||
+            Regex("""\s+x\s*\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz))""").containsMatchIn(titleNorm)
+        ) return -1.0
 
         // Word-start positions in titleCompact (for guarding compact matches)
         val wordStartsInCompact: Set<Int> = buildSet {
@@ -288,6 +292,18 @@ object RelevanceFilter {
         RegexOption.IGNORE_CASE,
     )
 
+    /** How far past "für" the thing itself has to appear for the phrase to be about it. */
+    private const val WORDS_AFTER_FOR = 4
+
+    /** A product sold as a stand-in for another, which is the same kind of thing as what was
+     *  searched for rather than something made for it. */
+    private val substituteFor = Regex(
+        """\b(replacement|ersatz(modul|speicher)?|equivalent[ea]?|equivalente|sostituzione|""" +
+            """remplacement|reemplazo|sustituto|ricambio|vervanging|compatible\s+replacement|""" +
+            """alternativ(e|es)?)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun isAccessoryFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         val tokens = parsed.positiveTokens
         if (tokens.isEmpty()) return false
@@ -310,8 +326,18 @@ object RelevanceFilter {
         // Only fires when the head names none of the query and the tail names it — otherwise the
         // product itself leads the title and the phrase is a normal qualifier.
         val headHasQuery = tokens.any { holds(head, it.lowercase()) }
-        val tailHasQuery = tokens.any { holds(tail, it.lowercase()) }
+        // What the phrase points at decides what it says. "Arbeitsspeicher für Laptop
+        // CT32G4SFD832A" names the machines the memory fits and is the memory; "Toner für Brother
+        // MFC-L2750DW" names what the toner is for and is not a printer.
+        val pointsAtAMachine = tail.trimStart().split(Regex("\\s+")).firstOrNull()
+            ?.let { hostDevice.matches(it.trim(',', '.', ':', ';')) } ?: false
+        if (pointsAtAMachine) return false
+        val pointedAt = tail.trim().split(Regex("\\s+")).take(WORDS_AFTER_FOR).joinToString(" ")
+        val tailHasQuery = tokens.any { holds(pointedAt, it.lowercase()) }
         if (headHasQuery || !tailHasQuery) return false
+        // A substitute names the thing it replaces, and is the same kind of thing: "32GB DDR4
+        // SODIMM (Replacement for Crucial CT32G4SFD832A)" is a module, not a module's accessory.
+        if (substituteFor.containsMatchIn(listing.title)) return false
         // The head is the accessory's own noun. If the query already asks for that noun, keep it.
         val q = queryText.lowercase()
         val headWords = head.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 }
@@ -366,7 +392,9 @@ object RelevanceFilter {
     private val hostDevice = Regex(
         """\b(gaming[\s-]?pc|gamer[\s-]?pc|komplett[\s-]?pc|desktop|tower|workstation|server|""" +
             """notebook|laptop|macbook|imac|mac\s?mini|thinkpad|elitebook|probook|latitude|""" +
-            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|pc)\b""",
+            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|pc|""" +
+            // The same machines as the markets in other languages name them.
+            """port(á|a)til(es)?|ordenador(es)?|portatile|computer|ordinateur|draagbare)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -397,7 +425,11 @@ object RelevanceFilter {
      */
     private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (hostDevice.containsMatchIn(queryText)) return false
-        val tokens = parsed.positiveTokens.ifEmpty { return false }
+        // The rule weighs how much of the search falls either side of the machine's name, so it
+        // needs more than one word to weigh. Asked for a part number alone, everything sits on one
+        // side by definition, and "Crucial 32GB Notebook DDR4-SODIMM CT32G4SFD832A" — a module for
+        // notebooks — read as a notebook.
+        val tokens = parsed.positiveTokens.takeIf { it.size >= 2 } ?: return false
         // Where the machine's own name ends: its spec list, or — for the titles written as one run
         // of words, which is most of them on a classifieds site — the first word of the search.
         val boundary = specListStart.find(listing.title)?.range?.first
@@ -572,7 +604,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } || isAPartNumber(token) ||
+                isASize(token) || token.all { it.isDigit() } ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             parsed.copy(positiveTokens = required)
@@ -654,18 +686,6 @@ object RelevanceFilter {
             }
         }
     }
-
-    /** Whether the word is the thing's own number: letters and digits together, long enough that
-     *  nobody types it by accident. "CT32G4SFD832A" and "WH1000XM5" name one product and one only,
-     *  so a search that carries one is asking for that product — where "m2" is a slot half the
-     *  market leaves out. */
-    private fun isAPartNumber(token: String): Boolean {
-        val t = token.lowercase().replace(NON_ALNUM, "")
-        return t.length >= PART_NUMBER_LENGTH && t.any { it.isLetter() } && t.any { it.isDigit() }
-    }
-
-    /** From this many characters, letters and digits together are a product's number. */
-    private const val PART_NUMBER_LENGTH = 6
 
     /** The share of a market's answer that has to carry a word of the search before a listing
      *  without one is treated as the exception rather than the rule. Half: measured against the two
