@@ -404,7 +404,12 @@ object RelevanceFilter {
             ?: firstTokenPosition(listing.title, tokens)
             ?: return false
         val head = listing.title.substring(0, boundary)
-        if (!hostDevice.containsMatchIn(head)) return false
+        // The machine has to be what the ad leads with. "Crucial 32GB DDR4-3200 SO-DIMM Laptop RAM
+        // CT32G4SFD832A" says "laptop" about what the part goes into, five words in, and is the
+        // part itself; "Gaming PC: 9850X3D, …" and "NEUER GAMER PC ULTRA 7 …" say it at the front,
+        // about themselves.
+        val naming = hostDevice.find(head) ?: return false
+        if (head.take(naming.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
         val headCompact = head.lowercase().replace(NON_ALNUM, "")
         val tailCompact = listing.title.substring(boundary).lowercase().replace(NON_ALNUM, "")
         val inHead = tokens.count { headCompact.contains(it.lowercase().replace(NON_ALNUM, "")) }
@@ -413,6 +418,38 @@ object RelevanceFilter {
         // MacBook Pro M2 Max carries "m2" in its own name, where it is the processor and not the
         // slot, and the drive it holds is listed with everything else it holds.
         return inTail > inHead
+    }
+
+    // What a thing is sold with, named as the thing on offer. A search for headphones comes back
+    // led by a storage case at 15 euro, a replacement headband at 18 and an aftermarket battery at
+    // 20, all of them carrying the model number because that is what they fit.
+    private val accessoryNoun = Regex(
+        // German builds these as compounds — Aufbewahrungshülle, Hochleistungsakku,
+        // Ersatzohrpolster — so the head noun is matched wherever the word ends, not only where it
+        // stands alone. The other languages a cross-border search reaches name them plainly.
+        """(?U)\w*(h(ü|ue)lle|etui|tasche|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
+            """polster|kopfband|halterung|st(ä|ae)nder|schutzfolie|displayschutz|reparaturset|""" +
+            """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung)\b|""" +
+            """\b(ear\s?pads?|headband|pcb|repair\s?kit|housse|custodia|funda|hoes|""" +
+            """cover|case|charger)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "mit Tasche", "inkl. Ladekabel", "+ Etui": what comes with the thing, rather than instead
+     *  of it. A word after one of these names an extra, and the ad is still about the product. */
+    private val comesWith = Regex("""(mit|inkl\.?|inklusive|incl\.?|including|with|\+|&)\s*$""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Whether the title's own subject is something sold alongside the thing searched for.
+     *
+     * Only where the query does not ask for it, and only where nothing marks it as an extra: a
+     * listing reading "WH-1000XM5 mit Tasche" is the headphones, and "WH-1000XM5
+     * Aufbewahrungshülle" is the bag.
+     */
+    private fun isAnAccessoryNamedOutright(listing: Listing, queryText: String): Boolean {
+        if (accessoryNoun.containsMatchIn(queryText)) return false
+        val match = accessoryNoun.find(listing.title) ?: return false
+        return !comesWith.containsMatchIn(listing.title.take(match.range.first))
     }
 
     // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
@@ -485,6 +522,7 @@ object RelevanceFilter {
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
+                isAnAccessoryNamedOutright(listing, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
                 // A part off the vehicle, named without a "für": a trim strip, a sill plate, a
                 // wheel bolt, an OEM number. Only for a search that names a vehicle — a model
@@ -534,7 +572,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } ||
+                isASize(token) || token.all { it.isDigit() } || isAPartNumber(token) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             parsed.copy(positiveTokens = required)
@@ -581,7 +619,10 @@ object RelevanceFilter {
     private fun compoundStems(parsed: ParsedQuery): List<String> =
         (parsed.positiveTokens + parsed.orGroups.flatten())
             .map { it.lowercase().replace(NON_ALNUM, "") }
-            .filter { it.length >= COMPOUND_LENGTH }
+            // A compound is built of words. "CT32G4SFD832A" is a part number, and its first seven
+            // characters name nothing, so a market that lists the same module without the number
+            // was being dropped for not repeating a prefix of it.
+            .filter { it.length >= COMPOUND_LENGTH && it.all { c -> c.isLetter() } }
             .map { it.take(STEM_LENGTH) }
             .distinct()
 
@@ -613,6 +654,18 @@ object RelevanceFilter {
             }
         }
     }
+
+    /** Whether the word is the thing's own number: letters and digits together, long enough that
+     *  nobody types it by accident. "CT32G4SFD832A" and "WH1000XM5" name one product and one only,
+     *  so a search that carries one is asking for that product — where "m2" is a slot half the
+     *  market leaves out. */
+    private fun isAPartNumber(token: String): Boolean {
+        val t = token.lowercase().replace(NON_ALNUM, "")
+        return t.length >= PART_NUMBER_LENGTH && t.any { it.isLetter() } && t.any { it.isDigit() }
+    }
+
+    /** From this many characters, letters and digits together are a product's number. */
+    private const val PART_NUMBER_LENGTH = 6
 
     /** The share of a market's answer that has to carry a word of the search before a listing
      *  without one is treated as the exception rather than the rule. Half: measured against the two

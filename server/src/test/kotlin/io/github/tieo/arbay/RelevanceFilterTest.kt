@@ -131,12 +131,12 @@ class RelevanceFilterTest {
             listing("Schutzhülle Case für MFC-L2750DW"),
             listing("Brother MFC-L2750DW Mainboard Formatter"),
         ))
-        // No hardcoded kill lists: the printer itself and a spare part named without an
-        // "accessory for" phrasing both pass. What does not pass is an accessory whose title
-        // says it is made FOR the searched product — a searcher after the printer does not
-        // want its toner or a case (see the accessory-for tests below).
+        // No hardcoded kill lists for a product: the printer itself passes on its own words. What
+        // does not pass is what the printer is sold beside — its toner, a case made for it, and
+        // the board out of one. A search for a printer led by a 20 euro mainboard is the shape
+        // this removes, and each of them says which rule took it.
         assertTrue(results.any { it.title.contains("Multifunktionsdrucker") })
-        assertTrue(results.any { it.title.contains("Mainboard") })
+        assertTrue(results.none { it.title.contains("Mainboard") }, "a board out of one is not one")
         assertTrue(results.none { it.title.contains("Toner") }, "toner is an accessory for the printer")
         assertTrue(results.none { it.title.contains("Schutzhülle") }, "case is an accessory for the printer")
     }
@@ -314,6 +314,50 @@ class RelevanceFilterTest {
         assertTrue(kept.none { it.contains("Gaming PC") }, "a PC with one inside is a PC")
         assertTrue(kept.none { it.contains("MacBook") }, "so is a laptop")
         assertTrue(kept.none { it.contains("PlayStation") }, "so is a console")
+    }
+
+    @Test
+    fun `a case for the headphones is not the headphones`() {
+        // Live, for "WH-1000XM5": a storage case at 15 euro, a replacement headband at 18 and an
+        // aftermarket battery at 20 led a list whose headphones sit around 160, all of them
+        // carrying the model number because that is what they fit.
+        val kept = search("WH-1000XM5", listOf(
+            listing("Sony WH-1000XM5 Aufbewahrungshülle grau", price = 1500),
+            listing("Sony WH-1000XM5 Kopfband 16-Pin Kunststoff", price = 1800),
+            listing("ERYNK WH-1000XM5/723741 Ersatz Akku kompatibel mit Sony WH-1000XM5", price = 2000),
+            listing("Sony WH-1000XM5 Bluetooth Kopfhörer schwarz", price = 21900),
+            listing("Sony WH-1000XM5 Kopfhörer mit Tragetasche", price = 23000),
+        )).map { it.title }
+        assertTrue(kept.any { it.endsWith("Kopfhörer schwarz") }, "the headphones themselves")
+        assertTrue(kept.any { it.endsWith("mit Tragetasche") }, "a bag that comes with them is not the subject")
+        assertTrue(kept.none { it.contains("Aufbewahrungshülle") }, "a case is a case")
+        assertTrue(kept.none { it.contains("Kopfband") }, "so is a spare headband")
+        assertTrue(kept.none { it.contains("Ersatz Akku") }, "so is an aftermarket battery")
+    }
+
+    @Test
+    fun `a part that says what it goes into is still the part`() {
+        // Live, for the part number "CT32G4SFD832A": seven exact matches were dropped as whole
+        // machines because their titles say "Laptop RAM", and Geizhals lists the same module
+        // without the number at all.
+        // Each market is judged on its own answer, which is how the filter is called, so eBay —
+        // where every listing writes the number — and Geizhals — where none does — are two sets.
+        val ebay = search("CT32G4SFD832A", listOf(
+            listing("Crucial 32GB DDR4-3200 SO-DIMM Laptop RAM CT32G4SFD832A"),
+            listing("Crucial 32GB DDR4 3200MHz SODIMM Laptop Memory PC4-25600 CT32G4SFD832A"),
+            listing("Gaming PC Ryzen 7, 32GB RAM CT32G4SFD832A verbaut"),
+        )).map { it.title }
+        assertTrue(ebay.any { it.endsWith("Laptop RAM CT32G4SFD832A") }, "a laptop module is a module")
+        assertTrue(ebay.none { it.startsWith("Gaming PC") }, "a PC with one in it is a PC")
+
+        // A number is what the search is: the modules a market lists without it may well be the
+        // same part, but nothing in their titles says so, and a 16GB module plainly is not.
+        val geizhals = search("CT32G4SFD832A", listOf(
+            listing("Crucial SO-DIMM 32GB, DDR4-3200, CL22-22-22, 2RX8"),
+            listing("Crucial SO-DIMM 16GB, DDR4-3200, CL22"),
+            listing("Kingston SO-DIMM 32GB, DDR4-3200, CL22"),
+        )).map { it.title }
+        assertEquals(emptyList(), geizhals, "none of them carries the number that was searched for")
     }
 
     @Test
