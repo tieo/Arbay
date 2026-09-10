@@ -91,8 +91,11 @@ object RelevanceFilter {
         // Reject bulk lots: "15x", "x15", "15 Stück". A count of one is not a lot, and a number
         // after the x is a size where a unit follows it — "Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB"
         // is one module, and reading it as a lot of 32 threw the exact product off the search.
-        if (Regex("""(?:^|\s)(?!1\s*x)\d{2,}\s*x\s""").containsMatchIn(titleNorm) ||
-            Regex("""\s+x\s*\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz))""").containsMatchIn(titleNorm)
+        // A count sits before the x ("20x", "4 x") or stands as its own word after it ("x 20").
+        // Glued to what follows, the x belongs to a model name — Biwin X570, Emtec X200 — and
+        // reading those as lots of 570 and 200 threw two real drives off a search for one.
+        if (Regex("""(?:^|\s)(?!1\s*x)\d{2,}\s*x(?:\s|$)""").containsMatchIn(titleNorm) ||
+            Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz))""").containsMatchIn(titleNorm)
         ) return -1.0
 
         // Word-start positions in titleCompact (for guarding compact matches)
@@ -369,8 +372,22 @@ object RelevanceFilter {
         // A drive that states its size twice ("2TB (2000GB)") states one size. Only a listing that
         // also offers something smaller than what was asked for is priced at a size nobody asked
         // for, which is what makes its place among the cheapest wrong.
-        return offered.size >= 2 && offered.any { it < asked.min() }
+        if (offered.size < 2 || offered.none { it < asked.min() }) return false
+        // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
+        // is two terabytes, sold as two sticks, at a price for the pair.
+        return !addsUpToTheAskedSize(listing.title, asked.min())
     }
+
+    /** "2x 1TB", "4 x 512GB": a count and a size whose product is the size asked for, which is
+     *  that size sold in pieces rather than a smaller thing at a smaller price. */
+    private fun addsUpToTheAskedSize(title: String, askedGb: Double): Boolean =
+        Regex("""(\d{1,2})\s*x\s*(\d{1,4}(?:[.,]\d)?\s?(?:gb|tb|mb))""", RegexOption.IGNORE_CASE)
+            .findAll(title)
+            .any { m ->
+                val count = m.groupValues[1].toIntOrNull() ?: return@any false
+                val each = sizeInGigabytes(m.groupValues[2].replace(" ", "")) ?: return@any false
+                count * each == askedGb
+            }
 
     /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
      *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */

@@ -317,6 +317,30 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `an X in a model name is not a count`() {
+        // Off the phone, both removed as bulk lots: Biwin X570 and Emtec X200 are single drives
+        // whose model names happen to start with an x.
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Biwin X570 2tb SSD M.2, Zustand: Neu"),
+            listing("Emtec x200 2tb ssd m.2, Zustand: Neu, mit Etikett"),
+            listing("Konvolut 20 x SSD M.2 2TB gemischt"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Biwin X570") }, "X570 is what it is called")
+        assertTrue(kept.any { it.startsWith("Emtec x200") }, "so is x200")
+        assertTrue(kept.none { it.startsWith("Konvolut") }, "twenty of them is a lot")
+    }
+
+    @Test
+    fun `a size sold in two sticks is still that size`() {
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Transcend MTE400S M.2 SSD 2TB (2x 1TB)"),
+            listing("Fanxiang M.2 SSD 256GB 512GB 1TB 2TB PCIe"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Transcend") }, "two times one terabyte is two terabytes")
+        assertTrue(kept.none { it.startsWith("Fanxiang") }, "a row of sizes is not")
+    }
+
+    @Test
     fun `one times a size is one of them, not a lot of them`() {
         // Off the phone: "Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB, DDR4" — the exact product —
         // was read as a bulk lot of 32 and thrown away, while a real lot says how many it is.
