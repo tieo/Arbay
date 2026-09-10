@@ -70,6 +70,29 @@ object Geocoder {
         return null
     }
 
+    /**
+     * The postcode nearest to a point, in one country.
+     *
+     * A site that filters by distance wants what its own sellers type: AutoScout24 takes a German
+     * postcode and a radius, not a pair of coordinates. Someone searching "near Rottweil" has named
+     * a town, so the town becomes a point and the point becomes the postcode the site understands.
+     */
+    fun nearestZip(country: String, lat: Double, lon: Double): String? {
+        val cc = normCountry(country) ?: return null
+        val prefix = "$cc:"
+        var best: String? = null
+        var bestKm = Double.MAX_VALUE
+        index.forEach { (key, coords) ->
+            if (!key.startsWith(prefix)) return@forEach
+            val value = key.removePrefix(prefix)
+            // Only the postal keys: a place name is not what the site's field takes.
+            if (!value.all { it.isDigit() || it == ' ' || it == '-' }) return@forEach
+            val km = haversine(lat, lon, coords.first, coords.second)
+            if (km < bestKm) { bestKm = km; best = value }
+        }
+        return best
+    }
+
     /** Coordinates for a listing location, or null if it cannot be resolved. Tries zip then city,
      *  scoped to the normalised country; if the country is unknown, tries the zip across all. */
     fun resolve(country: String?, zip: String?, city: String?): Pair<Double, Double>? {

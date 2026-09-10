@@ -21,6 +21,7 @@ import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.RequestMonitor
+import io.github.tieo.arbay.crawler.area
 import io.github.tieo.arbay.crawler.askedInItsOwnLanguage
 import io.github.tieo.arbay.crawler.localizedQuery
 import io.github.tieo.arbay.crawler.TermVerdictEmitter
@@ -167,6 +168,10 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
         excludeKeywords = excludeKeywords ?: base.excludeKeywords,
         aliases = aliases ?: base.aliases,
         reach = reach ?: base.reach,
+        // Where the search is centred, and how far it reaches. A market that takes one is asked
+        // with it; the rest are measured against what their listings say.
+        location = queryParameters["near"]?.takeIf { it.isNotBlank() } ?: base.location,
+        radiusKm = queryParameters["radiusKm"]?.toIntOrNull() ?: base.radiusKm,
     )
 }
 
@@ -226,6 +231,27 @@ private suspend fun carPostFilter(
  *  when the search carries the searcher's position. Geocoding runs unconditionally so the client
  *  can measure distances itself later — picking "nearest first" then costs no crawl. A listing
  *  with no resolvable location is left as it is. */
+/**
+ * What a search reaches, for the markets that cannot be told.
+ *
+ * AutoScout24 takes a postcode and a radius, mobile.de a point and a radius, and they narrow at the
+ * source. Everywhere else answers the whole country, so the listings that fall outside the search's
+ * reach are removed here, measured from where the search is centred rather than from the device. A
+ * listing whose market never says where it is stays: not knowing is not the same as being far.
+ */
+private fun outsideTheArea(listings: List<Listing>, query: SearchQuery): Pair<List<Listing>, List<Listing>> {
+    val area = query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) ?: return listings to emptyList()
+    val outside = mutableListOf<Listing>()
+    val inside = listings.filter { listing ->
+        val loc = listing.location ?: return@filter true
+        val coords = if (loc.latitude != null && loc.longitude != null) loc.latitude!! to loc.longitude!!
+        else Geocoder.resolve(loc.country, loc.zip, loc.city) ?: return@filter true
+        val km = Geocoder.haversine(area.latitude, area.longitude, coords.first, coords.second)
+        if (km > area.radiusKm) { outside += listing; false } else true
+    }
+    return inside to outside
+}
+
 private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<Listing> {
     val lat = query.userLat
     val lon = query.userLon
@@ -653,12 +679,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val partitioned = RelevanceFilter.partition(
                                     if (ignoredSearch != null) emptyList() else rawResults, pq,
                                 )
+                                val (near, far) = outsideTheArea(partitioned.kept, pq)
                                 val dropped = if (ignoredSearch != null) {
                                     rawResults.map { DroppedListing(it, DropReason.MARKET_IGNORED_SEARCH) }
                                 } else {
-                                    partitioned.dropped
+                                    partitioned.dropped + far.map { DroppedListing(it, DropReason.TOO_FAR) }
                                 }
-                                val classified = partitioned.kept.map { SoldDetector.classify(it) }
+                                val classified = near.map { SoldDetector.classify(it) }
                                 // Cache the raw relevance-filtered crawl; car post-filtering (card
                                 // filter → detail-verify → final filter) runs after, so a later
                                 // filter tweak re-filters from cache without re-crawling.

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui.screen
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,6 +53,10 @@ fun FiltersSheet(
     shownMarkets: Set<PlatformId>,
     shownCountries: Set<String>,
     onOpenMarkets: (() -> Unit)? = null,
+    // Where the search is centred and how far it reaches. Empty means everywhere.
+    near: String? = null,
+    radiusKm: Int? = null,
+    onNear: ((String?, Int?) -> Unit)? = null,
     blockedTerms: List<String>,
     onUnblock: (String) -> Unit,
     onBlock: (String) -> Unit,
@@ -158,6 +163,46 @@ fun FiltersSheet(
                             Spacer(Modifier.width(8.dp))
                             Text("Markets, and what each one said")
                         }
+                    }
+                }
+            }
+
+            if (onNear != null) {
+                FilterSection("Where to look") {
+                    var place by remember(near) { mutableStateOf(near.orEmpty()) }
+                    var km by remember(radiusKm) { mutableStateOf(radiusKm?.takeIf { it > 0 }?.toString() ?: "") }
+                    Text(
+                        "The markets that take a place are asked near it — AutoScout24 by postcode, " +
+                            "mobile.de by point. The rest answer their whole country and what they " +
+                            "publish is measured against this.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = place,
+                            onValueChange = { place = it },
+                            label = { Text("Near") },
+                            placeholder = { Text("town or postcode") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(2f),
+                        )
+                        OutlinedTextField(
+                            value = km,
+                            onValueChange = { km = it.filter { c -> c.isDigit() }.take(4) },
+                            label = { Text("km") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            onNear(place.trim().takeIf { it.isNotBlank() }, km.toIntOrNull()?.takeIf { it > 0 })
+                        }) { Text("Apply") }
                     }
                 }
             }

@@ -394,6 +394,9 @@ class ArbayClient(
         // How far this search may travel from the typed words. Sent per search, so the server
         // never decides on its own what a market gets asked.
         reach: SearchReach = SearchReach(),
+        // Where the search is centred and how far it reaches, for the markets that take one.
+        near: String? = null,
+        radiusKm: Int? = null,
         lat: Double? = null,
         lon: Double? = null,
     ): Flow<CrawlerSearchEvent> = flow {
@@ -412,6 +415,8 @@ class ArbayClient(
             }
             if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
             if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
+            near?.takeIf { it.isNotBlank() }?.let { parameter("near", it) }
+            radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
             if (!reach.isDefault) {
                 parameter("reach", streamJson.encodeToString(SearchReach.serializer(), reach))
             }

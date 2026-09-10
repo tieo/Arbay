@@ -97,10 +97,17 @@ private data class CarSearchScreenSnapshot(
 fun CarSearchSheet(
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
-    onSearch: (name: String, query: String, platforms: List<PlatformId>, filters: CarFilters, make: CarMakeNode?, model: CarModelNode?) -> Unit,
+    onSearch: (
+        name: String, query: String, platforms: List<PlatformId>, filters: CarFilters,
+        make: CarMakeNode?, model: CarModelNode?,
+        // Where to look and how far: a town or postcode, and a radius in kilometres.
+        near: String?, radiusKm: Int?,
+    ) -> Unit,
     initialMake: CarMakeNode? = null,
     initialModel: CarModelNode? = null,
     initialFilters: CarFilters? = null,
+    initialNear: String? = null,
+    initialRadiusKm: Int? = null,
     // The last market selection, so deselecting a platform survives closing/reopening the sheet.
     // Null = default to all markets. onPlatformsChange reports every toggle back to the caller.
     initialPlatforms: List<PlatformId>? = null,
@@ -111,6 +118,8 @@ fun CarSearchSheet(
     var model by remember { mutableStateOf(initialModel) }
     var showMakePicker by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
+    var nearPlace by remember { mutableStateOf(initialNear.orEmpty()) }
+    var nearRadius by remember { mutableStateOf(initialRadiusKm?.takeIf { it > 0 }?.toString() ?: "") }
     var yearFrom by remember { mutableStateOf(initialFilters?.firstRegFromYear?.toString() ?: "") }
     var yearTo by remember { mutableStateOf(initialFilters?.firstRegToYear?.toString() ?: "") }
     var maxKm by remember { mutableStateOf(initialFilters?.maxMileageKm?.toString() ?: "") }
@@ -248,6 +257,33 @@ fun CarSearchSheet(
             // named group that says how many of its criteria are set, so forty controls read as
             // six decisions rather than one wall.
             SectionLabel("What decides it")
+            // Where to look, which every other criterion is measured against and which the markets
+            // that take one are asked with: AutoScout24 by postcode, mobile.de by point, the rest
+            // measured against what they publish.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedTextField(
+                    value = nearPlace,
+                    onValueChange = { nearPlace = it },
+                    label = { Text("Near") },
+                    placeholder = { Text("town or postcode") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(2f),
+                )
+                OutlinedTextField(
+                    value = nearRadius,
+                    onValueChange = { nearRadius = it.filter { c -> c.isDigit() }.take(4) },
+                    label = { Text("km") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
             SliderNumberField("Year from", yearFrom, { yearFrom = it.take(4) }, 1995f, 2026f, 1)
             Spacer(Modifier.height(12.dp))
             SliderNumberField("Max price (EUR)", maxPrice, { maxPrice = it }, 0f, 100000f, 1000)
@@ -446,7 +482,13 @@ fun CarSearchSheet(
             val query = listOfNotNull(make?.name, model?.name).joinToString(" ")
             val name = query.ifBlank { "Car search" }
             Button(
-                onClick = { onSearch(name, query, selectedPlatforms.toList(), buildFilters(), make, model) },
+                onClick = {
+                    onSearch(
+                        name, query, selectedPlatforms.toList(), buildFilters(), make, model,
+                        nearPlace.trim().takeIf { it.isNotBlank() },
+                        nearRadius.toIntOrNull()?.takeIf { it > 0 },
+                    )
+                },
                 enabled = selectedPlatforms.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
             ) {

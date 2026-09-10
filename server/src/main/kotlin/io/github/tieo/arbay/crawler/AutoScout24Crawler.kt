@@ -29,7 +29,11 @@ class AutoScout24Crawler(
 
         return paginate(query) { page ->
             val pageParam = if (page <= 1) "" else "&page=$page"
-            val url = "$basePath?atype=C&cy=$countryParam&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}$pageParam"
+            // A postcode radius is a statement about one country, and this site drops it when the
+            // country list holds several. Centred on a place, the search asks that country.
+            val cy = query.area(isoCountry(countries.firstOrNull()))
+                ?.let { siteCountry(it.country) } ?: countryParam
+            val url = "$basePath?atype=C&cy=$cy&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}$pageParam"
             val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
             parseFromNextData(html) ?: parseFromHtml(html)
         }
@@ -41,9 +45,42 @@ class AutoScout24Crawler(
     // costs the same as a useful one and counts the same against this address, so the search is
     // simply not made. It was the single largest error class in the logs.
 
+    /** The two-letter code as this site's own country letter. */
+    private fun siteCountry(iso: String): String = when (iso.uppercase()) {
+        "DE" -> "D"
+        "AT" -> "A"
+        "BE" -> "B"
+        "ES" -> "E"
+        "FR" -> "F"
+        "IT" -> "I"
+        "LU" -> "L"
+        else -> iso.uppercase()
+    }
+
+    /** This site's own country letters as the two-letter codes everything else uses. */
+    private fun isoCountry(siteCode: String?): String = when (siteCode?.uppercase()) {
+        "D" -> "DE"
+        "A" -> "AT"
+        "B" -> "BE"
+        "E" -> "ES"
+        "F" -> "FR"
+        "I" -> "IT"
+        "L" -> "LU"
+        else -> siteCode?.uppercase()?.takeIf { it.length == 2 } ?: "DE"
+    }
+
     /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
      *  only matching cars and far less needs scraping. Parameter names verified live. */
     private fun filterParams(query: SearchQuery): String = buildString {
+        // Where the search is centred, as this site takes it: its own postcode field and a radius
+        // in kilometres. Without it every search is nationwide and "near me" is only a label the
+        // app draws afterwards.
+        // The postcode has to belong to a country this instance covers, and this site writes those
+        // in its own alphabet — "D" for Germany, "A" for Austria — which is not what a postcode
+        // index is keyed by.
+        query.area(isoCountry(countries.firstOrNull()))?.let { area ->
+            area.zip?.let { append("&zip=$it&zipr=${area.radiusKm}") }
+        }
         query.carCriteria.firstRegFromYear?.let { append("&fregfrom=$it") }
         query.carCriteria.firstRegToYear?.let { append("&fregto=$it") }
         query.carCriteria.maxMileageKm?.let { append("&kmto=$it") }

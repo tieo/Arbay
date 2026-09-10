@@ -82,10 +82,13 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
      *  `min:max`; either side may be empty. Names verified live against the search page: fr =
      *  first-registration year, ml = mileage, pw = power in kW, p = price in EUR, tr = gearbox. */
     private fun filterParams(query: SearchQuery): String {
-        val f = query.toCarFilters() ?: return ""
+        // The area is not a car criterion, so it is built even for a search that sets none.
+        val area = query.area("DE")?.let { "&ll=${it.latitude}%2C${it.longitude}&rad=${it.radiusKm}" } ?: ""
+        val f = query.toCarFilters() ?: return area
         fun range(min: Any?, max: Any?): String? =
             if (min != null || max != null) "${min ?: ""}:${max ?: ""}" else null
         return buildString {
+            append(area)
             range(f.firstRegFromYear, f.firstRegToYear)?.let { append("&fr=$it") }
             range(f.minMileageKm, f.maxMileageKm)?.let { append("&ml=$it") }
             range(f.minPowerKw, f.maxPowerKw)?.let { append("&pw=$it") }

@@ -46,6 +46,9 @@ enum class DropReason {
     /** A placeholder title ("Neues Angebot") or a bulk lot of many units. */
     NOT_A_SINGLE_OFFER,
 
+    /** Further from where the search is centred than it reaches. */
+    TOO_FAR,
+
     /** A price the scraper read wrong — digits from several fields run together. */
     IMPLAUSIBLE_PRICE,
 }
@@ -62,5 +65,6 @@ val DropReason.label: String
         DropReason.WANTED_AD -> "wanted ad"
         DropReason.RENTAL -> "for rent"
         DropReason.NOT_A_SINGLE_OFFER -> "not one offer"
+        DropReason.TOO_FAR -> "too far away"
         DropReason.IMPLAUSIBLE_PRICE -> "unreadable price"
     }

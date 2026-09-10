@@ -42,13 +42,27 @@ class OtomotoCrawler(
         // nothing is asked.
         val carQuery = CarQueryResolver.resolveForCarSite(query.positiveText) ?: return emptyList()
 
+        // Where to look is a path segment here, with the distance as a parameter beside it:
+        // /osobowe/volkswagen/crafter/warszawa?search[dist]=50. Verified live — 31 offers
+        // nationwide against 20 within 50 km of Warsaw. A place this country does not know
+        // resolves to nothing, so a German town never reaches a Polish URL.
+        val area = query.area(countryCode)
+        val citySlug = area?.placeName?.let(::citySlug)
+
         val basePath = buildString {
             append("$host/$categoryPath")
             append("/").append(carQuery.makeSlug)
             carQuery.modelSlug?.let { append("/").append(it) }
+            citySlug?.let { append("/").append(it) }
         }
 
-        val filters = filterParams(query)
+        val filters = buildString {
+            append(filterParams(query))
+            if (citySlug != null && area != null) {
+                if (isNotEmpty()) append("&")
+                append("search%5Bdist%5D=${area.radiusKm}")
+            }
+        }
         return paginate(query) { page ->
             // Page 1 uses no page param; subsequent pages append &page=N after the filter params.
             val url = if (page <= 1) {
@@ -59,6 +73,13 @@ class OtomotoCrawler(
             parse(fetchWithFallback(client, url, siteLabel))
         }
     }
+
+    /** A town as this site writes it in a URL: lowercase, its diacritics folded, spaces joined. */
+    private fun citySlug(place: String): String? = place.trim().lowercase()
+        .replace("ą", "a").replace("ć", "c").replace("ę", "e").replace("ł", "l")
+        .replace("ń", "n").replace("ó", "o").replace("ś", "s").replace("ź", "z").replace("ż", "z")
+        .replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        .takeIf { it.length >= 3 }
 
     /**
      * Builds the otomoto query-string fragment (without a leading "?") for the vehicle

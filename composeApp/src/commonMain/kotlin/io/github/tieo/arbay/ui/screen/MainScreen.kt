@@ -113,6 +113,9 @@ private data class ResultsView(
     // "n new" badge. Non-null means this view does not crawl to fill itself. Carried here so that
     // every way of closing the results drops them with the view.
     val stored: List<Listing>? = null,
+    // Where this search is centred and how far it reaches, when it says.
+    val near: String? = null,
+    val radiusKm: Int? = null,
 ) {
     /** Whether this is the vehicle-search view — computed from [category] rather than stored
      *  alongside it, so the two can never disagree. */
@@ -239,6 +242,9 @@ fun MainScreen(
     var carName by remember { mutableStateOf("") }
     var carPlatforms by remember { mutableStateOf<List<PlatformId>?>(null) }
     var carFilters by remember { mutableStateOf<CarFilters?>(null) }
+    // Where the vehicle form was last pointed, so reopening it keeps the place and the radius.
+    var carNear by remember { mutableStateOf<String?>(null) }
+    var carRadiusKm by remember { mutableStateOf<Int?>(null) }
     // The bookmark whose platforms are currently loaded, so re-opening the SAME bookmark's edit keeps
     // an unsaved market change instead of reloading the saved set each time.
     var carPlatformsLoadedFor by remember { mutableStateOf<String?>(null) }
@@ -653,11 +659,13 @@ fun MainScreen(
                     showDiscovery = true
                 }
             } else null,
-            onSearch = { name, query, platforms, filters, make, model ->
+            onSearch = { name, query, platforms, filters, make, model, near, radiusKm ->
                 carName = name
                 carQuery = query
                 carPlatforms = platforms
                 carFilters = filters
+                carNear = near
+                carRadiusKm = radiusKm
                 carMake = make
                 carModel = model
                 showCarSearch = false
@@ -673,6 +681,11 @@ fun MainScreen(
                                 platforms = platforms
                                     ?: MarketSets.platformsIn(MarketGroup.VEHICLES, SearchCountries.current.countries),
                                 category = MarketGroup.VEHICLES,
+                                // Where to look, carried on the search itself: the markets that
+                                // take a place are asked with it, and the rest are measured
+                                // against what they publish.
+                                location = near,
+                                radiusKm = radiusKm ?: 0,
                             ),
                         ),
                     )
@@ -688,12 +701,16 @@ fun MainScreen(
                     make = make,
                     model = model,
                     filters = filters,
+                    near = near,
+                    radiusKm = radiusKm,
                     fromCarForm = true,
                 )
             },
             initialMake = carMake,
             initialModel = carModel,
             initialFilters = carFilters,
+            initialNear = carNear,
+            initialRadiusKm = carRadiusKm,
             initialPlatforms = carPlatforms,
             onPlatformsChange = { carPlatforms = it },
         )

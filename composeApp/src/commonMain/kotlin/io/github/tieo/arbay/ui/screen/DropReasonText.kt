@@ -23,6 +23,9 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
         "The title offers it for hire, so its price is a rate rather than what one costs."
     DropReason.NOT_A_SINGLE_OFFER ->
         "A placeholder title, or a bulk lot priced for many units."
+    DropReason.TOO_FAR ->
+        "Further from where this search is centred than it reaches. A listing whose market never " +
+            "says where it is stays, since not knowing is not the same as being far."
     DropReason.IMPLAUSIBLE_PRICE ->
         "The price read off the page is not a price — digits from several fields run together."
     null -> ""

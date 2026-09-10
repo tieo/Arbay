@@ -266,7 +266,7 @@ class ListingViewModel(
         _pickedWords.value = next.extraTerms
         val query = _searchQuery.value
         if (query.isBlank() || rendersASample) return
-        search(query, platforms, carFilters, excludeKeywords, aliases, next, force = true)
+        search(query, platforms, carFilters, excludeKeywords, aliases, next, near, radiusKm, force = true)
     }
 
     /** Search one of the market's other words for the thing alongside the typed one, or stop.
@@ -363,6 +363,10 @@ class ListingViewModel(
     // tweak keeps whatever the searcher turned on, and so a change to it counts as a new search.
     private var reach: SearchReach = SearchReach()
 
+    // Where this search is centred and how far it reaches, sent with every crawl it runs.
+    private var near: String? = null
+    private var radiusKm: Int? = null
+
     /** Show only these markets; empty shows every market that answered. */
     fun showMarkets(markets: Set<PlatformId>) { _shownMarkets.value = markets }
 
@@ -395,7 +399,7 @@ class ListingViewModel(
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
         _allListings.value = emptyList()
-        search(query, platforms, carFilters, excludeKeywords, aliases, reach, force = true)
+        search(query, platforms, carFilters, excludeKeywords, aliases, reach, near, radiusKm, force = true)
     }
 
     fun searchSold() {
@@ -591,12 +595,14 @@ class ListingViewModel(
         excludeKeywords: List<String> = emptyList(),
         aliases: List<String> = emptyList(),
         reach: SearchReach = SearchReach(),
+        near: String? = null,
+        radiusKm: Int? = null,
         force: Boolean = false,
     ) {
         if (query.isBlank() || rendersASample) return
         if (!force && query == _searchQuery.value && filters == carFilters &&
             excludeKeywords == this.excludeKeywords && aliases == this.aliases &&
-            reach == this.reach &&
+            reach == this.reach && near == this.near && radiusKm == this.radiusKm &&
             (_allListings.value.isNotEmpty() || _loading.value)
         ) return
         _searchQuery.value = query
@@ -604,6 +610,8 @@ class ListingViewModel(
         this.excludeKeywords = excludeKeywords
         this.aliases = aliases
         this.reach = reach
+        this.near = near
+        this.radiusKm = radiusKm
         _searchReach.value = reach
         _pickedWords.value = reach.extraTerms
         _priceHistory.value = emptyList()
@@ -629,6 +637,7 @@ class ListingViewModel(
                 client.crawlerSearchStream(
                     query, platforms = platforms, filters = filters,
                     excludeKeywords = excludeKeywords, aliases = aliases, reach = reach,
+                    near = near, radiusKm = radiusKm,
                     lat = userLat, lon = userLon,
                 ).collect { event ->
                     when (event.type) {

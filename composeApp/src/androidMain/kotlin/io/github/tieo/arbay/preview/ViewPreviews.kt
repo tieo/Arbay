@@ -92,7 +92,7 @@ fun SearchPreview() = inPlace {
 @Preview(widthDp = 390, heightDp = 844)
 @Composable
 fun VehicleSearchPreview() = inPlace {
-    CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _ -> })
+    CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _, _, _ -> })
 }
 
 @Preview(widthDp = 390, heightDp = 844)

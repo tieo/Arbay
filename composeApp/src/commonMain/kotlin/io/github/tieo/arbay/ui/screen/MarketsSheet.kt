@@ -254,10 +254,14 @@ fun MarketsSheet(
                         kept = kept,
                         sentBeforeWords = offersBeforeWords[platform] ?: kept,
                         can = capabilities[platform],
-                        picked = kept > 0 && (wholeCountry || platform in shownMarkets),
-                        // A market nobody asked has nothing to give yet, and ticking it is exactly
-                        // how it gets asked.
-                        pickable = kept > 0 || status.status == PlatformSearchStatus.PENDING,
+                        // Ticked means "in what I am looking at", which is a thing about the
+                        // reader's choice and not about whether the market has answered yet. Tying
+                        // it to the count left a market inside a ticked country sitting unticked
+                        // while it was still being asked, contradicting the country above it.
+                        picked = wholeCountry || platform in shownMarkets,
+                        // Anything can be ticked: a market with nothing yet contributes nothing,
+                        // and ticking one nobody asked is how it gets asked.
+                        pickable = true,
                         onPick = {
                             if (platform != null) {
                                 when {

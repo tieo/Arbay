@@ -549,10 +549,10 @@ fun ListingsSheet(
     // Keyed on what defines the crawl, by value: a list rebuilt with the same contents is the same
     // crawl, and restarting on one cancelled the first mid-answer and left every market still
     // working marked "too slow, given up on".
-    val crawlKey = remember(searchQuery, carFilters, aliases, platformsToAsk, storedListings != null) {
+    val crawlKey = remember(searchQuery, carFilters, aliases, platformsToAsk, storedListings != null, savedFilters?.location, savedFilters?.radiusKm) {
         listOf(
-            searchQuery, carFilters, aliases, platformsToAsk?.map { it.name },
-            storedListings != null,
+            searchQuery, carFilters, aliases, platformsToAsk.map { it.name },
+            storedListings != null, savedFilters?.location, savedFilters?.radiusKm,
         ).toString()
     }
     LaunchedEffect(crawlKey) {
@@ -560,8 +560,11 @@ fun ListingsSheet(
         else listingViewModel.search(
             searchQuery, platformsToAsk, carFilters, excludeKeywords = blockedTerms, aliases = aliases,
             // A saved search reruns with the reach it was saved with, so the words it was last
-            // asking the markets are the words it asks them again.
+            // asking the markets are the words it asks them again, and with the place it is
+            // centred on, so the markets that take one are asked near there.
             reach = savedFilters?.reach ?: SearchReach(),
+            near = savedFilters?.location,
+            radiusKm = savedFilters?.radiusKm?.takeIf { it > 0 },
         )
     }
 
@@ -1167,6 +1170,18 @@ fun ListingsSheet(
                 onOpenMarkets = {
                     showFilters = false
                     showMarkets = true
+                },
+                near = savedFilters?.location,
+                radiusKm = savedFilters?.radiusKm,
+                onNear = { place, km ->
+                    persistFilters { it.copy(location = place, radiusKm = km ?: 0) }
+                    listingViewModel.search(
+                        searchQuery, platformsToAsk, carFilters,
+                        excludeKeywords = blockedTerms, aliases = aliases,
+                        reach = savedFilters?.reach ?: SearchReach(),
+                        near = place, radiusKm = km, force = true,
+                    )
+                    showFilters = false
                 },
                 blockedTerms = activeBlockedTerms,
                 onUnblock = unblockWord,
