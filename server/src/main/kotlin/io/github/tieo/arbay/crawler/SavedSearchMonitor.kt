@@ -190,7 +190,10 @@ class SavedSearchMonitor(
         for (platformId in platforms) {
             if (BlockCooldown.isCoolingDown(platformId)) continue
             val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
-            val query = product.searchQuery.copy(platforms = listOf(platformId))
+            // Asked exactly as the search asks when it is opened by hand, including a term the
+            // searcher accepted for this market's language. A watch that asked something else
+            // would notify about a different set of listings than the screen shows.
+            val query = localizedQuery(product.searchQuery.copy(platforms = listOf(platformId)), platformId)
             val results = try {
                 withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
             } catch (e: Exception) {
