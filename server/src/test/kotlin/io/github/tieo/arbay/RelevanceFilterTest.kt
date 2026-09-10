@@ -557,6 +557,18 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a Tiguan does not answer a search for a Crafter`() {
+        // Off the phone: six Tiguans among the Crafters on mobile.de. Both words of the search are
+        // written all over that market's answer, so both are asked for, and a van that carries one
+        // of them carries half the search.
+        val answer = List(9) { listing("Volkswagen Crafter 35 Kasten L3H2 Nr $it") } +
+            List(3) { listing("Volkswagen Tiguan Allspace") }
+        val kept = search("Volkswagen Crafter", answer).map { it.title }
+        assertEquals(9, kept.size, "the Crafters")
+        assertTrue(kept.none { it.contains("Tiguan") }, "a Tiguan is a different vehicle")
+    }
+
+    @Test
     fun `what a compound is about has to be in the listing`() {
         // Straight off the live answer for "parkettschleifmaschine": Geizhals and Amazon send
         // sanding belts and belt sanders, which share the tail of the word and nothing else. What

@@ -165,6 +165,13 @@ object RelevanceFilter {
             }
             // ≥6 chars: raw substring or compact (long tokens are distinctive enough for substring)
             if (titleNormForMatching.contains(token)) return true
+            // A German compound is written apart across a list — "Parkett-, Bodenschleifmaschine"
+            // is a Parkettschleifmaschine — and what it is about is its leading part. That part
+            // stands for the whole word, and only for that word: the rest of the search still has
+            // to be found, so a Tiguan does not pass a search for a Crafter on "Volkswagen" alone.
+            if (token.length >= COMPOUND_LENGTH && token.all { it.isLetter() } &&
+                titleCompact.contains(token.take(STEM_LENGTH))
+            ) return true
             // titleCompact catches tokens split by hyphens/spaces (e.g. "wh1000xm6" = "WH-1000XM6").
             // Guard: match must start AND end at word boundaries (prevents "g16" matching "8G 16GB").
             var searchFrom = 0
@@ -621,7 +628,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } ||
+                isASize(token) || token.all { it.isDigit() } || isACompound(token) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             parsed.copy(positiveTokens = required)
@@ -634,20 +641,10 @@ object RelevanceFilter {
                 dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
                 return@mapNotNull null
             }
-            // A compound names what it is about in its leading part, and that part is the test: a
-            // search for a Parkettschleifmaschine reaches "Parkett-, Bodenschleifmaschine" and not
-            // the sanding belts and belt sanders a market answers with, which share the tail and
-            // nothing else.
-            val stems = compoundStems(parsed)
-            if (stems.isNotEmpty()) {
-                if (!carriesAStem(listing, stems)) {
-                    dropped += DroppedListing(listing, DropReason.OFF_TARGET)
-                    return@mapNotNull null
-                }
-            } else if (sellersWriteTheseWords && s < ENOUGH_OF_THE_SEARCH) {
-                // Otherwise a listing has to carry the search well enough, and only where the
-                // market's own answer shows these are words its sellers write. Where they are not,
-                // the market's search is the only judge there is, and it already ran.
+            // A listing has to carry the search well enough, and only where the market's own answer
+            // shows these are words its sellers write. Where they are not, the market's search is
+            // the only judge there is, and it already ran.
+            if (sellersWriteTheseWords && s < ENOUGH_OF_THE_SEARCH) {
                 dropped += DroppedListing(listing, DropReason.OFF_TARGET)
                 return@mapNotNull null
             }
@@ -665,21 +662,6 @@ object RelevanceFilter {
      * novels a market returns that merely end in "-maschine", so that is what is compared. A word
      * too short to be built of parts has none to compare, and is matched whole like any other.
      */
-    private fun compoundStems(parsed: ParsedQuery): List<String> =
-        (parsed.positiveTokens + parsed.orGroups.flatten())
-            .map { it.lowercase().replace(NON_ALNUM, "") }
-            // A compound is built of words. "CT32G4SFD832A" is a part number, and its first seven
-            // characters name nothing, so a market that lists the same module without the number
-            // was being dropped for not repeating a prefix of it.
-            .filter { it.length >= COMPOUND_LENGTH && it.all { c -> c.isLetter() } }
-            .map { it.take(STEM_LENGTH) }
-            .distinct()
-
-    private fun carriesAStem(listing: Listing, stems: List<String>): Boolean {
-        val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
-        return stems.any { text.contains(it) }
-    }
-
     /** From this many characters a word is built of parts rather than being one. */
     private const val COMPOUND_LENGTH = 10
 
@@ -703,6 +685,14 @@ object RelevanceFilter {
             }
         }
     }
+
+    /** Whether the word is a compound naming one thing: letters enough of them that nobody types
+     *  it meaning a category. "Parkettschleifmaschine" is a machine for parquet and nothing else,
+     *  so a market answering it with sanding belts has not answered — while "laptop" is a word its
+     *  sellers can leave out of a laptop's title, and is judged on the answer instead. Matched
+     *  through its leading part, so a compound written apart still counts. */
+    private fun isACompound(token: String): Boolean =
+        token.length >= COMPOUND_LENGTH && token.all { it.isLetter() }
 
     /** The share of a market's answer that has to carry a word of the search before a listing
      *  without one is treated as the exception rather than the rule. Half: measured against the two
