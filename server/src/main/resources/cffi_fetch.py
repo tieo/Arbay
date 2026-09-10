@@ -17,6 +17,7 @@ Usage:
       Outputs JSON array: [{title, url, id, price_cents, image_url}, ...]
 """
 import sys
+from html import unescape as html_unescape
 import json
 import re
 import time
@@ -117,17 +118,26 @@ def cmd_idealo_search(query):
         sys.exit(4)
 
     product_items = []
+    category_urls = []
     for group in data.get('groups', []):
         for item in group.get('items', []):
             url = item.get('url', '')
-            if 'OffersOfProduct' not in url:
-                continue
-            m = re.search(r'/(\d{5,})_', url)
-            product_items.append({
-                'url': url,
-                'id': m.group(1) if m else None,
-                'suggest_title': item.get('titlePlain', ''),
-            })
+            if 'OffersOfProduct' in url:
+                m = re.search(r'/(\d{5,})_', url)
+                product_items.append({
+                    'url': url,
+                    'id': m.group(1) if m else None,
+                    'suggest_title': item.get('titlePlain', ''),
+                })
+            elif 'ProductCategory' in url:
+                category_urls.append(url)
+
+    # A word for a kind of thing ("laptop") is answered with categories and no products at all,
+    # which read as Idealo having none. The category page lists them, with its own prices, and
+    # answers where the suggest cannot.
+    if not product_items and category_urls:
+        sys.stdout.write(json.dumps(_idealo_category(s, page_headers, category_urls[0]), ensure_ascii=False))
+        return
 
     # Fetch each product page to extract the title (contains best price: "Name ab X,XX €")
     def fetch_price(item):
@@ -151,6 +161,36 @@ def cmd_idealo_search(query):
 
     valid = [r for r in results if r.get('price_text') and r.get('id')]
     sys.stdout.write(json.dumps(valid, ensure_ascii=False))
+
+
+def _idealo_category(session, headers, url):
+    """Products off an Idealo category page: name, link and the price it starts at."""
+    try:
+        r = session.get(url, timeout=25, headers=headers)
+    except Exception as e:
+        sys.stderr.write(f'category request failed: {e}\n')
+        return []
+    if r.status_code != 200:
+        sys.stderr.write(f'HTTP {r.status_code}\n')
+        sys.exit(_http_exit_code(r.status_code))
+    tiles = re.findall(
+        r'href="(https://www\.idealo\.de/preisvergleich/OffersOfProduct/[^"]+)"[^>]*>'
+        r'<div class="sr-productSummary__title[^"]*"[^>]*>([^<]+)</div>'
+        r'(.{0,4000}?)(?:</article>|sr-resultItemTile__infoWrapper)',
+        r.text, re.S)
+    out = []
+    for href, title, rest in tiles:
+        m_id = re.search(r'/(\d{5,})_', href)
+        m_price = re.search(r'((?:\d{1,3}\.)*\d+,\d{2})\s*(?:&nbsp;|\s)*€', rest)
+        if not m_id or not m_price:
+            continue
+        out.append({
+            'url': href,
+            'id': m_id.group(1),
+            'title': html_unescape(title).strip(),
+            'price_text': m_price.group(1),
+        })
+    return out
 
 
 def cmd_refurbed_search(query):

@@ -95,6 +95,23 @@ fun repeatedTitleReport(listings: List<Listing>): String? {
 private const val MIN_ANSWER_TO_JUDGE_TITLES = 5
 private const val SAME_TITLE_SHARE = 0.5
 
+/**
+ * A market saying it answered by matching the search to one of its own categories.
+ *
+ * Idealo answers "laptop" with the Laptop category, whose products are MacBooks and ThinkPads that
+ * never write the word. That is the market having searched, and having answered well; judged on
+ * words alone it looks exactly like a market that ignored the question, and the whole answer was
+ * being thrown away.
+ */
+class CategoryAnswerEmitter(val emit: () -> Unit) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<CategoryAnswerEmitter>
+    override val key: CoroutineContext.Key<*> = Key
+}
+
+internal suspend fun emitAnsweredFromCategory() {
+    coroutineContext[CategoryAnswerEmitter]?.emit()
+}
+
 /** CoroutineContext element collecting the app's verdict on each other word a market printed:
  *  what it is, why, and — once a word has actually been searched — what it added. A word emitted
  *  twice is the same word with its outcome filled in, so a collector keeps the last of each. */

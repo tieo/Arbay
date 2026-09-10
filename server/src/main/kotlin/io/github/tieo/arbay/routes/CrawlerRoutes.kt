@@ -497,6 +497,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // term for that language; the term is reported so the app shows what
                             // each site was actually asked.
                             val pq = localizedQuery(searchQuery, platformId)
+                            // Set when the market says it answered from one of its own categories.
+                            val answeredFromCategory = java.util.concurrent.atomic.AtomicBoolean(false)
+                            val categoryEmitter = io.github.tieo.arbay.crawler.CategoryAnswerEmitter {
+                                answeredFromCategory.set(true)
+                            }
                             val termsUsed = java.util.Collections.synchronizedList(mutableListOf<String>())
                             val termsEmitter = TermsUsedEmitter { t ->
                                 if (t.isNotBlank() && t !in termsUsed) termsUsed += t
@@ -604,7 +609,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
                             val event = try {
                                 val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter) {
+                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter) {
                                         crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                     }
                                 }
@@ -632,7 +637,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     )
                                 }
                                 val ignoredSearch = RelevanceFilter.answeredSomethingElse(
-                                    rawResults, pq, askedInItsOwnLanguage(pq, platformId),
+                                    rawResults, pq,
+                                    askedInItsOwnLanguage(pq, platformId) && !answeredFromCategory.get(),
                                 )
                                 if (ignoredSearch != null) {
                                     CrawlerStatusTracker.recordError(platformId, ignoredSearch, ErrorType.IRRELEVANT_RESULTS)

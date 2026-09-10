@@ -16,7 +16,13 @@ class IdealoCrawler(private val client: HttpClient) : Crawler {
         // Page title format: "Product Name ab 123,45 € (Monat Jahr Preise) | idealo.de"
         // curl_cffi Chrome TLS impersonation passes Akamai for both suggest and product pages.
         val jsonStr = CurlCffiClient.idealoSearch(query.positiveText)
-        return parseResults(jsonStr)
+        val listings = parseResults(jsonStr)
+        // The script falls back to Idealo's own category for a query it has no product suggestions
+        // for, and those products carry the category's name rather than the search's words.
+        if (listings.isNotEmpty() && listings.none { it.title.contains(query.positiveText, ignoreCase = true) }) {
+            emitAnsweredFromCategory()
+        }
+        return listings
     }
 
     private fun parseResults(jsonStr: String): List<Listing> {
