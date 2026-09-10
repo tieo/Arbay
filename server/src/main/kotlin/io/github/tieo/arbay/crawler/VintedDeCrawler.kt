@@ -6,6 +6,20 @@ import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 
 class VintedDeCrawler(private val client: HttpClient) : Crawler {
+
+    /** The product's name off a card, without the fields the title attribute reads out after it. */
+    internal fun cardTitle(item: org.jsoup.nodes.Element): String? =
+        item.selectFirst("[data-testid*=--overlay-link]")?.attr("title")
+            ?.let { cardLabel.split(it).first() }?.trim()?.trimEnd(',')?.takeIf { it.isNotBlank() }
+
+    /** Where a Vinted card stops naming the thing and starts describing it: a labelled field, in
+     *  any of the languages it runs in. */
+    private val cardLabel = Regex(
+        """,\s*(marke|zustand|gr(ö|oe)(ß|ss)e|brand|condition|size|marque|(é|e)tat|taille|""" +
+            """marca|condizione|talla|taglia|merk|staat|maat)\s*:""",
+        RegexOption.IGNORE_CASE,
+    )
+
     override val platformId = PlatformId.VINTED_DE
 
     override suspend fun search(query: SearchQuery): List<Listing> {
@@ -35,9 +49,12 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
             val priceText = priceEl?.text() ?: return@mapNotNull null
             val price = Money.parse(priceText) ?: return@mapNotNull null
 
-            // Overlay link title has full product name: "Sony WH-1000XM5, marke: Sony, zustand: ..."
-            val overlayTitle = item.selectFirst("[data-testid*=--overlay-link]")?.attr("title")
-                ?.substringBefore(", marke:")?.substringBefore(", zustand:")?.trim()
+            // The overlay link's title attribute is the whole card read aloud: "Sony WH-1000XM5,
+            // Marke: Sony, Zustand: Sehr gut, 50,00 €, 53,20 €". Everything from the first labelled
+            // field on describes the listing rather than naming it, and the labels are capitalised
+            // and in the language of whichever Vinted this is — cutting at a lowercase ", marke:"
+            // matched none of them, so the price ended up inside the product's name.
+            val overlayTitle = cardTitle(item)
             // Fallback to description-title (often just brand name like "Sony")
             val fallbackTitle = item.selectFirst("[data-testid*=--description-title]")?.text()?.trim()
             val title = overlayTitle?.takeIf { it.isNotBlank() } ?: fallbackTitle ?: return@mapNotNull null
