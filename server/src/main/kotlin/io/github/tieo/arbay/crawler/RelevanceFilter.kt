@@ -310,6 +310,62 @@ object RelevanceFilter {
         return headWords.none { q.contains(it) }
     }
 
+    // A device that a searched-for part is built into, named as the thing on offer. A search for a
+    // 2TB M.2 SSD comes back with gaming PCs and MacBooks that have one inside, which are the same
+    // words and a different product — and, at ten to a hundred times the price, the ones that wreck
+    // what a search says the thing costs.
+    private val hostDevice = Regex(
+        """\b(gaming[\s-]?pc|gamer[\s-]?pc|komplett[\s-]?pc|desktop|tower|workstation|server|""" +
+            """notebook|laptop|macbook|imac|mac\s?mini|thinkpad|elitebook|probook|latitude|""" +
+            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|pc)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Where a title's own name for what it sells ends and its spec list begins. */
+    private val specListStart = Regex("""[,|/:;•·]|\s[-–—]\s|\smit\s|\swith\s|\sinkl\b""")
+
+    /** Where in the title the first word of the search appears, comparing with separators stripped
+     *  from both sides so a title's "M.2" is found by the token "m2". Null when none appears. */
+    private fun firstTokenPosition(title: String, tokens: List<String>): Int? {
+        val positions = ArrayList<Int>(title.length)
+        val compact = StringBuilder(title.length)
+        title.lowercase().forEachIndexed { index, c ->
+            if (c.isLetterOrDigit()) { compact.append(c); positions += index }
+        }
+        val text = compact.toString()
+        return tokens.mapNotNull { token ->
+            text.indexOf(token.lowercase().replace(NON_ALNUM, "")).takeIf { it >= 0 }
+        }.minOrNull()?.let { positions.getOrNull(it) }
+    }
+
+    /**
+     * Whether the listing is a device the searched-for thing sits inside.
+     *
+     * The tell is where the words fall: the title names a machine of its own before its spec list
+     * starts, and the words searched for appear only inside that list. A listing for the part
+     * itself leads with the part ("Samsung 990 Evo Plus, NVMe M.2 2280"), so its own words are in
+     * the head. A search that asks for the machine keeps them, since then the machine is the thing.
+     */
+    private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        if (hostDevice.containsMatchIn(queryText)) return false
+        val tokens = parsed.positiveTokens.ifEmpty { return false }
+        // Where the machine's own name ends: its spec list, or — for the titles written as one run
+        // of words, which is most of them on a classifieds site — the first word of the search.
+        val boundary = specListStart.find(listing.title)?.range?.first
+            ?: firstTokenPosition(listing.title, tokens)
+            ?: return false
+        val head = listing.title.substring(0, boundary)
+        if (!hostDevice.containsMatchIn(head)) return false
+        val headCompact = head.lowercase().replace(NON_ALNUM, "")
+        val tailCompact = listing.title.substring(boundary).lowercase().replace(NON_ALNUM, "")
+        val inHead = tokens.count { headCompact.contains(it.lowercase().replace(NON_ALNUM, "")) }
+        val inTail = tokens.count { tailCompact.contains(it.lowercase().replace(NON_ALNUM, "")) }
+        // More of the search in the spec list than in the name, rather than none in the name: a
+        // MacBook Pro M2 Max carries "m2" in its own name, where it is the processor and not the
+        // slot, and the drive it holds is listed with everything else it holds.
+        return inTail > inHead
+    }
+
     // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
     // sandpaper, sanding belts, dust bags and filters far cheaper than any machine, which then poses
     // as the "best price". Dropped only when the query itself does not ask for the consumable.
@@ -373,6 +429,7 @@ object RelevanceFilter {
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
+                isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
                 isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE
                 else -> null
             }

@@ -28,6 +28,9 @@ enum class DropReason {
     /** A part or add-on made for the thing, not the thing. */
     ACCESSORY,
 
+    /** A machine of its own with the thing searched for built into it. */
+    BUILT_INTO_A_DEVICE,
+
     /** Something the thing uses up: sanding paper, dust bags, filters. */
     CONSUMABLE,
 
@@ -50,6 +53,7 @@ val DropReason.label: String
         DropReason.MARKET_IGNORED_SEARCH -> "market ignored the search"
         DropReason.OFF_TARGET -> "off target"
         DropReason.ACCESSORY -> "accessory"
+        DropReason.BUILT_INTO_A_DEVICE -> "inside another device"
         DropReason.CONSUMABLE -> "consumable"
         DropReason.WANTED_AD -> "wanted ad"
         DropReason.RENTAL -> "for rent"

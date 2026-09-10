@@ -298,6 +298,34 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a computer with the drive in it is not the drive`() {
+        // Off the live answer for "2tb m.2 ssd": 29 of 174 results were whole computers with one
+        // inside, and being ten to a hundred times the price they are what a search says the thing
+        // costs. Every title here is real.
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Gaming PC: 9850X3D,RTX 5080,32GB DDR5,X870E-E,2TB M.2 SSD", price = 260000),
+            listing("Apple MacBook Pro M2 Max | 14\" | 96GB RAM | 2TB SSD", price = 349900),
+            listing("PlayStation 5 Pro PS5 Pro mit M.2 SSD 2TB, Disc-Laufwerk", price = 119900),
+            listing("Samsung 990 Evo Plus, NVMe M.2 2280, 2TB SSD", price = 11400),
+            listing("Lexar NM790 2TB M.2 SSD", price = 9900),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Samsung 990") }, "the drive itself leads its own title")
+        assertTrue(kept.any { it.startsWith("Lexar") }, "so does this one")
+        assertTrue(kept.none { it.contains("Gaming PC") }, "a PC with one inside is a PC")
+        assertTrue(kept.none { it.contains("MacBook") }, "so is a laptop")
+        assertTrue(kept.none { it.contains("PlayStation") }, "so is a console")
+    }
+
+    @Test
+    fun `a search for the machine keeps the machine`() {
+        // The same listings, asked for as what they are.
+        val kept = search("gaming pc rtx 5080", listOf(
+            listing("Gaming PC: 9850X3D,RTX 5080,32GB DDR5,X870E-E,2TB M.2 SSD", price = 260000),
+        )).map { it.title }
+        assertEquals(1, kept.size, "asked for the PC, the PC is the answer")
+    }
+
+    @Test
     fun `a market that never writes the category word still answers for it`() {
         // Idealo, live, for "2tb m.2 ssd": it lists the drive by make and size and never writes
         // "SSD", so requiring that word threw away the very drives asked for. The size and the

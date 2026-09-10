@@ -113,6 +113,8 @@ private fun explain(reason: DropReason?): String = when (reason) {
             "different question and its whole answer was set aside."
     DropReason.OFF_TARGET ->
         "The title carries too few of the words searched for."
+    DropReason.BUILT_INTO_A_DEVICE ->
+        "The title names a machine of its own and lists the thing searched for among its parts."
     DropReason.ACCESSORY ->
         "The title reads as a part or add-on made for the thing rather than the thing itself."
     DropReason.CONSUMABLE ->
