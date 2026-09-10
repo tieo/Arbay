@@ -534,18 +534,16 @@ fun ListingsSheet(
     val coveredPlatforms: List<PlatformId> = remember(carFilters) {
         MarketSets.platformsFor(if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL)
     }
-    val platformsToAsk: List<PlatformId> = remember(platforms, coveredPlatforms, shownMarkets, shownCountries) {
-        val askable = platforms ?: MarketSets.platformsIn(
+    val platformsToAsk: List<PlatformId> = remember(platforms, coveredPlatforms, shownMarkets) {
+        // Every market this search covers, plus anything ticked by hand that it did not. Ticking
+        // is how a reader narrows what they are looking at; it is not an instruction to stop asking
+        // the rest, and reading it as one left a search that had been narrowed months ago asking
+        // two markets out of twenty-five.
+        val asked = platforms ?: MarketSets.platformsIn(
             if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL,
             SearchCountries.current.countries,
         )
-        // A market ticked by hand is asked even where the search was not covering it: ticking one
-        // is the way to have it asked, so the tick has to reach the crawl.
-        val narrowed = (askable + shownMarkets).distinct().filter { platform ->
-            (shownMarkets.isEmpty() || platform in shownMarkets) &&
-                (shownCountries.isEmpty() || MarketSets.countryOf(platform) in shownCountries)
-        }
-        narrowed.ifEmpty { askable }
+        (asked + shownMarkets.filter { it in coveredPlatforms }).distinct()
     }
 
     // Keyed on what defines the crawl, by value: a list rebuilt with the same contents is the same
