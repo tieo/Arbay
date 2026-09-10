@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.json.*
 
 /**
@@ -122,11 +123,19 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage
             if (productType != null && productType !in VEHICLE_PRODUCT_TYPES) return null
         }
 
-        // Prices are whole Swiss francs. A buy-now price wins; otherwise the current bid stands in,
-        // which is what a buyer would pay right now on an auction listing.
+        // Prices are whole Swiss francs. A buy-now price wins, because that is a price someone is
+        // asking; without one there is only the bid so far, which is not what the thing will cost.
+        // ricardo says which it is, so the listing carries it rather than the reader guessing.
+        val hasAuction = obj["hasAuction"]?.jsonPrimitive?.booleanOrNull ?: false
+        val hasBuyNow = obj["hasBuyNow"]?.jsonPrimitive?.booleanOrNull ?: false
         val francs = obj["buyNowPrice"]?.jsonPrimitive?.longOrNull
             ?: obj["bidPrice"]?.jsonPrimitive?.longOrNull
             ?: return null
+        val saleType = if (hasAuction && !hasBuyNow) SaleType.AUCTION else SaleType.FIXED_PRICE
+        val endsAt = obj["endDate"]?.jsonPrimitive?.contentOrNull
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?.takeIf { saleType == SaleType.AUCTION }
+        val bids = obj["bidsCount"]?.jsonPrimitive?.intOrNull
         if (francs <= 0) return null
         val price = Money(francs * 100, Currency.CHF)
 
@@ -156,6 +165,9 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage
             location = location,
             scrapedAt = scrapedAt,
             vehicle = vehicle,
+            saleType = saleType,
+            auctionEndsAt = endsAt,
+            bidCount = bids,
         )
     }
 
