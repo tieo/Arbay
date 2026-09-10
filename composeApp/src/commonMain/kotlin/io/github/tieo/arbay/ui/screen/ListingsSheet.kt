@@ -178,6 +178,7 @@ fun ListingsSheet(
     // Feed the bookmark's blocked keywords into the view model so results filter them out.
     LaunchedEffect(blockedTerms) { listingViewModel.setBlockedTerms(blockedTerms) }
     val activeBlockedTerms by listingViewModel.blockedTerms.collectAsState()
+    val bannedIds by listingViewModel.bannedIds.collectAsState()
     // Block/unblock a word from a listing: filter live (always) and persist onto the bookmark when
     // a change sink is wired. The mutation must run first — folding it into a null-safe call would
     // short-circuit and never block when no sink is attached (the car/preview sheets).
@@ -252,8 +253,8 @@ fun ListingsSheet(
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
-    var showDropped by remember { mutableStateOf(false) }
     var showOtherWords by remember { mutableStateOf(false) }
+    var showHidden by remember { mutableStateOf(false) }
 
     DebugSlice("resultsScreen") {
         debugJson.encodeToString(
@@ -329,6 +330,66 @@ fun ListingsSheet(
             .filter { conditionMatches(conditionFilter, it.condition) }
             .filter { !newOnly || it.id in newListingIds }
     }
+
+    // Every way a listing can be missing from this screen, each with what took it and, where one
+    // action puts it back, that action. Built here because this is where all of it is known: the
+    // reader's own bands and words, the markets they unticked, and what the search removed.
+    val hiddenGroups: List<HiddenGroup> = run {
+        val banned = fetchedListings.filter { it.id in bannedIds }
+        val byWord = fetchedListings.filter { it.id !in bannedIds && it !in marketBasis }
+        val outOfBand = allActiveListings.filterNot {
+            !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name))
+        }
+        val wrongCondition = activeListings.filterNot { conditionMatches(conditionFilter, it.condition) }
+        val notNew = if (!newOnly) emptyList()
+            else activeListings.filter { conditionMatches(conditionFilter, it.condition) && it.id !in newListingIds }
+        buildList {
+            if (banned.isNotEmpty()) add(HiddenGroup(
+                label = "you hid",
+                why = "Listings you sent away with the bin on their card.",
+                listings = banned,
+                undoLabel = "Put them back",
+                undo = { listingViewModel.unbanAll() },
+            ))
+            if (byWord.isNotEmpty()) add(HiddenGroup(
+                label = "your blocked words",
+                why = "Carrying one of your blocked words: " + activeBlockedTerms.joinToString(", "),
+                listings = byWord,
+                undoLabel = "Edit the words",
+                undo = { showHidden = false; showFilters = true },
+            ))
+            if (outOfBand.isNotEmpty()) add(HiddenGroup(
+                label = "outside your price band",
+                why = "Priced outside the band this search is narrowed to.",
+                listings = outOfBand,
+                undoLabel = "Widen it",
+                undo = { showHidden = false; showFilters = true },
+            ))
+            if (wrongCondition.isNotEmpty()) add(HiddenGroup(
+                label = "the other condition",
+                why = "You are looking at " + (conditionFilter?.lowercase() ?: "one condition") + " only.",
+                listings = wrongCondition,
+                undoLabel = "Show both",
+                undo = { conditionFilter = null; persistFilters { it.copy(condition = null) } },
+            ))
+            if (notNew.isNotEmpty()) add(HiddenGroup(
+                label = "not new since you last looked",
+                why = "You are looking at what this search found since you last opened it.",
+                listings = notNew,
+                undoLabel = "Show everything",
+                undo = { newOnly = false },
+            ))
+            // What the search itself removed, one group per reason it gave.
+            droppedBySearch.groupBy { it.reason }.forEach { (reason, entries) ->
+                add(HiddenGroup(
+                    label = reason.label,
+                    why = explainDropReason(reason),
+                    listings = entries.map { it.listing },
+                ))
+            }
+        }
+    }
+
     // How many of the backlog this crawl actually returned. The monitor and this search ran at
     // different times, so a listing counted as new can be gone by now; offering the filter on a
     // count of zero would be offering an empty view.
@@ -729,8 +790,13 @@ fun ListingsSheet(
                                     )
                                     ResultsDoor(
                                         icon = Icons.Outlined.Sell,
-                                        label = "Price",
-                                        detail = minPrice?.let { "from ${it.format()}" } ?: "\u2013",
+                                        // What things cost, as against what is being shown: this
+                                        // door reports, the Filters door narrows. Labelled "Price ·
+                                        // from X" it read as the price filter, which lives in
+                                        // Filters, so both looked like the same control.
+                                        label = "Prices",
+                                        detail = medianPrice?.let { "middle ${it.format()}" }
+                                            ?: minPrice?.let { "cheapest ${it.format()}" } ?: "\u2013",
                                         onClick = { showPrice = true },
                                         modifier = Modifier.weight(1f),
                                     )
@@ -759,151 +825,18 @@ fun ListingsSheet(
                     }
                 }
 
-                // Our filters are not the markets' filters, and the difference is worth a number.
-                // Three numbers and their grounds, on one line: a paragraph of it pushed the first
-                // offer off the screen, which is the one thing this view exists to show.
-                item("hidden-count") {
-                    // Each number counts a step of the same funnel, so they add up to what is
-                    // missing and never to more than there was. What the markets sent that never
-                    // matched the search is not on this line: it is not something the reader chose,
-                    // and counting it here put "19 criteria" under a Filters chip reading "none".
-                    val hiddenByPrice = allActiveListings.size - activeListings.size
-                    val hiddenByChoices = activeListings.size - displayedActiveListings.size
-                    val blockedByWords = fetchedListings.size - marketBasis.size
-                    val parts = buildList {
-                        if (hiddenByPrice > 0) add(hiddenByPrice to "price")
-                        if (hiddenByChoices > 0) add(hiddenByChoices to if (newOnly) "not new" else "condition")
-                        if (blockedByWords > 0) add(blockedByWords to "words")
-                    }
-                    if (parts.isNotEmpty()) {
+                // === One line for everything that is not on the screen, whoever took it: the
+                // reader's own words and bands, the markets they unticked, and what the search
+                // itself removed. Four separate lines and four separate places to read them meant
+                // nobody could tell which had taken a listing, so a filter that was wrong stayed
+                // wrong. ===
+                item("not-shown") {
+                    val hiddenTotal = hiddenGroups.sumOf { it.listings.size }
+                    if (hiddenTotal > 0) {
+                        val biggest = hiddenGroups.maxByOrNull { it.listings.size }
                         Row(
                             modifier = Modifier.fillMaxWidth()
-                                .clickable { showFilters = true }
-                                .padding(horizontal = 20.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.FilterAlt,
-                                null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                buildAnnotatedString {
-                                    append("Hidden by your filters: ")
-                                    parts.forEachIndexed { i, (count, why) ->
-                                        if (i > 0) append(" · ")
-                                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("$count") }
-                                        append(" $why")
-                                    }
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
-                // Nearest-first with nothing to measure from silently became cheapest-first, which
-                // is a list in the wrong order with nothing on screen saying so.
-                if (sortMode == SortMode.NEAREST && !hasPosition) {
-                    item("no-position") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable { detectAndSortNearest() }
-                                .padding(horizontal = 20.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.LocationOff,
-                                null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                            Text(
-                                "Nearest first needs somewhere to measure from. Tap to allow it.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                }
-
-                // The markets' own other words for the thing, as pills: tap one and it is searched
-                // too. Each costs a crawl per market, so none of them is taken without the tap, and
-                // a word that has been searched carries what it actually added.
-                if (otherWords.isNotEmpty()) {
-                    item("other-words") {
-                        val shown = remember(otherWords, pickedWords) {
-                            otherWords.filter { it.worthTrying || it.added != null ||
-                                pickedWords.any { p -> p.equals(it.term, ignoreCase = true) } }
-                                .take(4)
-                        }
-                        val rest = otherWords.size - shown.size
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 20.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            shown.forEach { word ->
-                                val on = pickedWords.any { it.equals(word.term, ignoreCase = true) }
-                                FilterChip(
-                                    selected = on,
-                                    onClick = { listingViewModel.toggleWord(word.term, platforms) },
-                                    leadingIcon = if (on) null else ({
-                                        Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
-                                    }),
-                                    label = {
-                                        Text(
-                                            word.added?.let { n ->
-                                                if (n > 0) "${word.term} +$n" else word.term
-                                            } ?: word.term,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            maxLines = 1,
-                                        )
-                                    },
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.height(28.dp),
-                                )
-                            }
-                            if (rest > 0) {
-                                AssistChip(
-                                    onClick = { showOtherWords = true },
-                                    label = {
-                                        Text("$rest more", style = MaterialTheme.typography.labelSmall)
-                                    },
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.height(28.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // What the search itself removed, which is not the reader's doing and so is not
-                // on the line above. It is still theirs to check: a rule that is wrong about a
-                // listing is only findable if the listings it took are reachable.
-                if (droppedBySearch.isNotEmpty()) {
-                    item("dropped-count") {
-                        val topReason = droppedBySearch.groupingBy { it.reason }.eachCount()
-                            .maxByOrNull { it.value }
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable { showDropped = true }
+                                .clickable { showHidden = true }
                                 .padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -916,11 +849,11 @@ fun ListingsSheet(
                             )
                             Text(
                                 buildAnnotatedString {
-                                    append("Removed by the search: ")
+                                    append("Not shown: ")
                                     withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                                        append("${droppedBySearch.size}")
+                                        append("$hiddenTotal")
                                     }
-                                    topReason?.let { append(" · mostly ${it.key.label}") }
+                                    biggest?.let { append(" · mostly ${it.label}") }
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1232,7 +1165,10 @@ fun ListingsSheet(
                 medianUsedPrice = medianUsedPrice,
                 usedCount = usedListings.size,
                 conditionFilter = conditionFilter,
-                onConditionFilterChange = { conditionFilter = if (conditionFilter == it) null else it },
+                // Narrowing happens in one place. Tapping a condition here goes there rather than
+                // being a second switch for the same filter, which is how "3 active" could mean
+                // something set on a screen the reader was not on.
+                onConditionFilterChange = { showPrice = false; showFilters = true },
                 newListings = newListings,
                 usedListings = usedListings,
                 soldListings = soldListings,
@@ -1242,6 +1178,14 @@ fun ListingsSheet(
                 soldPossible = soldPossible,
                 onBan = { listingViewModel.ban(it) },
                 onDismiss = { showPrice = false },
+            )
+        }
+
+        if (showHidden) {
+            HiddenSheet(
+                groups = hiddenGroups,
+                searchQuery = searchQuery,
+                onDismiss = { showHidden = false },
             )
         }
 
@@ -1255,20 +1199,16 @@ fun ListingsSheet(
             )
         }
 
-        if (showDropped) {
-            DroppedSheet(
-                dropped = droppedBySearch,
-                searchQuery = searchQuery,
-                onDismiss = { showDropped = false },
-            )
-        }
-
         if (showMarkets) {
             MarketsSheet(
                 statuses = platformStatuses,
                 // What each market has to give, counted before the market picks so a market does
                 // not read as empty because another one is picked.
                 offers = marketChoices.associate { it.platform to it.count },
+                // Before the blocked words, so a market whose answer they hid says that rather
+                // than claiming the market had nothing.
+                offersBeforeWords = fetchedListings.filter { !it.sold }
+                    .groupingBy { it.platformId }.eachCount(),
                 capabilities = marketCapabilities,
                 shownMarkets = shownMarkets,
                 onShowMarkets = { chosen ->

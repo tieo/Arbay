@@ -120,9 +120,9 @@ private val SCENES: List<Scene> = buildList {
             onDismiss = {},
         )
     })
-    add(scene("removed", "what-the-search-took-out") {
-        io.github.tieo.arbay.ui.screen.DroppedSheet(
-            dropped = PreviewData.droppedBySearch,
+    add(scene("hidden", "everything-not-on-the-screen") {
+        io.github.tieo.arbay.ui.screen.HiddenSheet(
+            groups = PreviewData.hiddenGroups,
             searchQuery = "parkettschleifmaschine",
             onDismiss = {},
         )

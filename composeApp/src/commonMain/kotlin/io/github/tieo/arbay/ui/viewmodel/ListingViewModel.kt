@@ -159,8 +159,12 @@ class ListingViewModel(
     private fun kept(listing: Listing, banned: Set<String>, blocked: List<String>): Boolean {
         if (listing.id in banned) return false
         if (blocked.isEmpty()) return true
-        val hay = wordsOnly("${listing.title} ${listing.description ?: ""}")
-        return blocked.none { it.isNotBlank() && hay.contains(wordsOnly(it)) }
+        // Padded on both sides, so a blocked word has to be a word: blocking "30" hid every van
+        // whose card said "130 kW", which on a vehicle search is nearly all of them, and a whole
+        // market read as having nothing. A blocked phrase still matches across punctuation, since
+        // both sides are reduced to their words first.
+        val hay = " " + wordsOnly("${listing.title} ${listing.description ?: ""}") + " "
+        return blocked.none { it.isNotBlank() && hay.contains(" " + wordsOnly(it) + " ") }
     }
 
     /**
@@ -314,6 +318,13 @@ class ListingViewModel(
     fun unblockTerm(term: String): List<String> {
         _blockedTerms.value = _blockedTerms.value.filterNot { it.equals(term, ignoreCase = true) }
         return _blockedTerms.value
+    }
+
+    /** Put back everything sent away by hand on this device. The bin is one tap and its listings
+     *  went somewhere nobody could look; this is the way back. */
+    fun unbanAll() {
+        _bannedIds.value = emptySet()
+        saveBannedIds(emptySet())
     }
 
     fun ban(listing: Listing) {

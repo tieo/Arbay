@@ -87,6 +87,41 @@ object PreviewData {
         SuggestedTerm("vertikutieren", worthTrying = false, why = "names the job, not the thing"),
     )
 
+    /** Every way a listing can be missing from the results, for the one view that shows them. */
+    val hiddenGroups: List<io.github.tieo.arbay.ui.screen.HiddenGroup> = listOf(
+        io.github.tieo.arbay.ui.screen.HiddenGroup(
+            label = "you hid",
+            why = "Listings you sent away with the bin on their card.",
+            listings = active.take(2),
+            undoLabel = "Put them back",
+            undo = {},
+        ),
+        io.github.tieo.arbay.ui.screen.HiddenGroup(
+            label = "your blocked words",
+            why = "Carrying one of your blocked words: defekt, bastler",
+            listings = active.drop(2).take(3),
+            undoLabel = "Edit the words",
+            undo = {},
+        ),
+        io.github.tieo.arbay.ui.screen.HiddenGroup(
+            label = "outside your price band",
+            why = "Priced outside the band this search is narrowed to.",
+            listings = active.drop(5).take(4),
+            undoLabel = "Widen it",
+            undo = {},
+        ),
+        io.github.tieo.arbay.ui.screen.HiddenGroup(
+            label = "consumable",
+            why = "The title reads as something the thing uses up — paper, bags, filters.",
+            listings = droppedBySearch.filter { it.reason == DropReason.CONSUMABLE }.map { it.listing },
+        ),
+        io.github.tieo.arbay.ui.screen.HiddenGroup(
+            label = "off target",
+            why = "The title carries too few of the words searched for.",
+            listings = droppedBySearch.filter { it.reason == DropReason.OFF_TARGET }.map { it.listing },
+        ),
+    )
+
     /** An auction among the fixed prices, so a render shows what a bid looks like beside a price.
      *  Ends soon enough to be the case that is allowed to interrupt. */
     val withAuction: List<Listing> = active.mapIndexed { i, l ->
