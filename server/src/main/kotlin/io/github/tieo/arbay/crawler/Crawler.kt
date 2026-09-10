@@ -111,7 +111,9 @@ suspend fun Crawler.trackedSearch(
             CrawlerStatusTracker.recordError(platformId, "Search returned 0 results", ErrorType.EMPTY_RESULTS)
             log.warn("{}: 0 results for '{}'", platformId.displayName, query.text)
         } else {
-            val ignoredSearch = RelevanceFilter.answeredSomethingElse(results, query)
+            val ignoredSearch = RelevanceFilter.answeredSomethingElse(
+                results, query, askedInItsOwnLanguage(query, platformId),
+            )
             val irrelevance = ignoredSearch ?: RelevanceFilter.irrelevanceReport(results, query)
             if (irrelevance != null) {
                 if (ignoredSearch != null) {

@@ -256,6 +256,28 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a market asked in the wrong language is not accused of ignoring the search`() {
+        // eBay Italy, live, asked in German because nobody turned translation on: it answers in
+        // Italian, so not one listing carries the word. It answered as well as it could.
+        val italian = listOf(
+            listing("5/10 nastri abrasivi nastro abrasivo per levigatrice, 750 x 200"),
+            listing("Nastro abrasivo 200 x 750 mm per levigatrice"),
+            listing("50 dischi abrasivi in ceramica a strappo per parquet"),
+            listing("Cinghia trapezoidale 13x787 Li"),
+            listing("2 Pezzi Cinghia per levigatrice"),
+        )
+        val query = SearchQuery(text = "parkettschleifmaschine", category = MarketGroup.GENERAL)
+        assertNull(
+            RelevanceFilter.answeredSomethingElse(italian, query, askedInItsOwnLanguage = false),
+            "asked in a language it does not search, it could not have sent the word back",
+        )
+        assertNotNull(
+            RelevanceFilter.answeredSomethingElse(italian, query, askedInItsOwnLanguage = true),
+            "asked in its own language, an answer without one word of it is a different question",
+        )
+    }
+
+    @Test
     fun `a market that mostly missed still keeps what it matched`() {
         // eBay Italy, live, for "2tb m.2 ssd": a hundred drives of every size, a few of them the
         // one asked for. It ran the search, so its answer is filtered listing by listing.
@@ -273,6 +295,17 @@ class RelevanceFilterTest {
             "the words are all over this answer; the market plainly ran the search",
         )
         assertEquals(listOf("Lexar NM790 2TB M.2 SSD"), RelevanceFilter.filter(mostlyOtherSizes, query).map { it.title })
+    }
+
+    @Test
+    fun `a switch off the machine is not the machine`() {
+        // Off the phone: a 33 euro Geizhals listing led a search for the machine it belongs to,
+        // because it carries the machine's own name and costs a fraction of one.
+        val kept = search("parkettschleifmaschine", listOf(
+            listing("Lägler Randschleifer Elan, Flip, Unico, Schalter Parkettschleifmaschine", price = 3299),
+            listing("Lägler Parkettschleifmaschine Hummel", price = 30000),
+        )).map { it.title }
+        assertEquals(listOf("Lägler Parkettschleifmaschine Hummel"), kept)
     }
 
     @Test

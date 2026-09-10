@@ -19,3 +19,16 @@ fun localizedQuery(base: SearchQuery, platform: PlatformId): SearchQuery {
     if (term == base.text) return base
     return base.copy(text = term)
 }
+
+/**
+ * Whether this market was asked in the language it searches in.
+ *
+ * A market asked in a language it does not search answers in its own words, and none of them are
+ * the ones sent: eBay Italy returns "nastri abrasivi per parquet" to a German term. That is the
+ * market answering as well as it can, not the market ignoring the question, and the two have to be
+ * told apart before either is judged.
+ */
+fun askedInItsOwnLanguage(query: SearchQuery, platform: PlatformId): Boolean =
+    platform.searchLanguage == "de" ||
+        (query.reach.otherLanguages &&
+            !query.reach.termByLanguage[platform.searchLanguage].isNullOrBlank())

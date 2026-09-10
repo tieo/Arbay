@@ -320,6 +320,10 @@ object RelevanceFilter {
         """\b(schleifpapiere?|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
             """schleifmittel|staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
             """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
+            // The electrical spares a machine is stripped for. Named as the thing being sold, so
+            // they carry the machine's own name and its price is a fraction of one, which put a
+            // €33 switch at the top of a search for the machine it belongs to.
+            """schalter|kohleb(ü|ue)rsten|kondensator|keilriemen|antriebsriemen|""" +
             // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
             // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.
             """papel\s+de\s+lija|banda\s+de\s+revestimiento|bandas?\s+abrasivas?|""" +
@@ -469,7 +473,14 @@ object RelevanceFilter {
      * handled listing by listing like every other market; one that never ran it has nothing to
      * filter, since what it sent is about something else entirely.
      */
-    fun answeredSomethingElse(listings: List<Listing>, query: SearchQuery): String? {
+    fun answeredSomethingElse(
+        listings: List<Listing>,
+        query: SearchQuery,
+        askedInItsOwnLanguage: Boolean = true,
+    ): String? {
+        // A market asked in a language it does not search cannot carry the words back, and its
+        // answer is judged listing by listing like any other rather than thrown away whole.
+        if (!askedInItsOwnLanguage) return null
         val parsed = parseQuery(query)
         val tokens = (parsed.positiveTokens + parsed.orGroups.flatten())
             .map { it.lowercase().replace(NON_ALNUM, "") }

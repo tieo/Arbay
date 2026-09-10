@@ -21,6 +21,7 @@ import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.RequestMonitor
+import io.github.tieo.arbay.crawler.askedInItsOwnLanguage
 import io.github.tieo.arbay.crawler.localizedQuery
 import io.github.tieo.arbay.crawler.TermVerdictEmitter
 import io.github.tieo.arbay.crawler.TermsUsedEmitter
@@ -606,7 +607,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // it answered a different question, and its answer holds nothing to
                                 // filter. Anything else is judged listing by listing, so a market
                                 // that ran the search keeps whatever of it matched.
-                                val ignoredSearch = RelevanceFilter.answeredSomethingElse(rawResults, pq)
+                                val ignoredSearch = RelevanceFilter.answeredSomethingElse(
+                                    rawResults, pq, askedInItsOwnLanguage(pq, platformId),
+                                )
                                 if (ignoredSearch != null) {
                                     CrawlerStatusTracker.recordError(platformId, ignoredSearch, ErrorType.IRRELEVANT_RESULTS)
                                 } else {

@@ -31,7 +31,9 @@ import io.github.tieo.arbay.catalog.ProductCatalog
 import io.github.tieo.arbay.catalog.ProductCategory
 import io.github.tieo.arbay.debug.DebugSlice
 import io.github.tieo.arbay.history.SearchHistoryEntry
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.MarketSets
+import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.history.summary
 import io.github.tieo.arbay.ui.AdaptiveSheet
@@ -244,7 +246,14 @@ fun DiscoverySheet(
                                 WayIn(
                                     icon = Icons.Outlined.DirectionsCar,
                                     title = "Vehicle search",
-                                    detail = "Make, year, mileage, price, power and gearbox, asked of 25 markets in their own languages",
+                                    // Counted from the countries this search covers, not written
+                                    // down: the number was fixed at 25 and the languages were a
+                                    // promise the search only keeps when asked to.
+                                    detail = MarketSets.platformsIn(MarketGroup.VEHICLES, countries).size.let { markets ->
+                                        "Make, year, mileage, price, power and gearbox, asked of " +
+                                            (if (markets == 1) "1 market" else "$markets markets") +
+                                            (if (countries.isEmpty()) "" else " in ${countries.joinToString(", ")}")
+                                    },
                                     onClick = it,
                                 )
                             }
