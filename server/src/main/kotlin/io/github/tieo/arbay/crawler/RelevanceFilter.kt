@@ -379,24 +379,36 @@ object RelevanceFilter {
             if (reason != null) dropped += DroppedListing(listing, reason)
             reason == null
         }
-        // Whether the words searched for are words this market's sellers actually write. Read off
-        // the answer in hand rather than assumed: a search for "grigri" comes back from Vinted with
-        // the word in nearly every title, so a listing without it is the odd one out; a search for
-        // "laptop" comes back as ThinkPads and MacBooks that never say "laptop", and demanding the
-        // word there would throw the market away. Nothing here counts how many words were typed —
-        // the same measurement decides for a one-word search and a five-word one.
-        val carryingAWord = listings.count { listing ->
-            val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
-            (parsed.positiveTokens + parsed.orGroups.flatten())
-                .map { it.lowercase().replace(NON_ALNUM, "") }
-                .filter { it.length >= 3 }
-                .any { text.contains(it) }
+        // Which of the words searched for a listing has to carry, decided per word rather than for
+        // the search as a whole.
+        //
+        // A word with a number in it is a size or a model code — 2TB, M.2, S25 — and asking for one
+        // is asking for that one, so it is always required. A word of letters alone is a category
+        // word, and whether it can be required is read off the market's own answer: Idealo lists
+        // "Lexar NM620 2TB M.2" and never writes "SSD", so requiring that word threw away the very
+        // drives asked for, while Vinted answers "grigri" with the word in nearly every title, so a
+        // listing without it is the odd one out. Where nothing can be required, the market's own
+        // search is the only judge there is, and it already ran.
+        fun shareCarrying(token: String): Double {
+            if (listings.isEmpty()) return 0.0
+            val t = token.lowercase().replace(NON_ALNUM, "")
+            if (t.length < 3) return 1.0
+            return listings.count { listing ->
+                "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "").contains(t)
+            }.toDouble() / listings.size
         }
-        val sellersWriteTheseWords =
-            listings.isNotEmpty() && carryingAWord.toDouble() / listings.size >= WORDS_ARE_WRITTEN
+        // Aliases are alternate phrasings of the whole search, scored as competing wholes, so only a
+        // plain token list is narrowed this way.
+        val asked = if (parsed.orGroups.isNotEmpty()) parsed else {
+            val required = parsed.positiveTokens.filter { token ->
+                token.any { it.isDigit() } || shareCarrying(token) >= WORDS_ARE_WRITTEN
+            }
+            parsed.copy(positiveTokens = required)
+        }
+        val sellersWriteTheseWords = asked.positiveTokens.isNotEmpty() || asked.orGroups.isNotEmpty()
 
         val kept = listings.mapNotNull { listing ->
-            val s = score(listing, parsed)
+            val s = score(listing, asked)
             if (s < 0) {
                 dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
                 return@mapNotNull null

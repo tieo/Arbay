@@ -298,6 +298,40 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a market that never writes the category word still answers for it`() {
+        // Idealo, live, for "2tb m.2 ssd": it lists the drive by make and size and never writes
+        // "SSD", so requiring that word threw away the very drives asked for. The size and the
+        // slot are asked for by number, and those it does write.
+        val idealo = listOf(
+            listing("Intenso M.2 PCIe Premium 2TB"),
+            listing("Lexar NM620 2TB M.2"),
+            listing("Samsung 980 Pro 2TB M.2"),
+            listing("Silicon Power UD90 2TB M.2"),
+            listing("Crucial P3 Plus 1TB M.2"),
+            listing("Kingston NV3 500GB M.2"),
+        )
+        val kept = search("2tb m.2 ssd", idealo).map { it.title }
+        assertTrue(kept.contains("Lexar NM620 2TB M.2"), "the drive asked for, named the way Idealo names it")
+        assertEquals(4, kept.size, "every 2TB M.2 it listed")
+        assertTrue(kept.none { it.contains("1TB") || it.contains("500GB") }, "a different size is a different drive")
+    }
+
+    @Test
+    fun `a size asked for by number is not negotiable`() {
+        // reBuy, live, for the same search: it carries "SSD" in one listing of its own shelf, which
+        // used to be enough to let the whole shelf through unjudged.
+        val shelf = listOf(
+            listing("Mashed (Playstation 2) [UK Import] PlayStation 2"),
+            listing("Power Semiconductor Drives"),
+            listing("Solid-State-Drives (SSDs) Modeling"),
+            listing("Samsung Galaxy S23 Ultra Dual SIM 1TB cream"),
+            listing("DriveClub [Special Edition Steelbook] PlayStation 4"),
+            listing("Die Zeitmaschine"),
+        )
+        assertEquals(emptyList(), search("2tb m.2 ssd", shelf), "none of it is a 2TB M.2 anything")
+    }
+
+    @Test
     fun `a title that is only the thing's name is a title`() {
         // Off the live answer: four Kleinanzeigen ads titled exactly "Parkettschleifmaschine" were
         // being thrown away as placeholders, for having one word.
