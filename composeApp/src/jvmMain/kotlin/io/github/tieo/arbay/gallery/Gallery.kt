@@ -120,6 +120,12 @@ private val SCENES: List<Scene> = buildList {
             onDismiss = {},
         )
     })
+    add(scene("listing", "everything-the-market-says", tall = true) {
+        io.github.tieo.arbay.ui.screen.ListingDetailSheet(
+            listing = PreviewData.fullyDescribed,
+            onDismiss = {},
+        )
+    })
     add(scene("hidden", "everything-not-on-the-screen") {
         io.github.tieo.arbay.ui.screen.HiddenSheet(
             groups = PreviewData.hiddenGroups,
@@ -351,7 +357,7 @@ private fun Price(
 
 @Composable
 private fun VehicleSearch() = inline {
-    io.github.tieo.arbay.ui.screen.CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _ -> })
+    io.github.tieo.arbay.ui.screen.CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _, _, _ -> })
 }()
 
 @Composable

@@ -1,5 +1,11 @@
 package io.github.tieo.arbay.ui.screen
 
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlin.math.roundToInt
+import io.github.tieo.arbay.model.importVat
+import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.ImportRules
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -119,10 +125,87 @@ fun ListingDetailSheet(
                 DetailChip(listing.platformId.displayName)
                 listing.condition?.let { DetailChip(it.name.lowercase().replace('_', ' ')) }
                 listing.location?.let { loc ->
-                    (loc.city ?: loc.raw ?: loc.country)?.let { DetailChip(it) }
+                    listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country)
+                        .joinToString(" ").takeIf { it.isNotBlank() }?.let { DetailChip(it) }
+                }
+                listing.distanceKm?.let { DetailChip("${it.roundToInt()} km away") }
+                listing.listingDate?.let {
+                    DetailChip("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}")
+                }
+                listing.soldDate?.let {
+                    DetailChip("sold ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}")
+                }
+                if (listing.saleType == SaleType.AUCTION) {
+                    DetailChip(listing.bidCount?.let { "$it bids" } ?: "auction")
                 }
                 if (listing.shipping?.free == true) DetailChip("Free shipping")
                 if (listing.negotiable) DetailChip("Negotiable")
+            }
+
+            // What the price really is where it is being read: a market outside the buyer's VAT
+            // area quotes without the import VAT charged on the way in, and the card's figure is
+            // the landed one, so the difference is spelled out rather than left as a discrepancy
+            // between this screen and the market's own page.
+            listing.importVat(ImportRules.current)?.let { vat ->
+                Text(
+                    "Includes ${ImportRules.current.importVatPercent}% import VAT of ${vat.format()} — " +
+                        "${listing.price.format()} on ${listing.platformId.displayName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            listing.shipping?.cost?.takeIf { it.amount > 0 }?.let {
+                Text(
+                    "Delivery ${it.format()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Everything the market published about the thing itself. It was all being carried and
+            // none of it shown: a van's own page said only its registration month and mileage,
+            // pulled out of a description string, while its year, power, gearbox, fuel, body,
+            // doors, seats, emission class, colour and inspection date sat in the record unread.
+            listing.vehicle?.let { v ->
+                val specs = buildList {
+                    v.firstRegYear?.let {
+                        add("First registered" to (v.firstRegMonth?.let { m -> "%02d/%d".format(m, it) } ?: "$it"))
+                    }
+                    v.mileageKm?.let { add("Mileage" to "${"%,d".format(it).replace(',', '.')} km") }
+                    v.powerKw?.let { add("Power" to "$it kW · ${(it * 1.35962).toInt()} hp") }
+                    v.displacementCc?.let { add("Engine" to "$it cc") }
+                    v.fuel?.let { add("Fuel" to it.name.lowercase().replace('_', ' ')) }
+                    v.gearbox?.let { add("Gearbox" to it.name.lowercase()) }
+                    v.drivetrain?.let { add("Drive" to it.name.lowercase().replace('_', ' ')) }
+                    v.bodyType?.let { add("Body" to it.name.lowercase().replace('_', ' ')) }
+                    v.doors?.let { add("Doors" to "$it") }
+                    v.seats?.let { add("Seats" to "$it") }
+                    v.condition?.let { add("Condition" to it.name.lowercase().replace('_', ' ')) }
+                    v.previousOwners?.let { add("Previous owners" to "$it") }
+                    v.color?.let { add("Colour" to it) }
+                    v.emissionClassEuro?.let { add("Emission class" to "Euro $it") }
+                    v.emissionSticker?.let { add("Sticker" to "$it") }
+                    v.inspectionUntil?.let { add("Inspection until" to it) }
+                    v.upholstery?.let { add("Upholstery" to it) }
+                    v.vanLength?.let { add("Length" to "L$it") }
+                    v.vanHeight?.let { add("Roof" to "H$it") }
+                }
+                if (specs.isNotEmpty()) {
+                    Text("What the market says it is", style = MaterialTheme.typography.labelLarge)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        specs.forEach { (label, value) ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(value, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
             }
 
             listing.seller?.let { seller ->

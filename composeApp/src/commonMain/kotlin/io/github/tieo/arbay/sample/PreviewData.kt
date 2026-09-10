@@ -100,6 +100,20 @@ object PreviewData {
         )
     }
 
+    /** A listing with everything a market publishes about it, for the view that shows the lot. */
+    val fullyDescribed: Listing = active[1].copy(
+        description = "Scheckheftgepflegt, 2. Hand, Standheizung, AHK abnehmbar, neue Bremsen vorne.",
+        distanceKm = 62.0,
+        listingDate = now,
+        vehicle = VehicleInfo(
+            firstRegYear = 2019, firstRegMonth = 3, mileageKm = 172_000, powerKw = 130,
+            displacementCc = 1968, fuel = Fuel.DIESEL, gearbox = Transmission.MANUAL,
+            drivetrain = Drivetrain.FWD, bodyType = BodyType.VAN, doors = 4, seats = 3,
+            previousOwners = 2, color = "Weiß", emissionClassEuro = 6, inspectionUntil = "2027-03",
+            upholstery = "Stoff", vanLength = 3, vanHeight = 2,
+        ),
+    )
+
     /** Every way a listing can be missing from the results, for the one view that shows them. */
     val hiddenGroups: List<io.github.tieo.arbay.ui.screen.HiddenGroup> = listOf(
         io.github.tieo.arbay.ui.screen.HiddenGroup(
