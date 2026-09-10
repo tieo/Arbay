@@ -345,6 +345,36 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a listing selling five sizes is not an offer of the one asked for`() {
+        // Off the live answer for "2tb m.2 ssd": these took every cheapest place in the list at a
+        // median of 78 euro against 220 for the rest, because the price on the card belongs to the
+        // smallest size in the title.
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Fanxiang M.2 2280 NVMe Interne SSD 256GB 512GB 1TB 2TB 4TB PCIE", price = 5000),
+            listing("verschiedene SSD Festplatten 2,5\" M2 SATA NVME 120 240 250 500GB 2TB", price = 1400),
+            listing("Netac 2TB 1T 500GB 250GB Interne Festplatte SSD M.2 2280 NVMe", price = 4600),
+            listing("Samsung SSD 990 PRO 2TB, M.2 2280 / M-Key / PCIe 4.0 x4", price = 31800),
+            listing("Lexar NM790 2TB M.2 SSD", price = 9900),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Samsung SSD 990 PRO 2TB") }, "one size, one price")
+        assertTrue(kept.any { it.startsWith("Lexar") }, "same")
+        assertEquals(2, kept.size, "the three that sell a row of sizes are not offers of a 2TB drive")
+    }
+
+    @Test
+    fun `a drive that states its size twice states one size`() {
+        // Also off the live answer: "Air Disk 2TB (2000GB)" is one drive saying the same number
+        // two ways, and comparing the sizes as words rather than as numbers threw it out.
+        val kept = search("2tb m.2 ssd", listOf(
+            listing("Air Disk 2TB (2000GB) m.2 NVME SSD Fast Neu 100%", price = 8900),
+            listing("Fanxiang M.2 SSD 256GB 512GB 1TB 2TB PCIe", price = 2800),
+            listing("Lexar NM790 2TB M.2 SSD", price = 9900),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Air Disk") }, "2TB and 2000GB are the same size")
+        assertTrue(kept.none { it.startsWith("Fanxiang") }, "256GB is not")
+    }
+
+    @Test
     fun `a drive that never writes its form factor is still that drive`() {
         // Vinted, Ricardo and Amazon, live: half the M.2 drives on them never write "M.2", and
         // asking for the words they leave out lost the very listings searched for. The size is a

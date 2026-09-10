@@ -31,6 +31,9 @@ enum class DropReason {
     /** A machine of its own with the thing searched for built into it. */
     BUILT_INTO_A_DEVICE,
 
+    /** One listing offering a row of sizes, priced at the smallest of them. */
+    ONE_OF_SEVERAL_SIZES,
+
     /** Something the thing uses up: sanding paper, dust bags, filters. */
     CONSUMABLE,
 
@@ -54,6 +57,7 @@ val DropReason.label: String
         DropReason.OFF_TARGET -> "off target"
         DropReason.ACCESSORY -> "accessory"
         DropReason.BUILT_INTO_A_DEVICE -> "inside another device"
+        DropReason.ONE_OF_SEVERAL_SIZES -> "priced at a smaller size"
         DropReason.CONSUMABLE -> "consumable"
         DropReason.WANTED_AD -> "wanted ad"
         DropReason.RENTAL -> "for rent"

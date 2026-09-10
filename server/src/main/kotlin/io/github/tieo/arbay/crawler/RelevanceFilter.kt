@@ -310,6 +310,47 @@ object RelevanceFilter {
         return headWords.none { q.contains(it) }
     }
 
+    /** Sizes as a listing writes them: a number glued or spaced to a storage unit. */
+    /** A speed, not a size: "7.300 MB/s Lesen" is how fast the drive is, and counting it as a
+     *  second size made every drive that advertises one look like a row of variants. */
+    private val sizeInTitle =
+        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Whether the listing offers a row of sizes and is priced at the smallest of them.
+     *
+     * One eBay listing sells the same drive in 120GB, 240GB, 500GB, 1TB and 2TB, and the price on
+     * the card is the 120GB one. Measured over a live search for a 2TB drive: 31 of 188 results
+     * were shaped like this, at a median of 78 euro against 220 for the rest, so they take every
+     * cheapest place in the list and none of them is an offer of what was asked for.
+     *
+     * Only when the search names a size itself — a search for a drive by model has no size to be
+     * misled about.
+     */
+    private fun isOneOfSeveralSizes(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = parsed.positiveTokens.mapNotNull { sizeInGigabytes(it) }.ifEmpty { return false }
+        val offered = sizeInTitle.findAll(listing.title)
+            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+            .toSet()
+        // A drive that states its size twice ("2TB (2000GB)") states one size. Only a listing that
+        // also offers something smaller than what was asked for is priced at a size nobody asked
+        // for, which is what makes its place among the cheapest wrong.
+        return offered.size >= 2 && offered.any { it < asked.min() }
+    }
+
+    /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
+     *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
+    private fun sizeInGigabytes(token: String): Double? {
+        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb)$""", RegexOption.IGNORE_CASE)
+            .find(token.trim()) ?: return null
+        val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
+        return when (m.groupValues[2].lowercase()) {
+            "tb" -> value * 1000
+            "mb" -> value / 1000
+            else -> value
+        }
+    }
+
     // A device that a searched-for part is built into, named as the thing on offer. A search for a
     // 2TB M.2 SSD comes back with gaming PCs and MacBooks that have one inside, which are the same
     // words and a different product — and, at ten to a hundred times the price, the ones that wreck
@@ -430,6 +471,7 @@ object RelevanceFilter {
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
+                isOneOfSeveralSizes(listing, parsed) -> DropReason.ONE_OF_SEVERAL_SIZES
                 isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE
                 else -> null
             }
