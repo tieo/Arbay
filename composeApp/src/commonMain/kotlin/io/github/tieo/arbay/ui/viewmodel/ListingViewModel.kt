@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.loadBannedIds
 import io.github.tieo.arbay.model.*
@@ -415,8 +416,8 @@ class ListingViewModel(
 
     // Device position, sent so the server fills in each listing's distance; and whether to order the
     // results nearest-first.
-    private var userLat: Double? = null
-    private var userLon: Double? = null
+    private var userLat: Double? = DevicePosition.latitude
+    private var userLon: Double? = DevicePosition.longitude
     private val _sortMode = MutableStateFlow(SortMode.BEST_MATCH)
     val sortMode: StateFlow<SortMode> = _sortMode
     // Kept for the callers that only ask "are we nearest-first?".
@@ -424,9 +425,15 @@ class ListingViewModel(
         .map { it == SortMode.NEAREST }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** Whether a position is known to measure from. Nearest-first has nothing to sort by without
+     *  one, and every distance on every card comes from it. */
+    private val _hasPosition = MutableStateFlow(DevicePosition.latitude != null)
+    val hasPosition: StateFlow<Boolean> = _hasPosition
+
     fun setLocation(lat: Double?, lon: Double?) {
         userLat = lat
         userLon = lon
+        _hasPosition.value = lat != null && lon != null
         // Measure the results already in hand against the new position. No crawl: the server
         // resolved each listing's coordinates when it delivered them.
         _allListings.value = sortListings(_allListings.value)

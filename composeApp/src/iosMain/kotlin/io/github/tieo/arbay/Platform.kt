@@ -20,3 +20,6 @@ actual fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit = { onCit
 
 @androidx.compose.runtime.Composable
 actual fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Unit = { onCoords(null, null) }
+
+@Composable
+actual fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit) { }

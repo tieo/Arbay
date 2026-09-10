@@ -147,6 +147,17 @@ class ArbayClient(
         client.delete("$baseUrl/api/auctions/reminders/${listingId.encodeURLPathPart()}")
     }
 
+    /** Where a place is, for measuring listings against a home town. Null when the server's index
+     *  does not know it. */
+    suspend fun geocode(place: String): Pair<Double, Double>? {
+        val response = client.get("$baseUrl/api/geocode") { parameter("q", place) }
+        if (!response.status.isSuccess()) return null
+        val body = response.body<Map<String, Double>>()
+        val lat = body["latitude"] ?: return null
+        val lon = body["longitude"] ?: return null
+        return lat to lon
+    }
+
     suspend fun getMarketSettings(): MarketSettings =
         client.get("$baseUrl/api/settings/markets").body()
 

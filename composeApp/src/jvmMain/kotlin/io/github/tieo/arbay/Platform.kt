@@ -1,5 +1,6 @@
 package io.github.tieo.arbay
 
+import androidx.compose.runtime.Composable
 import java.awt.Desktop
 import java.io.File
 import java.net.URI
@@ -68,3 +69,6 @@ actual fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit = { onCit
 
 @androidx.compose.runtime.Composable
 actual fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Unit = { onCoords(null, null) }
+
+@Composable
+actual fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit) { }

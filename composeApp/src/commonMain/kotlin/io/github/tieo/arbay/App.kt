@@ -39,6 +39,20 @@ fun App() {
             DebugRegistry.register("searchHistory") { debugJson.encodeToString(SearchHistoryStore.entries.value) }
         }
 
+        // Where the reader is, so every listing can say how far away it is. The device's own
+        // position where the app already has permission, the home town otherwise; the permission
+        // prompt belongs to the nearest-first control, which is someone asking for it.
+        ReadPositionIfAllowed { lat, lon -> DevicePosition.set(lat, lon) }
+        LaunchedEffect(Unit) {
+            if (DevicePosition.latitude == null) {
+                runCatching {
+                    client.getFreeItemProfile()?.location?.takeIf { it.isNotBlank() }?.let { home ->
+                        client.geocode(home)?.let { (lat, lon) -> DevicePosition.set(lat, lon) }
+                    }
+                }
+            }
+        }
+
         // Load exchange rates + refresh the car taxonomy on startup
         LaunchedEffect(Unit) {
             try {

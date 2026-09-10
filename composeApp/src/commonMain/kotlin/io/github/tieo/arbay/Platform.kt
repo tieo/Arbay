@@ -1,5 +1,6 @@
 package io.github.tieo.arbay
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,14 @@ expect fun rememberCityDetector(onCity: (String?) -> Unit): () -> Unit
  *  back with lat/lon, or (null, null) if unavailable/denied. */
 @androidx.compose.runtime.Composable
 expect fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Unit
+
+/**
+ * The device's position, but only where the app already has permission to read it, and never by
+ * asking. Distance to a listing is worth showing on every card, and it was only ever worked out
+ * after someone switched the order to nearest-first, so a list showed postcodes and nothing else.
+ */
+@Composable
+expect fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit)
 
 expect fun loadBannedIds(): Set<String>
 expect fun saveBannedIds(ids: Set<String>)
@@ -57,6 +66,20 @@ expect fun cancelPolling()
  */
 object ImportRules {
     var current: ImportSettings by mutableStateOf(ImportSettings())
+}
+
+/** Where the reader is, for measuring a listing against. The device's own position where the app
+ *  is allowed to read it, and the home town from the free-items profile otherwise, since a distance
+ *  is worth showing whether or not anyone granted a location permission. */
+object DevicePosition {
+    var latitude: Double? by mutableStateOf(null)
+    var longitude: Double? by mutableStateOf(null)
+
+    fun set(lat: Double?, lon: Double?) {
+        if (lat == null || lon == null) return
+        latitude = lat
+        longitude = lon
+    }
 }
 
 /** The countries a search covers when it names no markets of its own. Observable: changing it in

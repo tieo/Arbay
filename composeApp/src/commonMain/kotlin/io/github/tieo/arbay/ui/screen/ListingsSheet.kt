@@ -58,6 +58,8 @@ import coil3.compose.AsyncImage
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.comparablePrice
+import io.github.tieo.arbay.DevicePosition
+import io.github.tieo.arbay.ReadPositionIfAllowed
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.debug.DebugSlice
@@ -270,6 +272,18 @@ fun ListingsSheet(
     LaunchedEffect(savedFilters?.sort) {
         savedFilters?.sort?.let { listingViewModel.setSortMode(it) }
     }
+    // How far away a listing is belongs on the card whatever the order, so the position is read
+    // as the results open. Only where permission is already given: the prompt belongs to the
+    // nearest-first control, which is someone asking for it.
+    ReadPositionIfAllowed { lat, lon -> listingViewModel.setLocation(lat, lon) }
+    // The position the app worked out at startup, from the device or from the home town, so a
+    // sheet opened later measures against the same point.
+    LaunchedEffect(DevicePosition.latitude, DevicePosition.longitude) {
+        DevicePosition.latitude?.let { lat ->
+            DevicePosition.longitude?.let { lon -> listingViewModel.setLocation(lat, lon) }
+        }
+    }
+    val hasPosition by listingViewModel.hasPosition.collectAsState()
     val detectAndSortNearest = rememberCoordDetector { lat, lon ->
         listingViewModel.setLocation(lat, lon)
         listingViewModel.setSortByDistance(lat != null)
@@ -772,6 +786,33 @@ fun ListingsSheet(
                                 null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                // Nearest-first with nothing to measure from silently became cheapest-first, which
+                // is a list in the wrong order with nothing on screen saying so.
+                if (sortMode == SortMode.NEAREST && !hasPosition) {
+                    item("no-position") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { detectAndSortNearest() }
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.LocationOff,
+                                null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                "Nearest first needs somewhere to measure from. Tap to allow it.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }

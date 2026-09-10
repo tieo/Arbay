@@ -21,9 +21,15 @@ import io.github.tieo.arbay.model.VehicleInfo
 object CarFilterEngine {
 
     /** Sites that carry non-car inventory, where a car query can return parts/accessories. */
+    // Every market that sells anything, as against the vehicle sites where each result is a
+    // vehicle by construction. A car search reaches these too, and what they send back for one is
+    // mostly parts: the shops among them (Amazon, Geizhals, Idealo) sell nothing else.
     private val GENERAL_PLATFORMS = setOf(
         PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
         PlatformId.RICARDO, PlatformId.SUBITO, PlatformId.TWEEDEHANDS,
+        PlatformId.AMAZON_DE, PlatformId.GEIZHALS, PlatformId.IDEALO, PlatformId.EBAY_COM,
+        PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.VINTED_DE,
+        PlatformId.REBUY, PlatformId.REFURBED, PlatformId.BACKMARKET_DE,
     )
 
     /** @param keepNonVehicles when true, the parts/accessories guard is skipped, for a query that
@@ -210,6 +216,25 @@ object CarFilterEngine {
     // A word like "Zahnriemen" or "Bremsbeläge" is a part when the ad is about it and a selling
     // point when a car mentions what was replaced ("VW Crafter 2.0 TDI Zahnriemen neu"). Position
     // is what tells them apart: the part leads its own ad, and never leads a car's.
+    /** A part named near the front of a title, wherever a make's own name got there first: "2X
+     *  Sachs Gasdruck Stoßdämpfer hinten", "Kit Wartung Filter Und Öl Mercedes Sprinter 314". Read
+     *  as a part only alongside [fitsAVehicle], so a car mentioning what was replaced ("VW Crafter
+     *  2.0 TDI Zahnriemen neu") is not one. */
+    private val partNamedEarly = Regex(
+        """^(\S+\s+){0,3}(bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|""" +
+            """radlager|z(ü|ue)ndkerzen?|(luft|(ö|oe)l|innenraum)filter|wasserpumpe|auspuff|""" +
+            """zahnriemen|keilrippenriemen|wischerbl(ä|ae)tter|kit|set|satz|kette|r(ü|ue)ckfahrkamera|""" +
+            """k(ü|ue)hlergrillrahmen|rozrz(ą|a)d)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** What a part says about the vehicles it belongs on. A whole vehicle is not sold "für" or
+     *  "passend für" another one. */
+    private val fitsAVehicle = Regex(
+        """\b(f(ü|ue)r|passend\s+f(ü|ue)r|kompatibel|for|per|pour|para)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val partAccessoryLead = Regex(
         """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange|""" +
             """bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|radlager|""" +
@@ -258,7 +283,8 @@ object CarFilterEngine {
         val title = listing.title
         return partAccessory.containsMatchIn(title) || partAccessoryLead.containsMatchIn(title) ||
             partFromDonorVehicle.containsMatchIn(title) || partSuffix.containsMatchIn(title) ||
-            partNumber.containsMatchIn(title) || isTyreAd(title)
+            partNumber.containsMatchIn(title) || isTyreAd(title) ||
+            (partNamedEarly.containsMatchIn(title) && fitsAVehicle.containsMatchIn(title))
     }
 
     /** An OEM part number, which is what a parts seller titles a part with and what a whole
@@ -270,15 +296,8 @@ object CarFilterEngine {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         if (wantedAd.containsMatchIn(listing.title)) return true
         if (rentalAd.containsMatchIn(listing.title)) return true
-        val hasVehicleSpec = listing.vehicle?.let { v ->
-            v.isVerified(VehicleField.MILEAGE) || v.isVerified(VehicleField.FIRST_REG_YEAR) ||
-                v.isVerified(VehicleField.POWER)
-        } ?: false
-        if (!hasVehicleSpec && partAccessory.containsMatchIn(listing.title)) return true
-        if (!hasVehicleSpec && partAccessoryLead.containsMatchIn(listing.title)) return true
-        if (!hasVehicleSpec && partFromDonorVehicle.containsMatchIn(listing.title)) return true
-        if (!hasVehicleSpec && partSuffix.containsMatchIn(listing.title)) return true
-        if (!hasVehicleSpec && isTyreAd(listing.title)) return true
-        return false
+        // One reading of what a part looks like, shared with the general search filter, so a rule
+        // added for one of them cannot quietly leave the other behind.
+        return namesAVehiclePart(listing)
     }
 }

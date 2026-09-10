@@ -99,6 +99,9 @@ private val SCENES: List<Scene> = buildList {
     add(scene("results", "a-market-offers-its-captcha") {
         Results(PreviewData.active.take(3), PreviewData.captchaHeld)
     })
+    add(scene("results", "nearest-first-with-nowhere-to-measure-from") {
+        Results(PreviewData.active, PreviewData.marketAnswers, sort = io.github.tieo.arbay.model.SortMode.NEAREST)
+    })
     add(scene("results", "other-words-to-add") {
         Results(
             PreviewData.active, PreviewData.marketAnswers,
@@ -239,6 +242,7 @@ private fun Results(
     dropped: List<io.github.tieo.arbay.model.DroppedListing> = emptyList(),
     otherWords: List<io.github.tieo.arbay.model.SuggestedTerm> = emptyList(),
     picked: List<String> = emptyList(),
+    sort: io.github.tieo.arbay.model.SortMode? = null,
 ) = inline {
     io.github.tieo.arbay.ui.screen.ListingsSheet(
         productName = "Parkettschleifmaschine",
@@ -255,6 +259,11 @@ private fun Results(
             samplePicked = picked,
         ),
         platforms = PreviewData.active.map { it.platformId }.distinct(),
+        savedFilters = sort?.let {
+            io.github.tieo.arbay.model.SearchQuery(
+                text = "parkettschleifmaschine", category = io.github.tieo.arbay.model.MarketGroup.GENERAL, sort = it,
+            )
+        },
         blockedTerms = blocked,
         newListingIds = newIds,
         storedListings = stored,

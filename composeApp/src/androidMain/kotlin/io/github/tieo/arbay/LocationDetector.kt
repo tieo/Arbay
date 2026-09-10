@@ -7,6 +7,7 @@ import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -95,3 +96,14 @@ private suspend fun resolveCity(context: android.content.Context): String? =
             null
         }
     }
+
+@Composable
+actual fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) resolveCoords(context)?.let { onCoords(it.first, it.second) }
+    }
+}

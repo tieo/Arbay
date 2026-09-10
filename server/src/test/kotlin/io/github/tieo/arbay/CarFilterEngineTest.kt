@@ -94,6 +94,27 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun dropsPartWhoseOwnBrandGotToTheFrontFirst() {
+        // Off the live answer for "sprinter 314", all of them above the vans on price: the part
+        // word is there, a make's name simply got in front of it, and every one says which
+        // vehicles it fits.
+        val parts = listOf(
+            carListing("q1", PlatformId.AMAZON_DE, "2X Sachs Gasdruck Stoßdämpfer hinten | 314 606 passend für Sprinter",
+                priceCents = 10_500, vehicle = VehicleInfo()),
+            carListing("q2", PlatformId.EBAY_DE, "Kit Wartung Filter Und Öl Mercedes Sprinter 314 105KW für 2006-2009",
+                priceCents = 12_600, vehicle = VehicleInfo()),
+            carListing("q3", PlatformId.AMAZON_DE, "HD IP68 Transporter Rückfahrkamera für Sprinter Crafter",
+                priceCents = 7_000, vehicle = VehicleInfo()),
+        )
+        assertEquals(0, CarFilterEngine.apply(parts, CarFilters()).size)
+
+        // And the car that merely says what was replaced still stands.
+        val car = carListing("q4", PlatformId.EBAY_DE, "Mercedes Sprinter 314 CDI Zahnriemen neu Bremsen neu",
+            priceCents = 1_850_000, vehicle = VehicleInfo())
+        assertEquals(1, CarFilterEngine.apply(listOf(car), CarFilters()).size)
+    }
+
+    @Test
     fun partGuardExemptsListingWithVerifiedSpecs() {
         // A structured vehicle record is a real car even if its title contains a part word.
         val car = carListing("ex", PlatformId.EBAY_DE, "VW Crafter mit Dachträger Hochdach",
