@@ -120,6 +120,14 @@ object RelevanceFilter {
                 // nothing existing).
                 if (token.all { it.isDigit() } || Regex("""^\d+x\d+$""").matches(token)) {
                     if (titleWords.any { word -> word.startsWith(token) && unitSuffixes.any { word == token + it } }) return true
+                    // A van is sold as "Sprinter 314CDI" and a search asks for the 314: the trim
+                    // code glues onto the model number, and only letters may follow it, so 314 does
+                    // not reach 3140.
+                    if (titleWords.any { word ->
+                            word.length > token.length && word.startsWith(token) &&
+                                word.drop(token.length).all { c -> c.isLetter() }
+                        }
+                    ) return true
                 }
                 // Compact matching with word-boundary guard (catches hyphen-split tokens).
                 // e.g. "xt5" (from query "X-T5") matches "fujifilm x t5" via compact "fujifilmxt5".
@@ -471,6 +479,10 @@ object RelevanceFilter {
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
+                // A part off the thing, named without a "für": a trim strip, a sill plate, a wheel
+                // bolt. Its own words say what it is, and none of them belongs to a whole vehicle.
+                !CarFilterEngine.isPartQuery(query.text) &&
+                    CarFilterEngine.namesAVehiclePart(listing) -> DropReason.ACCESSORY
                 isOneOfSeveralSizes(listing, parsed) -> DropReason.ONE_OF_SEVERAL_SIZES
                 isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE
                 else -> null
@@ -507,7 +519,13 @@ object RelevanceFilter {
         // plain token list is narrowed this way.
         val asked = if (parsed.orGroups.isNotEmpty()) parsed else {
             val required = parsed.positiveTokens.filter { token ->
-                isASize(token) || shareCarrying(token) >= WORDS_ARE_WRITTEN
+                // A size and a bare number are what a search cannot be talked out of: 2TB is not
+                // 1TB, and a Sprinter 314 is not a Sprinter 316 and certainly not a book with
+                // "Sprinter" in its title. A word carrying letters as well as digits is a form
+                // factor or a trim as often as a model — "M.2" is on half the drives that have one
+                // — so those follow the market's own answer like any other word.
+                isASize(token) || token.all { it.isDigit() } ||
+                    shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             parsed.copy(positiveTokens = required)
         }

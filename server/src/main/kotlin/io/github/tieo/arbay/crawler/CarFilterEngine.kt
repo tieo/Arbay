@@ -167,6 +167,12 @@ object CarFilterEngine {
             // Bodies of parts an eBay vehicle search floats up: brake components, glass, a parcel
             // shelf, a radio, a catalytic converter, filters — none the subject of a car-for-sale ad.
             """\bhutablage\b|\bautoradio\b|\b(euro)?kat(alysator)?\b|\bbremssattel\b|\bbremskl(ö|oe)tze\b|""" +
+            // Parts a whole-vehicle title never carries at all, wherever they appear in it.
+            """\beinstiegblech\b|\bk(ü|ue)hlergrill\b|\bt(ü|ue)rgriff\b|\bquerlenker\b|""" +
+            """\bspurstange\b|\bturbolader\b|\banlasser\b|\blichtmaschine\b|""" +
+            """\bausr(ü|ue)cklager\b|\b(massen)?schwungrad\b|\babgasrohr\b|\bsto(ß|ss)f(ä|ae)nger\b|""" +
+            """\b(ö|oe)lwanne\b|\bzylinderkopf\b|\beinspritzd(ü|ue)se\b|\bhochdruckpumpe\b|""" +
+            """\bladeluftk(ü|ue)hler\b|\bkupplungssatz\b|\bt(ü|ue)rrahmen\b|""" +
             """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|\bfensterheber\b|""" +
             // Paperwork sold for a model, never the car: an owner's manual, a service book.
             """\b(bedienungsanleitung|betriebsanleitung|serviceplan|handbuch|reparaturhandbuch)\b|""" +
@@ -201,8 +207,14 @@ object CarFilterEngine {
 
     // Body panels a van legitimately lists as equipment ("Crafter 35 mit Trennwand"), so they only
     // mark a part when the title leads with them, which is how a parts ad is written.
+    // A word like "Zahnriemen" or "Bremsbeläge" is a part when the ad is about it and a selling
+    // point when a car mentions what was replaced ("VW Crafter 2.0 TDI Zahnriemen neu"). Position
+    // is what tells them apart: the part leads its own ad, and never leads a car's.
     private val partAccessoryLead = Regex(
-        """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange)\b""",
+        """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange|""" +
+            """bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|radlager|""" +
+            """z(ü|ue)ndkerzen?|(luft|(ö|oe)l|innenraum)filter|wasserpumpe|auspuff|zahnriemen|""" +
+            """keilrippenriemen|wischerbl(ä|ae)tter|ersatzrad|servicepaket|inspektionskit)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -227,6 +239,33 @@ object CarFilterEngine {
      *  them. Any listing the site gave structured vehicle specs for (verified mileage / first-reg /
      *  power) is exempt, so a real car is never dropped. No price threshold: a cheap or broken car
      *  is still a car. */
+    /**
+     * Whether the title names a vehicle part rather than a vehicle.
+     *
+     * The same vocabulary the vehicle post-filter uses, reachable from the general relevance
+     * filter: a search for "sprinter 314" is not recognised as a car search at all — a model
+     * without its make is not enough to send a search to the car sites — and came back led by
+     * trim strips, sill plates and wheel bolts at 13 to 25 euro.
+     */
+    fun namesAVehiclePart(listing: Listing): Boolean {
+        // A listing the market publishes mileage, a year or power for is a vehicle for sale, even
+        // when its title mentions the clutch that was just replaced.
+        val hasVehicleSpec = listing.vehicle?.let { v ->
+            v.isVerified(VehicleField.MILEAGE) || v.isVerified(VehicleField.FIRST_REG_YEAR) ||
+                v.isVerified(VehicleField.POWER)
+        } ?: false
+        if (hasVehicleSpec) return false
+        val title = listing.title
+        return partAccessory.containsMatchIn(title) || partAccessoryLead.containsMatchIn(title) ||
+            partFromDonorVehicle.containsMatchIn(title) || partSuffix.containsMatchIn(title) ||
+            partNumber.containsMatchIn(title) || isTyreAd(title)
+    }
+
+    /** An OEM part number, which is what a parts seller titles a part with and what a whole
+     *  vehicle is never titled with: "A9018900065", "A0031532728", "804528". Ten digits of it
+     *  cannot be a year, a mileage or a price. */
+    private val partNumber = Regex("""\b[A-Z]?\d{6,11}\b""")
+
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
         if (wantedAd.containsMatchIn(listing.title)) return true

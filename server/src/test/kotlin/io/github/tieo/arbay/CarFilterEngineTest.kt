@@ -79,6 +79,21 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun dropsPartAdThatLeadsWithThePart() {
+        // Off the live answer for "sprinter 314": these held every cheap place in the list at 13 to
+        // 47 euro, while the vans start in the thousands.
+        val parts = listOf(
+            carListing("p1", PlatformId.EBAY_DE, "BREMSBELÄGE DB P. SPRINTER 208-314 95-/VITO/LT 96-",
+                priceCents = 3_200, vehicle = VehicleInfo()),
+            carListing("p2", PlatformId.EBAY_DE, "MERCEDES SPRINTER (B906) 314 CDI Einstiegblech vorne rechts",
+                priceCents = 2_200, vehicle = VehicleInfo()),
+            carListing("p3", PlatformId.EBAY_DE, "Servicepaket Mercedes Sprinter 314 Luftfilter Ölfilter",
+                priceCents = 2_500, vehicle = VehicleInfo()),
+        )
+        assertEquals(0, CarFilterEngine.apply(parts, CarFilters()).size)
+    }
+
+    @Test
     fun partGuardExemptsListingWithVerifiedSpecs() {
         // A structured vehicle record is a real car even if its title contains a part word.
         val car = carListing("ex", PlatformId.EBAY_DE, "VW Crafter mit Dachträger Hochdach",

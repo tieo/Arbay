@@ -345,6 +345,25 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a van sold as 314CDI is the 314 that was searched for`() {
+        // Live, for "sprinter 314": every real van on Kleinanzeigen writes the trim code onto the
+        // model number, and the search dropped all of them while keeping books off reBuy whose
+        // titles merely start with "Sprinter".
+        val kept = search("sprinter 314", listOf(
+            listing("Mercedes-Benz Sprinter III Pritsche 314CDI RW Heck"),
+            listing("Mercedes-Benz Sprinter 314CDI Kasten 3,5t FWD L1H1 Kamera"),
+            listing("Mercedes-Benz Sprinter 316 CDI Kasten"),
+            listing("Sprinterjahre. Glanz und Schatten einer Radsportkarriere"),
+            listing("Mercedes Sprinter 3140 Sonderaufbau"),
+        )).map { it.title }
+        assertTrue(kept.any { it.contains("Pritsche 314CDI") }, "the trim code glues onto the model number")
+        assertTrue(kept.any { it.contains("314CDI Kasten") }, "so does this one")
+        assertTrue(kept.none { it.contains("316") }, "a 316 is a different van")
+        assertTrue(kept.none { it.startsWith("Sprinterjahre") }, "a book about cycling is not a van")
+        assertTrue(kept.none { it.contains("3140") }, "and 314 does not reach 3140")
+    }
+
+    @Test
     fun `a listing selling five sizes is not an offer of the one asked for`() {
         // Off the live answer for "2tb m.2 ssd": these took every cheapest place in the list at a
         // median of 78 euro against 220 for the rest, because the price on the card belongs to the
