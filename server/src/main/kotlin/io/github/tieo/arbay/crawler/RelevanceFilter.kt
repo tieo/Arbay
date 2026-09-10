@@ -466,6 +466,13 @@ object RelevanceFilter {
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> =
         partition(listings, query).kept
 
+    /** Whether the search names a vehicle, model-without-make included ("sprinter 314"). Read
+     *  from the live make/model taxonomy rather than from a word list, and asking whether any make
+     *  builds the model rather than which one: Sprinter is a Mercedes-Benz van and a Toyota
+     *  saloon, and either way a box of brake pads is not what was searched for. */
+    private fun namesAVehicle(queryText: String): Boolean =
+        CarQueryResolver.resolve(queryText) != null || CarQueryResolver.namesAKnownModel(queryText)
+
     /** What a market sent, split into what the search keeps and what it drops, each drop carrying
      *  the reason it was dropped. [filter] is the kept half; the dropped half is what the app shows
      *  when someone asks what the search removed. */
@@ -479,9 +486,12 @@ object RelevanceFilter {
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
-                // A part off the thing, named without a "für": a trim strip, a sill plate, a wheel
-                // bolt. Its own words say what it is, and none of them belongs to a whole vehicle.
-                !CarFilterEngine.isPartQuery(query.text) &&
+                // A part off the vehicle, named without a "für": a trim strip, a sill plate, a
+                // wheel bolt, an OEM number. Only for a search that names a vehicle — a model
+                // without its make is not enough to send a search to the car sites, but it is
+                // enough to know that a box of brake pads is not what was asked for. Elsewhere a
+                // long number in a title is an ordinary part number and means nothing.
+                namesAVehicle(query.text) && !CarFilterEngine.isPartQuery(query.text) &&
                     CarFilterEngine.namesAVehiclePart(listing) -> DropReason.ACCESSORY
                 isOneOfSeveralSizes(listing, parsed) -> DropReason.ONE_OF_SEVERAL_SIZES
                 isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE

@@ -90,6 +90,22 @@ object CarQueryResolver {
      * Toyota, and choosing between them is guessing. Unresolved is the honest answer, and the
      * caller can then decline to crawl rather than fetch a page of the site's whole catalogue.
      */
+    /**
+     * Whether the search names a vehicle model, whoever builds it.
+     *
+     * [resolveForCarSite] answers "which make", and gives up where two makes share a model name —
+     * Sprinter is a Mercedes-Benz van and a Toyota saloon — which is the right answer when a URL
+     * needs one make and the wrong question when all that is being asked is whether this search is
+     * about vehicles at all.
+     */
+    fun namesAKnownModel(text: String): Boolean {
+        val first = text.split(" ").firstOrNull { it.isNotBlank() && !it.startsWith("-") }
+            ?.lowercase()?.takeIf { it.length >= 3 } ?: return false
+        return CarTaxonomyProvider.current.makes.any { make ->
+            make.models.any { it.id.lowercase() == first || it.name.lowercase() == first }
+        }
+    }
+
     fun resolveForCarSite(text: String): CarQuery? {
         resolve(text)?.let { return it }
         val tokens = text.split(" ")

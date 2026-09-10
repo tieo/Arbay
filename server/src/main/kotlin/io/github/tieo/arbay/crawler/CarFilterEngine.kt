@@ -264,7 +264,7 @@ object CarFilterEngine {
     /** An OEM part number, which is what a parts seller titles a part with and what a whole
      *  vehicle is never titled with: "A9018900065", "A0031532728", "804528". Ten digits of it
      *  cannot be a year, a mileage or a price. */
-    private val partNumber = Regex("""\b[A-Z]?\d{6,11}\b""")
+    private val partNumber = Regex("""\b[A-Z]?\d{6,11}\b(?!\s*(km|tkm|kw|ps|eur|€))""", RegexOption.IGNORE_CASE)
 
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
         if (listing.platformId !in GENERAL_PLATFORMS) return false
