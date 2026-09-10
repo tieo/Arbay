@@ -44,6 +44,10 @@ object VehicleTextParser {
         """^\s*(?:/\s?(?:jahr|year|jaar)|pro\s+jahr|per\s+jaar|p\.\s?a\.|im\s+jahr|j[äÄa]hrlich|frei\b)""",
         RegexOption.IGNORE_CASE,
     )
+    private val wheelbaseRegex = Regex(
+        """(?:radstand|wheelbase|empattement)\s*:?\s*([0-9][0-9.,\s]{2,6})\s*(?:mm)\b""",
+        RegexOption.IGNORE_CASE,
+    )
     private val displacementCcRegex = Regex("""([0-9]{3,4})\s?(?:cm³|ccm|cc)\b""", RegexOption.IGNORE_CASE)
     private val displacementLRegex = Regex("""\b([0-9])[.,]([0-9])\s?(?:l|liter|litre)\b""", RegexOption.IGNORE_CASE)
 
@@ -57,6 +61,7 @@ object VehicleTextParser {
             fuel = Fuel.parse(text),
             bodyType = BodyType.parse(text),
             gearbox = parseGearbox(text),
+            wheelbaseMm = parseWheelbaseMm(text),
         )
         return if (info == VehicleInfo()) null else info
     }
@@ -81,6 +86,7 @@ object VehicleTextParser {
             if (v.emissionSticker != null) add(VehicleField.EMISSION_STICKER)
             if (v.inspectionUntil != null) add(VehicleField.INSPECTION)
             if (v.upholstery != null) add(VehicleField.UPHOLSTERY)
+            if (v.wheelbaseMm != null) add(VehicleField.WHEELBASE)
         }
         return v.copy(verified = fields)
     }
@@ -90,7 +96,10 @@ object VehicleTextParser {
     fun merge(structured: VehicleInfo?, fromText: VehicleInfo?): VehicleInfo? {
         if (structured == null) return fromText
         if (fromText == null) return structured
-        return VehicleInfo(
+        // Built from the structured record so a field only it carries — the inspection date, the
+        // upholstery, the van's size codes — survives the merge. Listing them one by one dropped
+        // whichever the text side has no counterpart for.
+        return structured.copy(
             firstRegYear = structured.firstRegYear ?: fromText.firstRegYear,
             firstRegMonth = structured.firstRegMonth ?: fromText.firstRegMonth,
             mileageKm = structured.mileageKm ?: fromText.mileageKm,
@@ -106,6 +115,7 @@ object VehicleTextParser {
             previousOwners = structured.previousOwners ?: fromText.previousOwners,
             color = structured.color ?: fromText.color,
             emissionClassEuro = structured.emissionClassEuro ?: fromText.emissionClassEuro,
+            wheelbaseMm = structured.wheelbaseMm ?: fromText.wheelbaseMm,
             // Only the structured side's fields are verified; text fills gaps as inferred.
             verified = structured.verified,
         )
@@ -164,6 +174,20 @@ object VehicleTextParser {
         val fromText = parse("${listing.title} ${listing.description ?: ""}")
         val merged = merge(listing.vehicle, fromText) ?: return listing
         return listing.copy(vehicle = merged)
+    }
+
+    /**
+     * The wheelbase a listing states, in millimetres.
+     *
+     * No market has a field for it that its sellers fill in — AutoScout24 ships a `wheelBase` key
+     * and it was empty on every Crafter measured — so the number lives in the equipment prose,
+     * written as "Radstand 3640 mm" or "Radstand: 3.250 mm". Bounded to what a road vehicle can
+     * have, so a stray four-digit number in the same sentence cannot become a wheelbase.
+     */
+    private fun parseWheelbaseMm(text: String): Int? {
+        val m = wheelbaseRegex.find(text) ?: return null
+        val mm = m.groupValues[1].replace(Regex("""[.,\s]"""), "").toIntOrNull() ?: return null
+        return mm.takeIf { it in 1500..7000 }
     }
 
     private fun parseGearbox(text: String): Transmission? {

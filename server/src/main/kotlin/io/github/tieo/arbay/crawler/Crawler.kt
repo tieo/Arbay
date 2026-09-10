@@ -17,6 +17,11 @@ interface Crawler {
      *  detail page carries structured attributes the search card omits (power, gearbox, doors,
      *  emission, colour…). Default null: the platform's card already holds everything it knows. */
     suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = null
+
+    /** Fetch a single listing's detail page and return where the thing is, for the markets that
+     *  publish a location on the item page and none on the search card. Default null: the card
+     *  already said, or the market never says at all. */
+    suspend fun fetchDetailLocation(listing: Listing): io.github.tieo.arbay.model.Location? = null
 }
 
 /**

@@ -87,6 +87,7 @@ private val DIM_LABELS = mapOf(
     "transmission" to "Gearbox", "fuel" to "Fuel", "bodyType" to "Body", "condition" to "Condition",
     "color" to "Colour", "drivetrain" to "Drivetrain", "doors" to "Doors", "seats" to "Seats",
     "emission" to "Emission", "seller" to "Seller", "vanLength" to "Length", "vanHeight" to "Height",
+    "wheelbase" to "Wheelbase",
     "description" to "In description",
 )
 
@@ -338,7 +339,11 @@ fun ListingsSheet(
     // reader's own bands and words, the markets they unticked, and what the search removed.
     val hiddenGroups: List<HiddenGroup> = run {
         val banned = fetchedListings.filter { it.id in bannedIds }
-        val byWord = fetchedListings.filter { it.id !in bannedIds && it !in marketBasis }
+        // The words the reader blocked catch listings in two places: here, over what the markets
+        // sent back, and on the server, which never sends one on. One word, one group.
+        val blockedOnTheServer = droppedBySearch.filter { it.reason == DropReason.BLOCKED_WORD }
+        val byWord = fetchedListings.filter { it.id !in bannedIds && it !in marketBasis } +
+            blockedOnTheServer.map { it.listing }
         val outOfBand = allActiveListings.filterNot {
             !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name))
         }
@@ -391,7 +396,8 @@ fun ListingsSheet(
                 undo = { newOnly = false },
             ))
             // What the search itself removed, one group per reason it gave.
-            droppedBySearch.groupBy { it.reason }.forEach { (reason, entries) ->
+            droppedBySearch.filterNot { it.reason == DropReason.BLOCKED_WORD }
+                .groupBy { it.reason }.forEach { (reason, entries) ->
                 add(HiddenGroup(
                     label = reason.label,
                     why = explainDropReason(reason),

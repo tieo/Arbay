@@ -24,24 +24,21 @@ data class SearchArea(
 /**
  * The area a search covers, or null when it covers everywhere.
  *
- * A typed place wins over the searcher's own position: someone who wrote "Berlin" is looking at
- * Berlin from wherever they happen to be sitting.
+ * Both halves have to be asked for: the place someone typed and the distance they gave. Where the
+ * device knows its position that is used to show and sort by distance, never to build an area —
+ * standing somewhere is not the same as saying you only want what is near you.
  */
 fun SearchQuery.area(country: String = "DE"): SearchArea? {
     val radius = radiusKm.takeIf { it > 0 } ?: return null
-    val typed = location?.trim()?.takeIf { it.isNotBlank() }
-    val coords = when {
-        typed != null -> Geocoder.resolve(country, typed.takeIf { it.any(Char::isDigit) }, typed)
-        userLat != null && userLon != null -> userLat!! to userLon!!
-        else -> null
-    } ?: return null
+    val typed = location?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val coords = Geocoder.resolve(country, typed.takeIf { it.any(Char::isDigit) }, typed) ?: return null
     return SearchArea(
         latitude = coords.first,
         longitude = coords.second,
         radiusKm = radius,
         country = country,
-        zip = typed?.takeIf { it.all { c -> c.isDigit() } }
+        zip = typed.takeIf { it.all { c -> c.isDigit() } }
             ?: Geocoder.nearestZip(country, coords.first, coords.second),
-        placeName = typed?.takeIf { it.any { c -> c.isLetter() } },
+        placeName = typed.takeIf { it.any { c -> c.isLetter() } },
     )
 }

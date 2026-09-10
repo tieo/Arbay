@@ -49,6 +49,32 @@ object RelevanceFilter {
             CarQueryResolver.makeSpellings(w)?.firstOrNull() ?: w
         }
 
+    /**
+     * The word the reader blocked that this listing carries, if any.
+     *
+     * Separate from the score so the app can say which word took a listing away. Folded into the
+     * score's one "reject" value, a blocked word was reported as "not one offer", which reads as
+     * the market having sent a placeholder or a bulk lot — twelve genuine vans sat under that
+     * heading because the reader had blocked "Pritsche".
+     */
+    fun blockedWord(listing: Listing, parsed: ParsedQuery): String? {
+        if (parsed.negativeTokens.isEmpty()) return null
+        val words = canonicalizeMakes(normalize(listing.title.lowercase()))
+            .split(" ").filter { it.isNotBlank() }
+        return parsed.negativeTokens.firstOrNull { token -> matchesNegative(words, token) }
+    }
+
+    /** Short tokens ("s", "x") match as whole words only, so a blocked "-s" does not take every
+     *  "Series". Longer ones also match German plurals and compounds. */
+    private fun matchesNegative(words: List<String>, token: String): Boolean {
+        if (token.length <= 2) return words.any { it == token }
+        return words.any { word ->
+            word == token || word.endsWith(token) ||
+                word.endsWith(token + "n") || word.endsWith(token + "en") ||
+                (token.length >= 4 && word.contains(token))
+        }
+    }
+
     fun score(listing: Listing, parsed: ParsedQuery): Double {
         val titleNorm = normalize(listing.title.lowercase())
         // Strip comparison phrases before token matching — prevents "wie WH-1000XM5" (German "like XM5")
@@ -187,21 +213,8 @@ object RelevanceFilter {
             return false
         }
 
-        fun negativeMatches(token: String): Boolean {
-            // Short tokens (≤2 chars like "s", "x") must match as whole words only.
-            // Avoids "series".endsWith("s") killing all Xbox Series results for query "-s".
-            if (token.length <= 2) return titleWords.any { it == token }
-            return titleWords.any { word ->
-                word == token || word.endsWith(token) ||
-                // German plurals: -huelle → -huellen
-                word.endsWith(token + "n") || word.endsWith(token + "en") ||
-                // Compound words for longer tokens (4+ chars to avoid "pro" in "product")
-                (token.length >= 4 && word.contains(token))
-            }
-        }
-
         for (neg in parsed.negativeTokens) {
-            if (negativeMatches(neg)) return -1.0
+            if (matchesNegative(titleWords, neg)) return -1.0
         }
 
         // Short model-code tokens MUST match as exact whole words:
@@ -636,6 +649,12 @@ object RelevanceFilter {
         val sellersWriteTheseWords = asked.positiveTokens.isNotEmpty() || asked.orGroups.isNotEmpty()
 
         val kept = listings.mapNotNull { listing ->
+            // A word the reader blocked is their own decision, and is reported as that rather than
+            // as something the market got wrong.
+            if (blockedWord(listing, asked) != null) {
+                dropped += DroppedListing(listing, DropReason.BLOCKED_WORD)
+                return@mapNotNull null
+            }
             val s = score(listing, asked)
             if (s < 0) {
                 dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)

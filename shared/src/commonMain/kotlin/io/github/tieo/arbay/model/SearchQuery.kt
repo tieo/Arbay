@@ -48,6 +48,10 @@ data class CarFilters(
     // the set. Listings with no stated code pass (unknown != excluded).
     val vanLengths: Set<Int> = emptySet(),   // L1..L4
     val vanHeights: Set<Int> = emptySet(),   // H1..H3
+    // Wheelbase band in millimetres. No market filters on it and few state it, so this narrows
+    // what states one and leaves the rest marked unchecked, like every other criterion here.
+    val minWheelbaseMm: Int? = null,
+    val maxWheelbaseMm: Int? = null,
     // Free text that must appear in the listing's title or description. A literal match on
     // text we already have, so it works on every platform and can safely exclude.
     val descriptionContains: String? = null,
@@ -84,6 +88,7 @@ data class CarFilters(
         if (sellerType != null) { /* the seller is on the listing itself, not the vehicle */ }
         if (vanLengths.isNotEmpty() && v?.vanLength == null) add("length")
         if (vanHeights.isNotEmpty() && v?.vanHeight == null) add("height")
+        if ((minWheelbaseMm != null || maxWheelbaseMm != null) && v?.wheelbaseMm == null) add("wheelbase")
     }
 
     val isEmpty: Boolean get() =
@@ -95,6 +100,7 @@ data class CarFilters(
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
+            minWheelbaseMm == null && maxWheelbaseMm == null &&
             descriptionContains.isNullOrBlank() && idealDescription.isNullOrBlank()
 }
 
@@ -227,8 +233,12 @@ data class SearchQuery(
     val soldOnly: Boolean = false,
     val freeOnly: Boolean = false,
     val excludeKeywords: List<String> = emptyList(),
+    // Where the search is centred and how far it reaches. Both are set by hand or not at all: a
+    // search with no place and no radius covers everywhere, so nothing is ever removed for being
+    // far away unless someone asked for a place. A default radius here quietly fenced in every
+    // search that predates the field, since a stored search that never wrote it decodes to it.
     val location: String? = null,   // city name / zip for location-based search
-    val radiusKm: Int = 30,         // search radius in km
+    val radiusKm: Int = 0,          // search radius in km; 0 = everywhere
     // The searcher's position (from the device GPS). When set, the server geocodes each listing and
     // fills in distanceKm, so results can be shown and sorted nearest-first.
     val userLat: Double? = null,

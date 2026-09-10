@@ -115,24 +115,16 @@ fun HiddenSheet(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             ) {
                 items(g.listings, key = { it.id }) { listing ->
-                    Column {
-                        ListingCard(
-                            listing = listing,
-                            searchQuery = searchQuery,
-                            modifier = Modifier.padding(vertical = 3.dp),
-                        )
-                        // One at a time, next to the one it is about. Putting every hidden listing
-                        // back at once is the only thing this used to offer, which is no use to
-                        // someone who wants one of them back.
-                        if (g.restore != null && g.restoreLabel != null) {
-                            TextButton(
-                                onClick = { g.restore.invoke(listing) },
-                                modifier = Modifier.align(Alignment.End),
-                            ) {
-                                Text(g.restoreLabel, style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                    }
+                    // One at a time, on the card it is about: putting every hidden listing back at
+                    // once was the only thing this used to offer, and the link that did it for one
+                    // sat in a band of empty sheet below the card's own divider, reading as
+                    // belonging to the next listing.
+                    ListingCard(
+                        listing = listing,
+                        searchQuery = searchQuery,
+                        onRestore = g.restore?.let { restore -> { restore(listing) } },
+                        restoreLabel = g.restoreLabel ?: "Put back",
+                    )
                 }
             }
         }

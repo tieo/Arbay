@@ -158,6 +158,23 @@ class ArbayClient(
         return lat to lon
     }
 
+    /**
+     * Where one listing is, for a market that says it on the item page and not on the card.
+     *
+     * eBay is that market: its search cards carry a price, a shipping line and a seller rating and
+     * never an address, so a location costs one item-page load and is asked for the listing being
+     * looked at rather than for every listing on the screen. Null when the market publishes none.
+     */
+    suspend fun listingLocation(listing: Listing): Location? = try {
+        val response = client.get("$baseUrl/api/crawler/listing-location") {
+            parameter("url", listing.url)
+            parameter("platform", listing.platformId.name)
+            parameter("id", listing.id)
+        }
+        if (response.status == HttpStatusCode.NoContent || !response.status.isSuccess()) null
+        else response.body<Location>()
+    } catch (_: Exception) { null }
+
     suspend fun getMarketSettings(): MarketSettings =
         client.get("$baseUrl/api/settings/markets").body()
 

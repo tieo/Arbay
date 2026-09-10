@@ -73,6 +73,7 @@ object CarFilterEngine {
         probe("seller", filters.copy(sellerType = null))
         probe("vanLength", filters.copy(vanLengths = emptySet()))
         probe("vanHeight", filters.copy(vanHeights = emptySet()))
+        probe("wheelbase", filters.copy(minWheelbaseMm = null, maxWheelbaseMm = null))
         probe("description", filters.copy(descriptionContains = null))
         return out
     }
@@ -148,6 +149,10 @@ object CarFilterEngine {
         if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return false
         if (drop(filters.vanLengths.isNotEmpty(), v?.vanLength != null) { v!!.vanLength in filters.vanLengths }) return false
         if (drop(filters.vanHeights.isNotEmpty(), v?.vanHeight != null) { v!!.vanHeight in filters.vanHeights }) return false
+        if (drop(filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null, v?.wheelbaseMm != null) {
+                val mm = v!!.wheelbaseMm!!
+                (filters.minWheelbaseMm?.let { mm >= it } ?: true) && (filters.maxWheelbaseMm?.let { mm <= it } ?: true)
+            }) return false
         return true
     }
 

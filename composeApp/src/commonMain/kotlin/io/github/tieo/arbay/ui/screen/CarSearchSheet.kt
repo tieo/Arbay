@@ -80,6 +80,8 @@ private data class CarSearchScreenSnapshot(
     val sellerType: SellerType?,
     val vanLengths: List<Int>,
     val vanHeights: List<Int>,
+    val minWheelbase: String,
+    val maxWheelbase: String,
     val descriptionContains: String,
     val idealDescription: String,
     val strictUnknown: Boolean,
@@ -140,6 +142,8 @@ fun CarSearchSheet(
     var sellerType by remember { mutableStateOf(initialFilters?.sellerType) }
     val vanLengths = remember { mutableStateListOf<Int>().apply { initialFilters?.vanLengths?.let { addAll(it) } } }
     val vanHeights = remember { mutableStateListOf<Int>().apply { initialFilters?.vanHeights?.let { addAll(it) } } }
+    var minWheelbase by remember { mutableStateOf(initialFilters?.minWheelbaseMm?.toString() ?: "") }
+    var maxWheelbase by remember { mutableStateOf(initialFilters?.maxWheelbaseMm?.toString() ?: "") }
     var descriptionContains by remember { mutableStateOf(initialFilters?.descriptionContains ?: "") }
     var idealDescription by remember { mutableStateOf(initialFilters?.idealDescription ?: "") }
     var strictUnknown by remember { mutableStateOf(initialFilters?.strictUnknown ?: false) }
@@ -180,6 +184,8 @@ fun CarSearchSheet(
                 sellerType = sellerType,
                 vanLengths = vanLengths.toList(),
                 vanHeights = vanHeights.toList(),
+                minWheelbase = minWheelbase,
+                maxWheelbase = maxWheelbase,
                 descriptionContains = descriptionContains,
                 idealDescription = idealDescription,
                 strictUnknown = strictUnknown,
@@ -209,6 +215,8 @@ fun CarSearchSheet(
         sellerType = sellerType,
         vanLengths = vanLengths.toSet(),
         vanHeights = vanHeights.toSet(),
+        minWheelbaseMm = minWheelbase.filter { it.isDigit() }.toIntOrNull(),
+        maxWheelbaseMm = maxWheelbase.filter { it.isDigit() }.toIntOrNull(),
         descriptionContains = descriptionContains.trim().takeIf { it.isNotBlank() },
         idealDescription = idealDescription.trim().takeIf { it.isNotBlank() },
         strictUnknown = strictUnknown,
@@ -324,6 +332,7 @@ fun CarSearchSheet(
                 setCount = listOf(
                     bodyTypes.isNotEmpty(), minDoors != null, minSeats.isNotBlank(),
                     vanLengths.isNotEmpty() || vanHeights.isNotEmpty(),
+                    minWheelbase.isNotBlank() || maxWheelbase.isNotBlank(),
                 ).count { it },
             ) {
                 SectionLabel("Body type")
@@ -357,6 +366,35 @@ fun CarSearchSheet(
                         )
                     }
                 }
+                Spacer(Modifier.height(14.dp))
+                // A wheelbase is stated by about half the AutoScout24 ads and a fifth of the
+                // Kleinanzeigen ones, in their own prose, and by no market as a field of its own.
+                // So this narrows the ads that state one; the rest are kept and marked unchecked.
+                SectionLabel("Wheelbase (mm)")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = minWheelbase,
+                        onValueChange = { minWheelbase = it.filter { c -> c.isDigit() }.take(4) },
+                        label = { Text("From") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = maxWheelbase,
+                        onValueChange = { maxWheelbase = it.filter { c -> c.isDigit() }.take(4) },
+                        label = { Text("To") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "Only ads that write one down can be narrowed by it; the others stay, marked unchecked.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
 
             FilterGroup(

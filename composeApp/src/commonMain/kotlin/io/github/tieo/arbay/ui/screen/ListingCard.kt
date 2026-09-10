@@ -240,6 +240,11 @@ internal fun ListingCard(
     // called for an auction: everything else has no end to count back from.
     onAuctionReminder: ((Int?) -> Unit)? = null,
     onBlockWord: ((String) -> Unit)? = null,
+    // Puts a listing that is not on the results screen back onto it. Sits in the same column as
+    // the bin it undoes, so a hidden listing is a card with one different button rather than a
+    // card with a text link floating under it.
+    onRestore: (() -> Unit)? = null,
+    restoreLabel: String = "Put back",
     searchQuery: String = "",
     // The vehicle criteria in force, so a listing can say which of them it was never checked
     // against: a market that publishes no power and no gearbox cannot be filtered by either, and
@@ -409,21 +414,28 @@ internal fun ListingCard(
             }
 
             val auctionEnd = listing.auctionEndsAt.takeIf { listing.saleType == SaleType.AUCTION }
-            if (onBan != null || onBlockWord != null || auctionEnd != null) {
-                Column {
+            if (onBan != null || onBlockWord != null || auctionEnd != null || onRestore != null) {
+                // One column of equally sized targets, centred on each other and on the row's text
+                // block. Left to itself the column sat at the row's top with 16 dp glyphs inside
+                // 32 dp buttons, so the two icons read as different sizes at different heights.
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(start = 4.dp).align(Alignment.CenterVertically),
+                ) {
                     // An auction runs out whether or not the app is open, so the useful thing is to
                     // be told a chosen stretch before it does, while a bid can still be made.
                     if (auctionEnd != null) {
                         IconButton(
                             onClick = { showReminder = true },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 if (remindsAt != null) Icons.Filled.NotificationsActive
                                 else Icons.Outlined.NotificationsNone,
                                 if (remindsAt != null) "Change when this auction is announced"
                                 else "Tell me before this auction ends",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(22.dp),
                                 tint = if (remindsAt != null) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             )
@@ -432,11 +444,11 @@ internal fun ListingCard(
                     if (onBan != null) {
                         IconButton(
                             onClick = onBan,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 Icons.Outlined.DeleteOutline, "Hide this listing",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(22.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             )
                         }
@@ -444,12 +456,24 @@ internal fun ListingCard(
                     if (onBlockWord != null) {
                         IconButton(
                             onClick = { showBlockDialog = true },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 Icons.Outlined.Block, "Block a word from this listing",
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(22.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+                    if (onRestore != null) {
+                        IconButton(
+                            onClick = onRestore,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Undo, restoreLabel,
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }

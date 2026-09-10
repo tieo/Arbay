@@ -32,6 +32,7 @@ object DetailEnricher {
         if (filters.minDoors != null) add(VehicleField.DOORS)
         if (filters.minSeats != null) add(VehicleField.SEATS)
         if (filters.minEmissionEuro != null) add(VehicleField.EMISSION)
+        if (filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null) add(VehicleField.WHEELBASE)
     }
 
     private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {

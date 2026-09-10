@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 enum class VehicleField {
     FIRST_REG_YEAR, MILEAGE, POWER, DISPLACEMENT, FUEL, BODY_TYPE, GEARBOX,
     DRIVETRAIN, DOORS, SEATS, CONDITION, COLOR, EMISSION,
-    EMISSION_STICKER, INSPECTION, UPHOLSTERY, VAN_LENGTH, VAN_HEIGHT,
+    EMISSION_STICKER, INSPECTION, UPHOLSTERY, VAN_LENGTH, VAN_HEIGHT, WHEELBASE,
 }
 
 /**
@@ -47,6 +47,12 @@ data class VehicleInfo(
     val upholstery: String? = null,        // Material Innenausstattung (Stoff/Leder/…)
     val vanLength: Int? = null,            // panel-van length class 1-4 (L1..L4)
     val vanHeight: Int? = null,            // panel-van roof height class 1-3 (H1..H3)
+    // Wheelbase in millimetres. Almost no market has a field for it: AutoScout24 ships a
+    // wheelBase key that its dealers leave empty on every Crafter measured, and what states a
+    // number is the equipment prose ("Radstand 3640 mm"), on about half the AutoScout24 ads and a
+    // fifth of the Kleinanzeigen ones. So it is inferred far more often than verified, and only a
+    // verified value may exclude anything.
+    val wheelbaseMm: Int? = null,
     val verified: Set<VehicleField> = emptySet(),
 ) {
     fun isVerified(field: VehicleField): Boolean = field in verified

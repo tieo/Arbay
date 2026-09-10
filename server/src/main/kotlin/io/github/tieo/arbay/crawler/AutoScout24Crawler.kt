@@ -17,6 +17,22 @@ class AutoScout24Crawler(
 
     private val countryParam: String get() = countries.joinToString("%2C")
 
+    /**
+     * What the card never carries, off the ad's own page: the wheelbase.
+     *
+     * This site has a `wheelBase` key in the page's own data and it was empty on every Crafter
+     * measured — 13 of 13. Where a wheelbase is stated at all it is written into the equipment
+     * prose ("Radstand 3640 mm"), on about half of them, and that is what this reads.
+     */
+    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = try {
+        val html = fetchWithFallback(client, listing.url, "AutoScout24", waitSelector = "main")
+        VehicleTextParser.parse(Jsoup.parse(html).text())
+            ?.takeIf { it.wheelbaseMm != null }
+            ?.let { VehicleInfo(wheelbaseMm = it.wheelbaseMm, verified = setOf(VehicleField.WHEELBASE)) }
+    } catch (e: Exception) {
+        null
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         val carQuery = CarQueryResolver.resolveForCarSite(query.positiveText)
             ?: return emptyList()

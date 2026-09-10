@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -28,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.imageModel
+import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 
@@ -48,6 +50,21 @@ fun ListingDetailSheet(
     isArchived: Boolean = false,
     onDismiss: () -> Unit,
 ) {
+    // eBay says where a thing is on the item page and nowhere on the card it was found through, so
+    // a listing that arrived without a location is asked about once, here, where someone is looking
+    // at that one listing. Markets that publish a location on the card never reach this.
+    val client = remember { ArbayClient() }
+    var fetchedLocation by remember(listing.id) { mutableStateOf<Location?>(null) }
+    var lookingUpLocation by remember(listing.id) { mutableStateOf(false) }
+    LaunchedEffect(listing.id) {
+        // An off-screen render must fire no network call, and an archived copy is being read for
+        // what it said when it was crawled, not for where the seller stands today.
+        if (listing.location != null || isArchived || listing.url.isBlank()) return@LaunchedEffect
+        lookingUpLocation = true
+        fetchedLocation = client.listingLocation(listing)
+        lookingUpLocation = false
+    }
+
     AdaptiveSheet(onDismiss = onDismiss) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp),
@@ -124,10 +141,12 @@ fun ListingDetailSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DetailChip(listing.platformId.displayName)
                 listing.condition?.let { DetailChip(it.name.lowercase().replace('_', ' ')) }
-                listing.location?.let { loc ->
+                val place = listing.location ?: fetchedLocation
+                place?.let { loc ->
                     listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country)
                         .joinToString(" ").takeIf { it.isNotBlank() }?.let { DetailChip(it) }
                 }
+                if (place == null && lookingUpLocation) DetailChip("looking up where it is\u2026")
                 listing.distanceKm?.let { DetailChip("${it.roundToInt()} km away") }
                 listing.listingDate?.let {
                     DetailChip("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}")
@@ -189,6 +208,7 @@ fun ListingDetailSheet(
                     v.upholstery?.let { add("Upholstery" to it) }
                     v.vanLength?.let { add("Length" to "L$it") }
                     v.vanHeight?.let { add("Roof" to "H$it") }
+                    v.wheelbaseMm?.let { add("Wheelbase" to "$it mm") }
                 }
                 if (specs.isNotEmpty()) {
                     Text("What the market says it is", style = MaterialTheme.typography.labelLarge)

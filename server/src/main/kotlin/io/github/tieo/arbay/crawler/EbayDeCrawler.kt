@@ -41,6 +41,27 @@ class EbayDeCrawler(
         null
     }
 
+    /**
+     * Where the thing is, off the item page, since the search card never says.
+     *
+     * eBay's card layout publishes a price, a shipping line, a watcher count and a seller rating
+     * and nothing about where the item stands; the item page carries it as an `itemLocation` block
+     * ("Standort: Hamburg, Deutschland"), city and country, no postcode. Costs one item-page load,
+     * which is why it is asked for a listing at a time rather than for a whole page of them.
+     */
+    override suspend fun fetchDetailLocation(listing: Listing): Location? = try {
+        kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+            val html = fetchWithFallback(
+                client, listing.url, "eBay",
+                primeUrl = "https://$domain/sch/i.html?_nkw=${listing.title.take(30).encodeUrl()}",
+                browserOnly = true,
+            )
+            itemLocation(html)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         val emitter = coroutineContext[FetchProgressEmitter.Key]
         val allResults = mutableListOf<Listing>()
@@ -209,6 +230,12 @@ class EbayDeCrawler(
             if (query.soldOnly) add("LH_Sold=1&LH_Complete=1")
             // For ebay.com, restrict to listings that ship to Germany
             if (domain == "ebay.com") add("_salic=DE")
+            // eBay's own radius search: a postcode and a distance in kilometres. Its cards publish
+            // no location, so a search area cannot be applied to what comes back — it has to be
+            // asked for at the source, or every eBay listing sits outside the area unmeasurably.
+            query.area(platformId.country ?: "DE")?.let { area ->
+                area.zip?.let { add("_stpos=$it&_sadis=${area.radiusKm}&_fspt=1") }
+            }
             query.minPrice?.let { add("_udlo=${it.amount / 100}") }
             query.maxPrice?.let { add("_udhi=${it.amount / 100}") }
             query.condition?.let { conditions ->
@@ -526,6 +553,35 @@ class EbayDeCrawler(
             // saying so lets the caller look elsewhere rather than pass one of them on.
             return if (screenReaderText.matches(title)) "" else title
         }
+
+        /**
+         * The item page's own statement of where the thing is.
+         *
+         * It rides in the page's data as an `itemLocation` block whose label is "Standort" and
+         * whose value is the place, city and country ("Hamburg, Deutschland"). There is no postcode
+         * in it, which is enough to place a listing on the map and not enough to measure a street.
+         */
+        internal fun itemLocation(html: String): Location? {
+            val m = itemLocationJson.find(html) ?: return null
+            val text = m.groupValues[1].trim().takeIf { it.isNotBlank() && it.length < 80 } ?: return null
+            // "Hamburg, Deutschland" — the tail is the country, the head the town.
+            val parts = text.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            if (parts.isEmpty()) return null
+            val country = parts.takeIf { it.size > 1 }?.last()
+            val place = parts.dropLast(if (country != null) 1 else 0).joinToString(", ")
+            // Location.parse names a town only when a postcode leads it, and eBay writes none.
+            val parsed = Location.parse(place)
+            return parsed.copy(
+                city = parsed.city ?: place.takeIf { it.isNotBlank() },
+                country = country,
+                raw = text,
+            )
+        }
+
+        /** The value inside eBay's own `itemLocation` block, which is JSON embedded in the page. */
+        private val itemLocationJson = Regex(
+            """"itemLocation"\s*:\s*\{[\s\S]{0,400}?"values"\s*:\s*\[[\s\S]{0,300}?"text"\s*:\s*"([^"]+)"""",
+        )
     }
 
 }

@@ -32,7 +32,11 @@ object KleinanzeigenDetailParser {
             }
             if (label.isNotBlank() && value.isNotBlank()) attrs[label.lowercase()] = value
         }
-        if (attrs.isEmpty()) return null
+        // The wheelbase is never one of the attribute rows here: where a seller states it at all,
+        // it is a line of their own prose ("Radstand: 3.250 mm"), so it is read off the whole page
+        // and stays inferred rather than verified.
+        val wheelbase = VehicleTextParser.parse(doc.text())?.wheelbaseMm
+        if (attrs.isEmpty()) return wheelbase?.let { VehicleInfo(wheelbaseMm = it) }
 
         val (year, month) = parseGermanMonthYear(attrs["erstzulassung"])
         val info = VehicleInfo(
@@ -68,7 +72,7 @@ object KleinanzeigenDetailParser {
                 if (y != null) "%04d-%02d".format(y, m ?: 1) else null
             },
         )
-        return VehicleTextParser.verifiedByPresence(info)
+        return VehicleTextParser.verifiedByPresence(info).copy(wheelbaseMm = wheelbase)
     }
 
     /** "November 2012" -> (2012, 11); "2019" -> (2019, null). */

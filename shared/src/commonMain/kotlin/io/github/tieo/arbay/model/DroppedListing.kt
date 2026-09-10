@@ -49,6 +49,10 @@ enum class DropReason {
     /** Further from where the search is centred than it reaches. */
     TOO_FAR,
 
+    /** Carries one of the words the reader blocked. Its own reason, because reading it as "not one
+     *  offer" put twelve real vans under a heading that says the market sent junk. */
+    BLOCKED_WORD,
+
     /** A price the scraper read wrong — digits from several fields run together. */
     IMPLAUSIBLE_PRICE,
 }
@@ -66,5 +70,6 @@ val DropReason.label: String
         DropReason.RENTAL -> "for rent"
         DropReason.NOT_A_SINGLE_OFFER -> "not one offer"
         DropReason.TOO_FAR -> "too far away"
+        DropReason.BLOCKED_WORD -> "a word you blocked"
         DropReason.IMPLAUSIBLE_PRICE -> "unreadable price"
     }

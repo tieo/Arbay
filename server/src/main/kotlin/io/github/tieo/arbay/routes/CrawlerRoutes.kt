@@ -98,21 +98,37 @@ private fun defaultPlatforms(isCar: Boolean): List<PlatformId> {
     }
 }
 
-/** A platform's finished result set: the car post-filter over the raw relevance-filtered crawl,
- *  with every listing measured against the searcher, plus the facet counts. The same step whether
- *  the crawl was fresh or served from cache. */
+/** A platform's finished result set: what is shown, what fell outside the search's area, and the
+ *  facet counts. The same step whether the crawl was fresh or served from cache. */
+private data class FinishedResults(
+    val listings: List<Listing>,
+    val tooFar: List<Listing>,
+    val facets: Map<String, Int>,
+)
+
+/** The car post-filter over the raw relevance-filtered crawl, then the search's area, with every
+ *  listing measured against the searcher. */
 private suspend fun finishedResults(
     raw: List<Listing>,
     query: SearchQuery,
     isCarQuery: Boolean,
     crawler: Crawler,
     listingRepo: ListingRepo,
-): Pair<List<Listing>, Map<String, Int>> {
-    val listings = annotateDistance(carPostFilter(raw, query, isCarQuery, crawler), query)
+): FinishedResults {
+    // A market that publishes no location on its cards is asked for one per listing, but only
+    // where a location decides something: a search centred on a place measures every listing
+    // against it, and one with no location cannot be measured at all. This runs before the area is
+    // applied, so a listing eBay never placed is judged on what its own page says rather than
+    // waved through for want of an address.
+    val filtered = carPostFilter(raw, query, isCarQuery, crawler)
+    val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
+        io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
+    val (inside, outside) = outsideTheArea(placed, query)
+    val listings = annotateDistance(inside, query)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(raw, query.toCarFilters() ?: CarFilters()) else emptyMap()
-    return listings to facets
+    return FinishedResults(listings, annotateDistance(outside, query), facets)
 }
 
 /** Reads the optional car-search filters from the request and applies them to a
@@ -372,15 +388,45 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
          *  refusing everything else leaves no other way to see it. */
         get("/page") {
             val url = call.request.queryParameters["url"] ?: throw BadRequestException("Missing url")
-            // Through the same TLS impersonation a crawl uses: eBay answers a plain client with a
-            // 1.8 KB challenge, which is no use to anyone fixing a parser against its markup.
-            val html = runCatching { io.github.tieo.arbay.crawler.CurlCffiClient.fetch(url) }
-                .getOrElse {
-                    io.github.tieo.arbay.crawler.fetchHttp(
-                        io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
-                    )
-                }
+            // The page a crawler would see, through the same tiers a crawl uses: eBay answers a
+            // plain client with a 1.8 KB challenge, and answers TLS impersonation with a 403 on the
+            // pages it defends hardest, which is no use to anyone fixing a parser against its
+            // markup. `prime` is the page to arrive from, the way a real reader would.
+            val prime = call.request.queryParameters["prime"]
+            val html = if (call.request.queryParameters["browser"]?.toBooleanStrictOrNull() == true) {
+                io.github.tieo.arbay.crawler.fetchWithFallback(
+                    io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
+                    primeUrl = prime, browserOnly = true,
+                )
+            } else {
+                runCatching { io.github.tieo.arbay.crawler.CurlCffiClient.fetch(url, primeUrl = prime) }
+                    .getOrElse {
+                        io.github.tieo.arbay.crawler.fetchHttp(
+                            io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
+                        )
+                    }
+            }
             call.respondText(html, ContentType.Text.Plain)
+        }
+
+        // Where one listing is, for a market that says it on the item page and not on the card.
+        // Asked for a listing at a time, when someone opens it: eBay's item page costs a browser
+        // load, which is a price worth paying for the one listing being looked at and not for
+        // fifty that are only being scrolled past.
+        get("/listing-location") {
+            val url = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
+            val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
+                ?: throw BadRequestException("Missing or unknown platform")
+            val id = call.queryParameters["id"] ?: url
+            io.github.tieo.arbay.crawler.LocationEnricher.cached(id)?.let { return@get call.respond(it) }
+            val crawler = CrawlerRegistry.crawlerFor(platform)
+                ?: throw BadRequestException("No crawler for $platform")
+            val stub = Listing(
+                id = id, platformId = platform, externalId = id, url = url, title = "",
+                price = Money(0, Currency.EUR), scrapedAt = kotlinx.datetime.Clock.System.now(),
+            )
+            val found = io.github.tieo.arbay.crawler.LocationEnricher.fetch(stub, crawler)
+            if (found == null) call.respond(HttpStatusCode.NoContent) else call.respond(found)
         }
 
         // Error snapshots — list, view, resolve
@@ -559,17 +605,17 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // Car post-filtering still runs on the cached set so the new filters apply.
                             val cached = QueryResultCache.get(platformId, pq)
                             if (cached != null) {
-                                val (filtered, facets) =
-                                    finishedResults(cached, pq, isCarQuery, crawler, listingRepo)
+                                val done = finishedResults(cached, pq, isCarQuery, crawler, listingRepo)
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
                                     platformName = platformId.displayName,
-                                    resultCount = filtered.size,
+                                    resultCount = done.listings.size,
                                     rawCount = cached.size,
-                                    listings = filtered,
+                                    listings = done.listings,
+                                    dropped = done.tooFar.take(60).map { DroppedListing(it, DropReason.TOO_FAR) },
                                     fromCache = true,
-                                    facets = facets,
+                                    facets = done.facets,
                                 ))
                                 return@crawl
                             }
@@ -679,19 +725,20 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val partitioned = RelevanceFilter.partition(
                                     if (ignoredSearch != null) emptyList() else rawResults, pq,
                                 )
-                                val (near, far) = outsideTheArea(partitioned.kept, pq)
+                                val classified = partitioned.kept.map { SoldDetector.classify(it) }
+                                // Cache the raw relevance-filtered crawl; car post-filtering (card
+                                // filter → detail-verify → final filter) and the search's area run
+                                // after, so a later filter tweak re-filters from cache without
+                                // re-crawling.
+                                QueryResultCache.put(platformId, pq, classified)
+                                val done = finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
+                                val results = done.listings
+                                val facets = done.facets
                                 val dropped = if (ignoredSearch != null) {
                                     rawResults.map { DroppedListing(it, DropReason.MARKET_IGNORED_SEARCH) }
                                 } else {
-                                    partitioned.dropped + far.map { DroppedListing(it, DropReason.TOO_FAR) }
+                                    partitioned.dropped + done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
                                 }
-                                val classified = near.map { SoldDetector.classify(it) }
-                                // Cache the raw relevance-filtered crawl; car post-filtering (card
-                                // filter → detail-verify → final filter) runs after, so a later
-                                // filter tweak re-filters from cache without re-crawling.
-                                QueryResultCache.put(platformId, pq, classified)
-                                val (results, facets) =
-                                    finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
 
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
