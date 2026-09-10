@@ -320,6 +320,13 @@ class ListingViewModel(
         return _blockedTerms.value
     }
 
+    /** Put one listing back. */
+    fun unban(listing: Listing) {
+        val updated = _bannedIds.value - listing.id
+        _bannedIds.value = updated
+        saveBannedIds(updated)
+    }
+
     /** Put back everything sent away by hand on this device. The bin is one tap and its listings
      *  went somewhere nobody could look; this is the way back. */
     fun unbanAll() {

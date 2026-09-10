@@ -27,6 +27,9 @@ data class HiddenGroup(
     val listings: List<Listing>,
     val undoLabel: String? = null,
     val undo: (() -> Unit)? = null,
+    /** What puts one of them back, when that is a thing that can be done to one at a time. */
+    val restoreLabel: String? = null,
+    val restore: ((Listing) -> Unit)? = null,
 )
 
 /**
@@ -112,11 +115,24 @@ fun HiddenSheet(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             ) {
                 items(g.listings, key = { it.id }) { listing ->
-                    ListingCard(
-                        listing = listing,
-                        searchQuery = searchQuery,
-                        modifier = Modifier.padding(vertical = 3.dp),
-                    )
+                    Column {
+                        ListingCard(
+                            listing = listing,
+                            searchQuery = searchQuery,
+                            modifier = Modifier.padding(vertical = 3.dp),
+                        )
+                        // One at a time, next to the one it is about. Putting every hidden listing
+                        // back at once is the only thing this used to offer, which is no use to
+                        // someone who wants one of them back.
+                        if (g.restore != null && g.restoreLabel != null) {
+                            TextButton(
+                                onClick = { g.restore.invoke(listing) },
+                                modifier = Modifier.align(Alignment.End),
+                            ) {
+                                Text(g.restoreLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                 }
             }
         }

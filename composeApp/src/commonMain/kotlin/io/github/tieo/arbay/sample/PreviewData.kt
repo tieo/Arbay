@@ -93,8 +93,10 @@ object PreviewData {
             label = "you hid",
             why = "Listings you sent away with the bin on their card.",
             listings = active.take(2),
-            undoLabel = "Put them back",
+            undoLabel = "Put all back",
             undo = {},
+            restoreLabel = "Put back",
+            restore = {},
         ),
         io.github.tieo.arbay.ui.screen.HiddenGroup(
             label = "your blocked words",

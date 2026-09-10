@@ -124,6 +124,10 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
     private val kmInfo = Regex("""([\d.]+)\s*km""")
     private val kwInfo = Regex("""(\d+)\s*kW""")
 
+    /** Where the seller is, as mobile.de writes it on the card: "DE-29227 Celle", "29227 Celle".
+     *  Every listing had only "DE" on it, so no mobile.de result could say how far away it was. */
+    private val placeInfo = Regex("""\b(?:DE-)?(\d{5})\s+([A-ZÄÖÜ][\p{L}.\-]+(?:\s[A-ZÄÖÜ][\p{L}.\-]+){0,2})""")
+
     internal fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
@@ -185,7 +189,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 title = title,
                 price = price,
                 imageUrls = listOfNotNull(imageUrl),
-                location = Location(country = "DE"),
+                location = placeInfo.find(info)?.let { m ->
+                    Location(city = m.groupValues[2].trim(), zip = m.groupValues[1], country = "DE", raw = m.value)
+                } ?: Location(country = "DE"),
                 description = description,
                 scrapedAt = now,
                 vehicle = vehicle,

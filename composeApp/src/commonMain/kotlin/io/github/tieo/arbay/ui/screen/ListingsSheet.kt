@@ -59,6 +59,8 @@ import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.DevicePosition
+import io.github.tieo.arbay.SearchCountries
+import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.ReadPositionIfAllowed
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
@@ -348,8 +350,10 @@ fun ListingsSheet(
                 label = "you hid",
                 why = "Listings you sent away with the bin on their card.",
                 listings = banned,
-                undoLabel = "Put them back",
+                undoLabel = "Put all back",
                 undo = { listingViewModel.unbanAll() },
+                restoreLabel = "Put back",
+                restore = { listingViewModel.unban(it) },
             ))
             if (byWord.isNotEmpty()) add(HiddenGroup(
                 label = "your blocked words",
@@ -357,6 +361,13 @@ fun ListingsSheet(
                 listings = byWord,
                 undoLabel = "Edit the words",
                 undo = { showHidden = false; showFilters = true },
+                // The word that caught this one is the word to drop, and it is the one thing the
+                // reader is looking at when they disagree with it.
+                restoreLabel = "Unblock the word that caught it",
+                restore = { listing ->
+                    val text = "${listing.title} ${listing.description.orEmpty()}".lowercase()
+                    activeBlockedTerms.firstOrNull { text.contains(it.lowercase()) }?.let(unblockWord)
+                },
             ))
             if (outOfBand.isNotEmpty()) add(HiddenGroup(
                 label = "outside your price band",
@@ -513,13 +524,35 @@ fun ListingsSheet(
         (platforms ?: PlatformId.entries).any { it.name.startsWith("EBAY") }
     }
 
-    // Keyed on searchQuery/carFilters/aliases only, same as before — blockedTerms is read at
-    // whatever value it holds when one of those actually changes, but blocking/unblocking a word
-    // live must not itself trigger a re-crawl: it only re-filters what was already fetched.
-    LaunchedEffect(searchQuery, carFilters, aliases, storedListings) {
+    // The markets this search actually asks: the ones it is narrowed to, and every one it covers
+    // otherwise. Narrowing used to hide what had already been fetched, so a search kept for two
+    // German markets still crawled eleven — which costs the time of the slowest of them and earns
+    // the blocks of the ones nobody asked to see.
+    val platformsToAsk: List<PlatformId>? = remember(platforms, shownMarkets, shownCountries) {
+        val all = platforms ?: MarketSets.platformsIn(
+            if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL,
+            SearchCountries.current.countries,
+        )
+        val narrowed = all.filter { platform ->
+            (shownMarkets.isEmpty() || platform in shownMarkets) &&
+                (shownCountries.isEmpty() || MarketSets.countryOf(platform) in shownCountries)
+        }
+        narrowed.ifEmpty { all }
+    }
+
+    // Keyed on what defines the crawl, by value: a list rebuilt with the same contents is the same
+    // crawl, and restarting on one cancelled the first mid-answer and left every market still
+    // working marked "too slow, given up on".
+    val crawlKey = remember(searchQuery, carFilters, aliases, platformsToAsk, storedListings != null) {
+        listOf(
+            searchQuery, carFilters, aliases, platformsToAsk?.map { it.name },
+            storedListings != null,
+        ).toString()
+    }
+    LaunchedEffect(crawlKey) {
         if (storedListings != null) listingViewModel.showStored(searchQuery, storedListings)
         else listingViewModel.search(
-            searchQuery, platforms, carFilters, excludeKeywords = blockedTerms, aliases = aliases,
+            searchQuery, platformsToAsk, carFilters, excludeKeywords = blockedTerms, aliases = aliases,
             // A saved search reruns with the reach it was saved with, so the words it was last
             // asking the markets are the words it asks them again.
             reach = savedFilters?.reach ?: SearchReach(),
