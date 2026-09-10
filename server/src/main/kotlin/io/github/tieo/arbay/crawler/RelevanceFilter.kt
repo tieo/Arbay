@@ -595,10 +595,25 @@ object RelevanceFilter {
         "neues angebot", "new listing", "nieuw", "nouveau",
     )
 
+    /** Words that name the act of selling rather than the thing sold. A title made only of these
+     *  says nothing about what is on offer. */
+    private val SALE_WORDS = setOf(
+        "verkaufe", "verkauf", "biete", "angebot", "neu", "neues", "gebraucht", "zu", "verkaufen",
+        "privatverkauf", "sale", "offer", "new", "used", "listing", "artikel", "top", "gut",
+    )
+
+    /**
+     * A title that names nothing being sold.
+     *
+     * Counting words decided this before, and a one-word title was taken for a placeholder: four
+     * Kleinanzeigen ads titled exactly "Parkettschleifmaschine" were dropped from a search for a
+     * Parkettschleifmaschine. What makes a title empty is that every word in it is about selling,
+     * not how many words there are.
+     */
     private fun isPlaceholderTitle(titleNorm: String, words: List<String>): Boolean {
         if (PLACEHOLDER_TITLES.any { titleNorm == normalize(it) }) return true
-        if (words.count { it.length > 1 } < 2) return true
-        return false
+        val naming = words.filter { it.length > 1 && it !in SALE_WORDS && it.any { c -> c.isLetter() } }
+        return naming.isEmpty()
     }
 }
 

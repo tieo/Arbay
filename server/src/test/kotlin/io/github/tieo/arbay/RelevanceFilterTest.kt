@@ -298,6 +298,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a title that is only the thing's name is a title`() {
+        // Off the live answer: four Kleinanzeigen ads titled exactly "Parkettschleifmaschine" were
+        // being thrown away as placeholders, for having one word.
+        val kept = search("parkettschleifmaschine", listOf(
+            listing("Parkettschleifmaschine", price = 45000),
+            listing("Verkaufe", price = 1000),
+            listing("Neues Angebot", price = 1000),
+            listing("Lägler Hummel Parkettschleifmaschine", price = 60000),
+        )).map { it.title }
+        assertTrue(kept.contains("Parkettschleifmaschine"), "an ad named after the thing is an ad")
+        assertTrue(kept.none { it == "Verkaufe" }, "a title that only says 'selling' names nothing")
+        assertTrue(kept.none { it == "Neues Angebot" }, "nor does a market's own placeholder")
+    }
+
+    @Test
     fun `a switch off the machine is not the machine`() {
         // Off the phone: a 33 euro Geizhals listing led a search for the machine it belongs to,
         // because it carries the machine's own name and costs a fraction of one.
