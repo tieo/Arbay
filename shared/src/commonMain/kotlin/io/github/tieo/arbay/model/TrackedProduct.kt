@@ -65,9 +65,17 @@ fun NotificationSubfilter.summaryText(): String {
     return if (parts.isEmpty()) "Any find in this search" else parts.joinToString(" · ")
 }
 
-/** What to call this subfilter when something needs one string — its own name, or its criteria
- *  when it was never given one. */
-val NotificationSubfilter.displayName: String get() = name.ifBlank { summaryText() }
+/**
+ * What to call this subfilter when something needs one string — its own name, or its criteria when
+ * it has nothing that reads as a name.
+ *
+ * A name of "." passes any test for being non-empty and says nothing: the notification it produced
+ * read ". · parkettschleifmaschine". Naming one is optional, and a placeholder typed to get past a
+ * field is the same as not naming it, so anything without a letter or a digit falls back to the
+ * criteria, which always say something true.
+ */
+val NotificationSubfilter.displayName: String get() =
+    name.takeIf { n -> n.any { it.isLetterOrDigit() } } ?: summaryText()
 
 @Serializable
 data class TrackedProduct(

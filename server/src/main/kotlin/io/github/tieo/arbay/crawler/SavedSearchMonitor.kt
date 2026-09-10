@@ -237,7 +237,10 @@ class SavedSearchMonitor(
                         subfilterName = sf.displayName,
                         title = l.title,
                         url = l.url,
-                        priceText = eurCents(l.price)?.let { "€${it / 100}" },
+                        // The number the subfilter decided on, so the notification cannot announce
+                        // €145 for a listing it let through at €149 landed.
+                        priceText = eurCents(l.landedPrice(ImportSettingsStore.current))
+                            ?.let { "€${it / 100}" },
                         locationText = l.location?.let { it.city ?: it.country },
                     )
                 }

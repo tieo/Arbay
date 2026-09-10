@@ -80,6 +80,13 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            // One crawl can match several listings at once, and each one used to arrive on its own
+            // with its own sound: three at 09:26 one morning, two of which Android throttled as
+            // arriving too fast, and it invented a group of its own to tidy them up. Grouped here
+            // instead, and only the summary is allowed to make a noise, so a run that finds five
+            // things interrupts once and the five are there to read.
+            .setGroup(channel)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
 
         url?.let {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it))
@@ -88,9 +95,33 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             builder.setContentIntent(pending)
+            // Tapping the notification already opens the listing; the button says that it will,
+            // which is the difference between a notification you act on and one you dismiss.
+            builder.addAction(android.R.drawable.ic_menu_view, "Open listing", pending)
         }
 
         NotificationManagerCompat.from(context).notify(id, builder.build())
+        postGroupSummary(context, channel)
+    }
+
+    /** The one notification of a group that is allowed to interrupt, and the one the shade shows
+     *  when the group is collapsed. Posted after each child so a group always has one. */
+    private fun postGroupSummary(context: Context, channel: String) {
+        val summary = NotificationCompat.Builder(context, channel)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(
+                when (channel) {
+                    CHANNEL_FREE_ITEM -> "Free items near you"
+                    else -> "Saved search alerts"
+                },
+            )
+            .setGroup(channel)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        NotificationManagerCompat.from(context).notify(channel.hashCode(), summary)
     }
 
     /** A free item worth fetching now. */

@@ -8,6 +8,8 @@ import io.github.tieo.arbay.model.NotificationSubfilter
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import io.github.tieo.arbay.model.displayName
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Whether a fresh listing is worth a push notification under a search's own subfilter, not just
@@ -102,5 +104,14 @@ class SavedSearchMonitorTest {
         assertFalse(SavedSearchMonitor.matchesSubfilter(listing("Sprinter 314 Automatik", 9500, Condition.USED), filter))
         assertFalse(SavedSearchMonitor.matchesSubfilter(listing("Sprinter 314 Automatik", 8000, Condition.NEW), filter))
         assertFalse(SavedSearchMonitor.matchesSubfilter(listing("Sprinter 314 Schaltung", 8000, Condition.USED), filter))
+    }
+
+    @Test
+    fun `a subfilter named with a placeholder is described by its criteria`() {
+        // Both saved searches on the phone were named ".", so every notification they raised read
+        // ". · parkettschleifmaschine". A name has to contain something to be a name.
+        assertEquals("up to €550", NotificationSubfilter(id = "a", name = ".", maxPriceEur = 550).displayName)
+        assertEquals("up to €550", NotificationSubfilter(id = "a", name = "  ", maxPriceEur = 550).displayName)
+        assertEquals("under 600", NotificationSubfilter(id = "a", name = "under 600", maxPriceEur = 550).displayName)
     }
 }
