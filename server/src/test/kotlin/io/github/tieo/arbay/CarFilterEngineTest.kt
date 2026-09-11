@@ -235,24 +235,37 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun vanWordExcludesOnMismatch() {
-        // Filtering L3 must drop a van that says "Maxi" (L4) and keep one that says "lang" (L3).
-        val filters = CarFilters(vanLengths = setOf(3))
-        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")       // L4, drop
-        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")       // L3, keep
-        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")        // L1, drop
-        val kept = CarFilterEngine.apply(listOf(maxi, lang, kurz), filters).map { it.id }
-        assertEquals(listOf("KLEINANZEIGEN:l"), kept)
+    fun vanSizeWordsNeverExclude() {
+        // A word names one maker's variant, not a class: VW's own papers call the Crafter's
+        // 4490 mm wheelbase "lang", and it is the longest one they build, so reading "Crafter 35
+        // Lang Plus XXL" as L3 and dropping it against an L4 filter throws away the very van
+        // being looked for. Every van described in words is kept, and the results mark it
+        // unchecked for that criterion.
+        val lengths = CarFilters(vanLengths = setOf(3))
+        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")
+        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")
+        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")
+        assertEquals(
+            listOf("KLEINANZEIGEN:x", "KLEINANZEIGEN:l", "KLEINANZEIGEN:k"),
+            CarFilterEngine.apply(listOf(maxi, lang, kurz), lengths).map { it.id },
+        )
+        assertEquals(listOf("length"), lengths.uncheckedFor(
+            CarFilterEngine.apply(listOf(lang), lengths).first().vehicle,
+        ))
+
+        val heights = CarFilters(vanHeights = setOf(1))
+        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach lang")
+        val flach = carListing("f", PlatformId.KLEINANZEIGEN, "VW Crafter Flachdach kurz")
+        assertEquals(2, CarFilterEngine.apply(listOf(hochdach, flach), heights).size)
     }
 
     @Test
-    fun vanHeightWordExcludes() {
-        // Filtering H1 (flat roof) drops a "Hochdach" (H2) van; a stated roof is a known size.
-        val filters = CarFilters(vanHeights = setOf(1))
-        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach lang")
-        val flach = carListing("f", PlatformId.KLEINANZEIGEN, "VW Crafter Flachdach kurz")
-        val kept = CarFilterEngine.apply(listOf(hochdach, flach), filters).map { it.id }
-        assertEquals(listOf("KLEINANZEIGEN:f"), kept)
+    fun vanSizeCodeExcludes() {
+        // A code is what the ad itself says, and it means the same thing on every van.
+        val filters = CarFilters(vanLengths = setOf(3))
+        val l3 = carListing("a", PlatformId.KLEINANZEIGEN, "VW Crafter L3H2 Kasten")
+        val l1 = carListing("b", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 Kasten")
+        assertEquals(listOf("KLEINANZEIGEN:a"), CarFilterEngine.apply(listOf(l3, l1), filters).map { it.id })
     }
 
     @Test

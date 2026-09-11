@@ -30,6 +30,8 @@ import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.imageModel
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ListingDetail
+import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
@@ -54,16 +56,27 @@ fun ListingDetailSheet(
     // a listing that arrived without a location is asked about once, here, where someone is looking
     // at that one listing. Markets that publish a location on the card never reach this.
     val client = remember { ArbayClient() }
-    var fetchedLocation by remember(listing.id) { mutableStateOf<Location?>(null) }
-    var lookingUpLocation by remember(listing.id) { mutableStateOf(false) }
+    var fromItsOwnPage by remember(listing.id) { mutableStateOf<ListingDetail?>(null) }
+    var readingItsPage by remember(listing.id) { mutableStateOf(false) }
     LaunchedEffect(listing.id) {
-        // An off-screen render must fire no network call, and an archived copy is being read for
-        // what it said when it was crawled, not for where the seller stands today.
-        if (listing.location != null || isArchived || listing.url.isBlank()) return@LaunchedEffect
-        lookingUpLocation = true
-        fetchedLocation = client.listingLocation(listing)
-        lookingUpLocation = false
+        // A card is the market's summary of the ad; this sheet is the ad. The page is read once,
+        // here, for the listing being looked at. An archived copy is read for what it said when it
+        // was crawled, and an off-screen render must fire no network call at all.
+        if (isArchived || listing.url.isBlank()) return@LaunchedEffect
+        readingItsPage = true
+        fromItsOwnPage = client.listingDetail(listing)
+        readingItsPage = false
     }
+    val vehicle = fromItsOwnPage?.vehicle?.let { fromPage ->
+        listing.vehicle?.let { card ->
+            card.copy(
+                wheelbaseMm = card.wheelbaseMm ?: fromPage.wheelbaseMm,
+                verified = card.verified + fromPage.verified,
+            )
+        } ?: fromPage
+    } ?: listing.vehicle
+    val description = fromItsOwnPage?.description
+        ?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
 
     AdaptiveSheet(onDismiss = onDismiss) {
         Row(
@@ -141,12 +154,12 @@ fun ListingDetailSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DetailChip(listing.platformId.displayName)
                 listing.condition?.let { DetailChip(it.name.lowercase().replace('_', ' ')) }
-                val place = listing.location ?: fetchedLocation
+                val place = listing.location ?: fromItsOwnPage?.location
                 place?.let { loc ->
                     listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country)
                         .joinToString(" ").takeIf { it.isNotBlank() }?.let { DetailChip(it) }
                 }
-                if (place == null && lookingUpLocation) DetailChip("looking up where it is\u2026")
+                if (place == null && readingItsPage) DetailChip("reading its page\u2026")
                 listing.distanceKm?.let { DetailChip("${it.roundToInt()} km away") }
                 listing.listingDate?.let {
                     DetailChip("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}")
@@ -185,35 +198,44 @@ fun ListingDetailSheet(
             // none of it shown: a van's own page said only its registration month and mileage,
             // pulled out of a description string, while its year, power, gearbox, fuel, body,
             // doors, seats, emission class, colour and inspection date sat in the record unread.
-            listing.vehicle?.let { v ->
+            vehicle?.let { v ->
+                // Each row carries the field it came from, so a value the market stated and a value
+                // read out of its words are not written the same way: "Lang" in a title became a
+                // flat "Length L3" here, which is a guess about one maker's naming printed as fact.
+                fun MutableList<Triple<String, String, VehicleField?>>.spec(
+                    label: String,
+                    value: String,
+                    field: VehicleField? = null,
+                ) = add(Triple(label, value, field))
                 val specs = buildList {
                     v.firstRegYear?.let {
-                        add("First registered" to (v.firstRegMonth?.let { m -> "%02d/%d".format(m, it) } ?: "$it"))
+                        spec("First registered", v.firstRegMonth?.let { m -> "%02d/%d".format(m, it) } ?: "$it", VehicleField.FIRST_REG_YEAR)
                     }
-                    v.mileageKm?.let { add("Mileage" to "${"%,d".format(it).replace(',', '.')} km") }
-                    v.powerKw?.let { add("Power" to "$it kW · ${(it * 1.35962).toInt()} hp") }
-                    v.displacementCc?.let { add("Engine" to "$it cc") }
-                    v.fuel?.let { add("Fuel" to it.name.lowercase().replace('_', ' ')) }
-                    v.gearbox?.let { add("Gearbox" to it.name.lowercase()) }
-                    v.drivetrain?.let { add("Drive" to it.name.lowercase().replace('_', ' ')) }
-                    v.bodyType?.let { add("Body" to it.name.lowercase().replace('_', ' ')) }
-                    v.doors?.let { add("Doors" to "$it") }
-                    v.seats?.let { add("Seats" to "$it") }
-                    v.condition?.let { add("Condition" to it.name.lowercase().replace('_', ' ')) }
-                    v.previousOwners?.let { add("Previous owners" to "$it") }
-                    v.color?.let { add("Colour" to it) }
-                    v.emissionClassEuro?.let { add("Emission class" to "Euro $it") }
-                    v.emissionSticker?.let { add("Sticker" to "$it") }
-                    v.inspectionUntil?.let { add("Inspection until" to it) }
-                    v.upholstery?.let { add("Upholstery" to it) }
-                    v.vanLength?.let { add("Length" to "L$it") }
-                    v.vanHeight?.let { add("Roof" to "H$it") }
-                    v.wheelbaseMm?.let { add("Wheelbase" to "$it mm") }
+                    v.mileageKm?.let { spec("Mileage", "${"%,d".format(it).replace(',', '.')} km", VehicleField.MILEAGE) }
+                    v.powerKw?.let { spec("Power", "$it kW · ${(it * 1.35962).toInt()} hp", VehicleField.POWER) }
+                    v.displacementCc?.let { spec("Engine", "$it cc", VehicleField.DISPLACEMENT) }
+                    v.fuel?.let { spec("Fuel", it.name.lowercase().replace('_', ' '), VehicleField.FUEL) }
+                    v.gearbox?.let { spec("Gearbox", it.name.lowercase(), VehicleField.GEARBOX) }
+                    v.drivetrain?.let { spec("Drive", it.name.lowercase().replace('_', ' '), VehicleField.DRIVETRAIN) }
+                    v.bodyType?.let { spec("Body", it.name.lowercase().replace('_', ' '), VehicleField.BODY_TYPE) }
+                    v.doors?.let { spec("Doors", "$it", VehicleField.DOORS) }
+                    v.seats?.let { spec("Seats", "$it", VehicleField.SEATS) }
+                    v.condition?.let { spec("Condition", it.name.lowercase().replace('_', ' '), VehicleField.CONDITION) }
+                    v.previousOwners?.let { spec("Previous owners", "$it") }
+                    v.color?.let { spec("Colour", it, VehicleField.COLOR) }
+                    v.emissionClassEuro?.let { spec("Emission class", "Euro $it", VehicleField.EMISSION) }
+                    v.emissionSticker?.let { spec("Sticker", "$it", VehicleField.EMISSION_STICKER) }
+                    v.inspectionUntil?.let { spec("Inspection until", it, VehicleField.INSPECTION) }
+                    v.upholstery?.let { spec("Upholstery", it, VehicleField.UPHOLSTERY) }
+                    v.vanLength?.let { spec("Length", "L$it", VehicleField.VAN_LENGTH) }
+                    v.vanHeight?.let { spec("Roof", "H$it", VehicleField.VAN_HEIGHT) }
+                    v.wheelbaseMm?.let { spec("Wheelbase", "$it mm", VehicleField.WHEELBASE) }
                 }
                 if (specs.isNotEmpty()) {
                     Text("What the market says it is", style = MaterialTheme.typography.labelLarge)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        specs.forEach { (label, value) ->
+                        specs.forEach { (label, value, field) ->
+                            val stated = field == null || v.isVerified(field)
                             Row(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                     label,
@@ -221,7 +243,21 @@ fun ListingDetailSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Text(value, style = MaterialTheme.typography.bodyMedium)
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        if (stated) value else "~$value",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (stated) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (!stated) {
+                                        Text(
+                                            "read out of the words, not stated",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -235,9 +271,18 @@ fun ListingDetailSheet(
                 )
             }
 
-            listing.description?.takeIf { it.isNotBlank() }?.let {
+            description?.takeIf { it.isNotBlank() }?.let {
                 Text("Description", style = MaterialTheme.typography.labelLarge)
                 Text(it, style = MaterialTheme.typography.bodyMedium)
+            }
+            // The card's description is the market's one-line summary of the ad; the ad itself is
+            // on its own page, which is being read while this is on screen.
+            if (readingItsPage) {
+                Text(
+                    "Reading the rest off the ad\u2026",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             Spacer(Modifier.height(4.dp))

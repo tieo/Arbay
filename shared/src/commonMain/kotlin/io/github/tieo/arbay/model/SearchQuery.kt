@@ -86,8 +86,12 @@ data class CarFilters(
         if (minSeats != null && v?.seats == null) add("seats")
         if (minEmissionEuro != null && v?.emissionClassEuro == null) add("emission")
         if (sellerType != null) { /* the seller is on the listing itself, not the vehicle */ }
-        if (vanLengths.isNotEmpty() && v?.vanLength == null) add("length")
-        if (vanHeights.isNotEmpty() && v?.vanHeight == null) add("height")
+        // A size read out of a word ("Lang") is a guess about one maker's naming, so a van
+        // described that way was never actually checked against the size asked for.
+        if (vanLengths.isNotEmpty() && v?.vanLength?.takeIf { v.isVerified(VehicleField.VAN_LENGTH) } == null)
+            add("length")
+        if (vanHeights.isNotEmpty() && v?.vanHeight?.takeIf { v.isVerified(VehicleField.VAN_HEIGHT) } == null)
+            add("height")
         if ((minWheelbaseMm != null || maxWheelbaseMm != null) && v?.wheelbaseMm == null) add("wheelbase")
     }
 

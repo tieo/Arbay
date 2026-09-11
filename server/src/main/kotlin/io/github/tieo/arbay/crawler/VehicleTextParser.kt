@@ -44,8 +44,20 @@ object VehicleTextParser {
         """^\s*(?:/\s?(?:jahr|year|jaar)|pro\s+jahr|per\s+jaar|p\.\s?a\.|im\s+jahr|j[äÄa]hrlich|frei\b)""",
         RegexOption.IGNORE_CASE,
     )
+    /**
+     * Every way an ad names the distance between the axles, and the number after it.
+     *
+     * German dealers write "Radstand", "Radabstand" and "Achsabstand" for the same measurement, and
+     * a list that had only the first one read 4490 mm as nothing on an ad that stated it plainly.
+     * The unit is optional because ads write "Radstand 3640", "3,64 m" and "364 cm" as well.
+     */
     private val wheelbaseRegex = Regex(
-        """(?:radstand|wheelbase|empattement)\s*:?\s*([0-9][0-9.,\s]{2,6})\s*(?:mm)\b""",
+        """(?:rad(?:ab)?stand|achs(?:ab)?stand|wheel\s?base|empattement|interasse|""" +
+            """batalla|rozstaw\s+osi|wielbasis|rozvor)""" +
+            // What a dealer writes between the word and the number: a colon, a dash, and the name
+            // of the variant it belongs to — "Radstand lang (LR) - 4.490 mm". Anything with a
+            // digit in it ends the run, so the number found is the one this label introduces.
+            """([^0-9<>\n]{0,25}?)([0-9][0-9.,]{1,7})\s*(mm|cm|m)?\b""",
         RegexOption.IGNORE_CASE,
     )
     private val displacementCcRegex = Regex("""([0-9]{3,4})\s?(?:cm³|ccm|cc)\b""", RegexOption.IGNORE_CASE)
@@ -184,11 +196,33 @@ object VehicleTextParser {
      * written as "Radstand 3640 mm" or "Radstand: 3.250 mm". Bounded to what a road vehicle can
      * have, so a stray four-digit number in the same sentence cannot become a wheelbase.
      */
-    private fun parseWheelbaseMm(text: String): Int? {
-        val m = wheelbaseRegex.find(text) ?: return null
-        val mm = m.groupValues[1].replace(Regex("""[.,\s]"""), "").toIntOrNull() ?: return null
-        return mm.takeIf { it in 1500..7000 }
-    }
+    fun parseWheelbaseMm(text: String): Int? =
+        wheelbaseRegex.findAll(text).firstNotNullOfOrNull { m ->
+            val between = m.groupValues[1]
+            val raw = m.groupValues[2]
+            val unit = m.groupValues[3].lowercase()
+            // A number reached across words has to name its unit. Measured over 72 van ads, the
+            // number always sits right behind the word ("Radstand 3665 mm") or behind the variant
+            // it belongs to ("Radstand lang (LR) - 4.490 mm"); a bare number several words later
+            // is some other figure in the same sentence.
+            if (unit.isEmpty() && between.trim().length > 2) return@firstNotNullOfOrNull null
+            // "3.640" and "3,640" are one number with a thousands mark; "3,64" and "3.64" are
+            // metres written with either mark, which is which decided by what follows the mark.
+            val grouped = Regex("""^\d{1,2}[.,]\d{3}$""").matches(raw)
+            val asNumber = raw.replace(",", ".").let { if (grouped) it.replace(".", "") else it }
+            val value = asNumber.toDoubleOrNull() ?: return@firstNotNullOfOrNull null
+            val mm = when {
+                unit == "mm" -> value
+                unit == "cm" -> value * 10
+                unit == "m" -> value * 1000
+                // No unit: the size of the number says which it is, since a wheelbase is between
+                // one and a half and seven metres however it is written.
+                value < 10 -> value * 1000
+                value < 800 -> value * 10
+                else -> value
+            }
+            mm.toInt().takeIf { it in 1500..7000 }
+        }
 
     private fun parseGearbox(text: String): Transmission? {
         val s = text.lowercase()

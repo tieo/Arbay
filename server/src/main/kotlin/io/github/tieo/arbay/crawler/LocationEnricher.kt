@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Location
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.sync.Semaphore
@@ -36,8 +37,12 @@ object LocationEnricher {
     suspend fun fetch(listing: Listing, crawler: Crawler): Location? {
         cache[listing.id]?.let { return it }
         if (!known.add(listing.id)) return null
-        val found = crawler.fetchDetailLocation(listing)
-        if (found == null) return null
+        // The whole page answers at once and is kept, so a later spec lookup for this listing
+        // does not load the same defended page a second time.
+        val detail = DetailCache.get(listing.id) ?: crawler.fetchDetail(listing)?.also {
+            DetailCache.put(listing.id, it)
+        }
+        val found = detail?.location ?: return null
         cache[listing.id] = found
         return found
     }

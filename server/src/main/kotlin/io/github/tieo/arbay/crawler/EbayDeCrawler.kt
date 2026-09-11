@@ -19,44 +19,29 @@ class EbayDeCrawler(
     private val domain: String = "ebay.de",
 ) : Crawler, FetchesEveryPage, HasSoldListings {
 
-    /** eBay keeps the vehicle specs on the item page, in "Info zum Artikel", and none of them on
-     *  the search card. Without this every eBay listing reaches a vehicle filter with everything
-     *  unknown and is kept by default. */
-    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = try {
-        // eBay answers 403 to every plain client on an item page, so this goes straight to the
-        // browser tier. It is also the one page eBay defends hardest, and a defended page costs a
-        // browser attempt per engine: bounded here so a market that will not answer costs seconds
-        // rather than the whole search's budget.
+    /**
+     * What eBay keeps on the item page and nowhere on the card: the vehicle specs in "Info zum
+     * Artikel", and where the thing is ("Standort: Hamburg, Deutschland", city and country, never
+     * a postcode). One load answers both — they were two, and the same defended page was fetched
+     * twice for one ad.
+     *
+     * eBay answers a plain client with a challenge on an item page, so this goes straight to the
+     * browser tier, primed with a search page: it serves an item page to a browser that arrives
+     * from its own search and a 403 to one that arrives cold. Bounded, since a defended page costs
+     * a browser attempt per engine and a market that will not answer must cost seconds rather than
+     * the whole search's budget.
+     */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         kotlinx.coroutines.withTimeoutOrNull(30_000L) {
-            // Primed with a search page first: eBay serves an item page to a browser that arrives
-            // from its own search and a 403 to one that arrives cold.
             val html = fetchWithFallback(
                 client, listing.url, "eBay",
                 primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
                 browserOnly = true,
             )
-            EbayDetailParser.parse(html)
-        }
-    } catch (e: Exception) {
-        null
-    }
-
-    /**
-     * Where the thing is, off the item page, since the search card never says.
-     *
-     * eBay's card layout publishes a price, a shipping line, a watcher count and a seller rating
-     * and nothing about where the item stands; the item page carries it as an `itemLocation` block
-     * ("Standort: Hamburg, Deutschland"), city and country, no postcode. Costs one item-page load,
-     * which is why it is asked for a listing at a time rather than for a whole page of them.
-     */
-    override suspend fun fetchDetailLocation(listing: Listing): Location? = try {
-        kotlinx.coroutines.withTimeoutOrNull(30_000L) {
-            val html = fetchWithFallback(
-                client, listing.url, "eBay",
-                primeUrl = "https://$domain/sch/i.html?_nkw=${listing.title.take(30).encodeUrl()}",
-                browserOnly = true,
-            )
-            itemLocation(html)
+            ListingDetail(
+                vehicle = EbayDetailParser.parse(html),
+                location = itemLocation(html),
+            ).takeIf { it.vehicle != null || it.location != null }
         }
     } catch (e: Exception) {
         null

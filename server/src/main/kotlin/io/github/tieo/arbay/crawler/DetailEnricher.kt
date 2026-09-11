@@ -15,7 +15,10 @@ import kotlinx.coroutines.sync.withPermit
  * filter needs an unverified field, it fetches nothing.
  */
 object DetailEnricher {
-    private const val MAX_FETCHES_PER_PLATFORM = 15
+    // How many of a market's listings one search may open. Measured on AutoScout24: 15 left 35 of
+    // 50 vans unchecked against a wheelbase, which is a filter that hardly narrows anything.
+    // Each of these is one page on a market that answers a plain client, three at a time.
+    private const val MAX_FETCHES_PER_PLATFORM = 25
     private val gate = Semaphore(3)
 
     /** Fields the given filters constrain and that a detail page could verify. */
@@ -57,15 +60,21 @@ object DetailEnricher {
 
         return listings.map { listing ->
             if (!needsDetail(listing, needed)) return@map listing
-            DetailCache.get(listing.id)?.let { cached ->
-                return@map listing.copy(vehicle = VehicleTextParser.merge(cached, listing.vehicle))
-            }
+            DetailCache.get(listing.id)?.let { return@map listing.withDetail(it) }
             if (listing.id !in toFetch) return@map listing // beyond budget → stays inferred, badged unverified
-            val detail = gate.withPermit { crawler.fetchDetailVehicle(listing) } ?: return@map listing
+            val detail = gate.withPermit { crawler.fetchDetail(listing) } ?: return@map listing
             DetailCache.put(listing.id, detail)
-            listing.copy(vehicle = VehicleTextParser.merge(detail, listing.vehicle))
+            listing.withDetail(detail)
         }
     }
+
+    /** The page's answers laid over the card's: its specs win where it has one, its own text
+     *  replaces the site's one-line summary, and a location it states fills in a missing one. */
+    private fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = copy(
+        vehicle = VehicleTextParser.merge(detail.vehicle, vehicle),
+        description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
+        location = location ?: detail.location,
+    )
 
     private fun priceEurCents(listing: Listing): Long =
         if (listing.price.currency == io.github.tieo.arbay.model.Currency.EUR) listing.price.amount

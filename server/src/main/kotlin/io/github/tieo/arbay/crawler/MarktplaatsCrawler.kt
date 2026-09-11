@@ -19,8 +19,9 @@ class MarktplaatsCrawler(
     /** The search card carries only year and mileage; the detail page's attribute object adds
      *  power, gearbox, fuel, doors, body type and colour, so a filter on those verifies instead of
      *  soft-passing. Fetched only for the listings DetailEnricher selects (budgeted + cached). */
-    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = try {
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         MarktplaatsDetailParser.parse(CurlCffiClient.fetch(listing.url, primeUrl = host))
+            ?.let { ListingDetail(vehicle = it) }
     } catch (_: Exception) {
         null
     }

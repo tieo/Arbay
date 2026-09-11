@@ -74,6 +74,32 @@ class ListingPlaceTest {
     }
 
     @Test
+    fun `every way 72 van ads wrote a wheelbase down`() {
+        // Each of these is a line off a real AutoScout24 advert. 40 of 71 readable pages state a
+        // wheelbase at all, always inside the equipment prose and never as a field of the site's
+        // own, which is why it is read off the detail page and off the seller's own text.
+        val stated = mapOf(
+            "Parklichtschaltung, Radstand 3250 mm, Reifen-Reparaturkit" to 3250,
+            "Federung und Dämpfung verstärkt Radstand 3.640 mm (MR)" to 3640,
+            "Motor 2,0 Ltr. - 130 kW TDI\nRadstand 4490 mm\nSchadstoffarm" to 4490,
+            "Produktionsstätte: Otosan Radstand 3300 mm Radvollabdeckung" to 3300,
+            "Motor 2,1 Ltr. - 95 kW CDI KAT (2143 ccm), Radstand 3665 mm" to 3665,
+            "Radabstand: 4490 mm" to 4490,
+            "Radstand lang (LR) - 4.490 mm" to 4490,
+            "Achsabstand 3,64 m" to 3640,
+            "Radstand 305 cm" to 3050,
+            "Wheelbase 3250mm" to 3250,
+        )
+        stated.forEach { (line, mm) ->
+            assertEquals(mm, VehicleTextParser.parseWheelbaseMm(line), "read off: $line")
+        }
+        // Stated without a number, and a number that belongs to something else.
+        assertNull(VehicleTextParser.parseWheelbaseMm("Langer Radstand !!!"))
+        assertNull(VehicleTextParser.parseWheelbaseMm("Radstand verstärkt, Motor 2,1 Ltr. - 120 kW"))
+        assertNull(VehicleTextParser.parseWheelbaseMm(""""wheelBase":null,"costModel":null,4"""))
+    }
+
+    @Test
     fun `a wheelbase is read where the ad writes one`() {
         val stated = VehicleTextParser.parse("VW Crafter, Radstand 3640 mm, Klima")
         assertEquals(3640, stated?.wheelbaseMm)

@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SuggestedTerm
@@ -13,15 +14,15 @@ interface Crawler {
 
     suspend fun search(query: SearchQuery): List<Listing>
 
-    /** Fetch a single listing's detail page and return its verified vehicle specs, where the
-     *  detail page carries structured attributes the search card omits (power, gearbox, doors,
-     *  emission, colour…). Default null: the platform's card already holds everything it knows. */
-    suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = null
-
-    /** Fetch a single listing's detail page and return where the thing is, for the markets that
-     *  publish a location on the item page and none on the search card. Default null: the card
-     *  already said, or the market never says at all. */
-    suspend fun fetchDetailLocation(listing: Listing): io.github.tieo.arbay.model.Location? = null
+    /**
+     * Fetch a single listing's own page and return what it says beyond the card: the structured
+     * specs (power, gearbox, doors, emission, colour…), the seller's own description, and where
+     * the thing is. Default null: this market's card already holds everything it knows.
+     *
+     * One fetch for all three. They were separate calls, and the page was loaded twice to answer
+     * two questions about the same ad.
+     */
+    suspend fun fetchDetail(listing: Listing): ListingDetail? = null
 }
 
 /**

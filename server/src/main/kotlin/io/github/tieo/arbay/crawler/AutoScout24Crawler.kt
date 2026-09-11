@@ -18,19 +18,67 @@ class AutoScout24Crawler(
     private val countryParam: String get() = countries.joinToString("%2C")
 
     /**
-     * What the card never carries, off the ad's own page: the wheelbase.
+     * What the card never carries, off the ad's own page: the seller's own text, and the wheelbase
+     * that is written inside it.
      *
      * This site has a `wheelBase` key in the page's own data and it was empty on every Crafter
-     * measured — 13 of 13. Where a wheelbase is stated at all it is written into the equipment
-     * prose ("Radstand 3640 mm"), on about half of them, and that is what this reads.
+     * measured. Where a wheelbase is stated at all it is a line of the dealer's equipment list —
+     * "Radstand 3640 mm", "Radabstand: 4490 mm" — which is also the only place the full
+     * description lives: the card's description is the site's own summary line ("EZ: 10-2020 |
+     * 145737 km") and says nothing the specs do not.
      */
-    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? = try {
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         val html = fetchWithFallback(client, listing.url, "AutoScout24", waitSelector = "main")
-        VehicleTextParser.parse(Jsoup.parse(html).text())
-            ?.takeIf { it.wheelbaseMm != null }
-            ?.let { VehicleInfo(wheelbaseMm = it.wheelbaseMm, verified = setOf(VehicleField.WHEELBASE)) }
+        val doc = Jsoup.parse(html)
+        val description = sellersOwnText(doc)
+        // Only the wheelbase is taken from the prose. Everything else on this page is already on
+        // the card as a structured value, and reading it out of an advert's sales text again would
+        // let "ab 199 € mtl., 1. Hand, 130.000 km Garantie" overwrite what the site itself stated.
+        val wheelbase = VehicleTextParser.parseWheelbaseMm(description ?: doc.text())
+        ListingDetail(
+            vehicle = wheelbase?.let {
+                VehicleInfo(wheelbaseMm = it, verified = setOf(VehicleField.WHEELBASE))
+            },
+            description = description,
+        ).takeIf { it.vehicle != null || it.description != null }
     } catch (e: Exception) {
         null
+    }
+
+    /**
+     * The dealer's own description, out of the page's data island.
+     *
+     * The island carries several `description` keys — the site's own page blurb ("Finde jetzt
+     * deinen Volkswagen …") among them — so the longest one wins, which is the advert every time.
+     */
+    private fun sellersOwnText(doc: org.jsoup.nodes.Document): String? {
+        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() ?: return null
+        var longest: String? = null
+        fun walk(element: JsonElement) {
+            when (element) {
+                is JsonObject -> element.forEach { (key, value) ->
+                    if (key == "description" && value is JsonPrimitive && value.isString) {
+                        val text = value.content
+                        if (text.length > (longest?.length ?: 0)) longest = text
+                    }
+                    walk(value)
+                }
+                is JsonArray -> element.forEach { walk(it) }
+                else -> {}
+            }
+        }
+        walk(root)
+        // The advert is written as HTML inside that string; a reader wants the lines, not the tags.
+        return longest
+            ?.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
+            ?.replace(Regex("""</li>""", RegexOption.IGNORE_CASE), "\n")
+            ?.replace(Regex("""<[^>]+>"""), " ")
+            ?.let { org.jsoup.parser.Parser.unescapeEntities(it, false) }
+            ?.replace(Regex("""[ \t]{2,}"""), " ")
+            ?.replace(Regex("""\n{3,}"""), "\n\n")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     override suspend fun search(query: SearchQuery): List<Listing> {

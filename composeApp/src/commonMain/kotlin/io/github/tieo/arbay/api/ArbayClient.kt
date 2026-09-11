@@ -159,20 +159,21 @@ class ArbayClient(
     }
 
     /**
-     * Where one listing is, for a market that says it on the item page and not on the card.
+     * Everything one listing's own page says, for a market that keeps it there rather than on the
+     * card it was found through: the seller's whole text, the specs the card omits, and where the
+     * thing is. eBay, for one, states a location on the item page and never on a search card.
      *
-     * eBay is that market: its search cards carry a price, a shipping line and a seller rating and
-     * never an address, so a location costs one item-page load and is asked for the listing being
-     * looked at rather than for every listing on the screen. Null when the market publishes none.
+     * One page load on the server, cached there, asked for the listing being read. Null when the
+     * market's page adds nothing or could not be read.
      */
-    suspend fun listingLocation(listing: Listing): Location? = try {
-        val response = client.get("$baseUrl/api/crawler/listing-location") {
+    suspend fun listingDetail(listing: Listing): ListingDetail? = try {
+        val response = client.get("$baseUrl/api/crawler/listing-detail") {
             parameter("url", listing.url)
             parameter("platform", listing.platformId.name)
             parameter("id", listing.id)
         }
         if (response.status == HttpStatusCode.NoContent || !response.status.isSuccess()) null
-        else response.body<Location>()
+        else response.body<ListingDetail>()
     } catch (_: Exception) { null }
 
     suspend fun getMarketSettings(): MarketSettings =

@@ -409,24 +409,30 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             call.respondText(html, ContentType.Text.Plain)
         }
 
-        // Where one listing is, for a market that says it on the item page and not on the card.
-        // Asked for a listing at a time, when someone opens it: eBay's item page costs a browser
-        // load, which is a price worth paying for the one listing being looked at and not for
-        // fifty that are only being scrolled past.
-        get("/listing-location") {
+        // Everything one listing's own page says, for the sheet that shows one listing: the
+        // seller's whole text, the specs the card omits, and where the thing is. Asked when
+        // someone opens it, since an item page costs a browser load on the markets that defend
+        // them — a price worth paying for the one listing being read and not for fifty being
+        // scrolled past.
+        get("/listing-detail") {
             val url = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
                 ?: throw BadRequestException("Missing or unknown platform")
             val id = call.queryParameters["id"] ?: url
-            io.github.tieo.arbay.crawler.LocationEnricher.cached(id)?.let { return@get call.respond(it) }
+            io.github.tieo.arbay.crawler.DetailCache.get(id)?.let { return@get call.respond(it) }
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(
                 id = id, platformId = platform, externalId = id, url = url, title = "",
                 price = Money(0, Currency.EUR), scrapedAt = kotlinx.datetime.Clock.System.now(),
             )
-            val found = io.github.tieo.arbay.crawler.LocationEnricher.fetch(stub, crawler)
-            if (found == null) call.respond(HttpStatusCode.NoContent) else call.respond(found)
+            val detail = crawler.fetchDetail(stub)
+            if (detail == null) {
+                call.respond(HttpStatusCode.NoContent)
+            } else {
+                io.github.tieo.arbay.crawler.DetailCache.put(id, detail)
+                call.respond(detail)
+            }
         }
 
         // Error snapshots — list, view, resolve
@@ -805,6 +811,22 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 )
                             }
                             resultChannel.send(event)
+                            // A market that says where a thing is only on the thing's own page —
+                            // eBay — is asked afterwards, not before: the cards are on screen the
+                            // moment the crawl is done, and the places fill in behind them. The
+                            // app replaces a market's listings when that market reports again, so
+                            // the second report is the same listings with an address on them.
+                            if (event.type == CrawlerEventType.PLATFORM_DONE &&
+                                event.listings.any { it.location == null }
+                            ) {
+                                val placed = io.github.tieo.arbay.crawler.LocationEnricher
+                                    .enrich(event.listings, crawler)
+                                if (placed.zip(event.listings).any { (a, b) -> a.location != b.location }) {
+                                    resultChannel.send(
+                                        event.copy(listings = annotateDistance(placed, pq)),
+                                    )
+                                }
+                            }
                           } ?: resultChannel.send(CrawlerSearchEvent(
                               type = CrawlerEventType.PLATFORM_ERROR,
                               platform = platformId.name,
@@ -819,9 +841,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     launch { jobs.joinAll(); resultChannel.close() }
 
                     var completed = 0
+                    // A market reports once when it is finished. It may report again with the same
+                    // listings placed on the map, and that later report must not count as another
+                    // market finishing, or the progress line reads "12 of 11 markets".
+                    val alreadyCounted = mutableSetOf<String>()
                     for (event in resultChannel) {
                         val isProgress = event.type == CrawlerEventType.PLATFORM_PROGRESS
-                        if (!isProgress) completed++
+                        val finishes = event.type == CrawlerEventType.PLATFORM_DONE ||
+                            event.type == CrawlerEventType.PLATFORM_ERROR
+                        if (finishes && alreadyCounted.add(event.platform)) completed++
                         val eventToWrite = if (isProgress) event else event.copy(
                             completedPlatforms = completed,
                             totalPlatforms = platforms.size,

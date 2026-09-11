@@ -339,10 +339,18 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
 
     /** Fetches the listing's detail page and parses its full structured attribute table into
      *  verified specs (power, gearbox, fuel, doors, emission, colour…) the search card omits. */
-    override suspend fun fetchDetailVehicle(listing: Listing): VehicleInfo? {
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? {
         return try {
             val html = fetchWithFallback(client, listing.url, "Kleinanzeigen")
-            KleinanzeigenDetailParser.parse(html)
+            // The card carries the first line of the ad; the page carries the seller's whole text,
+            // which is where a van's wheelbase is written when it is written at all.
+            val description = org.jsoup.Jsoup.parse(html)
+                .selectFirst("#viewad-description-text, [id=viewad-description-text]")
+                ?.wholeText()?.trim()?.takeIf { it.isNotBlank() }
+            ListingDetail(
+                vehicle = KleinanzeigenDetailParser.parse(html),
+                description = description,
+            ).takeIf { it.vehicle != null || it.description != null }
         } catch (e: Exception) {
             log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
             null

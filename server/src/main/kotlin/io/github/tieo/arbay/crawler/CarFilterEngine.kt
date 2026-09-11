@@ -78,18 +78,25 @@ object CarFilterEngine {
         return out
     }
 
-    /** Fill the van size classes from the listing text. A size the listing states, either an
-     *  explicit code ("L3H2") or a wheelbase/roof word ("Maxi", "lang", "Hochdach"), is a known
-     *  value that the filter may exclude on: filtering L3 must drop a van that says "Maxi" (L4).
-     *  Only a van that states nothing is soft-passed. */
+    /**
+     * Fill the van size classes from the listing text.
+     *
+     * An explicit code ("L3H2") is what the ad says, and a filter may exclude on it. A word is
+     * not: every maker names its own variants, and each name means a different class. "Crafter 35
+     * Lang Plus XXL" was read as L3 and shown as a fact, while VW's own papers call that van's
+     * 4490 mm wheelbase "lang" and it is the longest one they build. So a word fills the value in
+     * for display and is left unverified, which is how the rest of the app already writes a figure
+     * it only inferred — and unverified is what keeps it from dropping anything.
+     */
     private fun annotateVanDims(listing: Listing): Listing {
         val text = "${listing.title} ${listing.description ?: ""}"
+        val stated = VanDimensions.excludable(text)
         val inferred = VanDimensions.inferred(text)
         if (inferred.length == null && inferred.height == null) return listing
         val v = listing.vehicle ?: VehicleInfo()
         val verified = v.verified.toMutableSet()
-        if (inferred.length != null) verified += VehicleField.VAN_LENGTH
-        if (inferred.height != null) verified += VehicleField.VAN_HEIGHT
+        if (stated.length != null) verified += VehicleField.VAN_LENGTH
+        if (stated.height != null) verified += VehicleField.VAN_HEIGHT
         return listing.copy(
             vehicle = v.copy(vanLength = inferred.length, vanHeight = inferred.height, verified = verified),
         )
@@ -147,8 +154,19 @@ object CarFilterEngine {
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return false
         if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return false
         if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return false
-        if (drop(filters.vanLengths.isNotEmpty(), v?.vanLength != null) { v!!.vanLength in filters.vanLengths }) return false
-        if (drop(filters.vanHeights.isNotEmpty(), v?.vanHeight != null) { v!!.vanHeight in filters.vanHeights }) return false
+        // Only a stated code narrows a van's size. A word ("Lang", "Hochdach") names a variant of
+        // one model and says nothing about another model's classes, so a van described in words is
+        // kept and marked unchecked rather than measured against a guess.
+        if (drop(
+                filters.vanLengths.isNotEmpty(),
+                v?.vanLength != null && v.isVerified(VehicleField.VAN_LENGTH),
+            ) { v!!.vanLength in filters.vanLengths }
+        ) return false
+        if (drop(
+                filters.vanHeights.isNotEmpty(),
+                v?.vanHeight != null && v.isVerified(VehicleField.VAN_HEIGHT),
+            ) { v!!.vanHeight in filters.vanHeights }
+        ) return false
         if (drop(filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null, v?.wheelbaseMm != null) {
                 val mm = v!!.wheelbaseMm!!
                 (filters.minWheelbaseMm?.let { mm >= it } ?: true) && (filters.maxWheelbaseMm?.let { mm <= it } ?: true)
