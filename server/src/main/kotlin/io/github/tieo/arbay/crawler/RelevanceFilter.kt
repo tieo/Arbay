@@ -498,9 +498,14 @@ object RelevanceFilter {
         // stands alone. The other languages a cross-border search reaches name them plainly.
         """(?U)\w*(h(ü|ue)lle|etui|tasche|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
             """polster|kopfband|halterung|st(ä|ae)nder|schutzfolie|displayschutz|reparaturset|""" +
-            """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung)\b|""" +
+            """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung|""" +
+            // What a drive is put into rather than the drive: a search for a 2 TB M.2 came back led
+            // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
+            // what fits inside it.
+            """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
             """\b(ear\s?pads?|headband|pcb|repair\s?kit|housse|custodia|funda|hoes|""" +
-            """cover|case|charger)\b""",
+            """cover|case|charger|enclosure|caddy|docking\s?station|""" +
+            """bo(î|i)tier|carcasa|caja\s+externa|behuizing)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -571,6 +576,20 @@ object RelevanceFilter {
 
     fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> =
         partition(listings, query).kept
+
+    /**
+     * Whether the listing's own title carries any word of the search.
+     *
+     * Keeping a listing and interrupting someone about it are different bars. Where a market's
+     * sellers write none of the words searched for — a search for the part number CT32G4SFD832A,
+     * which eBay's sellers never print — nothing can be required of a title and the market's own
+     * search is the only judge, so every listing it returned is kept and shown. That is fine on a
+     * screen someone chose to open, and wrong in a notification: seven alerts went out for 8 GB and
+     * 16 GB modules, a SK hynix stick and a Supermicro ECC board, each announced as the Crucial
+     * 32 GB module being watched for.
+     */
+    fun carriesAWordOfTheSearch(listing: Listing, query: SearchQuery): Boolean =
+        score(listing, parseQuery(query)) > 0.0
 
     /** Whether the search names a vehicle, model-without-make included ("sprinter 314"). Read
      *  from the live make/model taxonomy rather than from a word list, and asking whether any make

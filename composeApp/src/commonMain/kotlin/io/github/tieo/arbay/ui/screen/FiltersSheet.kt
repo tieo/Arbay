@@ -41,10 +41,14 @@ fun FiltersSheet(
     priceRange: ClosedFloatingPointRange<Float>,
     onPriceRange: (ClosedFloatingPointRange<Float>) -> Unit,
     onPriceCommitted: () -> Unit,
-    condition: String?,
-    onCondition: (String?) -> Unit,
-    newCount: Int,
-    usedCount: Int,
+    // Which conditions are being looked at, and whether listings whose market never said are
+    // among them. An empty set is every condition.
+    conditions: Set<Condition>,
+    onConditions: (Set<Condition>) -> Unit,
+    unstatedCondition: Boolean,
+    onUnstatedCondition: (Boolean) -> Unit,
+    /** How many of the fetched listings are in each condition; null counts the ones with none. */
+    conditionCounts: Map<Condition?, Int>,
     sort: SortMode,
     onSort: (SortMode) -> Unit,
     markets: List<MarketChoice>,
@@ -104,21 +108,45 @@ fun FiltersSheet(
                 }
             }
 
-            if (newCount > 0 || usedCount > 0) {
+            if (conditionCounts.values.sum() > 0) {
                 FilterSection("Condition") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            null to "Any",
-                            "NEW" to "New ($newCount)",
-                            "USED" to "Used ($usedCount)",
-                        ).forEach { (value, label) ->
+                    // One chip per condition the results actually contain, each on or off by
+                    // itself: "new and used", "for parts only", "refurbished and like new" are all
+                    // sayable. Nothing picked means every condition, which is what the word on the
+                    // chip row says rather than a chip called "Any" competing with the rest.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Condition.entries
+                            .filter { (conditionCounts[it] ?: 0) > 0 }
+                            .forEach { value ->
+                                FilterChip(
+                                    selected = value in conditions,
+                                    onClick = {
+                                        onConditions(
+                                            if (value in conditions) conditions - value else conditions + value,
+                                        )
+                                    },
+                                    label = { Text("${value.label} (${conditionCounts[value] ?: 0})") },
+                                )
+                            }
+                        conditionCounts[null]?.takeIf { it > 0 }?.let { count ->
                             FilterChip(
-                                selected = condition == value,
-                                onClick = { onCondition(value) },
-                                label = { Text(label) },
+                                selected = unstatedCondition,
+                                onClick = { onUnstatedCondition(!unstatedCondition) },
+                                label = { Text("Not stated ($count)") },
                             )
                         }
                     }
+                    Text(
+                        if (conditions.isEmpty()) "Every condition."
+                        else "Only " + conditions.sortedBy { it.ordinal }.joinToString(", ") { it.label } +
+                            (if (unstatedCondition) ", and the ones that do not say." else "."),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
 
@@ -366,9 +394,32 @@ private fun PriceBand(
     }
 }
 
-/** The conditions a filter can ask for, in the order the chips show them. */
-internal fun conditionMatches(filter: String?, condition: Condition?): Boolean = when (filter) {
-    "NEW" -> condition == Condition.NEW
-    "USED" -> condition != null && condition != Condition.NEW
-    else -> true
+/** What a condition is called on a chip and in a sentence. */
+internal val Condition.label: String
+    get() = when (this) {
+        Condition.NEW -> "New"
+        Condition.LIKE_NEW -> "Like new"
+        Condition.VERY_GOOD -> "Very good"
+        Condition.GOOD -> "Good"
+        Condition.ACCEPTABLE -> "Acceptable"
+        Condition.USED -> "Used"
+        Condition.REFURBISHED -> "Refurbished"
+        Condition.PARTS_ONLY -> "For parts"
+    }
+
+/**
+ * Whether a listing is in one of the conditions being looked at.
+ *
+ * No condition picked is every condition. A listing whose market never said is its own answer
+ * ("Not stated"), rather than being counted as used: a broken drive sold for parts and a working
+ * one were both "not new", so a search could not be told to leave the broken ones out.
+ */
+internal fun conditionMatches(
+    wanted: Set<Condition>,
+    unstated: Boolean,
+    condition: Condition?,
+): Boolean = when {
+    wanted.isEmpty() -> condition != null || unstated
+    condition == null -> unstated
+    else -> condition in wanted
 }

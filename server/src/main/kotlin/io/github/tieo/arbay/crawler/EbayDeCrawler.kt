@@ -504,8 +504,12 @@ class EbayDeCrawler(
          *  in. Read as a title, a real van came back called "Wird in neuem Fenster oder Tab
          *  geöffnet" and was then dropped for carrying none of the words searched for. */
         private val screenReaderText = Regex(
-            """^\s*(wird\s+in\s+neuem\s+fenster\s+oder\s+tab\s+ge(ö|oe)ffnet|""" +
-                """opens\s+in\s+a\s+new\s+window\s+or\s+tab|""" +
+            // Some of these open with a subject of their own — "La page s'ouvre dans une nouvelle
+            // fenêtre ou un nouvel onglet" — so the line is recognised by what it says, not from
+            // its first word. Two notifications went out titled exactly that sentence.
+            """^\s*(la\s+page\s+|the\s+page\s+|de\s+pagina\s+|la\s+p(á|a)gina\s+)?""" +
+                """(wird\s+in\s+neuem\s+fenster\s+oder\s+tab\s+ge(ö|oe)ffnet|""" +
+                """(wordt\s+)?(ge)?opens?\s+in\s+a\s+new\s+window\s+or\s+tab|""" +
                 """si\s+apre\s+in\s+una\s+nuova\s+finestra\s+o\s+scheda|""" +
                 """viene\s+aperta\s+una\s+nuova\s+finestra\s+o\s+scheda|""" +
                 """se\s+abre\s+en\s+una\s+nueva\s+ventana\s+o\s+pesta(ñ|n)a|""" +

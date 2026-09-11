@@ -225,7 +225,14 @@ data class SearchQuery(
     val platforms: List<PlatformId> = MarketSets.platformsFor(category),
     val minPrice: Money? = null,
     val maxPrice: Money? = null,
+    // Which conditions are being looked at. Null or empty means every one of them. Any set is
+    // allowed, because any set is a real question: new and used but not for-parts, refurbished
+    // only, for-parts only. It was a three-way switch (new / used / any) where "used" meant
+    // "anything that is not new", so a listing sold for parts could not be told from a working
+    // one, and asking for two of the eight was not expressible at all.
     val condition: List<Condition>? = null,
+    /** Whether listings whose market never said what condition they are in are shown. */
+    val conditionUnstated: Boolean = true,
     // How the results are ordered. Part of the search rather than of the screen showing it, so
     // reopening a saved search restores the order it was left in.
     val sort: SortMode? = null,

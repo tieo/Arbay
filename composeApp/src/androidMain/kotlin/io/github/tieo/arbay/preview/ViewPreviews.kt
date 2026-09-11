@@ -58,7 +58,14 @@ fun FiltersPreview() = inPlace {
     FiltersSheet(
         priceMin = 120f, priceMax = 1400f, priceRange = 200f..900f,
         onPriceRange = {}, onPriceCommitted = {},
-        condition = "USED", onCondition = {}, newCount = 3, usedCount = 9,
+        conditions = setOf(io.github.tieo.arbay.model.Condition.USED),
+        onConditions = {}, unstatedCondition = true, onUnstatedCondition = {},
+        conditionCounts = mapOf(
+            io.github.tieo.arbay.model.Condition.NEW to 3,
+            io.github.tieo.arbay.model.Condition.USED to 9,
+            io.github.tieo.arbay.model.Condition.PARTS_ONLY to 2,
+            null to 4,
+        ),
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = PreviewData.marketChoices,
         shownMarkets = emptySet(), shownCountries = emptySet(), onOpenMarkets = {},

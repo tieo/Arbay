@@ -236,10 +236,18 @@ class SavedSearchMonitor(
             .filter { it.enabled }
             .flatMap { sf ->
                 freshListings
-                    .filter { matchesSubfilter(it, sf) && worthInterrupting(
-                        it,
-                        product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN),
-                    ) }
+                    .filter {
+                        // A notification is an interruption, so it has to be about the thing that
+                        // was searched for, not merely about something the market chose to answer
+                        // with. Where the search's own words are written by nobody, everything a
+                        // market sends is kept for the screen — and none of it is worth waking
+                        // someone for.
+                        RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) &&
+                            matchesSubfilter(it, sf) && worthInterrupting(
+                            it,
+                            product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN),
+                        )
+                    }
                     .map { sf to it }
             }
         if (subfilterMatches.isNotEmpty()) {

@@ -302,8 +302,14 @@ private fun Filters(
     io.github.tieo.arbay.ui.screen.FiltersSheet(
         priceMin = 120f, priceMax = priceMax, priceRange = 200f..900f,
         onPriceRange = {}, onPriceCommitted = {},
-        condition = if (active > 0) "USED" else null, onCondition = {},
-        newCount = if (markets.isEmpty()) 0 else 3, usedCount = if (markets.isEmpty()) 0 else 9,
+        conditions = if (active > 0) setOf(io.github.tieo.arbay.model.Condition.USED) else emptySet(),
+        onConditions = {}, unstatedCondition = true, onUnstatedCondition = {},
+        conditionCounts = if (markets.isEmpty()) emptyMap() else mapOf(
+            io.github.tieo.arbay.model.Condition.NEW to 3,
+            io.github.tieo.arbay.model.Condition.USED to 9,
+            io.github.tieo.arbay.model.Condition.PARTS_ONLY to 2,
+            null to 4,
+        ),
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = markets,
         shownMarkets = shownMarkets, shownCountries = shownCountries, onOpenMarkets = {},

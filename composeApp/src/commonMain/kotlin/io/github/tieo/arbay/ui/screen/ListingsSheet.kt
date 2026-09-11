@@ -116,7 +116,8 @@ private data class ResultsSheetUiSnapshot(
     val showFilters: Boolean,
     val showPrice: Boolean,
     val showMarkets: Boolean,
-    val conditionFilter: String?,
+    val conditions: List<String>,
+    val unstatedCondition: Boolean,
     val priceRangeStart: Float,
     val priceRangeEnd: Float,
 )
@@ -243,15 +244,14 @@ fun ListingsSheet(
         val hi = savedHigh?.coerceIn(priceMin, priceMax)?.coerceAtLeast(lo) ?: priceMax
         mutableStateOf(lo..hi)
     }
-    // The condition and the order are part of the saved search, so they open where they were left.
-    var conditionFilter by remember(savedFilters) {
-        mutableStateOf(
-            when {
-                savedFilters?.condition?.contains(Condition.NEW) == true -> "NEW"
-                savedFilters?.condition?.any { it != Condition.NEW } == true -> "USED"
-                else -> null
-            },
-        )
+    // The conditions and the order are part of the saved search, so they open where they were left.
+    // Any set of conditions is allowed, since any set is a real question: new and used but not
+    // for-parts, refurbished only, for-parts only.
+    var conditions by remember(savedFilters) {
+        mutableStateOf(savedFilters?.condition?.toSet() ?: emptySet())
+    }
+    var unstatedCondition by remember(savedFilters) {
+        mutableStateOf(savedFilters?.conditionUnstated ?: true)
     }
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
@@ -265,7 +265,8 @@ fun ListingsSheet(
                 showFilters = showFilters,
                 showPrice = showPrice,
                 showMarkets = showMarkets,
-                conditionFilter = conditionFilter,
+                conditions = conditions.map { it.name },
+                unstatedCondition = unstatedCondition,
                 priceRangeStart = priceRange.start,
                 priceRangeEnd = priceRange.endInclusive,
             ),
@@ -328,9 +329,15 @@ fun ListingsSheet(
     // the backlog it names is gone the moment the search is opened, so a remembered "new only"
     // would come back as a filter matching nothing.
     var newOnly by remember(newListingIds) { mutableStateOf(false) }
-    val displayedActiveListings = remember(activeListings, conditionFilter, newOnly, newListingIds) {
+    // How many of the fetched listings are in each condition, null keyed for the ones whose
+    // market never said. The chips are drawn from this, so a condition nothing is in is not
+    // offered and "for parts (3)" says how much of the screen it is.
+    val conditionCounts = remember(activeListings) {
+        activeListings.groupingBy { it.condition }.eachCount()
+    }
+    val displayedActiveListings = remember(activeListings, conditions, unstatedCondition, newOnly, newListingIds) {
         activeListings
-            .filter { conditionMatches(conditionFilter, it.condition) }
+            .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
             .filter { !newOnly || it.id in newListingIds }
     }
 
@@ -347,9 +354,11 @@ fun ListingsSheet(
         val outOfBand = allActiveListings.filterNot {
             !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name))
         }
-        val wrongCondition = activeListings.filterNot { conditionMatches(conditionFilter, it.condition) }
+        val wrongCondition = activeListings.filterNot { conditionMatches(conditions, unstatedCondition, it.condition) }
         val notNew = if (!newOnly) emptyList()
-            else activeListings.filter { conditionMatches(conditionFilter, it.condition) && it.id !in newListingIds }
+            else activeListings.filter {
+                conditionMatches(conditions, unstatedCondition, it.condition) && it.id !in newListingIds
+            }
         buildList {
             if (banned.isNotEmpty()) add(HiddenGroup(
                 label = "you hid",
@@ -383,10 +392,17 @@ fun ListingsSheet(
             ))
             if (wrongCondition.isNotEmpty()) add(HiddenGroup(
                 label = "the other condition",
-                why = "You are looking at " + (conditionFilter?.lowercase() ?: "one condition") + " only.",
+                why = "You are looking at " +
+                    (conditions.takeIf { it.isNotEmpty() }
+                        ?.sortedBy { it.ordinal }?.joinToString(", ") { it.label.lowercase() }
+                        ?: "only what states its condition") + ".",
                 listings = wrongCondition,
                 undoLabel = "Show both",
-                undo = { conditionFilter = null; persistFilters { it.copy(condition = null) } },
+                undo = {
+                    conditions = emptySet()
+                    unstatedCondition = true
+                    persistFilters { it.copy(condition = null, conditionUnstated = true) }
+                },
             ))
             if (notNew.isNotEmpty()) add(HiddenGroup(
                 label = "not new since you last looked",
@@ -474,7 +490,7 @@ fun ListingsSheet(
     }
     val activeFilterCount = listOf(
         priceFiltered,
-        conditionFilter != null,
+        conditions.isNotEmpty() || !unstatedCondition,
         sortMode != SortMode.BEST_MATCH,
         shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
@@ -484,11 +500,11 @@ fun ListingsSheet(
     // Built from the offers alone, the list was the markets that happened to find something: a
     // reader could not tell mobile.de had been asked and had nothing from mobile.de never having
     // been asked at all, and the two mean opposite things about the thing being searched for.
-    val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditionFilter, money) {
+    val marketChoices = remember(marketBasis, platformStatuses, platforms, loading, priceRange, conditions, unstatedCondition, money) {
         val offered = marketBasis
             .filter { !it.sold }
             .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name)) }
-            .filter { conditionMatches(conditionFilter, it.condition) }
+            .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
         val nearest = offered
             .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }
             .groupBy({ it.first }, { it.second })
@@ -1150,21 +1166,19 @@ fun ListingsSheet(
                 priceRange = priceRange,
                 onPriceRange = { priceRange = it },
                 onPriceCommitted = { persistPriceRange() },
-                condition = conditionFilter,
-                onCondition = { chosen ->
-                    conditionFilter = chosen
+                conditions = conditions,
+                onConditions = { chosen ->
+                    conditions = chosen
                     persistFilters { query ->
-                        query.copy(
-                            condition = when (chosen) {
-                                "NEW" -> listOf(Condition.NEW)
-                                "USED" -> listOf(Condition.USED, Condition.REFURBISHED)
-                                else -> null
-                            },
-                        )
+                        query.copy(condition = chosen.toList().takeIf { it.isNotEmpty() })
                     }
                 },
-                newCount = newListings.size,
-                usedCount = usedListings.size,
+                unstatedCondition = unstatedCondition,
+                onUnstatedCondition = { keep ->
+                    unstatedCondition = keep
+                    persistFilters { query -> query.copy(conditionUnstated = keep) }
+                },
+                conditionCounts = conditionCounts,
                 sort = sortMode,
                 onSort = { mode ->
                     if (mode == SortMode.NEAREST) detectAndSortNearest() else listingViewModel.setSortMode(mode)
@@ -1195,14 +1209,15 @@ fun ListingsSheet(
                 activeCount = activeFilterCount,
                 onClearAll = {
                     priceRange = priceMin..priceMax
-                    conditionFilter = null
+                    conditions = emptySet()
+                    unstatedCondition = true
                     listingViewModel.showMarkets(emptySet())
                     listingViewModel.showCountries(emptySet())
                     listingViewModel.setSortMode(SortMode.BEST_MATCH)
                     activeBlockedTerms.forEach(unblockWord)
                     persistFilters {
                         it.withPriceRangeEur(null, null).copy(
-                            condition = null, sort = null,
+                            condition = null, conditionUnstated = true, sort = null,
                             showOnlyMarkets = emptySet(), showOnlyCountries = emptySet(),
                         )
                     }
@@ -1224,7 +1239,11 @@ fun ListingsSheet(
                 minUsedPrice = minUsedPrice,
                 medianUsedPrice = medianUsedPrice,
                 usedCount = usedListings.size,
-                conditionFilter = conditionFilter,
+                conditionFilter = when {
+                    conditions == setOf(Condition.NEW) -> "NEW"
+                    conditions.isNotEmpty() && Condition.NEW !in conditions -> "USED"
+                    else -> null
+                },
                 // Narrowing happens in one place. Tapping a condition here goes there rather than
                 // being a second switch for the same filter, which is how "3 active" could mean
                 // something set on a screen the reader was not on.
