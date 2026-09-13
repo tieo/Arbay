@@ -10,7 +10,11 @@ import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
 class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs {
-    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX)
+    override val nativeCriteria = setOf(
+        FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
+        FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
+        FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.PRICE,
+    )
 
     override val platformId = PlatformId.KLEINANZEIGEN
 
@@ -150,9 +154,16 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
         // single-select, so only a single chosen fuel maps natively; multi-select falls back to
         // post-filtering.
         val cf = query.carFilters
+        val criteria = query.carCriteria
         val attrFilters = KleinanzeigenUrlBuilder.carAttrFilters(
             fuel = cf?.fuels?.singleOrNull()?.let { kleinanzeigenFuel(it) },
-            gearbox = query.carCriteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
+            gearbox = criteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
+            minYear = criteria.firstRegFromYear,
+            maxYear = criteria.firstRegToYear,
+            minMileageKm = criteria.minMileageKm,
+            maxMileageKm = criteria.maxMileageKm,
+            minPowerKw = criteria.minPowerKw,
+            maxPowerKw = criteria.maxPowerKw,
         )
 
         val endPage = query.startPage + maxPages - 1

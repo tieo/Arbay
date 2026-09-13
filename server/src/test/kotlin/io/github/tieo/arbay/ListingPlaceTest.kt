@@ -74,6 +74,23 @@ class ListingPlaceTest {
     }
 
     @Test
+    fun `a market answering with another model of the same make keeps nothing`() {
+        // mobile.de answered a Volkswagen Crafter search with thirty-four Volkswagen Tiguans, each
+        // meeting every criterion the search carried. "Crafter" was written by none of them, so it
+        // was not required of any of them, and "Volkswagen" — written by all of them — was the
+        // only word left to match.
+        val query = SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES)
+        val tiguans = (1..6).map { listing("Volkswagen Tiguan Allspace 2.0 TDI 4Motion", id = "t$it") }
+        val partitioned = RelevanceFilter.partition(tiguans, query)
+        assertEquals(emptyList(), partitioned.kept.map { it.id })
+        assertTrue(partitioned.dropped.all { it.reason == DropReason.OFF_TARGET })
+
+        // The same answer with the van in it keeps the van and nothing else.
+        val mixed = tiguans + listing("Volkswagen Crafter 35 Kasten Hochdach", id = "van")
+        assertEquals(listOf("van"), RelevanceFilter.partition(mixed, query).kept.map { it.id })
+    }
+
+    @Test
     fun `a blocked number is that number, not the start of a bigger one`() {
         // Blocked words on a real saved search: pritsche, 50, 30 — the Crafter 30 and 50 being
         // other vans than the 35 wanted. Normalising punctuation away split "30.000 km" into a

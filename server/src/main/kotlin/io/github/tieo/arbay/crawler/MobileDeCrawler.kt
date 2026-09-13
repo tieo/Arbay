@@ -7,7 +7,12 @@ import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
 class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation {
-    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+    override val nativeCriteria = setOf(
+        FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
+        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
+        FiltersAtTheSource.Criterion.GEARBOX, FiltersAtTheSource.Criterion.FUEL,
+        FiltersAtTheSource.Criterion.BODY, FiltersAtTheSource.Criterion.SELLER,
+    )
 
     override val platformId = PlatformId.MOBILE_DE
 
@@ -25,10 +30,20 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             isVanQuery(resolved, query.toCarFilters()) -> listOf("Car", "VanUpTo7500")
             else -> listOf("Car")
         }
-        val q = if (resolved != null) {
-            listOfNotNull(resolved.makeSlug, resolved.modelSlug).joinToString(" ").encodeUrl()
-        } else {
-            query.positiveText.encodeUrl()
+        // The model is chosen by this site's own numbers where it knows them, since its free-text
+        // field searches the seller's description rather than the model: with criteria set and the
+        // words in `q`, a Crafter search came back as thirty-four Tiguans that all met the
+        // criteria. The words stay only as the fallback for a model the site does not list.
+        val selection = resolved?.let {
+            MobileDeCatalog.modelSelection(
+                it.makeSlug.replace("-", " "),
+                it.modelSlug?.replace("-", " "),
+            )
+        }
+        val q = when {
+            selection != null -> ""
+            resolved != null -> listOfNotNull(resolved.makeSlug, resolved.modelSlug).joinToString(" ").encodeUrl()
+            else -> query.positiveText.encodeUrl()
         }
 
         // Every page is a slow stealth browser navigation, so keep mobile.de deliberately shallow:
@@ -46,7 +61,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             // enforce the request cutoff here too — it's the most block-sensitive platform.
             if (RequestMonitor.overBudget(platform))
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
-            val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true&s=Car&sb=rel&vc=$vc&q=$q${filterParams(query)}"
+            val model = selection?.let { "&ms=${it.replace(";", "%3B")}%3B%3B" } ?: ""
+            val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true" +
+                "&s=Car&sb=rel&vc=$vc$model&q=$q${filterParams(query)}"
             RequestMonitor.recordTier(platform, "Browser")
             var pageNo = 0
             val vcStart = System.currentTimeMillis()
@@ -98,7 +115,51 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 Transmission.MANUAL -> append("&tr=MANUAL_GEAR")
                 null -> {}
             }
+            // Names and values taken from this site's own filter definition, which it ships inside
+            // the search page: `dt` Antriebsart, `ft` Kraftstoffart, `c` Fahrzeugtyp, `door`,
+            // `sc` Sitzplätze, `emc` Schadstoffklasse, `st` Anbieter. Everything the site can
+            // narrow itself is narrowed there, so the pages fetched are pages of candidates.
+            when (f.drivetrain) {
+                Drivetrain.AWD -> append("&dt=ALL_WHEEL")
+                Drivetrain.FWD -> append("&dt=FRONT")
+                Drivetrain.RWD -> append("&dt=REAR")
+                null -> {}
+            }
+            f.fuels.forEach { fuel -> siteFuel(fuel)?.let { append("&ft=$it") } }
+            f.bodyTypes.mapNotNull { siteBody(it) }.distinct().forEach { append("&c=$it") }
+            f.minDoors?.let { doors ->
+                append("&door=" + if (doors >= 6) "SIX_OR_SEVEN" else if (doors >= 4) "FOUR_OR_FIVE" else "TWO_OR_THREE")
+            }
+            f.minSeats?.let { append("&sc=$it:") }
+            f.minEmissionEuro?.let { if (it in 1..7) append("&emc=EURO$it") }
+            f.sellerType?.let { append(if (it == SellerType.PRIVATE) "&st=FSBO" else "&st=DEALER") }
         }
+    }
+
+    /** This site's own fuel names. */
+    private fun siteFuel(fuel: Fuel): String? = when (fuel) {
+        Fuel.PETROL -> "PETROL"
+        Fuel.DIESEL -> "DIESEL"
+        Fuel.ELECTRIC -> "ELECTRICITY"
+        Fuel.HYBRID_PETROL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "HYBRID"
+        Fuel.HYBRID_DIESEL -> "HYBRID_DIESEL"
+        Fuel.LPG -> "LPG"
+        Fuel.CNG -> "CNG"
+        Fuel.HYDROGEN -> "HYDROGENIUM"
+        Fuel.ETHANOL -> "ETHANOL"
+        Fuel.OTHER -> null
+    }
+
+    /** This site's own vehicle types. */
+    private fun siteBody(body: BodyType): String? = when (body) {
+        BodyType.SMALL_CAR -> "SmallCar"
+        BodyType.SEDAN -> "Limousine"
+        BodyType.ESTATE -> "EstateCar"
+        BodyType.SUV, BodyType.PICKUP -> "OffRoad"
+        BodyType.COUPE -> "SportsCar"
+        BodyType.CONVERTIBLE -> "Cabrio"
+        BodyType.VAN, BodyType.MINIVAN, BodyType.TRANSPORTER -> "Van"
+        BodyType.OTHER -> "OtherCar"
     }
 
     /** Whether this query is after a large van/transporter, which mobile.de lists under the separate

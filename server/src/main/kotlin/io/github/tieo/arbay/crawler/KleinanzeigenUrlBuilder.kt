@@ -129,15 +129,44 @@ object KleinanzeigenUrlBuilder {
         return "$BASE/s-autos/${segments.joinToString("/")}/$categorySuffix"
     }
 
-    /** Kleinanzeigen `autos.*_s` attribute filter segments derived from the car filters,
-     *  for the dimensions the site supports single-select at the source. */
+    /**
+     * Kleinanzeigen's own car attribute filters, derived from the search's criteria.
+     *
+     * The site filters on all of these itself, which decides what the crawl is even made of:
+     * asked for "Volkswagen Crafter" alone it answers with 74 vans of every year, size and engine,
+     * of which one survived a real set of criteria. Asked with the criteria in the URL it answers
+     * with vans that already match — measured live: 582 results from 2018 on, 471 under 150.000 km,
+     * 389 from 150 PS up, and ten matching vans on the first page instead of one in three pages.
+     *
+     * Ranges are written `name:min,max` with either end allowed to be empty. Power is in PS here,
+     * as the site states it, so a filter held in kW is converted.
+     */
     fun carAttrFilters(
         fuel: String? = null,      // "benzin" | "diesel" | "elektro" | "hybrid" | "lpg" | "cng"
         gearbox: String? = null,   // "automatik" | "manuell" | "halbautomatik"
+        minYear: Int? = null,
+        maxYear: Int? = null,
+        minMileageKm: Int? = null,
+        maxMileageKm: Int? = null,
+        minPowerKw: Int? = null,
+        maxPowerKw: Int? = null,
     ): List<String> = buildList {
         fuel?.let { add("autos.fuel_s:$it") }
         gearbox?.let { add("autos.shift_s:$it") }
+        range("autos.ez_i", minYear, maxYear)?.let { add(it) }
+        range("autos.km_i", minMileageKm, maxMileageKm)?.let { add(it) }
+        // Rounded outwards, so the conversion itself never excludes a van at the boundary.
+        range(
+            "autos.power_i",
+            minPowerKw?.let { kotlin.math.floor(it * KW_TO_PS).toInt() },
+            maxPowerKw?.let { kotlin.math.ceil(it * KW_TO_PS).toInt() },
+        )?.let { add(it) }
     }
+
+    private const val KW_TO_PS = 1.35962
+
+    private fun range(name: String, min: Int?, max: Int?): String? =
+        if (min == null && max == null) null else "$name:${min ?: ""},${max ?: ""}"
 
     /**
      * Encode a city name as a URL-safe slug for Kleinanzeigen path segments.

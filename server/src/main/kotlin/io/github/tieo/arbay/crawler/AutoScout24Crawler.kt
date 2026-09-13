@@ -12,7 +12,12 @@ class AutoScout24Crawler(
     private val countries: List<String> = EUROPE,
     override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
 ) : Crawler, FetchesEveryPage, FiltersAtTheSource, KnowsLocation {
-    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+    override val nativeCriteria = setOf(
+        FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
+        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
+        FiltersAtTheSource.Criterion.GEARBOX, FiltersAtTheSource.Criterion.FUEL,
+        FiltersAtTheSource.Criterion.BODY, FiltersAtTheSource.Criterion.SELLER,
+    )
 
 
     private val countryParam: String get() = countries.joinToString("%2C")
@@ -89,6 +94,9 @@ class AutoScout24Crawler(
             append("https://www.autoscout24.de/lst/")
             append(carQuery.makeSlug)
             carQuery.modelSlug?.let { append("/").append(it) }
+            // Four-wheel drive is an equipment slug here rather than a parameter — the site's own
+            // "Volkswagen Crafter Allrad" link — and it narrows 1625 vans to 114 at the source.
+            if (query.carCriteria.drivetrain == Drivetrain.AWD) append("/eq_allrad")
         }
 
         return paginate(query) { page ->
@@ -158,12 +166,51 @@ class AutoScout24Crawler(
             else ExchangeRates.convert(min.amount, min.currency.name, "EUR") / 100
             append("&pricefrom=$eur")
         }
+        query.carCriteria.minMileageKm?.let { append("&kmfrom=$it") }
         query.carCriteria.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
+        query.carCriteria.maxPowerKw?.let { append("&powertype=kw&powerto=$it") }
         when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&gear=A")
             Transmission.MANUAL -> append("&gear=M")
             null -> {}
         }
+        // Everything below is filtered by the site itself, each verified against its own result
+        // count: asking for one fuel, one body, a door or seat count, an emission class or a kind
+        // of seller narrows what comes back instead of narrowing it here afterwards. A crawl that
+        // fetches what the criteria already rule out spends the page budget on listings that are
+        // thrown away — a real search returned 74 vans and kept one.
+        query.carCriteria.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel=$it") } }
+        query.carCriteria.bodyTypes.singleOrNull()?.let { body -> siteBody(body)?.let { append("&body=$it") } }
+        query.carCriteria.minDoors?.let { append("&doorfrom=$it") }
+        query.carCriteria.minSeats?.let { append("&seatsfrom=$it") }
+        query.carCriteria.minEmissionEuro?.let { append("&emclass=$it") }
+        query.carCriteria.sellerType?.let {
+            append(if (it == SellerType.PRIVATE) "&custtype=P" else "&custtype=D")
+        }
+    }
+
+    /** This site's own fuel letters. Measured on its result counts: D keeps the diesels, B the
+     *  petrol ones, E the electric. */
+    private fun siteFuel(fuel: Fuel): String? = when (fuel) {
+        Fuel.DIESEL -> "D"
+        Fuel.PETROL -> "B"
+        Fuel.ELECTRIC -> "E"
+        Fuel.LPG -> "L"
+        Fuel.CNG -> "C"
+        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "2"
+        else -> null
+    }
+
+    /** This site's own body-type numbers. */
+    private fun siteBody(body: BodyType): String? = when (body) {
+        BodyType.SMALL_CAR -> "1"
+        BodyType.CONVERTIBLE -> "2"
+        BodyType.COUPE -> "3"
+        BodyType.SUV -> "4"
+        BodyType.ESTATE -> "5"
+        BodyType.SEDAN -> "6"
+        BodyType.VAN, BodyType.MINIVAN, BodyType.TRANSPORTER -> "7"
+        BodyType.OTHER, BodyType.PICKUP -> null
     }
 
     companion object {

@@ -680,9 +680,22 @@ object RelevanceFilter {
                 isASize(token) || token.all { it.isDigit() } || isACompound(token) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
-            parsed.copy(positiveTokens = required)
+            // A requirement made only of words the whole answer carries decides nothing. Asked for
+            // a Volkswagen Crafter, mobile.de answered with thirty-four Volkswagen Tiguans:
+            // "crafter" is written by none of them, so it was dropped from the requirement, and
+            // every Tiguan then matched the one word left perfectly. Where that is the shape of an
+            // answer, the word the answer does not write is exactly the word that has to be
+            // required — it is the only one that can tell the thing from what came instead.
+            // A market that simply omits a category word is a different shape: there the other
+            // words of the search are not universal either, since they name the thing.
+            val decidesNothing = required.isNotEmpty() &&
+                required.all { shareCarrying(it) >= EVERY_LISTING_SAYS_IT }
+            val telling = if (!decidesNothing) emptyList() else
+                parsed.positiveTokens.filter { it !in required && shareCarrying(it) < EVERY_LISTING_SAYS_IT }
+            parsed.copy(positiveTokens = required + telling)
         }
         val sellersWriteTheseWords = asked.positiveTokens.isNotEmpty() || asked.orGroups.isNotEmpty()
+
 
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
@@ -758,6 +771,10 @@ object RelevanceFilter {
 
     /** How much of a multi-word search a listing has to carry: three of four words, four of five. */
     private const val ENOUGH_OF_THE_SEARCH = 0.76
+
+    /** From this share of a market's answer upwards, a word says nothing about which listing in it
+     *  is the thing searched for. */
+    private const val EVERY_LISTING_SAYS_IT = 0.95
 
     /**
      * Whether a market answered a different question than the one asked: it returned a page of

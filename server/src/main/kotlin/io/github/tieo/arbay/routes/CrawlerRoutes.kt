@@ -53,6 +53,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
@@ -401,7 +402,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // pages it defends hardest, which is no use to anyone fixing a parser against its
             // markup. `prime` is the page to arrive from, the way a real reader would.
             val prime = call.request.queryParameters["prime"]
-            val html = if (call.request.queryParameters["browser"]?.toBooleanStrictOrNull() == true) {
+            // mobile.de answers a plain client, TLS impersonation and the ordinary browser tier
+            // with nothing at all — it is reachable only through the stealth sidecar its crawler
+            // uses, which is also the only way to check one of its filter parameters by hand.
+            val html = if (call.request.queryParameters["stealth"]?.toBooleanStrictOrNull() == true) {
+                val marker = call.request.queryParameters["wait"] ?: "result-listing"
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    io.github.tieo.arbay.crawler.StealthBrowserClient.fetchRendered(url, marker, waitSeconds = 40)
+                }
+            } else if (call.request.queryParameters["browser"]?.toBooleanStrictOrNull() == true) {
                 io.github.tieo.arbay.crawler.fetchWithFallback(
                     io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
                     primeUrl = prime, browserOnly = true,
