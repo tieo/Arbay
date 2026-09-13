@@ -95,6 +95,7 @@ kotlin {
         }
 
         commonTest.dependencies {
+            implementation(libs.kotlinx.coroutinesTest)
             implementation(libs.kotlin.test)
         }
         jvmMain.dependencies {

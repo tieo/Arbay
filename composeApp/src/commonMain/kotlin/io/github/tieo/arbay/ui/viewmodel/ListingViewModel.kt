@@ -177,6 +177,15 @@ class ListingViewModel(
         return blocked.none { it.isNotBlank() && hay.contains(" " + wordsOnly(it) + " ") }
     }
 
+    // How the results are ordered. Declared here because the ordering is part of the flow that
+    // produces the list below, and a flow cannot read a field declared after it.
+    private val _sortMode = MutableStateFlow(SortMode.BEST_MATCH)
+    val sortMode: StateFlow<SortMode> = _sortMode
+    // Kept for the callers that only ask "are we nearest-first?".
+    val sortByDistance: StateFlow<Boolean> = _sortMode
+        .map { it == SortMode.NEAREST }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /**
      * Everything that survives every filter except the market and country picks.
      *
@@ -185,15 +194,21 @@ class ListingViewModel(
      * from the list and a second one could never be picked.
      */
     val marketBasis: StateFlow<List<Listing>> =
-        combine(_allListings, _bannedIds, _blockedTerms) { all, banned, blocked ->
-            all.filter { kept(it, banned, blocked) }
+        // The order is part of reading the list, so it is applied here rather than at each place
+        // that writes one — a saved search opens on its stored listings, two fallback paths assign
+        // their own, and every one of those skipped the sort. Nearest-first then showed a van 489
+        // km away third in a list that was otherwise ordered by distance, because that one listing
+        // had arrived after the last sort.
+        combine(_allListings, _bannedIds, _blockedTerms, _sortMode) { all, banned, blocked, _ ->
+            sortListings(all.filter { kept(it, banned, blocked) })
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             // The first value, before the flow above has run once. Handed a sample and words to
             // block, the blocking has to be in that first value too, or a single frame shows
-            // everything and a render of "the filters admit none" is a picture of the opposite.
-            sample.filter { kept(it, emptySet(), sampleBlocked) },
+            // everything and a render of "the filters admit none" is a picture of the opposite —
+            // and so does the order, or that frame shows an unsorted list.
+            sortListings(sample.filter { kept(it, emptySet(), sampleBlocked) }),
         )
 
     val listings: StateFlow<List<Listing>> = combine(marketBasis, _marketFilter) { kept, filter ->
@@ -450,12 +465,6 @@ class ListingViewModel(
     // results nearest-first.
     private var userLat: Double? = DevicePosition.latitude
     private var userLon: Double? = DevicePosition.longitude
-    private val _sortMode = MutableStateFlow(SortMode.BEST_MATCH)
-    val sortMode: StateFlow<SortMode> = _sortMode
-    // Kept for the callers that only ask "are we nearest-first?".
-    val sortByDistance: StateFlow<Boolean> = _sortMode
-        .map { it == SortMode.NEAREST }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Whether a position is known to measure from. Nearest-first has nothing to sort by without
      *  one, and every distance on every card comes from it. */
@@ -467,8 +476,9 @@ class ListingViewModel(
         userLon = lon
         _hasPosition.value = lat != null && lon != null
         // Measure the results already in hand against the new position. No crawl: the server
-        // resolved each listing's coordinates when it delivered them.
-        _allListings.value = sortListings(_allListings.value)
+        // resolved each listing's coordinates when it delivered them. Re-emitting the same
+        // listings is what re-runs the ordering below, which is where distances are worked out.
+        _allListings.value = _allListings.value.toList()
     }
 
     /** Distance from the device to each listing, computed locally from the coordinates the server
@@ -485,7 +495,6 @@ class ListingViewModel(
 
     fun setSortMode(mode: SortMode) {
         _sortMode.value = mode
-        _allListings.value = sortListings(_allListings.value)
     }
 
     private fun priceOf(listing: Listing): Long =
@@ -679,9 +688,9 @@ class ListingViewModel(
                             // Reconcile: replace this platform's streamed preview listings with its
                             // authoritative detail-enriched set, so any preview item the final filter
                             // dropped disappears and enriched specs replace the card-only ones.
-                            _allListings.value = sortListings(
+                            _allListings.value =
                                 (_allListings.value.filterNot { it.platformId.name == event.platform } + event.listings)
-                                    .distinctBy { it.id })
+                                    .distinctBy { it.id }
                             // Same reconcile for what this market had removed, so re-crawling a
                             // market replaces its drops instead of stacking a second copy.
                             _droppedBySearch.value =
@@ -726,8 +735,8 @@ class ListingViewModel(
                             // page of listings (pipelined). Append the page live so results stream in
                             // rather than landing all at once when the platform finishes.
                             if (event.listings.isNotEmpty()) {
-                                _allListings.value = sortListings(
-                                    (_allListings.value + event.listings).distinctBy { it.id })
+                                _allListings.value =
+                                    (_allListings.value + event.listings).distinctBy { it.id }
                             }
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)
