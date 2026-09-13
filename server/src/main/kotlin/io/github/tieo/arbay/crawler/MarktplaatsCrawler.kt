@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
 /**
@@ -38,12 +39,43 @@ class MarktplaatsCrawler(
         } else {
             query.positiveText
         }
-        val base = "$host/q/${text.encodeUrl()}/"
+        // A car search goes to the cars category with the criteria this site filters itself,
+        // rather than to the whole marketplace: "volkswagen crafter" site-wide is 6851 results,
+        // almost all of them parts, and 1059 inside the category. Verified on this site's own
+        // counts: the gearbox is stated by 1040 of those 1059 and the fuel by 1047, so both are
+        // asked for; a drive type by 796, so that one waits for a search that excludes unstated
+        // specs. The filters are path segments, `/f/<name>/<id>/`, taken from its own facet links.
+        val filterPath = if (car == null || !host.contains("marktplaats")) "" else buildString {
+            val criteria = query.carCriteria
+            when (criteria.transmission) {
+                Transmission.AUTOMATIC -> append("f/automaat/534/")
+                Transmission.MANUAL -> append("f/handgeschakeld/535/")
+                null -> {}
+            }
+            criteria.fuels.singleOrNull()?.let { fuel ->
+                when (fuel) {
+                    Fuel.DIESEL -> append("f/diesel/474/")
+                    Fuel.ELECTRIC -> append("f/elektrisch/11756/")
+                    else -> {}
+                }
+            }
+            if (criteria.strictUnknown) when (criteria.drivetrain) {
+                Drivetrain.AWD -> append("f/vierwielaandrijving/13945/")
+                Drivetrain.FWD -> append("f/voorwielaandrijving/13943/")
+                Drivetrain.RWD -> append("f/achterwielaandrijving/13944/")
+                null -> {}
+            }
+        }
+        val base = if (car != null && host.contains("marktplaats"))
+            "$host/l/auto-s/$filterPath" + "q/${text.encodeUrl()}/"
+        else "$host/q/${text.encodeUrl()}/"
 
+        val carsCategory = car != null && host.contains("marktplaats")
         return paginate(query) { page ->
             val url = if (page <= 1) base else "${base}p/$page/"
             val html = CurlCffiClient.fetch(url, primeUrl = if (page <= 1) host else null)
-            parseSearchResults(html, requireVehicleSpecs = car != null)
+            if (carsCategory) parseCarsCategory(html)
+            else parseSearchResults(html, requireVehicleSpecs = car != null)
         }
     }
 
@@ -78,6 +110,86 @@ class MarktplaatsCrawler(
      *  these classifieds: a vehicle ad always carries the row, a part ("Roetfilter", "ABS Pomp",
      *  "Expansievat van een Crafter") never does.
      */
+    /**
+     * The cars category's own listing data, out of the page's data island.
+     *
+     * That page draws a different card from the marketplace-wide search — the HTML parser below
+     * finds nothing in it — and it carries far more than the card ever did: the site's own
+     * `constructionYear`, `mileage`, `fuel` and `transmission` attributes, which are stated values
+     * rather than numbers read out of a title, plus the seller's coordinates.
+     */
+    internal fun parseCarsCategory(html: String): List<Listing> {
+        val island = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
+        val root = runCatching { Json { ignoreUnknownKeys = true }.parseToJsonElement(island) }
+            .getOrNull() ?: return emptyList()
+        val listings = mutableListOf<JsonObject>()
+        fun walk(element: JsonElement) {
+            when (element) {
+                is JsonObject -> element.forEach { (key, value) ->
+                    if (key == "listings" && value is JsonArray) {
+                        value.forEach { entry ->
+                            (entry as? JsonObject)?.takeIf { it["itemId"] != null }?.let { listings += it }
+                        }
+                    }
+                    walk(value)
+                }
+                is JsonArray -> element.forEach { walk(it) }
+                else -> {}
+            }
+        }
+        walk(root)
+        val now = Clock.System.now()
+        return listings.distinctBy { it["itemId"]?.jsonPrimitive?.content }.mapNotNull { item ->
+            val id = item["itemId"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val title = item["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val cents = item["priceInfo"]?.jsonObject?.get("priceCents")?.jsonPrimitive?.longOrNull
+                ?: return@mapNotNull null
+            if (cents <= 0L) return@mapNotNull null
+            val path = item["vipUrl"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val attributes = item["attributes"]?.jsonArray.orEmpty().mapNotNull { entry ->
+                val obj = entry as? JsonObject ?: return@mapNotNull null
+                val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val value = obj["value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                key to value
+            }.toMap()
+            val vehicle = VehicleInfo(
+                firstRegYear = attributes["constructionYear"]?.toIntOrNull()?.takeIf { it in 1950..2035 },
+                mileageKm = attributes["mileage"]?.replace(".", "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
+                fuel = Fuel.parse(attributes["fuel"]),
+                gearbox = when {
+                    attributes["transmission"]?.contains("utomaat", true) == true -> Transmission.AUTOMATIC
+                    attributes["transmission"]?.contains("andgeschakeld", true) == true -> Transmission.MANUAL
+                    else -> null
+                },
+            ).let { VehicleTextParser.verifiedByPresence(it) }
+            val place = item["location"]?.jsonObject
+            Listing(
+                id = "${platformId.name}:$id",
+                platformId = platformId,
+                externalId = id,
+                url = if (path.startsWith("http")) path else "$host$path",
+                title = title,
+                description = item["description"]?.jsonPrimitive?.contentOrNull,
+                price = Money(cents, Currency.EUR),
+                imageUrls = item["imageUrls"]?.jsonArray.orEmpty().mapNotNull { image ->
+                    image.jsonPrimitive.contentOrNull?.let { if (it.startsWith("//")) "https:$it" else it }
+                },
+                location = place?.let { where ->
+                    Location(
+                        city = where["cityName"]?.jsonPrimitive?.contentOrNull,
+                        country = where["countryAbbreviation"]?.jsonPrimitive?.contentOrNull,
+                        latitude = where["latitude"]?.jsonPrimitive?.doubleOrNull,
+                        longitude = where["longitude"]?.jsonPrimitive?.doubleOrNull,
+                    )
+                },
+                seller = item["sellerInformation"]?.jsonObject?.get("sellerName")?.jsonPrimitive?.contentOrNull
+                    ?.let { Seller(name = it) },
+                vehicle = vehicle.takeIf { it != VehicleInfo() },
+                scrapedAt = now,
+            )
+        }
+    }
+
     private fun parseSearchResults(html: String, requireVehicleSpecs: Boolean = false): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()

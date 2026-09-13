@@ -103,6 +103,19 @@ class OtomotoCrawler(
      * Parameter names use percent-encoded brackets (%5B / %5D) because otomoto returns
      * no __NEXT_DATA__ when raw "[" / "]" appear in the query string.
      */
+    /** This site's own fuel words. */
+    private fun siteFuel(fuel: Fuel): String? = when (fuel) {
+        Fuel.DIESEL -> "diesel"
+        Fuel.PETROL -> "petrol"
+        Fuel.ELECTRIC -> "electric"
+        Fuel.LPG -> "petrol-lpg"
+        Fuel.CNG -> "petrol-cng"
+        Fuel.HYBRID_PETROL, Fuel.MILD_HYBRID -> "hybrid"
+        Fuel.PLUGIN_HYBRID -> "plugin-hybrid"
+        Fuel.HYBRID_DIESEL -> "hybrid"
+        else -> null
+    }
+
     private fun filterParams(query: SearchQuery): String = buildString {
         fun enc(key: String, value: String) {
             if (isNotEmpty()) append("&")
@@ -128,6 +141,18 @@ class OtomotoCrawler(
             val cents = if (max.currency == siteCurrency) max.amount
             else ExchangeRates.convert(max.amount, max.currency.name, siteCurrency.name)
             enc("search[filter_float_price:to]", (cents / 100).toString())
+        }
+
+        query.carCriteria.minMileageKm?.let { enc("search[filter_float_mileage:from]", it.toString()) }
+        // Verified against this site's own counts, of 2334 Crafters: diesel 2220, so the fuel is
+        // asked for here. Four-wheel drive is one of its equipment flags rather than a drive type
+        // (`filter_enum_features=4x4`, 153 of them), which sellers tick or do not — so it waits
+        // for a search that excludes unstated specs, like every other flag of that kind.
+        query.carCriteria.fuels.singleOrNull()?.let { fuel ->
+            siteFuel(fuel)?.let { enc("search[filter_enum_fuel_type]", it) }
+        }
+        if (query.carCriteria.strictUnknown && query.carCriteria.drivetrain == Drivetrain.AWD) {
+            enc("search[filter_enum_features][0]", "4x4")
         }
 
         query.carCriteria.minPowerKw?.let { kw ->
