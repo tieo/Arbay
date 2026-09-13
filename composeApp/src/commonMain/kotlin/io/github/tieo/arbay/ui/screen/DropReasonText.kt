@@ -26,6 +26,9 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
     DropReason.TOO_FAR ->
         "Further from where this search is centred than it reaches. A listing whose market never " +
             "says where it is stays, since not knowing is not the same as being far."
+    DropReason.VEHICLE_CRITERIA ->
+        "It states something the vehicle criteria rule out. A listing that states nothing is kept " +
+            "instead, and marked unchecked for that criterion."
     DropReason.BLOCKED_WORD ->
         "Carries a word you blocked for this search. Drop the word in Filters to see these again."
     DropReason.IMPLAUSIBLE_PRICE ->

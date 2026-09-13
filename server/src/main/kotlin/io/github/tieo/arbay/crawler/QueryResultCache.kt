@@ -16,6 +16,12 @@ import java.util.concurrent.ConcurrentHashMap
  * Keyed on the query fields that change what a crawler fetches (text + filters), so two
  * searches that would hit the same URLs share an entry. Sold-only searches are not cached:
  * they feed price history and must stay live.
+ *
+ * What is stored is the market's whole answer, before the search has judged any of it. Storing the
+ * survivors instead made everything the search removed disappear on the second look — the reasons
+ * are worked out again from this each time it is served, so the list of what was removed is the
+ * same whether the crawl just ran or is fifteen minutes old, and dropping a blocked word brings
+ * its listings straight back instead of waiting for the entry to expire.
  */
 object QueryResultCache {
     private const val TTL_MS = 15 * 60 * 1000L
@@ -37,7 +43,7 @@ object QueryResultCache {
         query.carFilters?.fuels?.map { it.name }?.sorted()?.joinToString(","),
     ).joinToString("|") { it?.toString() ?: "" }
 
-    /** Cached listings if a fresh entry exists, else null. Sold-only queries never hit. */
+    /** The market's whole answer if a fresh entry exists, else null. Sold-only queries never hit. */
     fun get(platformId: PlatformId, query: SearchQuery): List<Listing>? {
         if (query.soldOnly) return null
         val entry = entries[key(platformId, query)] ?: return null

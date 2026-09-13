@@ -59,14 +59,28 @@ object RelevanceFilter {
      */
     fun blockedWord(listing: Listing, parsed: ParsedQuery): String? {
         if (parsed.negativeTokens.isEmpty()) return null
-        val words = canonicalizeMakes(normalize(listing.title.lowercase()))
+        val words = canonicalizeMakes(normalize(gluedThousands(listing.title.lowercase())))
             .split(" ").filter { it.isNotBlank() }
         return parsed.negativeTokens.firstOrNull { token -> matchesNegative(words, token) }
+    }
+
+    /** A thousands group written German-style is one number: "30.000 km" is thirty thousand, not
+     *  a 30 next to a 000. Normalizing punctuation away split it in two, and a reader who blocked
+     *  the Crafter 30 lost every van whose title stated a mileage or a price beginning with 30. */
+    internal fun gluedThousands(text: String): String {
+        var out = text
+        // A dot or a typographic space, never a plain one: "30.000" and "30 000" (narrow no-break)
+        // are one number, while "Fold 6 512GB" is a model and a size standing next to each other.
+        repeat(3) { out = Regex("""(\d)[.\u00a0\u202f](\d{3})(?!\d)""").replace(out, "$1$2") }
+        return out
     }
 
     /** Short tokens ("s", "x") match as whole words only, so a blocked "-s" does not take every
      *  "Series". Longer ones also match German plurals and compounds. */
     private fun matchesNegative(words: List<String>, token: String): Boolean {
+        // A number is blocked as the whole number it is: "50" is the Crafter 50, and a title
+        // reading "50 mm" or "1950" is not that van.
+        if (token.all { it.isDigit() }) return words.any { it == token }
         if (token.length <= 2) return words.any { it == token }
         return words.any { word ->
             word == token || word.endsWith(token) ||
@@ -76,7 +90,10 @@ object RelevanceFilter {
     }
 
     fun score(listing: Listing, parsed: ParsedQuery): Double {
-        val titleNorm = normalize(listing.title.lowercase())
+        // Thousands groups are glued back together before anything else reads the title, so a
+        // mileage or a price is one number here as it is on the page. Split into "30" and "000",
+        // it both matched a blocked "30" and offered "000" as a model number to match against.
+        val titleNorm = normalize(gluedThousands(listing.title.lowercase()))
         // Strip comparison phrases before token matching — prevents "wie WH-1000XM5" (German "like XM5")
         // from matching the XM5 query. Amazon uses "gleicher Prozessor wie WH-1000XM5" to cross-sell
         // related products, causing false positives when the model appears only in the comparison clause.

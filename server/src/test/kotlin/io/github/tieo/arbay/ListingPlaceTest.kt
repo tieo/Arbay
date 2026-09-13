@@ -74,6 +74,31 @@ class ListingPlaceTest {
     }
 
     @Test
+    fun `a blocked number is that number, not the start of a bigger one`() {
+        // Blocked words on a real saved search: pritsche, 50, 30 — the Crafter 30 and 50 being
+        // other vans than the 35 wanted. Normalising punctuation away split "30.000 km" into a
+        // "30" and a "000", so the block took every van whose title stated a mileage or a price,
+        // and one van out of sixty-one survived on the screen.
+        val query = SearchQuery(
+            text = "volkswagen crafter", category = MarketGroup.VEHICLES,
+            excludeKeywords = listOf("pritsche", "50", "30"),
+        )
+        val listings = listOf(
+            listing("VW Crafter 35 Kasten Hochdach 2.0 TDI 140 PS | 30.000 km", id = "keep-km"),
+            listing("Volkswagen Crafter Kasten 35 L2H2, EZ 2019, 28.500 EUR", id = "keep-price"),
+            listing("Volkswagen Crafter Kasten 50 L3H3 lang Superhochdach", id = "drop-50"),
+            listing("VW Crafter 30 Kasten 2.5 TDI", id = "drop-30"),
+            listing("Volkswagen Crafter 2.5 TDI Pritsche", id = "drop-pritsche"),
+        )
+        val partitioned = RelevanceFilter.partition(listings, query)
+        assertEquals(listOf("keep-km", "keep-price"), partitioned.kept.map { it.id })
+        assertEquals(
+            listOf("drop-50", "drop-30", "drop-pritsche"),
+            partitioned.dropped.filter { it.reason == DropReason.BLOCKED_WORD }.map { it.listing.id },
+        )
+    }
+
+    @Test
     fun `every way 72 van ads wrote a wheelbase down`() {
         // Each of these is a line off a real AutoScout24 advert. 40 of 71 readable pages state a
         // wheelbase at all, always inside the equipment prose and never as a field of the site's

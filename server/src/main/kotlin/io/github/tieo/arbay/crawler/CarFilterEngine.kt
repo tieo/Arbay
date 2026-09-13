@@ -35,7 +35,33 @@ object CarFilterEngine {
     /** @param keepNonVehicles when true, the parts/accessories guard is skipped, for a query that
      *  is itself asking for a part ("Crafter Drehkonsole") rather than a whole vehicle. */
     fun apply(listings: List<Listing>, filters: CarFilters, keepNonVehicles: Boolean = false): List<Listing> =
-        listings.map { annotateVanDims(it) }.filter { keep(it, filters, keepNonVehicles) }
+        partition(listings, filters, keepNonVehicles).kept
+
+    /** What the vehicle criteria keep, and what they take away with the criterion that took it. */
+    data class Partitioned(val kept: List<Listing>, val dropped: List<Pair<Listing, String>>)
+
+    /**
+     * The same filtering as [apply], reporting every listing it removes and the criterion that
+     * removed it.
+     *
+     * These drops used to happen in silence. A van removed for its mileage, its year or for
+     * reading as a part was simply not on the screen, and not in the list of everything that was
+     * taken off the screen either — so the one filter that removes most of a vehicle search was
+     * the one filter nobody could check.
+     */
+    fun partition(
+        listings: List<Listing>,
+        filters: CarFilters,
+        keepNonVehicles: Boolean = false,
+    ): Partitioned {
+        val kept = mutableListOf<Listing>()
+        val dropped = mutableListOf<Pair<Listing, String>>()
+        listings.map { annotateVanDims(it) }.forEach { listing ->
+            val rejectedBy = rejectedBy(listing, filters, keepNonVehicles)
+            if (rejectedBy == null) kept += listing else dropped += listing to rejectedBy
+        }
+        return Partitioned(kept, dropped)
+    }
 
     /** A car query that is really after a part or accessory, so the non-vehicle guard must not fire.
      *  Recognised from the same part nouns the guard drops, plus the wheels/tyres wording those
@@ -102,26 +128,30 @@ object CarFilterEngine {
         )
     }
 
-    private fun keep(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false): Boolean {
+    private fun keep(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false): Boolean =
+        rejectedBy(listing, filters, keepNonVehicles) == null
+
+    /** The criterion that rejects this listing, in the words the app shows, or null if it fits. */
+    private fun rejectedBy(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false): String? {
         val v = listing.vehicle
 
-        if (!keepNonVehicles && isLikelyNonVehicle(listing)) return false
+        if (!keepNonVehicles && isLikelyNonVehicle(listing)) return "not a vehicle"
 
         // Find-in-description: every whitespace-separated term must appear in the title or
         // description. This is a literal match on text we hold, so excluding is safe.
         filters.descriptionContains?.takeIf { it.isNotBlank() }?.let { needle ->
             val haystack = "${listing.title} ${listing.description ?: ""}".lowercase()
             if (!needle.lowercase().split(Regex("\\s+")).all { it.isBlank() || haystack.contains(it) })
-                return false
+                return "words in the ad"
         }
 
         // Price is always known (it's on the listing), so it can always exclude.
         val priceEur = priceEurCents(listing) / 100
-        filters.minPriceEur?.let { if (priceEur < it) return false }
-        filters.maxPriceEur?.let { if (priceEur > it) return false }
+        filters.minPriceEur?.let { if (priceEur < it) return "price" }
+        filters.maxPriceEur?.let { if (priceEur > it) return "price" }
 
         // Seller type comes from the listing, not VehicleInfo.
-        filters.sellerType?.let { want -> listing.seller?.type?.let { if (it != want) return false } }
+        filters.sellerType?.let { want -> listing.seller?.type?.let { if (it != want) return "seller" } }
 
         // Per-spec strictness. A spec is "known" when its value is present — whether from the site's
         // structured data or read from the listing text (a stated "345.000 km" counts). Known +
@@ -136,24 +166,24 @@ object CarFilterEngine {
         if (drop(filters.firstRegFromYear != null || filters.firstRegToYear != null, v?.firstRegYear != null) {
                 val y = v!!.firstRegYear!!
                 (filters.firstRegFromYear?.let { y >= it } ?: true) && (filters.firstRegToYear?.let { y <= it } ?: true)
-            }) return false
+            }) return "year"
         if (drop(filters.minMileageKm != null || filters.maxMileageKm != null, v?.mileageKm != null) {
                 val km = v!!.mileageKm!!
                 (filters.minMileageKm?.let { km >= it } ?: true) && (filters.maxMileageKm?.let { km <= it } ?: true)
-            }) return false
+            }) return "mileage"
         if (drop(filters.minPowerKw != null || filters.maxPowerKw != null, v?.powerKw != null) {
                 val kw = v!!.powerKw!!
                 (filters.minPowerKw?.let { kw >= it } ?: true) && (filters.maxPowerKw?.let { kw <= it } ?: true)
-            }) return false
-        if (drop(filters.transmission != null, v?.gearbox != null) { v!!.gearbox == filters.transmission }) return false
-        if (drop(filters.fuels.isNotEmpty(), v?.fuel != null) { v!!.fuel in filters.fuels }) return false
-        if (drop(filters.bodyTypes.isNotEmpty(), v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return false
-        if (drop(filters.conditions.isNotEmpty(), v?.condition != null) { v!!.condition in filters.conditions }) return false
-        if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return false
-        if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return false
-        if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return false
-        if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return false
-        if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return false
+            }) return "power"
+        if (drop(filters.transmission != null, v?.gearbox != null) { v!!.gearbox == filters.transmission }) return "gearbox"
+        if (drop(filters.fuels.isNotEmpty(), v?.fuel != null) { v!!.fuel in filters.fuels }) return "fuel"
+        if (drop(filters.bodyTypes.isNotEmpty(), v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return "body"
+        if (drop(filters.conditions.isNotEmpty(), v?.condition != null) { v!!.condition in filters.conditions }) return "condition"
+        if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
+        if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
+        if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
+        if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return "emission"
+        if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return "colour"
         // Only a stated code narrows a van's size. A word ("Lang", "Hochdach") names a variant of
         // one model and says nothing about another model's classes, so a van described in words is
         // kept and marked unchecked rather than measured against a guess.
@@ -161,17 +191,17 @@ object CarFilterEngine {
                 filters.vanLengths.isNotEmpty(),
                 v?.vanLength != null && v.isVerified(VehicleField.VAN_LENGTH),
             ) { v!!.vanLength in filters.vanLengths }
-        ) return false
+        ) return "length"
         if (drop(
                 filters.vanHeights.isNotEmpty(),
                 v?.vanHeight != null && v.isVerified(VehicleField.VAN_HEIGHT),
             ) { v!!.vanHeight in filters.vanHeights }
-        ) return false
+        ) return "height"
         if (drop(filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null, v?.wheelbaseMm != null) {
                 val mm = v!!.wheelbaseMm!!
                 (filters.minWheelbaseMm?.let { mm >= it } ?: true) && (filters.maxWheelbaseMm?.let { mm <= it } ?: true)
-            }) return false
-        return true
+            }) return "wheelbase"
+        return null
     }
 
     private fun priceEurCents(listing: Listing): Long =

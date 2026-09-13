@@ -14,6 +14,10 @@ import kotlinx.serialization.Serializable
 data class DroppedListing(
     val listing: Listing,
     val reason: DropReason,
+    /** Which of several things behind one reason took it — the criterion a vehicle failed
+     *  ("mileage", "wheelbase"), or the word that was blocked. "The search removed it" is not an
+     *  answer anyone can check; "its mileage" is. */
+    val detail: String? = null,
 )
 
 @Serializable
@@ -49,6 +53,10 @@ enum class DropReason {
     /** Further from where the search is centred than it reaches. */
     TOO_FAR,
 
+    /** One of the vehicle criteria this search carries — its mileage, year, power, size — or the
+     *  guard that keeps parts out of a search for a whole vehicle. */
+    VEHICLE_CRITERIA,
+
     /** Carries one of the words the reader blocked. Its own reason, because reading it as "not one
      *  offer" put twelve real vans under a heading that says the market sent junk. */
     BLOCKED_WORD,
@@ -70,6 +78,7 @@ val DropReason.label: String
         DropReason.RENTAL -> "for rent"
         DropReason.NOT_A_SINGLE_OFFER -> "not one offer"
         DropReason.TOO_FAR -> "too far away"
+        DropReason.VEHICLE_CRITERIA -> "a vehicle criterion"
         DropReason.BLOCKED_WORD -> "a word you blocked"
         DropReason.IMPLAUSIBLE_PRICE -> "unreadable price"
     }

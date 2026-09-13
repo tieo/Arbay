@@ -145,7 +145,12 @@ class ListingViewModel(
     /** Text reduced to its words, lowercase and single-spaced, so a match does not depend on the
      *  punctuation a seller happened to type. */
     private fun wordsOnly(text: String): String =
-        text.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        text.lowercase()
+            // A thousands group is one number, not two: splitting on the dot turned "30.000 km"
+            // into the words "30" and "000", so blocking the Crafter 30 hid every van whose ad
+            // mentioned a mileage or a price starting with 30.
+            .replace(Regex("(\\d)[.\u00a0\u202f](\\d{3})(?![\\d])"), "$1$2")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
     // Derived: listings filtered by selected platform, not banned, not matching a blocked keyword.
     private val _marketFilter = combine(_shownMarkets, _shownCountries) { markets, countries ->
@@ -159,11 +164,16 @@ class ListingViewModel(
     private fun kept(listing: Listing, banned: Set<String>, blocked: List<String>): Boolean {
         if (listing.id in banned) return false
         if (blocked.isEmpty()) return true
+        // The title, and only the title — the same text the server blocks on, and the text a
+        // reader is looking at when they block a word. Reading the description too made a blocked
+        // word mean "this word appears anywhere in the seller's prose": a search for a Crafter
+        // with "30" and "50" blocked came back with one van out of sixty-one, because German ads
+        // are long and every long ad names some number.
         // Padded on both sides, so a blocked word has to be a word: blocking "30" hid every van
         // whose card said "130 kW", which on a vehicle search is nearly all of them, and a whole
         // market read as having nothing. A blocked phrase still matches across punctuation, since
         // both sides are reduced to their words first.
-        val hay = " " + wordsOnly("${listing.title} ${listing.description ?: ""}") + " "
+        val hay = " " + wordsOnly(listing.title) + " "
         return blocked.none { it.isNotBlank() && hay.contains(" " + wordsOnly(it) + " ") }
     }
 

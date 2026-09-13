@@ -411,15 +411,24 @@ fun ListingsSheet(
                 undoLabel = "Show everything",
                 undo = { newOnly = false },
             ))
-            // What the search itself removed, one group per reason it gave.
+            // What the search itself removed, one group per reason it gave — and where one reason
+            // covers several things, one group per thing: "a vehicle criterion" is not an answer,
+            // "its mileage" is, so the criterion that took a listing is the heading it sits under.
             droppedBySearch.filterNot { it.reason == DropReason.BLOCKED_WORD }
-                .groupBy { it.reason }.forEach { (reason, entries) ->
-                add(HiddenGroup(
-                    label = reason.label,
-                    why = explainDropReason(reason),
-                    listings = entries.map { it.listing },
-                ))
-            }
+                .groupBy { it.reason to it.detail }
+                .forEach { (key, entries) ->
+                    val (reason, detail) = key
+                    add(HiddenGroup(
+                        label = detail ?: reason.label,
+                        why = explainDropReason(reason) +
+                            (detail?.let { " Taken by: $it." } ?: ""),
+                        listings = entries.map { it.listing },
+                        undoLabel = if (reason == DropReason.VEHICLE_CRITERIA) "Edit the criteria" else null,
+                        undo = if (reason == DropReason.VEHICLE_CRITERIA && onEditFilters != null) {
+                            { showHidden = false; onEditFilters.invoke() }
+                        } else null,
+                    ))
+                }
         }
     }
 

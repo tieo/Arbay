@@ -103,6 +103,8 @@ private fun defaultPlatforms(isCar: Boolean): List<PlatformId> {
 private data class FinishedResults(
     val listings: List<Listing>,
     val tooFar: List<Listing>,
+    /** What the vehicle criteria removed, each naming the criterion that removed it. */
+    val criteriaDropped: List<DroppedListing>,
     val facets: Map<String, Int>,
 )
 
@@ -120,7 +122,7 @@ private suspend fun finishedResults(
     // against it, and one with no location cannot be measured at all. This runs before the area is
     // applied, so a listing eBay never placed is judged on what its own page says rather than
     // waved through for want of an address.
-    val filtered = carPostFilter(raw, query, isCarQuery, crawler)
+    val (filtered, criteriaDropped) = carPostFilter(raw, query, isCarQuery, crawler)
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
         io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
@@ -128,7 +130,7 @@ private suspend fun finishedResults(
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(raw, query.toCarFilters() ?: CarFilters()) else emptyMap()
-    return FinishedResults(listings, annotateDistance(outside, query), facets)
+    return FinishedResults(listings, annotateDistance(outside, query), criteriaDropped, facets)
 }
 
 /** Reads the optional car-search filters from the request and applies them to a
@@ -224,8 +226,8 @@ private suspend fun carPostFilter(
     searchQuery: SearchQuery,
     isCarQuery: Boolean,
     crawler: Crawler,
-): List<Listing> {
-    if (!isCarQuery) return listings
+): Pair<List<Listing>, List<DroppedListing>> {
+    if (!isCarQuery) return listings to emptyList()
     val filters = searchQuery.toCarFilters() ?: CarFilters()
     // Parse specs from each card's own title/description first (mileage, year, power, …), so a
     // platform that ships no structured data — eBay, Kleinanzeigen — is still filterable: a stated
@@ -234,13 +236,19 @@ private suspend fun carPostFilter(
     // guard strip those parts out; then it returns the parts the user asked for.
     val partsIntent = CarFilterEngine.isPartQuery(searchQuery.positiveText)
     val enriched = listings.map { VehicleTextParser.enrich(it) }
-    val cardFiltered = CarFilterEngine.apply(enriched, filters, keepNonVehicles = partsIntent)
-    val detailed = DetailEnricher.enrich(cardFiltered, filters, crawler)
-    val filtered = CarFilterEngine.apply(detailed, filters, keepNonVehicles = partsIntent)
+    val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent)
+    val detailed = DetailEnricher.enrich(onTheCard.kept, filters, crawler)
+    val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent)
+    // What the criteria removed, named by the criterion that removed it — both passes, since a
+    // listing can fail on its card and another only once its own page has been read.
+    val dropped = (onTheCard.dropped + afterDetail.dropped).map { (listing, criterion) ->
+        DroppedListing(listing, DropReason.VEHICLE_CRITERIA, criterion)
+    }
     // A free-form ideal-car description ranks (not filters) the survivors by local semantic
     // similarity, so the best matches surface first. Skipped when none was given.
-    return filters.idealDescription?.takeIf { it.isNotBlank() }
-        ?.let { CarCriteriaScorer.rank(filtered, it) } ?: filtered
+    val filtered = filters.idealDescription?.takeIf { it.isNotBlank() }
+        ?.let { CarCriteriaScorer.rank(afterDetail.kept, it) } ?: afterDetail.kept
+    return filtered to dropped
 }
 
 /** Resolve every listing's location (zip/city + country) to coordinates, and fill in distanceKm
@@ -482,19 +490,19 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val crawler = CrawlerRegistry.crawlerFor(platformId) ?: return@map emptyList()
                     // Cross-border markets are searched in their own language.
                     val pq = localizedQuery(searchQuery, platformId)
-                    // Cache holds the raw relevance-filtered crawl; car post-filtering runs after
-                    // it, so tweaking a filter re-filters cached listings instead of re-crawling.
-                    // Skip the crawl (serve cache only) while the platform is cooling down from a
-                    // recent block — hitting it again would deepen the block.
-                    val classified = QueryResultCache.get(platformId, pq)
+                    // The cache holds the market's whole answer; the search judges it on the way
+                    // out, here and on every later hit alike, so tweaking a filter re-filters
+                    // cached listings instead of re-crawling. Skip the crawl (serve cache only)
+                    // while the platform is cooling down from a recent block — hitting it again
+                    // would deepen the block.
+                    val answer = QueryResultCache.get(platformId, pq)
                         ?: if (BlockCooldown.isCoolingDown(platformId)) emptyList()
-                        else run {
-                        val raw = crawler.trackedSearch(pq, corpusBackground(listingRepo))
-                        val filtered = RelevanceFilter.filter(raw, pq).map { SoldDetector.classify(it) }
-                        QueryResultCache.put(platformId, pq, filtered)
-                        filtered
-                    }
-                    val result = annotateDistance(carPostFilter(classified, pq, isCarQuery, crawler), pq)
+                        else crawler.trackedSearch(pq, corpusBackground(listingRepo))
+                            .also { QueryResultCache.put(platformId, pq, it) }
+                    val classified = RelevanceFilter.filter(answer, pq).map { SoldDetector.classify(it) }
+                    val result = annotateDistance(
+                        carPostFilter(classified, pq, isCarQuery, crawler).first, pq,
+                    )
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }
@@ -611,7 +619,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // Car post-filtering still runs on the cached set so the new filters apply.
                             val cached = QueryResultCache.get(platformId, pq)
                             if (cached != null) {
-                                val done = finishedResults(cached, pq, isCarQuery, crawler, listingRepo)
+                                // The same judging the fresh crawl gets, over the same answer: the
+                                // reasons are worked out here rather than stored, so re-opening a
+                                // search shows what it removed and why, and a blocked word dropped
+                                // in the meantime brings its listings back at once.
+                                val partitioned = RelevanceFilter.partition(cached, pq)
+                                val classified = partitioned.kept.map { SoldDetector.classify(it) }
+                                val done = finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
@@ -619,7 +633,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = done.listings.size,
                                     rawCount = cached.size,
                                     listings = done.listings,
-                                    dropped = done.tooFar.take(60).map { DroppedListing(it, DropReason.TOO_FAR) },
+                                    dropped = (
+                                        partitioned.dropped + done.criteriaDropped +
+                                            done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
+                                        ).take(80),
                                     fromCache = true,
                                     facets = done.facets,
                                 ))
@@ -732,18 +749,20 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     if (ignoredSearch != null) emptyList() else rawResults, pq,
                                 )
                                 val classified = partitioned.kept.map { SoldDetector.classify(it) }
-                                // Cache the raw relevance-filtered crawl; car post-filtering (card
-                                // filter → detail-verify → final filter) and the search's area run
-                                // after, so a later filter tweak re-filters from cache without
-                                // re-crawling.
-                                QueryResultCache.put(platformId, pq, classified)
+                                // Cache what the market actually sent, judged nowhere yet: the
+                                // relevance rules, the car post-filter and the search's area all
+                                // run over it on the way out, here and on a later cache hit alike,
+                                // so a filter tweak re-filters without re-crawling and nothing the
+                                // search removed is lost between the two.
+                                QueryResultCache.put(platformId, pq, rawResults)
                                 val done = finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
                                 val results = done.listings
                                 val facets = done.facets
                                 val dropped = if (ignoredSearch != null) {
                                     rawResults.map { DroppedListing(it, DropReason.MARKET_IGNORED_SEARCH) }
                                 } else {
-                                    partitioned.dropped + done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
+                                    partitioned.dropped + done.criteriaDropped +
+                                        done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
                                 }
 
                                 CrawlerSearchEvent(
@@ -757,7 +776,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     // stream as the results themselves. Kept in the order the
                                     // market ranked them, so the ones it thought most relevant —
                                     // the ones a wrong filter would be hiding — are the ones sent.
-                                    dropped = dropped.take(60),
+                                    dropped = dropped.take(80),
                                     termsUsed = termsUsed.toList(),
                                     suggestedTerms = verdicts.values.toList(),
                                     facets = facets,
