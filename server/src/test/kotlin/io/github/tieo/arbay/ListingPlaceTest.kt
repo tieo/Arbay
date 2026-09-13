@@ -91,6 +91,18 @@ class ListingPlaceTest {
     }
 
     @Test
+    fun `a make glued to the model is still both words`() {
+        // TruckScout24 writes its titles as "VWCrafter 35 Kasten": twenty-five real Crafters came
+        // back and every one of them read as carrying neither word of the search.
+        val query = SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES)
+        val glued = listOf(
+            listing("Kastenwagen VWCrafter 35 2,0 TDI FWD MR/HD", id = "a"),
+            listing("Kleinbus VWCrafter Kasten 35 Kombi Rampe", id = "b"),
+        )
+        assertEquals(listOf("a", "b"), RelevanceFilter.partition(glued, query).kept.map { it.id })
+    }
+
+    @Test
     fun `a blocked number is that number, not the start of a bigger one`() {
         // Blocked words on a real saved search: pritsche, 50, 30 — the Crafter 30 and 50 being
         // other vans than the 35 wanted. Normalising punctuation away split "30.000 km" into a

@@ -16,7 +16,7 @@ class AutoScout24Crawler(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
         FiltersAtTheSource.Criterion.GEARBOX, FiltersAtTheSource.Criterion.FUEL,
-        FiltersAtTheSource.Criterion.BODY, FiltersAtTheSource.Criterion.SELLER,
+        FiltersAtTheSource.Criterion.SELLER,
     )
 
 
@@ -96,7 +96,10 @@ class AutoScout24Crawler(
             carQuery.modelSlug?.let { append("/").append(it) }
             // Four-wheel drive is an equipment slug here rather than a parameter — the site's own
             // "Volkswagen Crafter Allrad" link — and it narrows 1625 vans to 114 at the source.
-            if (query.carCriteria.drivetrain == Drivetrain.AWD) append("/eq_allrad")
+            // Like every equipment list it is written by the sellers who bothered, so it is asked
+            // for only when the search excludes what states nothing anyway.
+            if (query.carCriteria.drivetrain == Drivetrain.AWD && query.carCriteria.strictUnknown)
+                append("/eq_allrad")
         }
 
         return paginate(query) { page ->
@@ -179,11 +182,14 @@ class AutoScout24Crawler(
         // of seller narrows what comes back instead of narrowing it here afterwards. A crawl that
         // fetches what the criteria already rule out spends the page budget on listings that are
         // thrown away — a real search returned 74 vans and kept one.
+        // Only where this site's own listings nearly all state the field, since its filter removes
+        // every listing that states nothing and this app keeps those, marked unchecked. Measured by
+        // asking for a range that excludes nothing, against 1625 Crafters: doors 1606, seats 1614,
+        // fuel, mileage, power and seller all 1625 — but emission class only 1267 and body type
+        // 446, so those two are filtered here rather than there.
         query.carCriteria.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel=$it") } }
-        query.carCriteria.bodyTypes.singleOrNull()?.let { body -> siteBody(body)?.let { append("&body=$it") } }
         query.carCriteria.minDoors?.let { append("&doorfrom=$it") }
         query.carCriteria.minSeats?.let { append("&seatsfrom=$it") }
-        query.carCriteria.minEmissionEuro?.let { append("&emclass=$it") }
         query.carCriteria.sellerType?.let {
             append(if (it == SellerType.PRIVATE) "&custtype=P" else "&custtype=D")
         }
@@ -201,17 +207,7 @@ class AutoScout24Crawler(
         else -> null
     }
 
-    /** This site's own body-type numbers. */
-    private fun siteBody(body: BodyType): String? = when (body) {
-        BodyType.SMALL_CAR -> "1"
-        BodyType.CONVERTIBLE -> "2"
-        BodyType.COUPE -> "3"
-        BodyType.SUV -> "4"
-        BodyType.ESTATE -> "5"
-        BodyType.SEDAN -> "6"
-        BodyType.VAN, BodyType.MINIVAN, BodyType.TRANSPORTER -> "7"
-        BodyType.OTHER, BodyType.PICKUP -> null
-    }
+
 
     companion object {
         /** AutoScout24 country codes reachable from the .de front end, covering Germany

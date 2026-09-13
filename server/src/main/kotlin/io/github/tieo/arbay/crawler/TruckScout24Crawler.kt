@@ -63,8 +63,10 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
      * when any filter is present.
      */
     private fun filterParams(query: SearchQuery): String = buildString {
-        query.carCriteria.firstRegFromYear?.let { append("&manufacturedFrom=$it") }
-        query.carCriteria.firstRegToYear?.let { append("&manufacturedTo=$it") }
+        // The build-year parameters are not usable: `manufacturedFrom` does not filter at all —
+        // 2018 and 2030 both answer with the same 248 of 521 vans, which is every van that states
+        // a year — and `manufacturedTo` answers 0 for any value, which is what made this market
+        // look like it had nothing. The year is filtered locally.
         query.maxPrice?.let { max ->
             val eur = if (max.currency == Currency.EUR) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
@@ -77,18 +79,49 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         }
         // PHP bracket notation: properties[mileage][value to] and properties[power][value from].
         // Spaces in param names are encoded as + by standard form encoding.
+        query.carCriteria.minMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+from%5D=$it") }
         query.carCriteria.maxMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+to%5D=$it") }
         query.carCriteria.minPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+from%5D=$it") }
-        when (query.carCriteria.transmission) {
+        query.carCriteria.maxPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+to%5D=$it") }
+        // The gearbox is stated by 358 of 521 vans here, so asking the site for it deletes a third
+        // of the market — only worth it when the search excludes unstated specs anyway.
+        if (query.carCriteria.strictUnknown) when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&properties%5Bgearing+type%5D%5Bvalue%5D=automatic")
             Transmission.MANUAL -> append("&properties%5Bgearing+type%5D%5Bvalue%5D=mechanical")
             null -> {}
         }
+        // A site's own filter removes every ad that states nothing for the field, which is the
+        // opposite of this app's rule that an unstated spec keeps the listing and marks it
+        // unchecked. So a criterion is sent to the site only where the site's ads nearly all state
+        // it, measured by asking for a range that excludes nothing: of 521 Crafters here, 519
+        // state a mileage and 514 a fuel, so those are asked at the source; 477 state a seat
+        // count, 430 an emission class, and only 2 a wheelbase — those are filtered here, where
+        // not stating one is not the same as failing it.
+        query.carCriteria.fuels.mapNotNull { siteFuel(it) }.distinct()
+            .forEach { append("&properties%5Bfuel+type%5D%5B%5D=$it") }
+    }
+
+    /** This site's own fuel words. */
+    private fun siteFuel(fuel: Fuel): String? = when (fuel) {
+        Fuel.DIESEL -> "diesel"
+        Fuel.PETROL -> "gasoline"
+        Fuel.ELECTRIC -> "electric"
+        Fuel.LPG, Fuel.CNG -> "gas"
+        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "hybrid"
+        Fuel.HYDROGEN -> "hydrogen"
+        else -> null
     }
 
     internal fun parse(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
+        // A search with no results still paints a page full of vans — the site's own suggestions,
+        // in the same cards as a result — and every one of them was being read as a result of the
+        // search. The page states its own count in the search-agent form, so a search that found
+        // nothing returns nothing.
+        val ownCount = doc.selectFirst("input[name=\"SearchAgentForm[initialResultCount]\"]")
+            ?.attr("value")?.trim()?.toIntOrNull()
+        if (ownCount == 0) return emptyList()
         return doc.select("section[data-listing-id]").mapNotNull { card ->
             val externalId = card.attr("data-listing-id").takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null

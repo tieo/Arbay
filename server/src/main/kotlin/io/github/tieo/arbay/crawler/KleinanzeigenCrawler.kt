@@ -13,7 +13,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
-        FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.PRICE,
+        FiltersAtTheSource.Criterion.PRICE,
     )
 
     override val platformId = PlatformId.KLEINANZEIGEN
@@ -164,6 +164,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             maxMileageKm = criteria.maxMileageKm,
             minPowerKw = criteria.minPowerKw,
             maxPowerKw = criteria.maxPowerKw,
+            strictUnknown = criteria.strictUnknown,
         )
 
         val endPage = query.startPage + maxPages - 1

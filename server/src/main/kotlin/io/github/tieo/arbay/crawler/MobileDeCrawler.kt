@@ -119,20 +119,27 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             // the search page: `dt` Antriebsart, `ft` Kraftstoffart, `c` Fahrzeugtyp, `door`,
             // `sc` Sitzplätze, `emc` Schadstoffklasse, `st` Anbieter. Everything the site can
             // narrow itself is narrowed there, so the pages fetched are pages of candidates.
-            when (f.drivetrain) {
-                Drivetrain.AWD -> append("&dt=ALL_WHEEL")
-                Drivetrain.FWD -> append("&dt=FRONT")
-                Drivetrain.RWD -> append("&dt=REAR")
-                null -> {}
-            }
             f.fuels.forEach { fuel -> siteFuel(fuel)?.let { append("&ft=$it") } }
             f.bodyTypes.mapNotNull { siteBody(it) }.distinct().forEach { append("&c=$it") }
-            f.minDoors?.let { doors ->
-                append("&door=" + if (doors >= 6) "SIX_OR_SEVEN" else if (doors >= 4) "FOUR_OR_FIVE" else "TWO_OR_THREE")
-            }
-            f.minSeats?.let { append("&sc=$it:") }
-            f.minEmissionEuro?.let { if (it in 1..7) append("&emc=EURO$it") }
             f.sellerType?.let { append(if (it == SellerType.PRIVATE) "&st=FSBO" else "&st=DEALER") }
+            // A site's filter removes what states nothing, which this app keeps and marks
+            // unchecked — so the fields most of this site's own ads leave empty are only asked for
+            // when the search itself excludes unknowns. Measured over 2875 Crafters: a drive type
+            // on 2221 of them (77%), a door count on 258 (9%), a seat count on 2444 (85%), an
+            // emission class on 2158 (75%). Fuel and vehicle type are on effectively all of them.
+            if (f.strictUnknown) {
+                when (f.drivetrain) {
+                    Drivetrain.AWD -> append("&dt=ALL_WHEEL")
+                    Drivetrain.FWD -> append("&dt=FRONT")
+                    Drivetrain.RWD -> append("&dt=REAR")
+                    null -> {}
+                }
+                f.minDoors?.let { doors ->
+                    append("&door=" + if (doors >= 6) "SIX_OR_SEVEN" else if (doors >= 4) "FOUR_OR_FIVE" else "TWO_OR_THREE")
+                }
+                f.minSeats?.let { append("&sc=$it:") }
+                f.minEmissionEuro?.let { if (it in 1..7) append("&emc=EURO$it") }
+            }
         }
     }
 

@@ -150,20 +150,22 @@ object KleinanzeigenUrlBuilder {
         maxMileageKm: Int? = null,
         minPowerKw: Int? = null,
         maxPowerKw: Int? = null,
+        strictUnknown: Boolean = false,
     ): List<String> = buildList {
         fuel?.let { add("autos.fuel_s:$it") }
         gearbox?.let { add("autos.shift_s:$it") }
         range("autos.ez_i", minYear, maxYear)?.let { add(it) }
         range("autos.km_i", minMileageKm, maxMileageKm)?.let { add(it) }
+        // The power is stated by 1364 of 1503 car ads here; this site's filter drops the other 139
+        // rather than leaving them unjudged, so it is asked for only when the search excludes
+        // unstated specs anyway. Year, mileage and gearbox are on ~all of them and always asked.
         // Rounded outwards, so the conversion itself never excludes a van at the boundary.
-        range(
+        if (strictUnknown) range(
             "autos.power_i",
-            minPowerKw?.let { kotlin.math.floor(it * KW_TO_PS).toInt() },
-            maxPowerKw?.let { kotlin.math.ceil(it * KW_TO_PS).toInt() },
+            minPowerKw?.let { kotlin.math.floor(it * 1.35962).toInt() },
+            maxPowerKw?.let { kotlin.math.ceil(it * 1.35962).toInt() },
         )?.let { add(it) }
     }
-
-    private const val KW_TO_PS = 1.35962
 
     private fun range(name: String, min: Int?, max: Int?): String? =
         if (min == null && max == null) null else "$name:${min ?: ""},${max ?: ""}"

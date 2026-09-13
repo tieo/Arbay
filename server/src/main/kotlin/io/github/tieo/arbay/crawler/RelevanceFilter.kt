@@ -151,6 +151,26 @@ object RelevanceFilter {
         }
 
         fun tokenMatches(token: String): Boolean {
+            // A make glued to the model is one word on some markets: TruckScout24 writes
+            // "VWCrafter", and every real Crafter there read as carrying neither word of
+            // "Volkswagen Crafter" — the model is not at a word start, and the make is not the
+            // whole word. A word that is a make followed by this token is both of them.
+            if (token.length >= 4 && titleWords.any { word ->
+                    word.length > token.length && word.endsWith(token) &&
+                        CarQueryResolver.makeSpellings(word.dropLast(token.length)) != null
+                }
+            ) return true
+            // The make itself, glued to the front of the same word, in any of its spellings —
+            // "VWCrafter" carries "Volkswagen" as surely as "VW Crafter" does.
+            CarQueryResolver.makeSpellings(token)?.let { spellings ->
+                if (titleWords.any { word ->
+                        spellings.any { spelling ->
+                            word.length > spelling.length + 2 && word.startsWith(spelling) &&
+                                word.drop(spelling.length).all { c -> c.isLetter() || c.isDigit() }
+                        }
+                    }
+                ) return true
+            }
             // A bare unit word ("GB", "MHz", "Zoll"...) is never its own word in a real listing
             // title — every seller glues it to the number ("32GB"). A query typed with a space
             // before the unit ("32 GB", "1x32 GB") must still match those titles.
