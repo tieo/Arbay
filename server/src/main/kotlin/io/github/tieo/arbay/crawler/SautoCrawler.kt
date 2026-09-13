@@ -84,10 +84,26 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
      *   AUTOMATIC         -> gearbox_seo=automaticka
      *   MANUAL            -> gearbox_seo=manualni
      */
+    /** This site's own fuel codes. */
+    private fun siteFuel(fuel: Fuel): Int? = when (fuel) {
+        Fuel.PETROL -> 1
+        Fuel.DIESEL -> 2
+        Fuel.LPG -> 3
+        Fuel.ELECTRIC -> 4
+        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> 5
+        Fuel.CNG -> 6
+        else -> null
+    }
+
     private fun filterParams(query: SearchQuery): String = buildString {
         query.carCriteria.firstRegFromYear?.let { append("&vehicle_age_from=$it") }
         query.carCriteria.firstRegToYear?.let { append("&vehicle_age_to=$it") }
+        query.carCriteria.minMileageKm?.let { append("&tachometer_from=$it") }
         query.carCriteria.maxMileageKm?.let { append("&tachometer_to=$it") }
+        // This site's own fuel codebook, read back from its API's own echo of the value it stored:
+        // 1 Benzín, 2 Nafta, 3 LPG+benzín, 4 Elektro, 5 Hybridní, 6 CNG+benzín. Every car but 21 of
+        // 105572 states one, so it is asked for at the source.
+        query.carCriteria.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel_cb=$it") } }
         query.carCriteria.minPowerKw?.let { append("&engine_power_from=$it") }
         query.maxPrice?.let { max ->
             val czk = if (max.currency == Currency.CZK) max.amount / 100
