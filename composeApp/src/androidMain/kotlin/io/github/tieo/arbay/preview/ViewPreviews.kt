@@ -66,6 +66,12 @@ fun FiltersPreview() = inPlace {
             io.github.tieo.arbay.model.Condition.PARTS_ONLY to 2,
             null to 4,
         ),
+        saleTypes = emptySet(), onSaleTypes = {},
+        unstatedSaleType = true, onUnstatedSaleType = {},
+        saleTypeCounts = mapOf(
+            io.github.tieo.arbay.model.SaleType.FIXED_PRICE to 22,
+            io.github.tieo.arbay.model.SaleType.AUCTION to 7,
+        ),
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = PreviewData.marketChoices,
         shownMarkets = emptySet(), shownCountries = emptySet(), onOpenMarkets = {},

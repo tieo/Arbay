@@ -67,10 +67,10 @@ fun String.tidyTitle(): String =
 
 /** How a listing is sold, where the market says so. */
 @Serializable
-enum class SaleType {
+enum class SaleType(val label: String) {
     /** A price the seller is asking, which is what it costs to buy it now. */
-    FIXED_PRICE,
+    FIXED_PRICE("Buy now"),
 
     /** A price that is only the highest bid so far, and rises until the auction ends. */
-    AUCTION,
+    AUCTION("Auction"),
 }

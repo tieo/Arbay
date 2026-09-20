@@ -233,6 +233,12 @@ data class SearchQuery(
     val condition: List<Condition>? = null,
     /** Whether listings whose market never said what condition they are in are shown. */
     val conditionUnstated: Boolean = true,
+    // How the thing is sold. An auction's price is the bid so far and rises until it ends, so a
+    // search for what something costs is a different search from one that includes auctions.
+    // Null or empty means both.
+    val saleTypes: List<SaleType>? = null,
+    /** Whether listings whose market never said how they are sold are shown. */
+    val saleTypeUnstated: Boolean = true,
     // How the results are ordered. Part of the search rather than of the screen showing it, so
     // reopening a saved search restores the order it was left in.
     val sort: SortMode? = null,

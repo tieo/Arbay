@@ -253,6 +253,14 @@ fun ListingsSheet(
     var unstatedCondition by remember(savedFilters) {
         mutableStateOf(savedFilters?.conditionUnstated ?: true)
     }
+    // How the listings are sold, kept the same way: an auction's price is the bid so far, so
+    // "what does this cost" and "what is it bid to" are different questions to ask of a screen.
+    var saleTypes by remember(savedFilters) {
+        mutableStateOf(savedFilters?.saleTypes?.toSet() ?: emptySet())
+    }
+    var unstatedSaleType by remember(savedFilters) {
+        mutableStateOf(savedFilters?.saleTypeUnstated ?: true)
+    }
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
@@ -335,9 +343,15 @@ fun ListingsSheet(
     val conditionCounts = remember(activeListings) {
         activeListings.groupingBy { it.condition }.eachCount()
     }
-    val displayedActiveListings = remember(activeListings, conditions, unstatedCondition, newOnly, newListingIds) {
+    val saleTypeCounts = remember(activeListings) {
+        activeListings.groupingBy { it.saleType }.eachCount()
+    }
+    val displayedActiveListings = remember(
+        activeListings, conditions, unstatedCondition, saleTypes, unstatedSaleType, newOnly, newListingIds,
+    ) {
         activeListings
             .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
+            .filter { saleTypeMatches(saleTypes, unstatedSaleType, it.saleType) }
             .filter { !newOnly || it.id in newListingIds }
     }
 
@@ -355,6 +369,9 @@ fun ListingsSheet(
             !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name))
         }
         val wrongCondition = activeListings.filterNot { conditionMatches(conditions, unstatedCondition, it.condition) }
+        val wrongSaleType = activeListings
+            .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
+            .filterNot { saleTypeMatches(saleTypes, unstatedSaleType, it.saleType) }
         val notNew = if (!newOnly) emptyList()
             else activeListings.filter {
                 conditionMatches(conditions, unstatedCondition, it.condition) && it.id !in newListingIds
@@ -402,6 +419,20 @@ fun ListingsSheet(
                     conditions = emptySet()
                     unstatedCondition = true
                     persistFilters { it.copy(condition = null, conditionUnstated = true) }
+                },
+            ))
+            if (wrongSaleType.isNotEmpty()) add(HiddenGroup(
+                label = "sold the other way",
+                why = "You are looking at " +
+                    (saleTypes.takeIf { it.isNotEmpty() }
+                        ?.sortedBy { it.ordinal }?.joinToString(", ") { it.label.lowercase() }
+                        ?: "only what says how it is sold") + ".",
+                listings = wrongSaleType,
+                undoLabel = "Show both",
+                undo = {
+                    saleTypes = emptySet()
+                    unstatedSaleType = true
+                    persistFilters { it.copy(saleTypes = null, saleTypeUnstated = true) }
                 },
             ))
             if (notNew.isNotEmpty()) add(HiddenGroup(
@@ -500,6 +531,7 @@ fun ListingsSheet(
     val activeFilterCount = listOf(
         priceFiltered,
         conditions.isNotEmpty() || !unstatedCondition,
+        saleTypes.isNotEmpty() || !unstatedSaleType,
         sortMode != SortMode.BEST_MATCH,
         shownMarkets.isNotEmpty() || shownCountries.isNotEmpty(),
         activeBlockedTerms.isNotEmpty(),
@@ -514,6 +546,7 @@ fun ListingsSheet(
             .filter { !it.sold }
             .filter { !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name)) }
             .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
+            .filter { saleTypeMatches(saleTypes, unstatedSaleType, it.saleType) }
         val nearest = offered
             .mapNotNull { listing -> listing.distanceKm?.let { listing.platformId to it } }
             .groupBy({ it.first }, { it.second })
@@ -1188,6 +1221,19 @@ fun ListingsSheet(
                     persistFilters { query -> query.copy(conditionUnstated = keep) }
                 },
                 conditionCounts = conditionCounts,
+                saleTypes = saleTypes,
+                onSaleTypes = { chosen ->
+                    saleTypes = chosen
+                    persistFilters { query ->
+                        query.copy(saleTypes = chosen.toList().takeIf { it.isNotEmpty() })
+                    }
+                },
+                unstatedSaleType = unstatedSaleType,
+                onUnstatedSaleType = { keep ->
+                    unstatedSaleType = keep
+                    persistFilters { query -> query.copy(saleTypeUnstated = keep) }
+                },
+                saleTypeCounts = saleTypeCounts,
                 sort = sortMode,
                 onSort = { mode ->
                     if (mode == SortMode.NEAREST) detectAndSortNearest() else listingViewModel.setSortMode(mode)

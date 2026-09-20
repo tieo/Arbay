@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
@@ -49,6 +50,13 @@ fun FiltersSheet(
     onUnstatedCondition: (Boolean) -> Unit,
     /** How many of the fetched listings are in each condition; null counts the ones with none. */
     conditionCounts: Map<Condition?, Int>,
+    // How the listings being looked at are sold. An empty set is every way.
+    saleTypes: Set<SaleType>,
+    onSaleTypes: (Set<SaleType>) -> Unit,
+    unstatedSaleType: Boolean,
+    onUnstatedSaleType: (Boolean) -> Unit,
+    /** How many of the fetched listings are sold each way; null counts the ones whose market never said. */
+    saleTypeCounts: Map<SaleType?, Int>,
     sort: SortMode,
     onSort: (SortMode) -> Unit,
     markets: List<MarketChoice>,
@@ -139,14 +147,38 @@ fun FiltersSheet(
                             )
                         }
                     }
-                    Text(
-                        if (conditions.isEmpty()) "Every condition."
-                        else "Only " + conditions.sortedBy { it.ordinal }.joinToString(", ") { it.label } +
-                            (if (unstatedCondition) ", and the ones that do not say." else "."),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+                }
+            }
+
+            // Offered only where the results hold both kinds, since a screen of shop listings has
+            // no auction to take out and the chips would be a filter over one thing.
+            if (saleTypeCounts.keys.filterNotNull().size > 1) {
+                FilterSection("How it is sold") {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SaleType.entries
+                            .filter { (saleTypeCounts[it] ?: 0) > 0 }
+                            .forEach { value ->
+                                FilterChip(
+                                    selected = value in saleTypes,
+                                    onClick = {
+                                        onSaleTypes(
+                                            if (value in saleTypes) saleTypes - value else saleTypes + value,
+                                        )
+                                    },
+                                    label = { Text("${value.label} (${saleTypeCounts[value] ?: 0})") },
+                                )
+                            }
+                        saleTypeCounts[null]?.takeIf { it > 0 }?.let { count ->
+                            FilterChip(
+                                selected = unstatedSaleType,
+                                onClick = { onUnstatedSaleType(!unstatedSaleType) },
+                                label = { Text("Not stated ($count)") },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -414,6 +446,17 @@ internal val Condition.label: String
  * ("Not stated"), rather than being counted as used: a broken drive sold for parts and a working
  * one were both "not new", so a search could not be told to leave the broken ones out.
  */
+/** Whether a listing sold this way belongs on a screen narrowed to [wanted]. */
+internal fun saleTypeMatches(
+    wanted: Set<SaleType>,
+    unstated: Boolean,
+    saleType: SaleType?,
+): Boolean = when {
+    wanted.isEmpty() -> saleType != null || unstated
+    saleType == null -> unstated
+    else -> saleType in wanted
+}
+
 internal fun conditionMatches(
     wanted: Set<Condition>,
     unstated: Boolean,
