@@ -62,7 +62,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val json = Json { encodeDefaults = true }
+// The app can be a version ahead of the server; a filter field this build does not
+// know must not cost the reader every other filter they set.
+private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
 @Serializable
 private data class CrawlerTestResult(
