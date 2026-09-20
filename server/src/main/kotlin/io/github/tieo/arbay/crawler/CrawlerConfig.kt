@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.io.File
 
 @Serializable
@@ -27,19 +28,29 @@ data class CrawlerConfig(
         var current: CrawlerConfig = load()
             private set
 
+        private val log = LoggerFactory.getLogger(CrawlerConfig::class.java)
+
         fun update(config: CrawlerConfig) {
             current = config
             try {
                 file.parentFile.mkdirs()
                 file.writeText(json.encodeToString(config))
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                // The setting holds for this run either way; saying so is the only way anyone
+                // learns why it is back to its old value after a restart.
+                log.error("Crawler settings could not be written to {}: {}", file, e.message)
+            }
         }
 
         private fun load(): CrawlerConfig {
             return try {
                 if (!file.exists()) return CrawlerConfig()
                 json.decodeFromString<CrawlerConfig>(file.readText())
-            } catch (_: Exception) { CrawlerConfig() }
+            } catch (e: Exception) {
+                // Every setting is about to silently become its default, which is worth a line.
+                log.error("Crawler settings at {} could not be read, using defaults: {}", file, e.message)
+                CrawlerConfig()
+            }
         }
     }
 }

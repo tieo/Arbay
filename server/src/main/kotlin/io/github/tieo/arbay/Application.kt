@@ -4,6 +4,7 @@ import io.github.tieo.arbay.classifier.FreeItemMonitor
 import io.github.tieo.arbay.classifier.FreeItemProfileStore
 import io.github.tieo.arbay.classifier.ModelRegistry
 import io.github.tieo.arbay.classifier.models.*
+import org.slf4j.LoggerFactory
 import io.github.tieo.arbay.crawler.CarTaxonomyProvider
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.plugins.configureRouting
@@ -50,7 +51,14 @@ fun Application.module() {
     // live catalog on boot and daily. The only thing that ever fetches this.
     launch {
         while (true) {
-            try { CarTaxonomyProvider.refresh() } catch (_: Exception) {}
+            try {
+                CarTaxonomyProvider.refresh()
+            } catch (e: Exception) {
+                // A refresh that keeps failing leaves the catalogue as it was, which looks like a
+                // site that has stopped adding models rather than like a fetch that never lands.
+                LoggerFactory.getLogger("CarTaxonomy")
+                    .error("Car taxonomy refresh failed, keeping the catalogue as it is: {}", e.message)
+            }
             delay(24 * 60 * 60 * 1000L)
         }
     }
