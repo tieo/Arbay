@@ -10,6 +10,9 @@ data class Money(
     companion object {
         fun cents(cents: Long, currency: Currency = Currency.EUR) = Money(cents, currency)
 
+        /** One written number: digits, and the separators that sit between digits. */
+        private val AMOUNT = Regex("""\d+(?:[ \u00A0.,]\d+)*""")
+
         fun parse(text: String): Money? {
             val currency = when {
                 "€" in text || "EUR" in text -> Currency.EUR
@@ -30,9 +33,15 @@ data class Money(
          *  symbol in the text. Used by crawlers on sites with a single known currency
          *  whose symbol ("kr") is ambiguous across markets. */
         fun parse(text: String, currency: Currency): Money? {
+            // One number, the first one, with only the characters that belong to it. Removing every
+            // non-digit from the whole text instead glued separate numbers together: an eBay card
+            // titled "Kein Versand !!!!Apple iPhone 11 Schwarz 64GB A2221 MWLT2ZD/A" produced a
+            // delivery charge of 116422212, which is 11, 64, 2221 and 2 run into one number.
+            // A space inside a number stays, since "49 000 kr" writes its thousands that way.
+            val token = AMOUNT.find(text)?.value ?: return null
             // Trailing/leading separators are not part of the number: "469.995 kr." strips to
             // "469.995." and "kr.-" style suffixes leave a dangling dot that breaks the parse.
-            val stripped = text.replace(Regex("[^\\d.,]"), "").trim('.', ',')
+            val stripped = token.replace(Regex("[^\\d.,]"), "").trim('.', ',')
             if (stripped.isBlank()) return null
 
             val hasDot = '.' in stripped

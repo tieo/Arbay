@@ -325,7 +325,8 @@ class EbayDeCrawler(
                     val t = el.text()
                     el.children().isEmpty() && // leaf element only
                     (t.contains("Versand", true) || t.contains("shipping", true) ||
-                     t.contains("Lieferung", true) || t.contains("postage", true))
+                     t.contains("Lieferung", true) || t.contains("postage", true)) &&
+                    saysWhatDeliveryCosts(t)
                 }?.text()
             val shipping = parseShipping(shippingText)
 
@@ -419,8 +420,23 @@ class EbayDeCrawler(
         }
     }
 
+    /**
+     * Whether a line states a delivery charge at all, rather than merely carrying the word.
+     *
+     * A seller who writes "Kein Versand !!!!" in the title says the word in a line that names no
+     * charge, and reading a number out of the rest of that title produced a delivery charge of
+     * 116422212 on an iPhone: the 11, 64, 2221 and 2 of "iPhone 11 Schwarz 64GB A2221 MWLT2ZD".
+     * A charge is written as money, or as one of the words for free.
+     */
+    private fun saysWhatDeliveryCosts(text: String): Boolean {
+        val lower = text.lowercase()
+        return "€" in text || "eur" in lower || "$" in text || "£" in text ||
+            "kostenlos" in lower || "free" in lower || "gratis" in lower ||
+            "not specified" in lower || "nicht angegeben" in lower
+    }
+
     private fun parseShipping(text: String?): Shipping? {
-        if (text == null) return null
+        if (text == null || !saysWhatDeliveryCosts(text)) return null
         val lower = text.lowercase()
         return when {
             lower.contains("kostenlos") || lower.contains("free") || lower.contains("gratis") ->

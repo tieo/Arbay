@@ -178,4 +178,17 @@ class MoneyParseTest {
     @Test
     fun `CZK price detected from koruna symbol`() =
         assertParse("599 000 Kč", 59900000, Currency.CZK)
+
+    @Test
+    fun `prose with several numbers is not one number`() {
+        // An eBay card whose own title carries the word "Versand" was read as a delivery charge,
+        // and every digit in it ran together into 116422212.
+        val title = "Kein Versand !!!!Apple iPhone 11 Schwarz 64GB A2221 MWLT2ZD/A Originalverpackung"
+        assertEquals(1100L, Money.parse(title)?.amount, "only the first number in the text")
+    }
+
+    @Test
+    fun `thousands written with spaces still parse`() {
+        assertEquals(4900000L, Money.parse("49 000 kr", Currency.SEK)?.amount)
+    }
 }
