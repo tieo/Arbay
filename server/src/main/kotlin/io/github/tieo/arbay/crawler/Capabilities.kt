@@ -38,6 +38,12 @@ interface FiltersAtTheSource {
  *  Only eBay does, across every market crawled. */
 interface HasSoldListings
 
+/** Sells by auction, so a price on one of its listings may be the bid so far rather than what the
+ *  thing costs. eBay and ricardo do; on every other market crawled, every listing is sold at the
+ *  price it states, which is why a market that does not declare this says so on its listings
+ *  instead of leaving the question open. */
+interface SellsByAuction
+
 /** Prints the searches it considers related to the one asked — its own vocabulary for the thing,
  *  which is where query expansion gets its terms. Only Kleinanzeigen does. */
 interface SuggestsRelatedSearches

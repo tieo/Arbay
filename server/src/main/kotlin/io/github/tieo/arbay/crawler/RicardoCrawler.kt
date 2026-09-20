@@ -19,7 +19,7 @@ import kotlinx.serialization.json.*
  * (slug, numeric id and query-param forms all return the same unfiltered promo feed) and it
  * issues no client-side listings request, so no fetchable URL yields filtered Swiss results.
  */
-class RicardoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, KnowsLocation {
+class RicardoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, KnowsLocation, SellsByAuction {
     override val platformId = PlatformId.RICARDO
 
     private val json = Json { ignoreUnknownKeys = true }

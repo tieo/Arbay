@@ -6,6 +6,8 @@ import io.github.tieo.arbay.crawler.Crawler
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.crawler.SellsByAuction
 import io.github.tieo.arbay.crawler.CrawlerStatusTracker
 import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
@@ -127,11 +129,11 @@ private suspend fun finishedResults(
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
         io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
-    val listings = annotateDistance(inside, query)
+    val listings = asDelivered(inside, query)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(raw, query.toCarFilters() ?: CarFilters()) else emptyMap()
-    return FinishedResults(listings, annotateDistance(outside, query), criteriaDropped, facets)
+    return FinishedResults(listings, asDelivered(outside, query), criteriaDropped, facets)
 }
 
 /** Reads the optional car-search filters from the request and applies them to a
@@ -277,10 +279,26 @@ private fun outsideTheArea(listings: List<Listing>, query: SearchQuery): Pair<Li
     return inside to outside
 }
 
-private fun annotateDistance(listings: List<Listing>, query: SearchQuery): List<Listing> {
+/**
+ * Say how a listing is sold, for the markets where there is only one answer.
+ *
+ * Two markets of twenty-eight hold auctions, and they say so on each listing. Everywhere else every
+ * listing is sold at the price it states, which the crawlers left unsaid rather than untrue: the
+ * results then read as 105 listings whose sale type was unknown against 26 that stated one, and a
+ * reader taking auctions out of the screen had to take the unknown ones with them.
+ */
+private fun statedSale(listings: List<Listing>): List<Listing> = listings.map { l ->
+    if (l.saleType != null) l
+    else if (CrawlerRegistry.crawlerFor(l.platformId) is SellsByAuction) l
+    else l.copy(saleType = SaleType.FIXED_PRICE)
+}
+
+/** Everything a listing gains on its way out of the server: where it is, how far that is from the
+ *  reader, and how it is sold. */
+private fun asDelivered(listings: List<Listing>, query: SearchQuery): List<Listing> {
     val lat = query.userLat
     val lon = query.userLon
-    return listings.map { l ->
+    return statedSale(listings).map { l ->
         val loc = l.location ?: return@map l
         val coords = if (loc.latitude != null && loc.longitude != null) loc.latitude!! to loc.longitude!!
             else Geocoder.resolve(loc.country, loc.zip, loc.city) ?: return@map l
@@ -509,7 +527,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                         else crawler.trackedSearch(pq, corpusBackground(listingRepo))
                             .also { QueryResultCache.put(platformId, pq, it) }
                     val classified = RelevanceFilter.filter(answer, pq).map { SoldDetector.classify(it) }
-                    val result = annotateDistance(
+                    val result = asDelivered(
                         carPostFilter(classified, pq, isCarQuery, crawler).first, pq,
                     )
                     result.forEach { listingRepo.upsert(it) }
@@ -690,7 +708,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val card = if (isCarQuery)
                                     CarFilterEngine.apply(classified.map { VehicleTextParser.enrich(it) }, partialFilters, keepNonVehicles = partsIntent)
                                 else classified
-                                val fresh = annotateDistance(card.filter { emittedIds.add(it.id) }, pq)
+                                val fresh = asDelivered(card.filter { emittedIds.add(it.id) }, pq)
                                 if (fresh.isNotEmpty()) {
                                     fresh.forEach { listingRepo.upsert(it) }
                                     resultChannel.send(CrawlerSearchEvent(
@@ -851,7 +869,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     .enrich(event.listings, crawler)
                                 if (placed.zip(event.listings).any { (a, b) -> a.location != b.location }) {
                                     resultChannel.send(
-                                        event.copy(listings = annotateDistance(placed, pq)),
+                                        event.copy(listings = asDelivered(placed, pq)),
                                     )
                                 }
                             }

@@ -17,7 +17,7 @@ class EbayDeCrawler(
     private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.EBAY_DE,
     private val domain: String = "ebay.de",
-) : Crawler, FetchesEveryPage, HasSoldListings {
+) : Crawler, FetchesEveryPage, HasSoldListings, SellsByAuction {
 
     /**
      * What eBay keeps on the item page and nowhere on the card: the vehicle specs in "Info zum
