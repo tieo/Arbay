@@ -542,12 +542,16 @@ fun ListingsSheet(
     val nothingToShow = displayedActiveListings.isEmpty() && soldListings.isEmpty()
 
     val answeredMarkets = platformStatuses.count { it.status == PlatformSearchStatus.DONE }
-    val failedMarkets = platformStatuses.count {
+    // A market that turned the search away is a different thing from a search that
+    // broke on our side, and they lead the reader somewhere different.
+    val turnedAwayMarkets = platformStatuses.count {
         it.status in setOf(
-            PlatformSearchStatus.ERROR, PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED,
+            PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED,
             PlatformSearchStatus.TIMEOUT, PlatformSearchStatus.CAPTCHA,
         )
     }
+    val brokenMarkets = platformStatuses.count { it.status == PlatformSearchStatus.ERROR }
+    val failedMarkets = turnedAwayMarkets + brokenMarkets
     val activeFilterCount = listOf(
         priceFiltered,
         conditions.isNotEmpty() || !unstatedCondition,
@@ -1112,6 +1116,8 @@ fun ListingsSheet(
                                 Text(
                                     when {
                                         hiddenByUs > 0 -> "The markets answered. Widen the price, the markets or the blocked words."
+                                        nobodyAnswered && turnedAwayMarkets == 0 ->
+                                            "All $failedMarkets ended in an error before the market answered. That is Arbay failing, not the markets."
                                         nobodyAnswered -> "All $failedMarkets blocked, timed out or asked for a captcha. This says nothing about whether the thing exists."
                                         else -> "All $answeredMarkets markets answered and none had one. Try other words."
                                     },

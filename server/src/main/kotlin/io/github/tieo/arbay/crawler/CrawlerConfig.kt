@@ -22,13 +22,15 @@ data class CrawlerConfig(
 ) {
     companion object {
         private val file = File(System.getProperty("user.home"), ".arbay/crawler_config.json")
-        private val json = Json { prettyPrint = true; encodeDefaults = true }
+        // A settings file written by another version carries keys this build does not know;
+        // rejecting it would leave every crawler without its limits.
+        private val json = Json { prettyPrint = true; encodeDefaults = true; ignoreUnknownKeys = true }
+
+        private val log = LoggerFactory.getLogger(CrawlerConfig::class.java)
 
         @Volatile
         var current: CrawlerConfig = load()
             private set
-
-        private val log = LoggerFactory.getLogger(CrawlerConfig::class.java)
 
         fun update(config: CrawlerConfig) {
             current = config
@@ -43,14 +45,16 @@ data class CrawlerConfig(
         }
 
         private fun load(): CrawlerConfig {
-            return try {
-                if (!file.exists()) return CrawlerConfig()
-                json.decodeFromString<CrawlerConfig>(file.readText())
-            } catch (e: Exception) {
-                // Every setting is about to silently become its default, which is worth a line.
-                log.error("Crawler settings at {} could not be read, using defaults: {}", file, e.message)
-                CrawlerConfig()
-            }
+            if (!file.exists()) return CrawlerConfig()
+            return parse(file.readText())
+        }
+
+        internal fun parse(text: String): CrawlerConfig = try {
+            json.decodeFromString<CrawlerConfig>(text)
+        } catch (e: Exception) {
+            // Every setting is about to silently become its default, which is worth a line.
+            log.error("Crawler settings at {} could not be read, using defaults: {}", file, e.message)
+            CrawlerConfig()
         }
     }
 }
