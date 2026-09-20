@@ -48,8 +48,11 @@ fun HiddenSheet(
     onDismiss: () -> Unit,
 ) {
     val shown = remember(groups) { groups.filter { it.listings.isNotEmpty() } }
-    var open by remember(shown) { mutableStateOf(shown.firstOrNull()?.label) }
-    val group = shown.firstOrNull { it.label == open }
+    // Which group is open is the reader's choice, so it survives the groups changing underneath:
+    // results are still arriving while this is open, and each arrival rebuilt the list and threw
+    // the reader back to the first group. A group that empties while open falls back to the first.
+    var open by remember { mutableStateOf<String?>(null) }
+    val group = shown.firstOrNull { it.label == open } ?: shown.firstOrNull()
     val total = remember(shown) { shown.sumOf { it.listings.size } }
 
     AdaptiveSheet(onDismiss = onDismiss) {

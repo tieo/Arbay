@@ -862,20 +862,26 @@ fun MainScreen(
                 if (bookmark != null) {
                     productViewModel.deleteProduct(bookmark.id)
                 } else {
-                    productViewModel.createProduct(
-                        name = view.name.ifBlank { view.query },
-                        searchText = view.query,
-                        // A plain search (no catalogue/car platform list of its own) is bookmarked
-                        // with the same markets it was actually searched with — never "every
-                        // platform including car-only and real-estate sites", which the
-                        // saved-search monitor would then re-run forever regardless of relevance.
-                        platforms = view.platforms
+                    // The search as it stands on screen, which is what the reader is saving: the
+                    // filters they set live on the history entry until the bookmark exists, and
+                    // rebuilding the query from its text alone dropped every one of them the
+                    // moment they tapped save.
+                    // A plain search (no catalogue/car platform list of its own) is bookmarked
+                    // with the same markets it was actually searched with — never "every
+                    // platform including car-only and real-estate sites", which the
+                    // saved-search monitor would then re-run forever regardless of relevance.
+                    val asItStands = bookmarkQuery(
+                        onScreen = resultsHistoryEntry?.searchQuery
+                            ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category),
+                        text = view.query,
+                        asked = view.platforms
                             ?: MarketSets.platformsIn(view.category, SearchCountries.current.countries),
                         category = view.category,
                         carFilters = view.filters,
-                        excludeKeywords = resultsBlockedTerms,
+                        blockedWords = resultsBlockedTerms,
                         aliases = resultsHistoryEntry?.searchQuery?.aliases ?: view.aliases,
                     )
+                    productViewModel.createProduct(view.name.ifBlank { view.query }, asItStands)
                 }
             },
             onDismiss = {

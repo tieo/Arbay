@@ -338,8 +338,8 @@ private val PlatformStatus.isFailure: Boolean
  */
 private fun PlatformStatus.saidWhat(kept: Int, hiddenByWords: Boolean = false): String? = when (status) {
     // A market that was not part of this crawl says so, and says how to have it asked.
-    PlatformSearchStatus.PENDING -> fetchStage ?: "waiting its turn"
-    PlatformSearchStatus.SEARCHING -> fetchStage ?: "being asked"
+    PlatformSearchStatus.PENDING -> fetchStage?.let(::fetchStageWords) ?: "waiting its turn"
+    PlatformSearchStatus.SEARCHING -> fetchStage?.let(::fetchStageWords) ?: "being asked"
     PlatformSearchStatus.CAPTCHA -> "asked for a captcha instead of answering"
     // A market that was still sending when it was given up on has usually sent some of it. Saying
     // only that it was too slow, beside a count of what it managed, reads as a contradiction.

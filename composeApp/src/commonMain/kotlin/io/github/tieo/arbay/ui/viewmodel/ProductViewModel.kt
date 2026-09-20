@@ -60,6 +60,42 @@ class ProductViewModel(
         }
     }
 
+    /**
+     * Save a search exactly as it stands, narrowing and all.
+     *
+     * Bookmarking rebuilt the query from its text and markets alone, so the price band, the
+     * conditions, the sale type, the order and the market picks the reader had set were dropped at
+     * the moment they saved the search: the same screen went from 188 offers to 252 as the bookmark
+     * replaced the history entry those choices lived on.
+     */
+    fun createProduct(name: String, query: SearchQuery) {
+        // One search, one bookmark. The screen knows a search is saved by finding it in the list,
+        // which only arrives once the server has answered, so a second tap in that gap saved the
+        // same search again: two identical "iphone 11" bookmarks, a second and a half apart.
+        val key = "$name|${query.text}"
+        if (!beingSaved.add(key)) return
+        viewModelScope.launch {
+            try {
+                client.createProduct(
+                    TrackedProduct(
+                        id = generateId(),
+                        name = name,
+                        searchQuery = query,
+                        createdAt = Clock.System.now(),
+                    ),
+                )
+                loadProducts()
+            } catch (e: Exception) {
+                _error.value = e.message
+            } finally {
+                beingSaved.remove(key)
+            }
+        }
+    }
+
+    /** Searches with a save in flight, so the same one cannot be saved twice over. */
+    private val beingSaved = mutableSetOf<String>()
+
     fun createProduct(
         name: String,
         searchText: String,

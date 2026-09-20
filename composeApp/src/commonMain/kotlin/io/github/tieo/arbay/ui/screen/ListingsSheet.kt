@@ -236,31 +236,45 @@ fun ListingsSheet(
     val priceMax = remember(allActivePrices) {
         ((allActivePrices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
     }
-    // Seed from the saved bound (clamped into the current data range), else the full range.
-    var priceRange by remember(priceMin, priceMax) {
-        val savedLow = savedFilters?.minPrice?.amount?.div(100)?.toFloat()
-        val savedHigh = savedFilters?.maxPrice?.amount?.div(100)?.toFloat()
-        val lo = savedLow?.coerceIn(priceMin, priceMax) ?: priceMin
-        val hi = savedHigh?.coerceIn(priceMin, priceMax)?.coerceAtLeast(lo) ?: priceMax
-        mutableStateOf(lo..hi)
-    }
-    // The conditions and the order are part of the saved search, so they open where they were left.
-    // Any set of conditions is allowed, since any set is a real question: new and used but not
-    // for-parts, refurbished only, for-parts only.
-    var conditions by remember(savedFilters) {
-        mutableStateOf(savedFilters?.condition?.toSet() ?: emptySet())
-    }
-    var unstatedCondition by remember(savedFilters) {
-        mutableStateOf(savedFilters?.conditionUnstated ?: true)
-    }
+    // What the reader has narrowed this screen to. It is read out of the saved search once, when
+    // the screen opens on it, and is the reader's from then on.
+    //
+    // These were keyed on the saved search itself, so every write back to it — and each of these
+    // choices writes itself back — handed the screen a new query object and re-seeded all of them
+    // from it. Saving a search as a bookmark does the same thing, since the filters move from the
+    // history entry to the bookmark: one tap on the bookmark took a screen of 188 offers with four
+    // filters set to 252 with two, without the reader touching a filter.
+    val openedSearch = "$productName|$searchQuery"
+    var seededFrom by remember { mutableStateOf<String?>(null) }
+    // A band of null is the whole range, whatever the results turn out to hold, so results still
+    // arriving widen the slider rather than narrowing what the reader asked for.
+    var chosenBand by remember(openedSearch) { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
+    var conditions by remember(openedSearch) { mutableStateOf(emptySet<Condition>()) }
+    var unstatedCondition by remember(openedSearch) { mutableStateOf(true) }
     // How the listings are sold, kept the same way: an auction's price is the bid so far, so
     // "what does this cost" and "what is it bid to" are different questions to ask of a screen.
-    var saleTypes by remember(savedFilters) {
-        mutableStateOf(savedFilters?.saleTypes?.toSet() ?: emptySet())
+    var saleTypes by remember(openedSearch) { mutableStateOf(emptySet<SaleType>()) }
+    var unstatedSaleType by remember(openedSearch) { mutableStateOf(true) }
+    // The saved search can arrive after the first frame, so the seeding waits for it rather than
+    // reading whatever was there at the start. It happens once per search opened.
+    LaunchedEffect(openedSearch, savedFilters != null) {
+        val saved = savedFilters
+        if (seededFrom == openedSearch || saved == null) return@LaunchedEffect
+        val low = saved.minPrice?.amount?.div(100)?.toFloat()
+        val high = saved.maxPrice?.amount?.div(100)?.toFloat()
+        chosenBand = if (low == null && high == null) null
+            else (low ?: 0f)..(high ?: Float.MAX_VALUE)
+        conditions = saved.condition?.toSet() ?: emptySet()
+        unstatedCondition = saved.conditionUnstated
+        saleTypes = saved.saleTypes?.toSet() ?: emptySet()
+        unstatedSaleType = saved.saleTypeUnstated
+        seededFrom = openedSearch
     }
-    var unstatedSaleType by remember(savedFilters) {
-        mutableStateOf(savedFilters?.saleTypeUnstated ?: true)
-    }
+    // What the slider shows: the reader's band held inside whatever the results actually hold.
+    val priceRange = chosenBand
+        ?.let { band -> band.start.coerceIn(priceMin, priceMax)..band.endInclusive.coerceIn(priceMin, priceMax) }
+        ?.takeIf { it.start <= it.endInclusive }
+        ?: priceMin..priceMax
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
@@ -308,8 +322,14 @@ fun ListingsSheet(
     // Remember the band on the saved search, whether it was set by dragging the slider or typed
     // into the fields — they edit one value, so they save it the same way.
     fun persistFilters(edit: (SearchQuery) -> SearchQuery) {
-        val base = savedFilters ?: return
-        onFiltersPersist?.invoke(edit(base))
+        // A search with nothing saved for it yet still keeps what the reader narrows it to: the
+        // choice is written against a query of this search's own text, which is what a bookmark
+        // made later is built from. Dropping the write instead meant every filter set before
+        // saving a search was lost the moment it was saved.
+        onFiltersPersist?.invoke(edit(savedFilters ?: SearchQuery(
+            text = searchQuery,
+            category = if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL,
+        )))
     }
 
     fun persistPriceRange() {
@@ -1206,7 +1226,7 @@ fun ListingsSheet(
                 priceMin = priceMin,
                 priceMax = priceMax,
                 priceRange = priceRange,
-                onPriceRange = { priceRange = it },
+                onPriceRange = { chosenBand = it },
                 onPriceCommitted = { persistPriceRange() },
                 conditions = conditions,
                 onConditions = { chosen ->
@@ -1263,7 +1283,7 @@ fun ListingsSheet(
                 onBlock = blockWord,
                 activeCount = activeFilterCount,
                 onClearAll = {
-                    priceRange = priceMin..priceMax
+                    chosenBand = null
                     conditions = emptySet()
                     unstatedCondition = true
                     listingViewModel.showMarkets(emptySet())

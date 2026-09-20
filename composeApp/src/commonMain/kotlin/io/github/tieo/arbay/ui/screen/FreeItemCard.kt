@@ -686,7 +686,7 @@ internal fun LoadingState(platformStatus: PlatformStatus?) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            platformStatus?.fetchStage?.let { stage ->
+            platformStatus?.fetchStage?.let(::fetchStageWords)?.let { stage ->
                 Spacer(Modifier.height(4.dp))
                 Text(stage, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

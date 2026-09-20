@@ -90,9 +90,18 @@ fun FreeItemsSheet(
     var buttonAction by remember { mutableStateOf<String?>(null) }
 
     var editingProfile by remember { mutableStateOf(profile == null) }
-    var profileDraft by remember(profile) { mutableStateOf(profile?.description ?: "") }
-    var locationDraft by remember(profile) { mutableStateOf(profile?.location ?: "") }
-    var radiusDraft by remember(profile) { mutableFloatStateOf((profile?.radiusKm ?: 30).toFloat()) }
+    // The three fields of the profile form, filled from the saved profile when the form opens and
+    // the reader's from then on. Keyed on the profile itself, a reload landing mid-sentence — the
+    // search that follows saving writes the profile back — replaced what was being typed.
+    var profileDraft by remember { mutableStateOf(profile?.description ?: "") }
+    var locationDraft by remember { mutableStateOf(profile?.location ?: "") }
+    var radiusDraft by remember { mutableFloatStateOf((profile?.radiusKm ?: 30).toFloat()) }
+    LaunchedEffect(editingProfile) {
+        if (!editingProfile) return@LaunchedEffect
+        profileDraft = profile?.description ?: profileDraft
+        locationDraft = profile?.location ?: locationDraft
+        radiusDraft = (profile?.radiusKm ?: radiusDraft.toInt()).toFloat()
+    }
     var showSavedSheet by remember { mutableStateOf(false) }
 
     DebugSlice("freeItemsScreen") {
