@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# The last check before anything leaves: every commit being pushed, whole, with its message and
+# both identities. It catches what the commit hooks cannot, such as a commit made with --no-verify,
+# on a clone without the hooks, or by a tool that commits on its own.
+set -u
+. "$(git rev-parse --show-toplevel)/.githooks/lib/leakcheck.sh"
+warn_if_no_private_patterns
+
+zero=0000000000000000000000000000000000000000
+fail=0
+
+scan_commit() {
+  local c="$1" email f
+  for email in "$(git show -s --format=%ae "$c")" "$(git show -s --format=%ce "$c")"; do
+    identity_allowed "$email" || { echo "  $c: by $email, not an allowed identity" >&2; fail=1; }
+  done
+  git show -s --format=%B "$c" | scan_text "$c message" || fail=1
+  for f in $(git show --format= --name-only --diff-filter=ACM "$c"); do
+    is_fixture "$f" && continue
+    git show --format= -U0 "$c" -- "$f" | grep '^+' | grep -v '^+++' | scan_text "$c $f" || fail=1
+  done
+}
+
+# .githooks/pre-push --audit-history checks every commit on every branch, not only the ones a push
+# would send: what to run before a repository is made public, and after its history is rewritten.
+if [ "${1:-}" = "--audit-history" ]; then
+  for c in $(git rev-list --all); do scan_commit "$c"; done
+  [ "$fail" -ne 0 ] && { echo "The history carries the findings above." >&2; exit 1; }
+  echo "leakcheck: $(git rev-list --all | wc -l) commits checked, nothing found."
+  exit 0
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue            # a deleted ref sends nothing
+  if [ "$remote_sha" = "$zero" ]; then range="$local_sha --not --remotes"; else range="$remote_sha..$local_sha"; fi
+  for c in $(git rev-list $range); do scan_commit "$c"; done
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "The push was stopped: the commits above carry something that identifies the machine or its owner." >&2
+  exit 1
+fi
+exit 0

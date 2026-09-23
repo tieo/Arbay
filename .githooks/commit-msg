@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The message is published with the commit, so it is held to the same rules as the content.
+set -u
+. "$(git rev-parse --show-toplevel)/.githooks/lib/leakcheck.sh"
+load_private_patterns || true
+if ! grep -v '^#' "$1" | scan_text "commit message"; then
+  echo "The commit was stopped: its message names something that identifies the machine or its owner." >&2
+  echo "Describe it in general terms (the server, the home network) and commit again." >&2
+  exit 1
+fi
+exit 0

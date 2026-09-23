@@ -248,7 +248,7 @@ object PreviewData {
     /** A free-item profile, so Home renders with the card the real app pins at the top. */
     val freeItemProfile = io.github.tieo.arbay.model.FreeItemProfile(
         description = "tools, wood, anything for the workshop",
-        location = "Frankfurt (Oder)",
+        location = "Rottweil",
         radiusKm = 30,
     )
 
