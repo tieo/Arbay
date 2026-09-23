@@ -18,7 +18,6 @@ import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -1201,7 +1200,7 @@ private fun AddProductSheet(
 
     AdaptiveFormSheet(onDismiss = onDismiss) {
         if (onBack != null) {
-            BackHandler(onBack = onBack)
+            OnBack(onBack = onBack)
         }
         Column(
             modifier = Modifier

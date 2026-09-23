@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -666,7 +665,7 @@ fun ListingsSheet(
 
     AdaptiveSheet(onDismiss = onDismiss) {
         if (onBack != null) {
-            BackHandler(onBack = onBack)
+            OnBack(onBack = onBack)
         }
         Box(
             modifier = Modifier

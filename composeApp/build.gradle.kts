@@ -64,6 +64,7 @@ kotlin {
             implementation(libs.androidx.work.runtime)
         }
         commonMain.dependencies {
+            implementation(libs.navigationevent.compose)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

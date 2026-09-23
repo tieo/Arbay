@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -223,7 +222,7 @@ fun CarSearchSheet(
     )
 
     AdaptiveFormSheet(onDismiss = onDismiss) {
-        if (onBack != null) BackHandler(onBack = onBack)
+        if (onBack != null) OnBack(onBack = onBack)
         // Scrollable filters above, a sticky Search bar pinned at the bottom (like the
         // real car apps): every field is optional, so the bar is always reachable + enabled.
         Column(
