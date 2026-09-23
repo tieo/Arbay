@@ -3,7 +3,7 @@ package io.github.tieo.arbay.classifier
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import org.slf4j.LoggerFactory
+import io.github.tieo.arbay.DataDir
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -13,6 +13,7 @@ import java.nio.FloatBuffer
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
 
 /**
  * CLIP ViT-B/32 image encoder (ONNX) producing a 512-dim L2-normalized embedding of a
@@ -34,7 +35,6 @@ object ClipImageModel {
     private const val HF_REPO = "immich-app/ViT-B-32__openai"
     private const val HF_FILE = "visual/model.onnx"
     private const val MODEL_FILE = "clip-vit-b32-vision.onnx"
-    private const val MODELS_DIR = ".arbay/models"
     const val DIM = 512
     private const val SIZE = 224
 
@@ -173,7 +173,7 @@ object ClipImageModel {
     }
 
     private fun ensureDownloaded(): File {
-        val dir = File(System.getProperty("user.home"), MODELS_DIR).also { it.mkdirs() }
+        val dir = DataDir.models.also { it.mkdirs() }
         val file = File(dir, MODEL_FILE)
         if (file.exists() && file.length() > 1024) return file
 
@@ -182,14 +182,23 @@ object ClipImageModel {
         // plain HTTP GET is rejected. Copy the resolved cache path to our models dir.
         val script = "from huggingface_hub import hf_hub_download; import shutil, sys; " +
             "p = hf_hub_download('$HF_REPO', '$HF_FILE'); shutil.copyfile(p, sys.argv[1])"
-        val proc = ProcessBuilder("python3", "-c", script, file.absolutePath)
-            .redirectErrorStream(true).start()
-        val out = proc.inputStream.bufferedReader().readText()
+        // Copied beside the model and renamed once complete, so a download cut short never sits
+        // at the model's name. The output goes to a file rather than a pipe, so the time limit
+        // holds even when the script stops writing without exiting.
+        val partial = File(dir, "$MODEL_FILE.part")
+        val output = File(dir, "$MODEL_FILE.download.log")
+        val proc = ProcessBuilder("python3", "-c", script, partial.absolutePath)
+            .redirectErrorStream(true).redirectOutput(output).start()
         val finished = proc.waitFor(15, java.util.concurrent.TimeUnit.MINUTES)
         if (!finished) { proc.destroyForcibly(); throw java.io.IOException("CLIP model download timed out") }
-        if (proc.exitValue() != 0 || !file.exists() || file.length() < 1024) {
-            throw java.io.IOException("huggingface_hub download failed (exit ${proc.exitValue()}): ${out.take(400)}")
+        if (proc.exitValue() != 0 || !partial.exists() || partial.length() < 1024) {
+            throw java.io.IOException("huggingface_hub download failed (exit ${proc.exitValue()}): ${output.readText().take(400)}")
         }
+        java.nio.file.Files.move(
+            partial.toPath(), file.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+        )
+        output.delete()
         log.info("Downloaded $MODEL_FILE (${file.length() / 1024}KB)")
         return file
     }

@@ -1,13 +1,16 @@
 package io.github.tieo.arbay.classifier
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 enum class FeedbackAction { LOVE, LIKE, DISLIKE, PASS }
 
@@ -33,7 +36,7 @@ data class StoredFeedback(
 object FreeItemFeedbackStore {
 
     private val log = LoggerFactory.getLogger(FreeItemFeedbackStore::class.java)
-    private val feedbackFile = File(System.getProperty("user.home"), ".arbay/free_item_feedback.json")
+    private val feedbackFile = DataDir.file("free_item_feedback.json")
     private val json = Json { ignoreUnknownKeys = true }
 
     private val feedback = mutableListOf<StoredFeedback>()
@@ -138,23 +141,19 @@ object FreeItemFeedbackStore {
     }
 
     private fun load() {
-        if (!feedbackFile.exists()) return
-        try {
-            val loaded = json.decodeFromString<List<StoredFeedback>>(feedbackFile.readText())
-            synchronized(feedback) { feedback.addAll(loaded) }
-            log.info("Loaded ${loaded.size} free item feedback entries")
-        } catch (e: Exception) {
-            log.warn("Could not load free item feedback: ${e.message}")
-        }
+        val loaded = feedbackFile.readStore(log) { json.decodeFromString<List<StoredFeedback>>(it) } ?: return
+        synchronized(feedback) { feedback.addAll(loaded) }
+        log.info("Loaded ${loaded.size} free item feedback entries")
     }
 
-    private fun save() {
+    // The copy is taken and written under one lock, so a save that copied earlier can never
+    // land on disk after one that copied later and roll the file back.
+    private fun save() = synchronized(feedbackFile) {
         try {
-            feedbackFile.parentFile.mkdirs()
             val copy = synchronized(feedback) { feedback.toList() }
-            feedbackFile.writeText(json.encodeToString(copy))
+            feedbackFile.writeTextAtomically(json.encodeToString(copy))
         } catch (e: Exception) {
-            log.warn("Could not save free item feedback: ${e.message}")
+            log.error("Could not save free item feedback: {}", e.message)
         }
     }
 }

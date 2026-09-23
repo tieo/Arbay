@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -43,7 +44,7 @@ class EbayDeCrawler(
                 location = itemLocation(html),
             ).takeIf { it.vehicle != null || it.location != null }
         }
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
     }
 
@@ -59,7 +60,7 @@ class EbayDeCrawler(
             emitter?.emit("BrowseAPI")
             val apiResults = try {
                 EbayBrowseApi.search(client, query, platformId, domain, CrawlerConfig.current.maxResultsPerPlatform)
-            } catch (_: Exception) { null }
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             if (!apiResults.isNullOrEmpty()) return apiResults
         }
 
@@ -69,7 +70,7 @@ class EbayDeCrawler(
             val html = fetchHttp(client, firstUrl, "eBay")
             validateHtml(html, "eBay")
             html
-        } catch (_: Exception) { null }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
 
         if (httpHtml != null) {
             return fetchActiveAndSoldHttp(httpHtml, query, allResults, seenIds)
@@ -81,7 +82,7 @@ class EbayDeCrawler(
             val html = CurlCffiClient.fetch(firstUrl, primeUrl = "https://www.$domain")
             validateHtml(html, "eBay")
             html
-        } catch (_: Exception) { null }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
 
         // A CurlCffi page that parses to zero listings for a keyword search is almost always a
         // soft block (eBay serves a 200 challenge/empty page), not a genuinely empty result — so
@@ -101,7 +102,7 @@ class EbayDeCrawler(
                     val html = try {
                         val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
                         validateHtml(h, "eBay"); h
-                    } catch (_: Exception) { break }
+                    } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
                     val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
                     allResults.addAll(results)
                     if (results.size < 20 || allResults.size >= cap) break
@@ -115,13 +116,13 @@ class EbayDeCrawler(
                         val html = try {
                             val h = CurlCffiClient.fetch(buildSearchUrl(soldQuery, soldPage))
                             validateHtml(h, "eBay"); h
-                        } catch (_: Exception) { break }
+                        } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
                         val sold = parseSearchResults(html).map { it.copy(sold = true) }
                             .filter { seenIds.add(it.externalId) }
                         allResults.addAll(sold)
                         if (sold.size < 20) break
                     }
-                } catch (_: Exception) {}
+                } catch (e: CancellationException) { throw e } catch (_: Exception) {}
             }
             return allResults
         }
@@ -135,8 +136,7 @@ class EbayDeCrawler(
                 waitSelector = "li.s-card, li.s-item",
                 extraWaitMs = 1000,
             ) { fetchPage ->
-                val result = try { fetchPage(buildSearchUrl(query, 1)) }
-                    catch (e: Exception) { throw e }
+                val result = fetchPage(buildSearchUrl(query, 1))
                 val html = validateBrowserResult(result, "eBay")
                 val pageResults = parseSearchResults(html)
                 allResults.addAll(pageResults.filter { seenIds.add(it.externalId) })
@@ -170,7 +170,7 @@ class EbayDeCrawler(
                 val html = try {
                     val h = fetchHttp(client, buildSearchUrl(query, page), "eBay")
                     validateHtml(h, "eBay"); h
-                } catch (_: Exception) { break }
+                } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
                 val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
                 allResults.addAll(results)
                 if (results.size < 20 || allResults.size >= cap) break
@@ -183,13 +183,13 @@ class EbayDeCrawler(
                     val html = try {
                         val h = fetchHttp(client, buildSearchUrl(soldQuery, soldPage), "eBay")
                         validateHtml(h, "eBay"); h
-                    } catch (_: Exception) { break }
+                    } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
                     val sold = parseSearchResults(html).map { it.copy(sold = true) }
                         .filter { seenIds.add(it.externalId) }
                     allResults.addAll(sold)
                     if (sold.size < 20) break
                 }
-            } catch (_: Exception) {}
+            } catch (e: CancellationException) { throw e } catch (_: Exception) {}
         }
         return allResults
     }

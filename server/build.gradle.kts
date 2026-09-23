@@ -38,8 +38,14 @@ dependencies {
 }
 
 // Image preprocessing (CLIP) uses java.awt; run headless so it needs no X11 libs.
+// Tests write into a directory of their own that starts empty on every run, never into the
+// ~/.arbay of the machine running them. The downloaded models are a cache, so they stay shared.
 tasks.withType<Test> {
     systemProperty("java.awt.headless", "true")
+    val testData = layout.buildDirectory.dir("test-data").get().asFile
+    systemProperty("arbay.dataDir", testData.absolutePath)
+    systemProperty("arbay.modelsDir", File(System.getProperty("user.home"), ".arbay/models").absolutePath)
+    doFirst { testData.deleteRecursively(); testData.mkdirs() }
 }
 // Prints every market's declared capabilities as JSON, which the model site renders its market
 // objects from. Run: ./gradlew :server:dumpCapabilities -q

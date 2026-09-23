@@ -6,12 +6,12 @@
         </encoder>
     </appender>
 
-    <!-- Persistent rolling file in the data volume (user.home=/var/lib/arbay in prod), so logs
-         survive container recreation. Rolls daily and at 50 MB, keeps 14 days / 500 MB total. -->
+    <!-- Persistent rolling file in the data directory (-Darbay.dataDir, else ~/.arbay, the same
+         rule as DataDir.kt; user.home=/var/lib/arbay in prod), so logs survive container recreation. Rolls daily and at 50 MB, keeps 14 days / 500 MB total. -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${user.home}/.arbay/logs/arbay.log</file>
+        <file>${arbay.dataDir:-${user.home}/.arbay}/logs/arbay.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${user.home}/.arbay/logs/arbay.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${arbay.dataDir:-${user.home}/.arbay}/logs/arbay.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>50MB</maxFileSize>
             <maxHistory>14</maxHistory>
             <totalSizeCap>500MB</totalSizeCap>

@@ -1,14 +1,15 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.AuctionReminder
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * Auctions someone asked to be told about before they end.
@@ -20,18 +21,14 @@ import kotlin.time.Duration.Companion.minutes
  */
 object AuctionReminderStore {
     private val log = LoggerFactory.getLogger(AuctionReminderStore::class.java)
-    private val file = File(System.getProperty("user.home"), ".arbay/auction_reminders.json")
+    private val file = DataDir.file("auction_reminders.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
 
     private val reminders = ConcurrentHashMap<String, AuctionReminder>()
 
     init {
-        runCatching {
-            if (file.exists()) {
-                json.decodeFromString<List<AuctionReminder>>(file.readText())
-                    .forEach { reminders[it.listingId] = it }
-            }
-        }.onFailure { log.warn("Could not read auction reminders: {}", it.message) }
+        file.readStore(log) { json.decodeFromString<List<AuctionReminder>>(it) }
+            ?.forEach { reminders[it.listingId] = it }
     }
 
     fun all(): List<AuctionReminder> = reminders.values.sortedBy { it.endsAt }
@@ -53,15 +50,19 @@ object AuctionReminderStore {
      * running: the point is to arrive in time to bid, and late is only useless once it has ended.
      */
     fun drainDue(now: Instant = Clock.System.now()): List<AuctionReminder> {
-        val due = reminders.values.filter { now >= it.endsAt.minus(it.leadMinutes.minutes) }
+        // Each reminder is claimed by removing it, so two polls arriving together cannot both hand
+        // the same one over and raise the notification twice.
+        val due = reminders.values
+            .filter { now >= it.endsAt.minus(it.leadMinutes.minutes) }
+            .filter { reminders.remove(it.listingId, it) }
         if (due.isEmpty()) return emptyList()
-        due.forEach { reminders.remove(it.listingId) }
         persist()
         return due.filter { it.endsAt > now }.sortedBy { it.endsAt }
     }
 
-    private fun persist() {
+    // Copy and write under one lock, so an older copy never lands after a newer one.
+    private fun persist() = synchronized(file) {
         runCatching { file.writeTextAtomically(json.encodeToString(reminders.values.toList())) }
-            .onFailure { log.warn("Could not save auction reminders: {}", it.message) }
+            .onFailure { log.error("Could not save auction reminders: {}", it.message) }
     }
 }

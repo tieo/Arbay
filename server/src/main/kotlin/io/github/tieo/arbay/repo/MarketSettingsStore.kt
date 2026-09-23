@@ -1,10 +1,11 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.MarketSettings
+import java.io.File
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Which countries a search covers when it names no markets of its own.
@@ -15,26 +16,24 @@ import java.io.File
  */
 object MarketSettingsStore {
     private val log = LoggerFactory.getLogger(MarketSettingsStore::class.java)
-    private val file = File(System.getProperty("user.home"), ".arbay/market_settings.json")
+    private val file = DataDir.file("market_settings.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
 
     @Volatile
     var current: MarketSettings = load()
         private set
 
-    private fun load(): MarketSettings = try {
-        if (file.exists()) json.decodeFromString(file.readText()) else MarketSettings()
-    } catch (e: Exception) {
-        log.warn("Could not read market settings, using defaults: {}", e.message)
-        MarketSettings()
-    }
+    private fun load(): MarketSettings =
+        file.readStore(log) { json.decodeFromString<MarketSettings>(it) } ?: MarketSettings()
 
+    // One update at a time, so the settings in memory and the ones on disk are the same ones.
+    @Synchronized
     fun update(settings: MarketSettings): MarketSettings {
         current = settings
         try {
             file.writeTextAtomically(json.encodeToString(settings))
         } catch (e: Exception) {
-            log.warn("Could not save market settings: {}", e.message)
+            log.error("Could not save market settings: {}", e.message)
         }
         return current
     }

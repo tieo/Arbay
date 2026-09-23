@@ -4,12 +4,13 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLQueryComponent
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Translates a short search term between languages so a cross-border search can query each market
@@ -35,9 +36,17 @@ object Translator {
         // a failure that looks exactly like a term with no translation. A second and third source
         // keep one refusal from silently turning every foreign market back into the home language.
         val translated = sources(text, from, to).firstNotNullOfOrNull { (name, fetch) ->
-            runCatching { fetch() }
-                .onFailure { log.debug("translate '{}' {}->{} via {} failed: {}", text, from, to, name, it.message) }
-                .getOrNull()
+            // A cancelled search must not fall through to the next source and then cache the
+            // untranslated text as this term's answer for the life of the process.
+            val answer = try {
+                fetch()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.debug("translate '{}' {}->{} via {} failed: {}", text, from, to, name, e.message)
+                null
+            }
+            answer
                 ?.trim()
                 ?.takeIf { it.isNotBlank() && !it.equals(text, ignoreCase = true) }
         } ?: text

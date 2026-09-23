@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
-import org.slf4j.LoggerFactory
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.repo.writeTextAtomically
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.net.URL
@@ -9,6 +10,7 @@ import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
 
 /**
  * Resolves a listing's postal location to coordinates so a distance to the searcher can be computed.
@@ -25,7 +27,7 @@ object Geocoder {
         "DE", "AT", "CH", "FR", "IT", "ES", "BE", "NL", "LU", "DK", "SE", "NO", "FI", "PL", "PT",
         "LT", "RS",
     )
-    private val dir = File(System.getProperty("user.home"), ".arbay/geonames")
+    private val dir = DataDir.file("geonames")
 
     // "CC:zip" and "CC:city" → (lat, lon). Built once, lazily.
     private val index: Map<String, Pair<Double, Double>> by lazy { buildIndex() }
@@ -55,13 +57,19 @@ object Geocoder {
     private fun ensureCountry(cc: String): String? {
         val f = File(dir, "$cc.txt")
         if (f.exists() && f.length() > 0) return f.readText()
-        val bytes = URL("https://download.geonames.org/export/zip/$cc.zip").openStream().use { it.readBytes() }
+        // Bounded, so an unanswered download fails and is retried on the next start instead of
+        // holding the thread that builds the index.
+        val connection = URL("https://download.geonames.org/export/zip/$cc.zip").openConnection().apply {
+            connectTimeout = 15_000
+            readTimeout = 60_000
+        }
+        val bytes = connection.getInputStream().use { it.readBytes() }
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
                 if (entry.name == "$cc.txt") {
                     val txt = zis.readBytes().toString(Charsets.UTF_8)
-                    f.writeText(txt)
+                    f.writeTextAtomically(txt)
                     return txt
                 }
                 entry = zis.nextEntry

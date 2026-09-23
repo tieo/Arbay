@@ -3,8 +3,12 @@ package io.github.tieo.arbay.plugins
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import kotlinx.serialization.SerializationException
+import org.slf4j.LoggerFactory
+
+private val statusPagesLog = LoggerFactory.getLogger("StatusPages")
 
 fun Application.configureStatusPages() {
     install(StatusPages) {
@@ -18,7 +22,10 @@ fun Application.configureStatusPages() {
             call.respondText(cause.message ?: "Invalid request body", status = HttpStatusCode.BadRequest)
         }
         exception<Throwable> { call, cause ->
-            call.respondText(cause.message ?: "Internal error", status = HttpStatusCode.InternalServerError)
+            // The stack trace goes to the log, where it can be read; the caller learns only
+            // that the server failed, not the paths and internals a message can carry.
+            statusPagesLog.error("Unhandled error on {} {}", call.request.httpMethod.value, call.request.path(), cause)
+            call.respondText("Internal error", status = HttpStatusCode.InternalServerError)
         }
     }
 }

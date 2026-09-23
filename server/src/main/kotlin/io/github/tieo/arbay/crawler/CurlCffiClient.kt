@@ -2,8 +2,6 @@ package io.github.tieo.arbay.crawler
 
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 /**
  * Calls cffi_fetch.py via subprocess to make HTTP requests with a real Chrome 131 TLS/HTTP2 fingerprint.
@@ -29,7 +27,7 @@ object CurlCffiClient {
      * @param primeUrl If provided, visits this URL first to establish session cookies (e.g. homepage priming).
      * @return raw HTML body
      */
-    fun fetch(url: String, primeUrl: String? = null): String {
+    suspend fun fetch(url: String, primeUrl: String? = null): String {
         val args = mutableListOf("python3", scriptPath, "fetch", url)
         if (!primeUrl.isNullOrBlank()) args.add(primeUrl)
         return run(args, url)
@@ -39,7 +37,7 @@ object CurlCffiClient {
      * Search Idealo via /suggest API + concurrent product page title scraping.
      * @return JSON string: array of {title, url, id, price_text}
      */
-    fun idealoSearch(query: String): String {
+    suspend fun idealoSearch(query: String): String {
         return run(listOf("python3", scriptPath, "idealo", query), "idealo:$query")
     }
 
@@ -47,35 +45,20 @@ object CurlCffiClient {
      * Search Refurbed via /search-autosuggest API + concurrent product page price extraction.
      * @return JSON string: array of {title, url, id, price_cents, image_url}
      */
-    fun refurbedSearch(query: String): String {
+    suspend fun refurbedSearch(query: String): String {
         return run(listOf("python3", scriptPath, "refurbed", query), "refurbed:$query")
     }
 
-    private fun run(args: List<String>, desc: String): String {
+    private suspend fun run(args: List<String>, desc: String): String {
         log.debug("CurlCffi launching: {}", desc)
-        val process = ProcessBuilder(args)
-            .redirectErrorStream(false)
-            .start()
-
-        // Read stdout/stderr in background threads to prevent pipe buffer deadlock
-        var stderr = ""
-        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
-        stderrThread.isDaemon = true
-        stderrThread.start()
-
-        // Read stdout with a hard timeout — process.inputStream.readBytes() blocks until process exits
-        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
-        val output = try {
-            outputFuture.get(70, TimeUnit.SECONDS)
-        } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroyForcibly()
+        val outcome = try {
+            runProcess(args, timeoutMs = 70_000)
+        } catch (_: ProcessTimedOut) {
             throw CrawlerBlockedException("curl_cffi output timeout for $desc", ErrorType.TIMEOUT)
         }
+        val stderr = outcome.stderr
 
-        stderrThread.join(3_000)
-        process.waitFor(5, TimeUnit.SECONDS)
-
-        val exitCode = process.exitValue()
+        val exitCode = outcome.exitCode
         if (exitCode != 0) {
             // Exit codes from cffi_fetch.py: 2=403, 3=429, 4=503, 5=other non-200, 1=script error
             // stderr contains "HTTP <status>" for non-200 responses
@@ -92,6 +75,6 @@ object CurlCffiClient {
         }
 
         if (stderr.isNotBlank()) log.debug("CurlCffi stderr for {}: {}", desc, stderr.take(200))
-        return output.toString(Charsets.UTF_8)
+        return outcome.stdout.toString(Charsets.UTF_8)
     }
 }

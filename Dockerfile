@@ -23,8 +23,8 @@ COPY server/build/libs/server-all.jar /app/server.jar
 
 RUN mkdir -p /var/lib/arbay
 
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC" \
-    ARBAY_DATA_DIR=/var/lib/arbay
+# The server keeps its data in ~/.arbay (see DataDir.kt), so user.home is the volume.
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -Duser.home=/var/lib/arbay"
 
 EXPOSE 8090
 VOLUME /var/lib/arbay

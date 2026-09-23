@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -32,13 +33,13 @@ object MobileDeCatalog {
     private val modelsByMake = ConcurrentHashMap<Int, Map<String, Int>>()
 
     /** The site's number for a make, or null when it does not list one under that name. */
-    fun makeId(name: String): Int? {
+    suspend fun makeId(name: String): Int? {
         val table = makes ?: fetch(MAKES_URL, "makes")?.also { makes = it } ?: return null
         return lookUp(table, name)
     }
 
     /** The site's number for a model of that make, or null when it lists none under that name. */
-    fun modelId(makeId: Int, name: String): Int? {
+    suspend fun modelId(makeId: Int, name: String): Int? {
         val table = modelsByMake[makeId]
             ?: fetch(modelsUrl(makeId), "models")?.also { modelsByMake[makeId] = it }
             ?: return null
@@ -46,7 +47,7 @@ object MobileDeCatalog {
     }
 
     /** `ms` as the site writes it: make, model, and two empty fields for variant and free text. */
-    fun modelSelection(make: String, model: String?): String? {
+    suspend fun modelSelection(make: String, model: String?): String? {
         val makeNumber = makeId(make) ?: return null
         val modelNumber = model?.let { modelId(makeNumber, it) }
         return if (modelNumber == null) "$makeNumber" else "$makeNumber;$modelNumber"
@@ -67,7 +68,7 @@ object MobileDeCatalog {
     private fun normalize(name: String) = name.lowercase().replace(Regex("[^a-z0-9]"), "")
 
     /** `{"makes":[{"i":25200,"n":"Volkswagen"},…]}` and the same shape for models. */
-    private fun fetch(url: String, key: String): Map<String, Int>? = try {
+    private suspend fun fetch(url: String, key: String): Map<String, Int>? = try {
         val body = CurlCffiClient.fetch(url)
         val array = json.parseToJsonElement(body).jsonObject[key]?.jsonArray
         array?.mapNotNull { entry ->
@@ -76,6 +77,8 @@ object MobileDeCatalog {
             val name = obj["n"]?.jsonPrimitive?.content
             if (id != null && name != null) normalize(name) to id else null
         }?.toMap()?.takeIf { it.isNotEmpty() }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         log.warn("mobile.de {} list unavailable: {}", key, e.message?.take(80))
         null

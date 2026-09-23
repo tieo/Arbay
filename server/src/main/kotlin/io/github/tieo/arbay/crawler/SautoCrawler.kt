@@ -1,8 +1,9 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.model.carCriteria
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 
@@ -50,7 +51,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
         for (categoryId in CATEGORIES) {
             val json = try {
                 fetchWithFallback(client, buildUrl(car, categoryId, 0), "Sauto")
-            } catch (_: Exception) {
+            } catch (e: CancellationException) { throw e } catch (_: Exception) {
                 continue
             }
             val matches = parse(json).any { it.title.contains(modelSlug, ignoreCase = true) }

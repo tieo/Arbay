@@ -1,15 +1,18 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.SuggestedTerm
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.SuggestedTerm
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import kotlinx.coroutines.delay
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 internal const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -164,13 +167,13 @@ private suspend fun fetchPageWithRetry(
         // Retrying would only deepen the block, so surface it immediately.
         if (isFirstPage) throw e
         return null
-    } catch (_: Exception) {
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
         // A transient network/HTTP error: back off and try once more.
     }
     delay(700L + fetchJitterMs())
     return try {
         fetchPage(page)
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         if (isFirstPage) throw e
         null
     }
@@ -290,7 +293,7 @@ internal suspend fun fetchWithFallback(
             validateHtml(html, platformName)
             RequestMonitor.recordTier(platformName, "HTTP")
             return html
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             errors.add("HTTP: ${e.message?.take(60)}")
             fetchLog.debug("[{}] HTTP failed: {}", platformName, e.message?.take(80))
             if (!isRetryable(e)) throw e
@@ -303,7 +306,7 @@ internal suspend fun fetchWithFallback(
             validateHtml(html, platformName)
             RequestMonitor.recordTier(platformName, "Rnet")
             return html
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             errors.add("Rnet: ${e.message?.take(60)}")
             fetchLog.debug("[{}] Rnet failed: {}", platformName, e.message?.take(80))
         }
@@ -315,7 +318,7 @@ internal suspend fun fetchWithFallback(
             validateHtml(html, platformName)
             RequestMonitor.recordTier(platformName, "CurlCffi")
             return html
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             errors.add("CurlCffi: ${e.message?.take(60)}")
             fetchLog.debug("[{}] CurlCffi failed: {}", platformName, e.message?.take(80))
         }
@@ -324,13 +327,17 @@ internal suspend fun fetchWithFallback(
     // === Step 3: Chromium non-headless via Xvfb ===
     emitter?.let { it.emit("Chromium") }
     try {
-        val result = HeadlessBrowser.fetch(
-            url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
-            waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
-            engine = BrowserEngine.CHROMIUM,
-        )
+        // Playwright blocks its thread for the whole page load, so it runs on the IO pool
+        // rather than on a thread the request's other coroutines share.
+        val result = withContext(Dispatchers.IO) {
+            HeadlessBrowser.fetch(
+                url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
+                waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
+                engine = BrowserEngine.CHROMIUM,
+            )
+        }
         return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         errors.add("Chromium: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Chromium failed: {}", platformName, e.message?.take(80))
     }
@@ -338,13 +345,17 @@ internal suspend fun fetchWithFallback(
     // === Step 4: Firefox headless ===
     emitter?.let { it.emit("Firefox") }
     try {
-        val result = HeadlessBrowser.fetch(
-            url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
-            waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
-            engine = BrowserEngine.FIREFOX,
-        )
+        // Playwright blocks its thread for the whole page load, so it runs on the IO pool
+        // rather than on a thread the request's other coroutines share.
+        val result = withContext(Dispatchers.IO) {
+            HeadlessBrowser.fetch(
+                url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
+                waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
+                engine = BrowserEngine.FIREFOX,
+            )
+        }
         return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         errors.add("Firefox: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Firefox failed: {}", platformName, e.message?.take(80))
     }
@@ -359,7 +370,7 @@ internal suspend fun fetchWithFallback(
 
 /** Convenience: fetch with browser only (skip HTTP/CurlCffi steps).
  *  Retries once on TargetClosedError (browser process died mid-session). */
-internal fun fetchWithBrowser(
+internal suspend fun fetchWithBrowser(
     url: String,
     platformName: String,
     waitSelector: String? = null,
@@ -374,7 +385,8 @@ internal fun fetchWithBrowser(
         extraWaitMs = extraWaitMs, waitNetworkIdle = waitNetworkIdle,
         primeUrl = primeUrl, engine = engine,
     )
-    val result = try { doFetch() } catch (e: Exception) {
+    // Playwright blocks its thread for the whole page load, so it runs on the IO pool.
+    val result = withContext(Dispatchers.IO) { try { doFetch() } catch (e: Exception) {
         val msg = e.message ?: ""
         if (msg.contains("Object doesn't exist") || msg.contains("TargetClosedError") ||
             msg.contains("has been closed") || msg.contains("call_adopt") ||
@@ -384,7 +396,7 @@ internal fun fetchWithBrowser(
             log.warn("Playwright stale for {}, retrying: {}", platformName, msg.take(60))
             doFetch()
         } else throw e
-    }
+    } }
     return validateBrowserResult(result, platformName)
 }
 

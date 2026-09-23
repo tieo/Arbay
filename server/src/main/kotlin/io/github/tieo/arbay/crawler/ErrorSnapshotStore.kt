@@ -1,12 +1,15 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Captures full debug snapshots when crawler errors occur.
@@ -18,7 +21,7 @@ import java.io.File
  */
 object ErrorSnapshotStore {
     private val log = LoggerFactory.getLogger(ErrorSnapshotStore::class.java)
-    private val dir = File(System.getProperty("user.home"), ".arbay/error_snapshots")
+    private val dir = DataDir.file("error_snapshots")
     // Starts at the threshold so the first capture after a restart prunes: whatever collected while
     // no version of this pruned is cleared then, rather than fifty captures later.
     private val sinceLastPrune = java.util.concurrent.atomic.AtomicInteger(50)
@@ -44,6 +47,8 @@ object ErrorSnapshotStore {
         val resolved: Boolean = false,
     )
 
+    private val sequence = AtomicInteger()
+
     fun capture(
         platform: String,
         query: String,
@@ -56,14 +61,16 @@ object ErrorSnapshotStore {
         statusCode: Int? = null,
     ): String {
         val ts = Clock.System.now()
-        val id = "${platform.lowercase()}_${ts.epochSeconds}_${(ts.nanosecondsOfSecond / 1_000_000) % 1000}"
+        // The sequence keeps two captures from the same market in the same millisecond, which
+        // parallel spellings of one search do produce, from writing over each other.
+        val id = "${platform.lowercase()}_${ts.epochSeconds}_${(ts.nanosecondsOfSecond / 1_000_000) % 1000}_${sequence.incrementAndGet() % 1000}"
 
         // Save HTML if available
         var htmlFile: String? = null
         if (!html.isNullOrBlank()) {
             htmlFile = "$id.html"
             try {
-                File(dir, htmlFile).writeText(html)
+                File(dir, htmlFile).writeTextAtomically(html)
             } catch (e: Exception) {
                 log.warn("Failed to save error HTML: {}", e.message)
                 htmlFile = null
@@ -87,7 +94,7 @@ object ErrorSnapshotStore {
         )
 
         try {
-            File(dir, "$id.json").writeText(json.encodeToString(snapshot))
+            File(dir, "$id.json").writeTextAtomically(json.encodeToString(snapshot))
             log.info("Error snapshot saved: {} ({})", id, errorType)
         } catch (e: Exception) {
             log.warn("Failed to save error snapshot: {}", e.message)
@@ -117,7 +124,14 @@ object ErrorSnapshotStore {
             ?: emptyList()
     }
 
+    // Ids are minted by capture() as platform_seconds_millis. Anything else arriving from a
+    // request is refused before it becomes part of a path, so it cannot name a file outside
+    // the snapshot directory.
+    private val snapshotId = Regex("[a-z0-9_]+")
+
+
     fun get(id: String): ErrorSnapshot? {
+        if (!snapshotId.matches(id)) return null
         val f = File(dir, "$id.json")
         if (!f.exists()) return null
         return try { json.decodeFromString(f.readText()) } catch (_: Exception) { null }
@@ -134,8 +148,10 @@ object ErrorSnapshotStore {
         val snapshot = get(id) ?: return
         val updated = snapshot.copy(resolved = true)
         try {
-            File(dir, "$id.json").writeText(json.encodeToString(updated))
-        } catch (_: Exception) {}
+            File(dir, "$id.json").writeTextAtomically(json.encodeToString(updated))
+        } catch (e: Exception) {
+            log.warn("Could not mark snapshot {} resolved: {}", id, e.message)
+        }
     }
 
     /** Prune old resolved snapshots (keep last 200 unresolved, 50 resolved) */
@@ -146,7 +162,12 @@ object ErrorSnapshotStore {
         var unresolvedCount = 0
         var resolvedCount = 0
         for (f in all) {
-            val snapshot = try { json.decodeFromString<ErrorSnapshot>(f.readText()) } catch (_: Exception) { continue }
+            // A snapshot that cannot be read back is of no use to anyone and would otherwise
+            // never be counted against either limit, so it goes first.
+            val snapshot = try { json.decodeFromString<ErrorSnapshot>(f.readText()) } catch (_: Exception) {
+                toDelete.add(f)
+                continue
+            }
             if (snapshot.resolved) {
                 resolvedCount++
                 if (resolvedCount > 50) toDelete.add(f)

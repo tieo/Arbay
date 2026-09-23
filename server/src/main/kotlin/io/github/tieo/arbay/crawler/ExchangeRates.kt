@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
@@ -33,7 +34,7 @@ object ExchangeRates {
             rates = fetchedRates.filterKeys { it in SUPPORTED } + ("EUR" to 1.0)
             lastUpdate = System.currentTimeMillis()
             log.info("Exchange rates updated: {}", rates)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Failed to fetch exchange rates: {}", e.message)
         }
     }

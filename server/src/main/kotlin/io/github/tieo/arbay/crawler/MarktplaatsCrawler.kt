@@ -2,6 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
@@ -23,7 +24,7 @@ class MarktplaatsCrawler(
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         MarktplaatsDetailParser.parse(CurlCffiClient.fetch(listing.url, primeUrl = host))
             ?.let { ListingDetail(vehicle = it) }
-    } catch (_: Exception) {
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
     }
 

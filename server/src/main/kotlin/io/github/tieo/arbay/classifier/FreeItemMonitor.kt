@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.classifier
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.NewMatch
@@ -7,13 +8,16 @@ import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PollResult
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Background monitor that periodically crawls for new free items
@@ -33,8 +37,9 @@ object FreeItemMonitor {
     private var lastPollResult: PollResult? = null
 
     // Notification settings — persisted to disk
-    private val settingsFile = File(System.getProperty("user.home"), ".arbay/notification_settings.json")
+    private val settingsFile = DataDir.file("notification_settings.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    @Volatile
     private var _settings = loadSettings()
 
     val settings: NotificationSettings get() = _settings
@@ -118,7 +123,7 @@ object FreeItemMonitor {
         log.info("Running background check for new free items...")
         val results = try {
             withTimeout(120_000L) { crawler.search(query) }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Background crawl failed: ${e.message}")
             return
         }
@@ -130,7 +135,7 @@ object FreeItemMonitor {
             val text = "${listing.title} ${listing.description ?: ""}"
             val embedding = EmbeddingModel.embed(text)
             val score = if (embedding != null && activeModel != null) {
-                try { activeModel.score(embedding, text, context) } catch (_: Exception) { 0.0 }
+                try { activeModel.score(embedding, text, context) } catch (e: CancellationException) { throw e } catch (_: Exception) { 0.0 }
             } else {
                 FreeItemScorer.score(listing, profileEmbedding, profile.description)
             }
@@ -196,22 +201,14 @@ object FreeItemMonitor {
             results.size, newIds.size, urgentMatches.size)
     }
 
-    private fun loadSettings(): NotificationSettings {
-        if (!settingsFile.exists()) return NotificationSettings()
-        return try {
-            json.decodeFromString(settingsFile.readText())
-        } catch (e: Exception) {
-            log.warn("Could not load notification settings: ${e.message}")
-            NotificationSettings()
-        }
-    }
+    private fun loadSettings(): NotificationSettings =
+        settingsFile.readStore(log) { json.decodeFromString<NotificationSettings>(it) } ?: NotificationSettings()
 
-    private fun saveSettings() {
+    private fun saveSettings() = synchronized(settingsFile) {
         try {
-            settingsFile.parentFile.mkdirs()
-            settingsFile.writeText(json.encodeToString(_settings))
+            settingsFile.writeTextAtomically(json.encodeToString(_settings))
         } catch (e: Exception) {
-            log.warn("Could not save notification settings: ${e.message}")
+            log.error("Could not save notification settings: {}", e.message)
         }
     }
 }

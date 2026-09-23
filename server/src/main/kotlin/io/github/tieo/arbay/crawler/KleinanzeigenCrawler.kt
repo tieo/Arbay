@@ -1,10 +1,11 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.model.carCriteria
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
@@ -46,7 +47,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
                 ?: return null
             val citySlug = KleinanzeigenUrlBuilder.citySlug(location)
             locationId to citySlug
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("Location lookup failed for '{}': {}", location, e.message)
             null
         }
@@ -363,7 +364,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
                 vehicle = KleinanzeigenDetailParser.parse(html),
                 description = description,
             ).takeIf { it.vehicle != null || it.description != null }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
             null
         }

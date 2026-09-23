@@ -1,10 +1,11 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.ImportSettings
+import java.io.File
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Where the buyer is and what import VAT they pay.
@@ -16,26 +17,24 @@ import java.io.File
  */
 object ImportSettingsStore {
     private val log = LoggerFactory.getLogger(ImportSettingsStore::class.java)
-    private val file = File(System.getProperty("user.home"), ".arbay/import_settings.json")
+    private val file = DataDir.file("import_settings.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
 
     @Volatile
     var current: ImportSettings = load()
         private set
 
-    private fun load(): ImportSettings = try {
-        if (file.exists()) json.decodeFromString(file.readText()) else ImportSettings()
-    } catch (e: Exception) {
-        log.warn("Could not read import settings, using defaults: {}", e.message)
-        ImportSettings()
-    }
+    private fun load(): ImportSettings =
+        file.readStore(log) { json.decodeFromString<ImportSettings>(it) } ?: ImportSettings()
 
+    // One update at a time, so the settings in memory and the ones on disk are the same ones.
+    @Synchronized
     fun update(settings: ImportSettings): ImportSettings {
         current = settings
         try {
             file.writeTextAtomically(json.encodeToString(settings))
         } catch (e: Exception) {
-            log.warn("Could not save import settings: {}", e.message)
+            log.error("Could not save import settings: {}", e.message)
         }
         return current
     }

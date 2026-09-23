@@ -1,8 +1,9 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.model.carCriteria
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
@@ -46,7 +47,7 @@ class AutoScout24Crawler(
             },
             description = description,
         ).takeIf { it.vehicle != null || it.description != null }
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
     }
 

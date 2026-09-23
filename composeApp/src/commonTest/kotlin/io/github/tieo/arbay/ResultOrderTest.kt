@@ -37,7 +37,7 @@ class ResultOrderTest {
     )
 
     @Test
-    fun `nearest first orders every listing, however it arrived`() = runTest {
+    fun `nearest first orders every listing however it arrived`() = runTest {
         // The view model's own scope runs on the main dispatcher, which a test has to provide.
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         // Ulm, and vans at increasing distances from it, handed over in the wrong order.

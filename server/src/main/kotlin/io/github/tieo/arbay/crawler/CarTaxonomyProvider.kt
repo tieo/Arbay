@@ -1,16 +1,20 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.CarTaxonomy
 import io.github.tieo.arbay.model.CarTaxonomySeed
-import kotlinx.coroutines.delay
-import kotlinx.serialization.encodeToString
-import org.jsoup.Jsoup
-import org.slf4j.LoggerFactory
-import kotlinx.serialization.json.*
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
 import java.io.File
 import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
+import org.jsoup.Jsoup
+import org.slf4j.LoggerFactory
 
 /**
  * Holds the canonical car taxonomy the app pulls: every make AND its full model list, live from
@@ -33,7 +37,7 @@ object CarTaxonomyProvider {
     private val log = LoggerFactory.getLogger(CarTaxonomyProvider::class.java)
     private const val CATALOG_URL = "https://www.autoscout24.de/lst?atype=C&cy=D&sort=standard"
     private val json = Json { ignoreUnknownKeys = true }
-    private val persistFile = File(System.getProperty("user.home"), ".arbay/car_taxonomy.json")
+    private val persistFile = DataDir.file("car_taxonomy.json")
 
     // Loaded from yesterday's successful refresh when present, so a restart serves the full
     // catalog immediately instead of the thin bundled seed for the ~10 minutes a fresh refresh
@@ -42,19 +46,14 @@ object CarTaxonomyProvider {
     var current: CarTaxonomy = loadPersisted() ?: CarTaxonomySeed.taxonomy
         private set
 
-    private fun loadPersisted(): CarTaxonomy? = try {
-        if (persistFile.exists()) json.decodeFromString<CarTaxonomy>(persistFile.readText()) else null
-    } catch (e: Exception) {
-        log.warn("Could not load persisted car taxonomy: {}", e.message)
-        null
-    }
+    private fun loadPersisted(): CarTaxonomy? =
+        persistFile.readStore(log) { json.decodeFromString<CarTaxonomy>(it) }
 
-    private fun persist(taxonomy: CarTaxonomy) {
+    private fun persist(taxonomy: CarTaxonomy) = synchronized(persistFile) {
         try {
-            persistFile.parentFile.mkdirs()
-            persistFile.writeText(json.encodeToString(taxonomy))
+            persistFile.writeTextAtomically(json.encodeToString(taxonomy))
         } catch (e: Exception) {
-            log.warn("Could not persist car taxonomy: {}", e.message)
+            log.error("Could not persist car taxonomy: {}", e.message)
         }
     }
 
@@ -64,7 +63,7 @@ object CarTaxonomyProvider {
         val url = "https://www.autoscout24.de/lst/$makeSlug?atype=C&cy=D&sort=standard"
         val html = fetchWithFallback(CrawlerRegistry.httpClient, url, "AutoScout24-models", waitSelector = "article")
         parseAutoScout24Models(html, siteId)
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         log.warn("Model probe for {} failed: {}", makeSlug, e.message)
         emptyList()
     }
@@ -94,7 +93,7 @@ object CarTaxonomyProvider {
         val makes = try {
             val html = fetchWithFallback(CrawlerRegistry.httpClient, CATALOG_URL, "AutoScout24-taxonomy", waitSelector = "article")
             parseAutoScout24Makes(html)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Car taxonomy refresh failed: ${e.message}; keeping current")
             return
         }
@@ -115,7 +114,7 @@ object CarTaxonomyProvider {
             if (index > 0) delay(800L + Random.nextLong(200, 700))
             val probed = try {
                 probeModels(id, siteId)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.debug("Model probe for {} failed: {}", id, e.message)
                 emptyList()
             }

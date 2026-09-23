@@ -1,16 +1,19 @@
 package io.github.tieo.arbay.classifier
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.FreeItemProfile
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 object FreeItemProfileStore {
 
     private val log = LoggerFactory.getLogger(FreeItemProfileStore::class.java)
-    private val profileFile = File(System.getProperty("user.home"), ".arbay/free_item_profile.json")
-    private val legacyProfileFile = File(System.getProperty("user.home"), ".arbay/free_item_profile.txt")
+    private val profileFile = DataDir.file("free_item_profile.json")
+    private val legacyProfileFile = DataDir.file("free_item_profile.txt")
     private val json = Json { ignoreUnknownKeys = true }
 
     @Volatile
@@ -23,10 +26,9 @@ object FreeItemProfileStore {
         if (cachedProfile != null) return cachedProfile
         return try {
             when {
-                profileFile.exists() -> {
-                    val profile = json.decodeFromString<FreeItemProfile>(profileFile.readText())
-                    profile.also { cachedProfile = it }
-                }
+                profileFile.exists() ->
+                    profileFile.readStore(log) { json.decodeFromString<FreeItemProfile>(it) }
+                        ?.also { cachedProfile = it }
                 legacyProfileFile.exists() -> {
                     // Migrate from plain-text format
                     val text = legacyProfileFile.readText().trim()
@@ -47,12 +49,11 @@ object FreeItemProfileStore {
         save(profile)
     }
 
-    private fun save(profile: FreeItemProfile) {
+    private fun save(profile: FreeItemProfile) = synchronized(profileFile) {
         try {
-            profileFile.parentFile.mkdirs()
-            profileFile.writeText(json.encodeToString(profile))
+            profileFile.writeTextAtomically(json.encodeToString(profile))
         } catch (e: Exception) {
-            log.warn("Could not save free item profile: ${e.message}")
+            log.error("Could not save free item profile: {}", e.message)
         }
     }
 

@@ -2,6 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.*
@@ -37,7 +38,7 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
                     slug to id
                 }
                 .toMap()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             emptyMap()
         }
         // A parse that found almost nothing likely means the page shape changed, not that

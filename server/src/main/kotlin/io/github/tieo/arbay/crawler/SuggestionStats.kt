@@ -1,10 +1,13 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * How many different searches a marketplace has offered each related term under.
@@ -23,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
 object SuggestionStats {
 
     private val log = LoggerFactory.getLogger(SuggestionStats::class.java)
-    private val file = File(System.getProperty("user.home"), ".arbay/suggestion_stats.json")
+    private val file = DataDir.file("suggestion_stats.json")
 
     /** term → the distinct query texts it has been suggested under. */
     private val seenUnder = ConcurrentHashMap<String, MutableSet<String>>()
@@ -34,13 +37,14 @@ object SuggestionStats {
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
-        runCatching {
-            if (file.exists()) {
-                json.decodeFromString(Persisted.serializer(), file.readText()).seenUnder
-                    .forEach { (term, queries) -> seenUnder[term] = queries.toMutableSet() }
-                log.info("Suggestion stats loaded for {} terms", seenUnder.size)
+        file.readStore(log) { json.decodeFromString(Persisted.serializer(), it) }?.let { persisted ->
+            // Each set is added to from several searches at once, so it has to be a concurrent one,
+            // the same kind record() creates.
+            persisted.seenUnder.forEach { (term, queries) ->
+                seenUnder[term] = ConcurrentHashMap.newKeySet<String>().apply { addAll(queries) }
             }
-        }.onFailure { log.warn("Suggestion stats unreadable: {}", it.message) }
+            log.info("Suggestion stats loaded for {} terms", seenUnder.size)
+        }
     }
 
     /** Record that [query]'s results page offered these related searches. */
@@ -56,13 +60,13 @@ object SuggestionStats {
     /** How many distinct searches this term has been offered under. */
     fun searchesOfferingIt(term: String): Int = seenUnder[term.trim().lowercase()]?.size ?: 0
 
-    private fun persist() {
+    // Copy and write under one lock, so an older copy never lands after a newer one.
+    private fun persist() = synchronized(file) {
         runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(
+            file.writeTextAtomically(json.encodeToString(
                 Persisted.serializer(),
                 Persisted(seenUnder.mapValues { it.value.toList() }),
             ))
-        }.onFailure { log.debug("Suggestion stats not written: {}", it.message) }
+        }.onFailure { log.error("Suggestion stats not written: {}", it.message) }
     }
 }

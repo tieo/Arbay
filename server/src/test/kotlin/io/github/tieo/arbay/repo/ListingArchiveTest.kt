@@ -1,21 +1,21 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
-import kotlinx.datetime.Instant
 import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.datetime.Instant
 
 class ListingArchiveTest {
 
-    // A real, unique id per test so a run never sees another run's leftover file and so cleanup
-    // only ever touches files this test itself created under the real ~/.arbay/archive.
+    // A unique id per test so a run never sees another test's leftover file.
     private val id = "test-archive-${System.nanoTime()}"
 
     private fun listing() = Listing(
@@ -30,7 +30,7 @@ class ListingArchiveTest {
 
     @AfterTest
     fun cleanup() {
-        val root = File(System.getProperty("user.home"), ".arbay/archive")
+        val root = DataDir.file("archive")
         File(root, "listings/$id.json").delete()
         File(root, "images/$id").deleteRecursively()
     }
@@ -57,7 +57,7 @@ class ListingArchiveTest {
 
     @Test
     fun `imageFile refuses to walk outside the listing's own directory`() {
-        val dir = File(System.getProperty("user.home"), ".arbay/archive/images/$id")
+        val dir = DataDir.file("archive/images/$id")
         dir.mkdirs()
         File(dir, "0.jpg").writeText("fake image bytes")
 

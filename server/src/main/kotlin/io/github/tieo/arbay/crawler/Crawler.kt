@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SuggestedTerm
 import io.github.tieo.arbay.model.VehicleInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
@@ -75,9 +76,14 @@ suspend fun Crawler.searchAllSpellings(
         // The follow-up carries its own related searches, so whether the market names this query
         // back is answered by the page we are already fetching.
         val back = mutableListOf<String>()
-        val followUp = runCatching {
+        val followUp = try {
             withContext(SuggestedTermsEmitter { back += it }) { search(query.copy(text = candidate.term)) }
-        }.getOrDefault(emptyList())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.debug("{}: follow-up '{}' failed: {}", platformId.displayName, candidate.term, e.message)
+            emptyList()
+        }
 
         // A word built like the query is trusted on that alone. One built differently could still
         // be the same thing ("Motorsäge" for "Kettensäge"); there the market decides, by naming the
@@ -161,7 +167,7 @@ suspend fun Crawler.trackedSearch(
         // Coroutine cancelled (client disconnected) — not a real crawler error
         log.debug("{}: cancelled for '{}'", platformId.displayName, query.text)
         emptyList()
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         // A cancelling parent scope (the client disconnected mid-search) surfaces as an
         // exception whose message mentions Cancelling/Cancelled but is not a CancellationException.
         // That is not a crawler failure — don't record it as an error or a snapshot.

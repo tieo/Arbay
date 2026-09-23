@@ -24,7 +24,7 @@ object GeoDistance {
      *  resolved coordinates. */
     fun to(listing: Listing, lat: Double, lon: Double): Double? {
         val la = listing.location?.latitude ?: return null
-        val lo = listing.location?.longitude ?: return null
+        val lo = listing.location.longitude ?: return null
         return haversine(lat, lon, la, lo)
     }
 

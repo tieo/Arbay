@@ -1,10 +1,12 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 @Serializable
 data class CrawlerConfig(
@@ -21,7 +23,7 @@ data class CrawlerConfig(
     val ebayDeCarCategory: String? = "9800",
 ) {
     companion object {
-        private val file = File(System.getProperty("user.home"), ".arbay/crawler_config.json")
+        private val file = DataDir.file("crawler_config.json")
         // A settings file written by another version carries keys this build does not know;
         // rejecting it would leave every crawler without its limits.
         private val json = Json { prettyPrint = true; encodeDefaults = true; ignoreUnknownKeys = true }
@@ -35,8 +37,7 @@ data class CrawlerConfig(
         fun update(config: CrawlerConfig) {
             current = config
             try {
-                file.parentFile.mkdirs()
-                file.writeText(json.encodeToString(config))
+                file.writeTextAtomically(json.encodeToString(config))
             } catch (e: Exception) {
                 // The setting holds for this run either way; saying so is the only way anyone
                 // learns why it is back to its old value after a restart.

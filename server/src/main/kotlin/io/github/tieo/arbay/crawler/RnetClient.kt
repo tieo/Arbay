@@ -2,8 +2,6 @@ package io.github.tieo.arbay.crawler
 
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 /**
  * Calls rnet_fetch.py via subprocess to fetch a URL with a current Chrome TLS/HTTP2
@@ -31,28 +29,17 @@ object RnetClient {
      * @param primeUrl visited first to establish session cookies; defaults to the target origin.
      * @return raw HTML body
      */
-    fun fetch(url: String, primeUrl: String? = null): String {
+    suspend fun fetch(url: String, primeUrl: String? = null): String {
         val args = mutableListOf("python3", scriptPath, "fetch", url)
         if (!primeUrl.isNullOrBlank()) args.add(primeUrl)
-        val process = ProcessBuilder(args).redirectErrorStream(false).start()
-
-        var stderr = ""
-        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
-        stderrThread.isDaemon = true
-        stderrThread.start()
-
-        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
-        val output = try {
-            outputFuture.get(70, TimeUnit.SECONDS)
-        } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroyForcibly()
+        val outcome = try {
+            runProcess(args, timeoutMs = 70_000)
+        } catch (_: ProcessTimedOut) {
             throw CrawlerBlockedException("rnet output timeout for $url", ErrorType.TIMEOUT)
         }
+        val stderr = outcome.stderr
 
-        stderrThread.join(3_000)
-        process.waitFor(5, TimeUnit.SECONDS)
-
-        val exitCode = process.exitValue()
+        val exitCode = outcome.exitCode
         if (exitCode != 0) {
             // Exit codes from rnet_fetch.py: 2=403, 3=429, 4=503, 5=other non-200, 1=script error
             log.debug("rnet exited {} for {}: {}", exitCode, url, stderr.take(200))
@@ -65,6 +52,6 @@ object RnetClient {
             val httpStatus = Regex("HTTP (\\d{3})").find(stderr)?.groupValues?.get(1)
             throw CrawlerBlockedException("rnet $url: ${httpStatus?.let { "HTTP $it" } ?: "exit $exitCode"}", errorType)
         }
-        return output.toString(Charsets.UTF_8)
+        return outcome.stdout.toString(Charsets.UTF_8)
     }
 }

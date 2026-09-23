@@ -1,52 +1,52 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.tidyTitle
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 class ListingRepo {
     private val log = LoggerFactory.getLogger(ListingRepo::class.java)
     private val listings = ConcurrentHashMap<String, Listing>()
-    private val persistFile = File(System.getProperty("user.home"), ".arbay/sold_listings.json")
+    private val persistFile = DataDir.file("sold_listings.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val persistPending = AtomicBoolean(false)
 
-    init { loadPersisted() }
-
-    private fun loadPersisted() {
-        try {
-            if (!persistFile.exists()) return
-            val stored = json.decodeFromString<List<Listing>>(persistFile.readText())
-            stored.forEach { listings[it.id] = it }
-            log.info("Loaded ${stored.size} persisted sold listings")
-        } catch (e: Exception) {
-            loadFailed = true
-            log.error("Could not read {}; leaving it alone rather than writing over it: {}", persistFile, e.message)
-        }
+    // One thread does every write, so two writes of the file never run at once.
+    private val writer = Executors.newSingleThreadScheduledExecutor { task ->
+        Thread(task, "sold-listings-writer").apply { isDaemon = true }
     }
 
-    // Sold listings on disk that could not be read are still the only copy there is.
-    private var loadFailed = false
+    init { loadPersisted() }
 
+    // A file that cannot be read is moved aside by readStore before anything is written, so the
+    // sold listings it held survive for whoever reads the log.
+    private fun loadPersisted() {
+        val stored = persistFile.readStore(log) { json.decodeFromString<List<Listing>>(it) } ?: return
+        stored.forEach { listings[it.id] = it }
+        log.info("Loaded ${stored.size} persisted sold listings")
+    }
+
+    // Writes are gathered for a couple of seconds, so a batch of sold listings writes once.
     private fun schedulePersist() {
         if (persistPending.compareAndSet(false, true)) {
-            Thread {
-                Thread.sleep(2000)
+            writer.schedule({
                 persistPending.set(false)
                 try {
-                    if (loadFailed) return@Thread
                     val sold = listings.values.filter { it.sold }
                     persistFile.writeTextAtomically(json.encodeToString(sold))
                 } catch (e: Exception) {
-                    log.warn("Failed to persist sold listings: ${e.message}")
+                    log.error("Failed to persist sold listings: {}", e.message)
                 }
-            }.also { it.isDaemon = true }.start()
+            }, 2, TimeUnit.SECONDS)
         }
     }
 

@@ -2,6 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import org.jsoup.Jsoup
 
@@ -17,7 +18,7 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler {
             val url = buildSearchUrl(query, page)
             val html = try {
                 CurlCffiClient.fetch(url, primeUrl = if (page == 1) "https://www.amazon.de" else null)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 if (page == 1) throw e
                 break
             }

@@ -3,13 +3,14 @@ package io.github.tieo.arbay.classifier
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import org.slf4j.LoggerFactory
+import io.github.tieo.arbay.DataDir
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.LongBuffer
 import java.text.Normalizer
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
 
 /**
  * Sentence embedding model using distiluse-base-multilingual-cased-v1 (ONNX).
@@ -21,7 +22,6 @@ object EmbeddingModel {
     private val log = LoggerFactory.getLogger(EmbeddingModel::class.java)
     private const val MODEL_URL = "https://huggingface.co/sentence-transformers/distiluse-base-multilingual-cased-v1/resolve/main/onnx/model.onnx"
     private const val VOCAB_URL = "https://huggingface.co/sentence-transformers/distiluse-base-multilingual-cased-v1/resolve/main/vocab.txt"
-    private const val MODELS_DIR = ".arbay/models"
     private const val MAX_SEQ_LEN = 256
 
     private val env: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
@@ -104,7 +104,7 @@ object EmbeddingModel {
     }
 
     private fun ensureDownloaded(filename: String, startUrl: String): File {
-        val dir = File(System.getProperty("user.home"), MODELS_DIR).also { it.mkdirs() }
+        val dir = DataDir.models.also { it.mkdirs() }
         val file = File(dir, filename)
         if (!file.exists() || file.length() < 1024) {
             log.info("Downloading $filename from HuggingFace...")
@@ -116,6 +116,8 @@ object EmbeddingModel {
                 if (stream != null) return@repeat
                 val conn = URI(currentUrl).toURL().openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = false
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 60_000
                 conn.setRequestProperty("User-Agent", "Java/HuggingFace-download")
                 conn.connect()
                 when (conn.responseCode) {
@@ -131,7 +133,14 @@ object EmbeddingModel {
                 }
             }
             val inputStream = stream ?: throw java.io.IOException("Too many redirects for $startUrl")
-            inputStream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+            // Downloaded beside the model and renamed once complete: a download cut short must not
+            // leave a file at the model's name, where it would pass for the model on every start.
+            val partial = File(dir, "$filename.part")
+            inputStream.use { input -> partial.outputStream().use { output -> input.copyTo(output) } }
+            java.nio.file.Files.move(
+                partial.toPath(), file.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            )
             log.info("Downloaded $filename (${file.length() / 1024}KB)")
         }
         return file

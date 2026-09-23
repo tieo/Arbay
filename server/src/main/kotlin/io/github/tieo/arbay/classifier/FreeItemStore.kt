@@ -1,13 +1,16 @@
 package io.github.tieo.arbay.classifier
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 @Serializable
 data class TrackedItem(
@@ -29,7 +32,7 @@ data class TrackedItem(
 object FreeItemStore {
 
     private val log = LoggerFactory.getLogger(FreeItemStore::class.java)
-    private val storeFile = File(System.getProperty("user.home"), ".arbay/free_item_store.json")
+    private val storeFile = DataDir.file("free_item_store.json")
     private val json = Json { ignoreUnknownKeys = true }
 
     private val items = mutableMapOf<String, TrackedItem>()
@@ -117,25 +120,20 @@ object FreeItemStore {
     }
 
     private fun load() {
-        if (!storeFile.exists()) return
-        try {
-            val loaded = json.decodeFromString<List<TrackedItem>>(storeFile.readText())
-            synchronized(items) {
-                loaded.forEach { items[it.listingId] = it }
-            }
-            log.info("Loaded {} tracked free items", loaded.size)
-        } catch (e: Exception) {
-            log.warn("Could not load free item store: ${e.message}")
+        val loaded = storeFile.readStore(log) { json.decodeFromString<List<TrackedItem>>(it) } ?: return
+        synchronized(items) {
+            loaded.forEach { items[it.listingId] = it }
         }
+        log.info("Loaded {} tracked free items", loaded.size)
     }
 
-    private fun save() {
+    // Copy and write under one lock, so an older copy never lands after a newer one.
+    private fun save() = synchronized(storeFile) {
         try {
-            storeFile.parentFile.mkdirs()
             val copy = synchronized(items) { items.values.toList() }
-            storeFile.writeText(json.encodeToString(copy))
+            storeFile.writeTextAtomically(json.encodeToString(copy))
         } catch (e: Exception) {
-            log.warn("Could not save free item store: ${e.message}")
+            log.error("Could not save free item store: {}", e.message)
         }
     }
 }

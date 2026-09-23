@@ -1,10 +1,13 @@
 package io.github.tieo.arbay.classifier
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.repo.readStore
+import io.github.tieo.arbay.repo.writeTextAtomically
+import java.io.File
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Tracks per-model prediction accuracy from user swipes.
@@ -21,8 +24,13 @@ import java.io.File
 object ModelArena {
 
     private val log = LoggerFactory.getLogger(ModelArena::class.java)
-    private val file = File(System.getProperty("user.home"), ".arbay/model_arena.json")
+    private val file = DataDir.file("model_arena.json")
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+
+    // Swipes arrive on request threads while the stream records predictions; both maps and the
+    // mutable counters inside each ModelStats are only touched while holding this lock, and
+    // what leaves the object is a copy.
+    private val lock = Any()
 
     // listingId → map of modelId → predicted score
     private val predictions = mutableMapOf<String, MutableMap<String, Double>>()
@@ -39,7 +47,7 @@ object ModelArena {
      * Called when items are scored in the stream.
      */
     fun recordPredictions(listingId: String, scores: Map<String, Double>) {
-        synchronized(predictions) {
+        synchronized(lock) {
             predictions[listingId] = scores.toMutableMap()
         }
     }
@@ -52,10 +60,14 @@ object ModelArena {
         if (action == "PASS") return // ambiguous — don't count
         // LIKE is treated as positive signal (same as LOVE for model evaluation)
 
-        val preds = synchronized(predictions) {
-            predictions.remove(listingId) ?: return
+        synchronized(lock) {
+            val preds = predictions.remove(listingId) ?: return
+            score(listingId, action, preds)
         }
+        save()
+    }
 
+    private fun score(listingId: String, action: String, preds: Map<String, Double>) {
         for ((modelId, score) in preds) {
             val modelStats = stats.getOrPut(modelId) { ModelStats(modelId) }
             val predictedLove = score >= 0.5
@@ -87,16 +99,14 @@ object ModelArena {
                 }
             }
         }
-
-        save()
     }
 
-    fun getStats(): List<ModelStats> = stats.values.toList()
+    fun getStats(): List<ModelStats> = synchronized(lock) { stats.values.map { it.snapshot() } }
 
-    fun getStats(modelId: String): ModelStats? = stats[modelId]
+    fun getStats(modelId: String): ModelStats? = synchronized(lock) { stats[modelId]?.snapshot() }
 
     fun leaderboard(): List<ModelLeaderboardEntry> {
-        return stats.values
+        return getStats()
             .filter { it.totalPredictions >= 5 }
             .map { s ->
                 ModelLeaderboardEntry(
@@ -114,28 +124,27 @@ object ModelArena {
 
     /** Clear all tracking data. */
     fun clear() {
-        synchronized(predictions) { predictions.clear() }
-        stats.clear()
-        file.delete()
-    }
-
-    private fun load() {
-        if (!file.exists()) return
-        try {
-            val loaded = json.decodeFromString<List<ModelStats>>(file.readText())
-            for (s in loaded) stats[s.modelId] = s
-            log.info("Loaded arena stats for {} models", loaded.size)
-        } catch (e: Exception) {
-            log.warn("Could not load arena stats: {}", e.message)
+        synchronized(file) {
+            synchronized(lock) {
+                predictions.clear()
+                stats.clear()
+            }
+            file.delete()
         }
     }
 
-    private fun save() {
+    private fun load() {
+        val loaded = file.readStore(log) { json.decodeFromString<List<ModelStats>>(it) } ?: return
+        synchronized(lock) { for (s in loaded) stats[s.modelId] = s }
+        log.info("Loaded arena stats for {} models", loaded.size)
+    }
+
+    // Copy and write under one lock, so an older copy never lands after a newer one.
+    private fun save() = synchronized(file) {
         try {
-            file.parentFile.mkdirs()
-            file.writeText(json.encodeToString(stats.values.toList()))
+            file.writeTextAtomically(json.encodeToString(getStats()))
         } catch (e: Exception) {
-            log.warn("Could not save arena stats: {}", e.message)
+            log.error("Could not save arena stats: {}", e.message)
         }
     }
 }
@@ -155,6 +164,8 @@ data class ModelStats(
     var dislikedCount: Int = 0,
     val worstPredictions: MutableList<WrongPrediction> = mutableListOf(),
 ) {
+    fun snapshot(): ModelStats = copy(worstPredictions = worstPredictions.toMutableList())
+
     val accuracy: Double get() = if (totalPredictions > 0) correctPredictions.toDouble() / totalPredictions else 0.0
     val precision: Double get() {
         val predicted = truePositives + falsePositives

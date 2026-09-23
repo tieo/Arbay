@@ -1,70 +1,73 @@
 package io.github.tieo.arbay.routes
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.BlockCooldown
+import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
+import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.CarQueryResolver
+import io.github.tieo.arbay.crawler.CrawlThrottle
 import io.github.tieo.arbay.crawler.Crawler
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerConfig
 import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.model.SaleType
-import io.github.tieo.arbay.crawler.SellsByAuction
 import io.github.tieo.arbay.crawler.CrawlerStatusTracker
-import io.github.tieo.arbay.crawler.VehicleTextParser
+import io.github.tieo.arbay.crawler.DetailEnricher
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
-import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.ErrorType
-import io.github.tieo.arbay.classifier.CarCriteriaScorer
-import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
-import io.github.tieo.arbay.crawler.Geocoder
+import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
+import io.github.tieo.arbay.crawler.Geocoder
 import io.github.tieo.arbay.crawler.PartialResultEmitter
 import io.github.tieo.arbay.crawler.PlatformStatus
 import io.github.tieo.arbay.crawler.QueryResultCache
-import io.github.tieo.arbay.crawler.CarFilterEngine
-import io.github.tieo.arbay.crawler.DetailEnricher
+import io.github.tieo.arbay.crawler.QueryVariants
+import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.RequestMonitor
-import io.github.tieo.arbay.crawler.area
-import io.github.tieo.arbay.crawler.askedInItsOwnLanguage
-import io.github.tieo.arbay.crawler.localizedQuery
+import io.github.tieo.arbay.crawler.SellsByAuction
+import io.github.tieo.arbay.crawler.SoldDetector
 import io.github.tieo.arbay.crawler.TermVerdictEmitter
 import io.github.tieo.arbay.crawler.TermsUsedEmitter
 import io.github.tieo.arbay.crawler.Translator
-import io.github.tieo.arbay.model.CarFilters
-import io.github.tieo.arbay.model.toCarFilters
-import io.github.tieo.arbay.crawler.QueryVariants
-import io.github.tieo.arbay.crawler.searchAllSpellings
-import io.github.tieo.arbay.crawler.RelevanceFilter
-import io.github.tieo.arbay.crawler.SoldDetector
+import io.github.tieo.arbay.crawler.VehicleTextParser
+import io.github.tieo.arbay.crawler.area
+import io.github.tieo.arbay.crawler.askedInItsOwnLanguage
 import io.github.tieo.arbay.crawler.classifyException
+import io.github.tieo.arbay.crawler.localizedQuery
+import io.github.tieo.arbay.crawler.searchAllSpellings
 import io.github.tieo.arbay.crawler.trackedSearch
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.MarketSettingsStore
-import kotlinx.serialization.Serializable
 import io.ktor.http.*
 import io.ktor.http.ContentType
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.github.tieo.arbay.crawler.CrawlThrottle
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 
 // The app can be a version ahead of the server; a filter field this build does not
 // know must not cost the reader every other filter they set.
 private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+
+private val routesLog = LoggerFactory.getLogger("CrawlerRoutes")
 
 @Serializable
 private data class CrawlerTestResult(
@@ -221,6 +224,10 @@ private val crawlSlots = kotlinx.coroutines.sync.Semaphore(4)
 
 /** How long a whole search may hold its scrape permit, whatever the crawlers are doing. */
 private const val SEARCH_BUDGET_MS = 420_000L
+
+// How long the listings of one market that finished may take to be placed on the map. It is
+// spent after the market has reported, so running out only leaves some listings unplaced.
+private const val LOCATION_BUDGET_MS = 90_000L
 
 /** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
  *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
@@ -381,7 +388,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // the app or a browser without SSH. Behind Authelia like everything else.
         get("/logs") {
             val n = (call.queryParameters["lines"]?.toIntOrNull() ?: 300).coerceIn(1, 5000)
-            val logFile = java.io.File(System.getProperty("user.home"), ".arbay/logs/arbay.log")
+            val logFile = DataDir.file("logs/arbay.log")
             val text = if (logFile.exists())
                 logFile.readLines().takeLast(n).joinToString("\n")
             else "no log file at ${logFile.path}"
@@ -596,6 +603,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val resultChannel = Channel<CrawlerSearchEvent>(Channel.UNLIMITED)
                     val jobs = platforms.map { platformId ->
                         launch {
+                          // The report this market finished with, kept so its listings can be placed
+                          // on the map after the crawl slot and the crawl's budget are let go.
+                          var finished: CrawlerSearchEvent? = null
+                          var finishedBy: Crawler? = null
                           // A crawler that never returns must not outlive the request. Without this
                           // its coroutine holds the stream open, the stream holds the scrape permit,
                           // and the server refuses every later search as busy until it restarts.
@@ -737,10 +748,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             }
 
                             val event = try {
-                                val rawResults = withTimeout(300_000L) {
-                                    kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter) {
-                                        crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
-                                    }
+                                // Bounded by the market's budget around this block, which is what
+                                // turns a crawl that never answers into a TIMEOUT report.
+                                val rawResults = kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter) {
+                                    crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
                                 // yet wired) still surfaces its whole parsed set here, before the
@@ -810,20 +821,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     suggestedTerms = verdicts.values.toList(),
                                     facets = facets,
                                 )
-                            } catch (e: TimeoutCancellationException) {
-                                CrawlerStatusTracker.recordError(platformId, "Timeout after 180s", ErrorType.TIMEOUT)
-                                val snapId = try {
-                                    ErrorSnapshotStore.capture(
-                                        platform = platformId.name, query = query, error = RuntimeException("Timeout after 180s", e), errorType = ErrorType.TIMEOUT,
-                                    )
-                                } catch (_: Exception) { "?" }
-                                CrawlerSearchEvent(
-                                    type = CrawlerEventType.PLATFORM_ERROR,
-                                    platform = platformId.name,
-                                    platformName = platformId.displayName,
-                                    error = "Timeout after 180s [$snapId]",
-                                    errorType = "TIMEOUT",
-                                )
                             } catch (e: CrawlerBlockedException) {
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Blocked", e.errorType)
                                 if (BlockCooldown.isBlock(e.errorType)) BlockCooldown.record(platformId)
@@ -838,12 +835,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     errorType = e.errorType.name,
                                     captchaUrl = if (e.errorType == ErrorType.CAPTCHA) "https://${platformId.displayName.lowercase().replace(" ", "")}.de" else null,
                                 )
+                            } catch (e: CancellationException) {
+                                // The budget ran out (reported below) or the app hung up. Neither is
+                                // the market failing, so nothing is recorded against it here, and
+                                // the cancellation has to carry on for the coroutine to end.
+                                throw e
                             } catch (e: Exception) {
-                                // Client disconnected mid-search (a cancelling parent scope) — not a
-                                // crawler failure; don't record it or emit an error event.
-                                if (e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true) {
-                                    return@crawl
-                                }
                                 val errorType = classifyException(e)
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
                                 if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)
@@ -859,29 +856,49 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 )
                             }
                             resultChannel.send(event)
-                            // A market that says where a thing is only on the thing's own page —
-                            // eBay — is asked afterwards, not before: the cards are on screen the
-                            // moment the crawl is done, and the places fill in behind them. The
-                            // app replaces a market's listings when that market reports again, so
-                            // the second report is the same listings with an address on them.
-                            if (event.type == CrawlerEventType.PLATFORM_DONE &&
-                                event.listings.any { it.location == null }
-                            ) {
-                                val placed = io.github.tieo.arbay.crawler.LocationEnricher
-                                    .enrich(event.listings, crawler)
-                                if (placed.zip(event.listings).any { (a, b) -> a.location != b.location }) {
-                                    resultChannel.send(
-                                        event.copy(listings = asDelivered(placed, pq)),
-                                    )
-                                }
+                            if (event.type == CrawlerEventType.PLATFORM_DONE) {
+                                finished = event
+                                finishedBy = crawler
                             }
-                          } ?: resultChannel.send(CrawlerSearchEvent(
-                              type = CrawlerEventType.PLATFORM_ERROR,
-                              platform = platformId.name,
-                              platformName = platformId.displayName,
-                              error = "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on",
-                              errorType = "TIMEOUT",
-                          ))
+                          } ?: run {
+                              CrawlerStatusTracker.recordError(
+                                  platformId, "No answer within ${PLATFORM_BUDGET_MS / 1000}s", ErrorType.TIMEOUT,
+                              )
+                              resultChannel.send(CrawlerSearchEvent(
+                                  type = CrawlerEventType.PLATFORM_ERROR,
+                                  platform = platformId.name,
+                                  platformName = platformId.displayName,
+                                  error = "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on",
+                                  errorType = "TIMEOUT",
+                              ))
+                          }
+                          }
+                          // A market that says where a thing is only on the thing's own page (eBay)
+                          // is asked afterwards, not before: the cards are on screen the moment the
+                          // crawl is done, and the places fill in behind them. The app replaces a
+                          // market's listings when that market reports again, so the second report
+                          // is the same listings with an address on them. This runs on its own
+                          // budget, after the crawl slot is free, and whatever goes wrong in it
+                          // leaves the market's finished report standing: failing here must not
+                          // turn a market that answered into one that did not, nor end the search
+                          // for every other market.
+                          val done = finished
+                          val doneBy = finishedBy
+                          if (done != null && doneBy != null && done.listings.any { it.location == null }) {
+                              try {
+                                  withTimeoutOrNull(LOCATION_BUDGET_MS) {
+                                      val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
+                                      if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
+                                          resultChannel.send(done.copy(
+                                              listings = asDelivered(placed, localizedQuery(searchQuery, platformId)),
+                                          ))
+                                      }
+                                  }
+                              } catch (e: CancellationException) {
+                                  throw e
+                              } catch (e: Exception) {
+                                  routesLog.warn("Placing {} listings on the map failed: {}", platformId.displayName, e.message)
+                              }
                           }
                         }
                     }

@@ -4,7 +4,6 @@ import io.github.tieo.arbay.classifier.FreeItemMonitor
 import io.github.tieo.arbay.classifier.FreeItemProfileStore
 import io.github.tieo.arbay.classifier.ModelRegistry
 import io.github.tieo.arbay.classifier.models.*
-import org.slf4j.LoggerFactory
 import io.github.tieo.arbay.crawler.CarTaxonomyProvider
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.plugins.configureRouting
@@ -16,8 +15,10 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.request.*
 import io.ktor.server.sse.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 
 fun main() {
@@ -53,7 +54,7 @@ fun Application.module() {
         while (true) {
             try {
                 CarTaxonomyProvider.refresh()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 // A refresh that keeps failing leaves the catalogue as it was, which looks like a
                 // site that has stopped adding models rather than like a fetch that never lands.
                 LoggerFactory.getLogger("CarTaxonomy")

@@ -1,21 +1,22 @@
 package io.github.tieo.arbay.repo
 
+import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.SearchQueryMigration
 import io.github.tieo.arbay.model.TrackedProduct
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.slf4j.LoggerFactory
-import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /** Saved searches. Persisted to disk so they survive a server restart / redeploy —
  *  a saved Crafter must not vanish when the container is recreated. */
 class ProductRepo {
     private val log = LoggerFactory.getLogger(ProductRepo::class.java)
     private val products = ConcurrentHashMap<String, TrackedProduct>()
-    private val persistFile = File(System.getProperty("user.home"), ".arbay/tracked_products.json")
+    private val persistFile = DataDir.file("tracked_products.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     // A load that threw left this empty while the file on disk still holds every saved search.

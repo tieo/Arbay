@@ -5,7 +5,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 /**
@@ -45,32 +44,19 @@ object StealthBrowserClient {
      *  data-qa attribute) appears in the rendered DOM, so a client-rendered grid is present rather
      *  than the empty post-challenge shell. For Cloudflare/Datadome pages whose content is painted
      *  after the challenge clears. */
-    fun fetchRendered(url: String, waitMarker: String, waitSeconds: Int = 30, minMatches: Int = 1): String {
+    suspend fun fetchRendered(url: String, waitMarker: String, waitSeconds: Int = 30, minMatches: Int = 1): String {
         val args = listOf("xvfb-run", "-a", "python3", genericScriptPath, url, waitMarker, waitSeconds.toString(), minMatches.toString())
-        val process = ProcessBuilder(args).redirectErrorStream(false).start()
-
-        var stderr = ""
-        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
-        stderrThread.isDaemon = true
-        stderrThread.start()
-
-        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
-        val output = try {
-            outputFuture.get((waitSeconds + 45).toLong(), TimeUnit.SECONDS)
-        } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroyForcibly()
+        val outcome = try {
+            runProcess(args, timeoutMs = (waitSeconds + 45) * 1000L)
+        } catch (_: ProcessTimedOut) {
             throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
         }
-        stderrThread.join(3_000)
-        process.waitFor(5, TimeUnit.SECONDS)
-
-        val exitCode = process.exitValue()
-        if (exitCode != 0) {
-            log.warn("stealth render exit {} for {}: {}", exitCode, url, stderr.take(200))
-            val type = if (exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
-            throw CrawlerBlockedException("stealth render $url: exit $exitCode", type)
+        if (outcome.exitCode != 0) {
+            log.warn("stealth render exit {} for {}: {}", outcome.exitCode, url, outcome.stderr.take(200))
+            val type = if (outcome.exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
+            throw CrawlerBlockedException("stealth render $url: exit ${outcome.exitCode}", type)
         }
-        return output.toString(Charsets.UTF_8)
+        return outcome.stdout.toString(Charsets.UTF_8)
     }
 
     /** How long a human is given to solve an interactive captcha once the sidecar exposes the live
@@ -149,28 +135,35 @@ object StealthBrowserClient {
         val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
         val watchdog = Thread {
             while (process.isAlive) {
-                if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); process.destroyForcibly(); break }
+                if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); killTree(process); break }
                 Thread.sleep(1_000)
             }
         }
         watchdog.isDaemon = true
         watchdog.start()
 
-        coroutineScope {
-            val ctrlJob = launch {
-                for (msg in controls) {
-                    if (msg == "CAPTCHA_INTERACTIVE") deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
-                    onControl(msg)
+        try {
+            coroutineScope {
+                val ctrlJob = launch {
+                    for (msg in controls) {
+                        if (msg == "CAPTCHA_INTERACTIVE") deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
+                        onControl(msg)
+                    }
                 }
+                for (page in pages) onPage(page)
+                ctrlJob.join()
             }
-            for (page in pages) onPage(page)
-            ctrlJob.join()
+        } catch (e: Throwable) {
+            // The search that wanted these pages is gone or failed; the browser must go with it
+            // rather than page on until the watchdog's deadline.
+            killTree(process)
+            throw e
         }
 
         if (timedOut.get()) throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
 
         stderrThread.join(3_000)
-        if (!process.waitFor(10, TimeUnit.SECONDS)) process.destroyForcibly()
+        if (!process.waitFor(10, TimeUnit.SECONDS)) killTree(process)
 
         val stderr = stderrBuf.toString()
         val exitCode = runCatching { process.exitValue() }.getOrElse { -1 }
@@ -181,35 +174,4 @@ object StealthBrowserClient {
         }
     }
 
-    /** Load [url] in real Chrome, solve the Akamai challenge once, then page through up to
-     *  [maxPages] in the same session. Returns each page's HTML joined by [PAGE_BREAK]. */
-    fun fetch(url: String, maxPages: Int = 1, waitSeconds: Int = 30): String {
-        // xvfb-run gives Chrome a virtual display on a headless host. -a picks a free display.
-        val args = listOf("xvfb-run", "-a", "python3", scriptPath, url, maxPages.toString(), waitSeconds.toString())
-        val process = ProcessBuilder(args).redirectErrorStream(false).start()
-
-        var stderr = ""
-        val stderrThread = Thread { stderr = process.errorStream.bufferedReader().readText() }
-        stderrThread.isDaemon = true
-        stderrThread.start()
-
-        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
-        val output = try {
-            outputFuture.get((waitSeconds + maxPages * 20 + 60).toLong(), TimeUnit.SECONDS)
-        } catch (_: java.util.concurrent.TimeoutException) {
-            process.destroyForcibly()
-            throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
-        }
-
-        stderrThread.join(3_000)
-        process.waitFor(5, TimeUnit.SECONDS)
-
-        val exitCode = process.exitValue()
-        if (exitCode != 0) {
-            log.warn("stealth browser exit {} for {}: {}", exitCode, url, stderr.take(200))
-            val type = if (exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
-            throw CrawlerBlockedException("stealth browser $url: exit $exitCode", type)
-        }
-        return output.toString(Charsets.UTF_8)
-    }
 }

@@ -38,7 +38,7 @@ class SearchQueryPriceTest {
     }
 
     @Test
-    fun `a price band alone is a filter, on a query with no car filters`() {
+    fun `a price band alone is a filter on a query with no car filters`() {
         val q = SearchQuery(text = "parkettschleifmaschine", category = MarketGroup.GENERAL).withPriceRangeEur(300, 700)
 
         assertEquals(Money(30_000, Currency.EUR), q.minPrice)

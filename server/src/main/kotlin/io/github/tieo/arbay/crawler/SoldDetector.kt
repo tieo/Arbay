@@ -4,6 +4,7 @@ import io.github.tieo.arbay.model.Listing
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
 /**
@@ -80,7 +81,7 @@ object SoldDetector {
                     log.debug("SoldDetector: LLM-based sold detection for '${title.take(60)}'")
                     return listing.copy(sold = true)
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.warn("SoldDetector: LLM call failed for '${title.take(40)}': ${e.message}")
             }
         }

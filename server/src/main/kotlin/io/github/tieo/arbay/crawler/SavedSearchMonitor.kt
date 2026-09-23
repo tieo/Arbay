@@ -1,30 +1,33 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.SaleType
-import io.github.tieo.arbay.model.landedPrice
+import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
+import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SubfilterMatch
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.displayName
-import io.github.tieo.arbay.model.Money
-import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.landedPrice
 import io.github.tieo.arbay.repo.ImportSettingsStore
 import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
+import io.github.tieo.arbay.repo.ProductRepo
+import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
-import kotlinx.datetime.Clock
+import java.io.File
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
-import kotlinx.serialization.Serializable
-import io.github.tieo.arbay.repo.ProductRepo
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.datetime.Clock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
  * Re-runs a saved search (TrackedProduct) on the schedule set on that search, so a bookmark keeps
@@ -66,7 +69,12 @@ class SavedSearchMonitor(
     }
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val seenFile = File(System.getProperty("user.home"), ".arbay/saved_search_seen.json")
+
+    // The watch loop writes [seen], [unopened], [lastNew] and [lastRun] while the app's requests
+    // read and clear them, so every touch of them holds this lock. Crawling happens outside it.
+    private val stateLock = Any()
+
+    private val seenFile = DataDir.file("saved_search_seen.json")
     // Listing ids already reported, keyed by saved-search id, so only genuinely new stock alerts.
     private val seen: MutableMap<String, MutableSet<String>> = loadSeen()
 
@@ -88,9 +96,9 @@ class SavedSearchMonitor(
         val lastRunAtMillis: Map<String, Long> = emptyMap(),
     )
 
-    private val stateFile = File(System.getProperty("user.home"), ".arbay/saved_search_state.json")
-    private val legacyStatusFile = File(System.getProperty("user.home"), ".arbay/saved_search_status.json")
-    private val legacyLastNewFile = File(System.getProperty("user.home"), ".arbay/saved_search_last_new.json")
+    private val stateFile = DataDir.file("saved_search_state.json")
+    private val legacyStatusFile = DataDir.file("saved_search_status.json")
+    private val legacyLastNewFile = DataDir.file("saved_search_last_new.json")
 
     private val unopened: MutableMap<String, MutableSet<String>>
     private val lastNew: MutableMap<String, MutableSet<String>>
@@ -105,18 +113,20 @@ class SavedSearchMonitor(
 
     /** What every saved search has been doing, for the app's list of them. */
     fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
-        SavedSearchStatus(
-            productId = product.id,
-            watched = product.autoFetch.enabled,
-            lastRunAtMillis = lastRun[product.id],
-            newSinceOpened = unopened[product.id]?.size ?: 0,
-            newListingIds = unopened[product.id]?.toList().orEmpty(),
-        )
+        synchronized(stateLock) {
+            SavedSearchStatus(
+                productId = product.id,
+                watched = product.autoFetch.enabled,
+                lastRunAtMillis = lastRun[product.id],
+                newSinceOpened = unopened[product.id]?.size ?: 0,
+                newListingIds = unopened[product.id]?.toList().orEmpty(),
+            )
+        }
     }
 
     /** Called when a saved search is opened: what was waiting has now been seen. */
     fun markOpened(productId: String) {
-        unopened.remove(productId)
+        synchronized(stateLock) { unopened.remove(productId) }
         saveStatus()
     }
 
@@ -130,7 +140,9 @@ class SavedSearchMonitor(
      * outlives a restart and mirrors the images too.
      */
     fun newListings(productId: String): List<Listing> {
-        val ids = unopened[productId]?.takeIf { it.isNotEmpty() } ?: lastNew[productId].orEmpty()
+        val ids = synchronized(stateLock) {
+            unopened[productId]?.takeIf { it.isNotEmpty() }?.toList() ?: lastNew[productId].orEmpty().toList()
+        }
         // The archived copy first: it is the one whose images are mirrored here, so it still shows
         // a photo after the platform drops the listing. The repo copy stands in while archiving is
         // still in flight, since that runs in the background after a crawl.
@@ -165,7 +177,7 @@ class SavedSearchMonitor(
         for (product in productRepo.getAll()) {
             if (!product.autoFetch.enabled) continue
             val intervalMs = product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN) * 60_000L
-            val last = lastRun[product.id] ?: 0L
+            val last = synchronized(stateLock) { lastRun[product.id] } ?: 0L
             if (now - last < intervalMs) continue
             try {
                 runProduct(product)
@@ -181,7 +193,6 @@ class SavedSearchMonitor(
      *  search re-enabled later does not re-alert on a backlog it already knows about, since [seen]
      *  persists across restarts. */
     private suspend fun runProduct(product: TrackedProduct) {
-        val silent = product.id !in seen
         val platforms = product.searchQuery.platforms
             .filter { CrawlerRegistry.crawlerFor(it) != null }
             .ifEmpty { return }
@@ -196,14 +207,14 @@ class SavedSearchMonitor(
             val query = localizedQuery(product.searchQuery.copy(platforms = listOf(platformId)), platformId)
             val results = try {
                 withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
                 continue
             }
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
         }
 
-        lastRun[product.id] = System.currentTimeMillis()
+        synchronized(stateLock) { lastRun[product.id] = System.currentTimeMillis() }
 
         // Every market refused or failed. Recording that as this search's first, silent run would
         // spend the one chance to seed quietly on nothing, and the next run that does reach a
@@ -214,12 +225,19 @@ class SavedSearchMonitor(
             return
         }
 
-        val known = seen.getOrPut(product.id) { mutableSetOf() }
-        val fresh = found.keys.filter { it !in known }
-        known.addAll(found.keys)
+        val silent: Boolean
+        val fresh: List<String>
+        synchronized(stateLock) {
+            silent = product.id !in seen
+            val known = seen.getOrPut(product.id) { mutableSetOf() }
+            fresh = found.keys.filter { it !in known }
+            known.addAll(found.keys)
+            if (fresh.isNotEmpty() && !silent) {
+                unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
+                lastNew[product.id] = fresh.toMutableSet()
+            }
+        }
         if (fresh.isNotEmpty() && !silent) {
-            unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
-            lastNew[product.id] = fresh.toMutableSet()
             saveStatus()
             // Stored as found, so the app can show this batch later without asking the platform
             // again — which by then may no longer have it. Archiving mirrors the images too.
@@ -358,56 +376,46 @@ class SavedSearchMonitor(
     }
 
     /** The state file, or whatever the two files it replaced still hold. */
-    private fun loadState(): SearchState = try {
-        if (stateFile.exists()) json.decodeFromString<SearchState>(stateFile.readText())
+    private fun loadState(): SearchState =
+        if (stateFile.exists()) stateFile.readStore(log) { json.decodeFromString<SearchState>(it) } ?: SearchState()
         else SearchState(unopened = loadIds(legacyStatusFile), lastNew = loadIds(legacyLastNewFile))
-    } catch (e: Exception) {
-        log.warn("Could not read saved-search state, starting from empty: {}", e.message)
-        SearchState()
-    }
 
-    private fun loadIds(file: File): Map<String, Set<String>> = try {
-        if (file.exists()) json.decodeFromString<Map<String, Set<String>>>(file.readText()) else emptyMap()
-    } catch (_: Exception) { emptyMap() }
+    private fun loadIds(file: File): Map<String, Set<String>> =
+        file.readStore(log) { json.decodeFromString<Map<String, Set<String>>>(it) }.orEmpty()
 
     /** Persist what the watches know, dropping anything belonging to a bookmark that is gone —
      *  a deleted search left its whole listing-id history behind on every previous version. */
-    private fun saveStatus() {
+    private fun saveStatus() = synchronized(stateFile) {
         val live = productRepo.getAll().map { it.id }.toSet()
-        unopened.keys.retainAll(live)
-        lastNew.keys.retainAll(live)
-        lastRun.keys.retainAll(live)
-        seen.keys.retainAll(live)
-        try {
-            stateFile.writeTextAtomically(
-                json.encodeToString(
-                    SearchState(
-                        unopened = unopened.mapValues { it.value.toSet() },
-                        lastNew = lastNew.mapValues { it.value.toSet() },
-                        lastRunAtMillis = lastRun.toMap(),
-                    ),
-                ),
+        val state = synchronized(stateLock) {
+            unopened.keys.retainAll(live)
+            lastNew.keys.retainAll(live)
+            lastRun.keys.retainAll(live)
+            seen.keys.retainAll(live)
+            SearchState(
+                unopened = unopened.mapValues { it.value.toSet() },
+                lastNew = lastNew.mapValues { it.value.toSet() },
+                lastRunAtMillis = lastRun.toMap(),
             )
+        }
+        try {
+            stateFile.writeTextAtomically(json.encodeToString(state))
         } catch (e: Exception) {
-            log.debug("could not write saved-search state: {}", e.message)
+            log.error("could not write saved-search state: {}", e.message)
         }
     }
 
-    private fun loadSeen(): MutableMap<String, MutableSet<String>> = try {
-        if (seenFile.exists()) {
-            json.decodeFromString<Map<String, Set<String>>>(seenFile.readText())
-                .mapValuesTo(HashMap()) { it.value.toMutableSet() }
-        } else HashMap()
-    } catch (e: Exception) {
-        log.warn("Could not load saved-search state: {}", e.message)
-        HashMap()
-    }
+    private fun loadSeen(): MutableMap<String, MutableSet<String>> =
+        seenFile.readStore(log) { json.decodeFromString<Map<String, Set<String>>>(it) }
+            ?.mapValuesTo(HashMap()) { it.value.toMutableSet() }
+            ?: HashMap()
 
-    private fun saveSeen() {
+    private fun saveSeen() = synchronized(seenFile) {
+        val snapshot = synchronized(stateLock) { seen.mapValues { it.value.toList() } }
         try {
-            seenFile.writeTextAtomically(json.encodeToString(seen.mapValues { it.value.toList() }))
+            seenFile.writeTextAtomically(json.encodeToString(snapshot))
         } catch (e: Exception) {
-            log.warn("Could not save saved-search state: {}", e.message)
+            log.error("Could not save saved-search state: {}", e.message)
         }
     }
 }
