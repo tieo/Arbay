@@ -3,17 +3,22 @@ package io.github.tieo.arbay.api
 import io.github.tieo.arbay.appSecrets
 import io.github.tieo.arbay.defaultServerUrl
 import io.github.tieo.arbay.loadDeviceSettings
-import io.github.tieo.arbay.saveDeviceSettings
 import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.saveDeviceSettings
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.plugins.HttpResponseValidator
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
@@ -27,7 +32,7 @@ class ArbayClient(
     // The address this device was last pointed at, else the configured one. A server chosen in
     // Settings is a property of the device, so it outlives the process that chose it.
     baseUrl: String = loadDeviceSettings()["serverUrl"] ?: appSecrets().serverUrl ?: defaultServerUrl(),
-) {
+) : AutoCloseable {
     var baseUrl: String = baseUrl.trimEnd('/')
         private set
 
@@ -38,11 +43,55 @@ class ArbayClient(
                 encodeDefaults = true
             })
         }
+        // Every answer that is not a success is an error with the server's own reason, raised
+        // here once. Unchecked, a 500 or the sign-in page in front of the server failed later as a
+        // serializer's "unexpected token", and a delete that was refused looked like one that worked.
+        HttpResponseValidator {
+            validateResponse { response ->
+                // The sign-in in front of the server answers an unsigned request with its own login
+                // page and a 200, which is not the server answering. The server itself never sends
+                // a web page, so one arriving means something in between answered instead.
+                if (response.contentType()?.match(ContentType.Text.Html) == true) {
+                    val host = response.call.request.url.host
+                    throw ArbayApiException(
+                        if (host != Url(baseUrl).host) "The server asked to sign in first ($host), so it was not reached"
+                        else "The server answered with a web page instead of data",
+                    )
+                }
+                if (!response.status.isSuccess()) {
+                    val reason = runCatching { response.bodyAsText() }.getOrNull()?.take(300)
+                    throw ArbayApiException(reason?.takeIf { it.isNotBlank() } ?: response.status.description)
+                }
+            }
+        }
+        // A server that takes the connection and then says nothing must not leave a screen
+        // loading for ever. The two streams lift the overall limit (a search runs for minutes)
+        // and keep the silence limit, which the server's keepalive line stays well inside.
+        install(HttpTimeout) {
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 60_000
+            requestTimeoutMillis = 60_000
+        }
         appSecrets().authHeader?.let { auth ->
             install(DefaultRequest) {
                 header(HttpHeaders.Authorization, auth)
             }
         }
+    }
+
+    override fun close() = client.close()
+
+    /**
+     * A read the screen can do without: its value, or [fallback] when the server could not give
+     * one. A caller that was cancelled is not a read that failed, so its cancellation carries on
+     * instead of coming back as the fallback.
+     */
+    private inline fun <T> orElse(fallback: T, read: () -> T): T = try {
+        read()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        fallback
     }
 
     fun updateBaseUrl(newUrl: String) {
@@ -150,9 +199,8 @@ class ArbayClient(
     /** Where a place is, for measuring listings against a home town. Null when the server's index
      *  does not know it. */
     suspend fun geocode(place: String): Pair<Double, Double>? {
-        val response = client.get("$baseUrl/api/geocode") { parameter("q", place) }
-        if (!response.status.isSuccess()) return null
-        val body = response.body<Map<String, Double>>()
+        val body = orElse(null) { client.get("$baseUrl/api/geocode") { parameter("q", place) }.body<Map<String, Double>>() }
+            ?: return null
         val lat = body["latitude"] ?: return null
         val lon = body["longitude"] ?: return null
         return lat to lon
@@ -166,15 +214,14 @@ class ArbayClient(
      * One page load on the server, cached there, asked for the listing being read. Null when the
      * market's page adds nothing or could not be read.
      */
-    suspend fun listingDetail(listing: Listing): ListingDetail? = try {
+    suspend fun listingDetail(listing: Listing): ListingDetail? = orElse(null) {
         val response = client.get("$baseUrl/api/crawler/listing-detail") {
             parameter("url", listing.url)
             parameter("platform", listing.platformId.name)
             parameter("id", listing.id)
         }
-        if (response.status == HttpStatusCode.NoContent || !response.status.isSuccess()) null
-        else response.body<ListingDetail>()
-    } catch (_: Exception) { null }
+        if (response.status == HttpStatusCode.NoContent) null else response.body<ListingDetail>()
+    }
 
     suspend fun getMarketSettings(): MarketSettings =
         client.get("$baseUrl/api/settings/markets").body()
@@ -190,10 +237,8 @@ class ArbayClient(
 
     /** The offline copy of a listing that may no longer exist on its own platform — its own
      *  fields plus images mirrored on our server. Null when it was never archived. */
-    suspend fun getArchivedListing(id: String): Listing? = try {
+    suspend fun getArchivedListing(id: String): Listing? = orElse(null) {
         client.get("$baseUrl/api/archive/listings/$id").body<Listing>().withServerImages()
-    } catch (_: Exception) {
-        null
     }
 
     /**
@@ -225,6 +270,12 @@ class ArbayClient(
         excludeKeywords: List<String> = emptyList(), aliases: List<String> = emptyList(),
     ): List<Listing> =
         client.get("$baseUrl/api/crawler/search") {
+            // Every market crawled before the one answer comes back, with nothing said meanwhile:
+            // bounded by the server's own search budget rather than the default minute.
+            timeout {
+                requestTimeoutMillis = 420_000
+                socketTimeoutMillis = 420_000
+            }
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             parameter("limit", limit)
@@ -238,10 +289,10 @@ class ArbayClient(
 
     // ── Free Items ────────────────────────────────────────────────────────────
 
-    suspend fun getFreeItemProfile(): FreeItemProfile? = try {
+    suspend fun getFreeItemProfile(): FreeItemProfile? = orElse(null) {
         val response = client.get("$baseUrl/api/free-items/profile")
         if (response.status == HttpStatusCode.NoContent) null else response.body()
-    } catch (_: Exception) { null }
+    }
 
     suspend fun setFreeItemProfile(description: String, location: String? = null, radiusKm: Int = 30, trackingEnabled: Boolean = false) {
         client.post("$baseUrl/api/free-items/profile") {
@@ -255,7 +306,7 @@ class ArbayClient(
         url: String? = null, imageUrl: String? = null, locationText: String? = null,
         description: String? = null, relevanceScore: Double? = null,
         remainingIds: List<String> = emptyList(),
-    ): FeedbackResponse? = try {
+    ): FeedbackResponse =
         client.post("$baseUrl/api/free-items/feedback") {
             contentType(ContentType.Application.Json)
             setBody(ListingFeedback(
@@ -265,35 +316,34 @@ class ArbayClient(
                 remainingIds = remainingIds,
             ))
         }.body<FeedbackResponse>()
-    } catch (_: Exception) { null }
 
     suspend fun undoFreeItemFeedback(listingId: String) {
         client.delete("$baseUrl/api/free-items/feedback/$listingId")
     }
 
-    suspend fun getFreeItemInsights(): FreeItemInsights? = try {
+    suspend fun getFreeItemInsights(): FreeItemInsights? = orElse(null) {
         client.get("$baseUrl/api/free-items/insights").body()
-    } catch (_: Exception) { null }
+    }
 
-    suspend fun getFreeItemHistory(action: FeedbackAction? = null): List<FeedbackHistoryItem> = try {
+    suspend fun getFreeItemHistory(action: FeedbackAction? = null): List<FeedbackHistoryItem> = orElse(emptyList()) {
         client.get("$baseUrl/api/free-items/history") {
             action?.let { parameter("action", it.name) }
         }.body()
-    } catch (_: Exception) { emptyList() }
+    }
 
-    suspend fun getFreeItemStats(): FreeItemStats? = try {
+    suspend fun getFreeItemStats(): FreeItemStats? = orElse(null) {
         client.get("$baseUrl/api/free-items/stats").body()
-    } catch (_: Exception) { null }
+    }
 
-    suspend fun getNewMatches(): List<NewMatch> = try {
+    suspend fun getNewMatches(): List<NewMatch> = orElse(emptyList()) {
         client.get("$baseUrl/api/free-items/tracking/matches").body()
-    } catch (_: Exception) { emptyList() }
+    }
 
     // ── Notification Settings ─────────────────────────────────────────────
 
-    suspend fun getNotificationSettings(): NotificationSettings = try {
+    suspend fun getNotificationSettings(): NotificationSettings = orElse(NotificationSettings()) {
         client.get("$baseUrl/api/free-items/notifications/settings").body()
-    } catch (_: Exception) { NotificationSettings() }
+    }
 
     suspend fun updateNotificationSettings(settings: NotificationSettings) {
         client.post("$baseUrl/api/free-items/notifications/settings") {
@@ -302,14 +352,23 @@ class ArbayClient(
         }
     }
 
-    suspend fun pollNow(): PollResult = try {
-        client.get("$baseUrl/api/free-items/notifications/poll").body()
-    } catch (_: Exception) { PollResult() }
+    /** What the server has waiting to be raised as notifications. Throws when it cannot be asked,
+     *  so the background worker retries instead of recording a poll that never happened.
+     *  [acknowledged] is the last delivery this device raised, which the server then lets go. */
+    suspend fun pollNow(acknowledged: Long): PollResult =
+        client.get("$baseUrl/api/free-items/notifications/poll") {
+            parameter("ack", acknowledged)
+            // The server runs its free-item check before it answers, a crawl of up to two minutes.
+            timeout {
+                requestTimeoutMillis = 180_000
+                socketTimeoutMillis = 180_000
+            }
+        }.body()
 
-    suspend fun getLastPollResult(): PollResult? = try {
+    suspend fun getLastPollResult(): PollResult? = orElse(null) {
         val response = client.get("$baseUrl/api/free-items/notifications/last")
         if (response.status == HttpStatusCode.NoContent) null else response.body()
-    } catch (_: Exception) { null }
+    }
 
     // ── Model Arena ─────────────────────────────────────────────────────────
 
@@ -338,13 +397,13 @@ class ArbayClient(
         val falseNegatives: Int = 0,
     )
 
-    suspend fun getModels(): List<ModelInfo> = try {
+    suspend fun getModels(): List<ModelInfo> = orElse(emptyList()) {
         client.get("$baseUrl/api/models").body()
-    } catch (_: Exception) { emptyList() }
+    }
 
-    suspend fun getArenaLeaderboard(): List<ArenaEntry> = try {
+    suspend fun getArenaLeaderboard(): List<ArenaEntry> = orElse(emptyList()) {
         client.get("$baseUrl/api/models/arena").body()
-    } catch (_: Exception) { emptyList() }
+    }
 
     suspend fun setActiveModel(modelId: String) {
         client.post("$baseUrl/api/models/active") {
@@ -353,16 +412,15 @@ class ArbayClient(
         }
     }
 
-    suspend fun retrainModels(): Map<String, String> = try {
+    suspend fun retrainModels(): Map<String, String> =
         client.post("$baseUrl/api/models/retrain").body()
-    } catch (_: Exception) { emptyMap() }
 
-    suspend fun getRejectedItems(threshold: Double = 0.4, limit: Int = 50): List<RejectedItem> = try {
+    suspend fun getRejectedItems(threshold: Double = 0.4, limit: Int = 50): List<RejectedItem> = orElse(emptyList()) {
         client.get("$baseUrl/api/free-items/rejected") {
             parameter("threshold", threshold)
             parameter("limit", limit)
         }.body()
-    } catch (_: Exception) { emptyList() }
+    }
 
     fun freeItemsStream(
         query: String = "",
@@ -371,6 +429,12 @@ class ArbayClient(
         radiusKm: Int? = null,
     ): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/free-items/stream") {
+            // No keepalive line on this stream, and one page through the browser tiers can take
+            // minutes, so it may stay silent that long.
+            timeout {
+                requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                socketTimeoutMillis = 300_000
+            }
             if (query.isNotBlank()) parameter("q", query)
             if (startPage > 1) parameter("startPage", startPage)
             if (batchSize != 10) parameter("batchSize", batchSize)
@@ -419,6 +483,7 @@ class ArbayClient(
         lon: Double? = null,
     ): Flow<CrawlerSearchEvent> = flow {
         client.prepareGet("$baseUrl/api/crawler/search/stream") {
+            timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }
             if (platforms != null && platform == null) {

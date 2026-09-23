@@ -261,8 +261,10 @@ fun MainScreen(
     // A search's filters live somewhere the moment it opens: on the bookmark if it is saved, in
     // history otherwise. This is the "otherwise" — looked up live, same as the bookmark above.
     val searchHistory by SearchHistoryStore.entries.collectAsState()
+    // Matched on the words and the kind of search, the same identity the store keys on.
     val resultsHistoryEntry = results?.let { view -> searchHistory.firstOrNull {
-        it.searchQuery.text.trim().equals(view.query.trim(), ignoreCase = true)
+        it.searchQuery.text.trim().equals(view.query.trim(), ignoreCase = true) &&
+            it.searchQuery.category == view.category
     } }
     // Blocked keywords for the open results, held locally so edits filter live before they are
     // saved. Seeded from the bookmark, else from history; a search with neither starts with none.
@@ -600,7 +602,7 @@ fun MainScreen(
             },
             history = searchHistory,
             onOpenHistory = { entry -> openResults(ResultsView.of(entry)) },
-            onRemoveHistory = { query -> SearchHistoryStore.remove(query) },
+            onRemoveHistory = { entry -> SearchHistoryStore.remove(entry.searchQuery.text, entry.searchQuery.category) },
             onClearHistory = { SearchHistoryStore.clear() },
             onCarSearch = {
                 // Fresh car search: clear any state left from a previous edit so the form
@@ -823,7 +825,7 @@ fun MainScreen(
                     // rewritten to.
                     val base = SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
                         .copy(text = newQuery, aliases = emptyList())
-                    SearchHistoryStore.remove(view.query)
+                    SearchHistoryStore.remove(view.query, view.category)
                     SearchHistoryStore.record(newName, base)
                 }
                 results = view.copy(name = newName, query = newQuery)

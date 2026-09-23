@@ -50,10 +50,10 @@ class ProductViewModel(
                 _products.value = client.getProducts()
                 _status.value = try {
                     client.getSavedSearchStatus().associateBy { it.productId }
-                } catch (_: Exception) {
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
                     emptyMap()
                 }
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = e.message
             }
             _loading.value = false
@@ -69,32 +69,8 @@ class ProductViewModel(
      * replaced the history entry those choices lived on.
      */
     fun createProduct(name: String, query: SearchQuery) {
-        // One search, one bookmark. The screen knows a search is saved by finding it in the list,
-        // which only arrives once the server has answered, so a second tap in that gap saved the
-        // same search again: two identical "iphone 11" bookmarks, a second and a half apart.
-        val key = "$name|${query.text}"
-        if (!beingSaved.add(key)) return
-        viewModelScope.launch {
-            try {
-                client.createProduct(
-                    TrackedProduct(
-                        id = generateId(),
-                        name = name,
-                        searchQuery = query,
-                        createdAt = Clock.System.now(),
-                    ),
-                )
-                loadProducts()
-            } catch (e: Exception) {
-                _error.value = e.message
-            } finally {
-                beingSaved.remove(key)
-            }
-        }
+        save(TrackedProduct(id = generateId(), name = name, searchQuery = query, createdAt = Clock.System.now()))
     }
-
-    /** Searches with a save in flight, so the same one cannot be saved twice over. */
-    private val beingSaved = mutableSetOf<String>()
 
     fun createProduct(
         name: String,
@@ -106,25 +82,42 @@ class ProductViewModel(
         excludeKeywords: List<String> = emptyList(),
         aliases: List<String> = emptyList(),
     ) {
+        save(
+            TrackedProduct(
+                id = generateId(),
+                name = name,
+                searchQuery = SearchQuery(
+                    text = searchText,
+                    platforms = platforms,
+                    excludeKeywords = excludeKeywords,
+                    category = category,
+                    aliases = aliases,
+                ).withCarFilters(carFilters),
+                identifiers = identifiers,
+                createdAt = Clock.System.now(),
+            ),
+        )
+    }
+
+    /** Searches with a save in flight, so the same one cannot be saved twice over. */
+    private val beingSaved = mutableSetOf<String>()
+
+    // One search, one bookmark, whichever screen saves it. The list shows a search as saved only
+    // once the server has answered, so a second tap in that gap saved the same search again: two
+    // identical "iphone 11" bookmarks, a second and a half apart.
+    private fun save(product: TrackedProduct) {
+        val key = "${product.name}|${product.searchQuery.text}|${product.searchQuery.category}"
+        if (!beingSaved.add(key)) return
         viewModelScope.launch {
             try {
-                val product = TrackedProduct(
-                    id = generateId(),
-                    name = name,
-                    searchQuery = SearchQuery(
-                        text = searchText,
-                        platforms = platforms,
-                        excludeKeywords = excludeKeywords,
-                        category = category,
-                        aliases = aliases,
-                    ).withCarFilters(carFilters),
-                    identifiers = identifiers,
-                    createdAt = Clock.System.now(),
-                )
                 client.createProduct(product)
                 loadProducts()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _error.value = e.message
+            } finally {
+                beingSaved.remove(key)
             }
         }
     }
@@ -134,7 +127,7 @@ class ProductViewModel(
             try {
                 client.deleteProduct(id)
                 loadProducts()
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = e.message
             }
         }
@@ -146,7 +139,7 @@ class ProductViewModel(
             try {
                 client.updateProduct(product)
                 loadProducts()
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = e.message
             }
         }

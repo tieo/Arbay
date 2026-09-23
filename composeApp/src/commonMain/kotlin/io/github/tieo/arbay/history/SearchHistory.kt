@@ -90,17 +90,22 @@ object SearchHistoryStore {
     private val _entries = MutableStateFlow(load())
     val entries: StateFlow<List<SearchHistoryEntry>> = _entries
 
-    private fun key(text: String) = text.trim().lowercase()
+    // A search is its words and what kind of thing they name. Keyed on the words alone, a car
+    // search for "golf" and a plain search for "golf" were one entry: running either overwrote
+    // the other, and the car search reopened as a plain one without its vehicle criteria.
+    private fun key(text: String, category: MarketGroup) = "${text.trim().lowercase()}|$category"
 
-    fun entryFor(query: String): SearchHistoryEntry? =
-        _entries.value.firstOrNull { key(it.searchQuery.text) == key(query) }
+    private fun SearchHistoryEntry.key() = key(searchQuery.text, searchQuery.category)
+
+    fun entryFor(query: String, category: MarketGroup): SearchHistoryEntry? =
+        _entries.value.firstOrNull { it.key() == key(query, category) }
 
     /** The full query to persist, whichever a caller already has: what history already knows about
      *  this search, or a fresh one built from what was just opened with. [category] decides the
      *  platforms a fresh entry defaults to — never "every platform", which is what searching a
      *  parkettschleifmaschine against car and real-estate sites forever turned out to mean. */
     fun baseQuery(query: String, platforms: List<PlatformId>?, carFilters: CarFilters?, category: MarketGroup): SearchQuery =
-        entryFor(query)?.searchQuery
+        entryFor(query, category)?.searchQuery
             ?: SearchQuery(
                 text = query,
                 platforms = platforms ?: MarketSets.platformsIn(category, SearchCountries.current.countries),
@@ -111,8 +116,8 @@ object SearchHistoryStore {
     /** A search was opened. Keeps whatever it was narrowed to last time; only the display name and
      *  freshly-known platforms/vehicle criteria are refreshed, so reopening the same search does not
      *  reset a price band or blocked word set the way starting a new one should not inherit them.
-     *  [category] is what this search IS, not something to keep re-guessing — an existing entry's
-     *  own category wins over whatever this particular open call happens to pass. */
+     *  [category] is part of which search this is, so the same words opened as another kind of
+     *  search are a different entry. */
     fun recordOpen(
         name: String,
         query: String,
@@ -123,8 +128,8 @@ object SearchHistoryStore {
         excludeKeywords: List<String>? = null,
     ) {
         if (query.isBlank()) return
-        val existing = entryFor(query)
-        val resolvedCategory = existing?.searchQuery?.category ?: category
+        val existing = entryFor(query, category)
+        val resolvedCategory = category
         val q = (existing?.searchQuery ?: SearchQuery(text = query, category = resolvedCategory)).copy(
             platforms = platforms ?: existing?.searchQuery?.platforms
                 ?: MarketSets.platformsIn(resolvedCategory, SearchCountries.current.countries),
@@ -140,14 +145,14 @@ object SearchHistoryStore {
      *  persistence already does, applied here for a search nobody chose to keep. */
     fun record(name: String, query: SearchQuery) {
         if (query.text.isBlank()) return
-        val k = key(query.text)
-        val without = _entries.value.filterNot { key(it.searchQuery.text) == k }
+        val k = key(query.text, query.category)
+        val without = _entries.value.filterNot { it.key() == k }
         _entries.value = (listOf(SearchHistoryEntry(name, query, Clock.System.now())) + without).take(MAX_ENTRIES)
         persist()
     }
 
-    fun remove(query: String) {
-        _entries.value = _entries.value.filterNot { key(it.searchQuery.text) == key(query) }
+    fun remove(query: String, category: MarketGroup) {
+        _entries.value = _entries.value.filterNot { it.key() == key(query, category) }
         persist()
     }
 

@@ -22,8 +22,10 @@ class FreeItemPollWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val client = ArbayClient()
-            val result = client.pollNow()
+            // One client per run, closed with it: the worker is a fresh object every time it runs,
+            // and an unclosed client keeps its connection pool and threads for the process's life.
+            val acknowledged = loadDeviceSettings()[ACK_SETTING]?.toLongOrNull() ?: 0L
+            val result = ArbayClient().use { it.pollNow(acknowledged) }
 
             NotificationHelper.ensureChannels(applicationContext)
 
@@ -80,7 +82,16 @@ class FreeItemPollWorker(
                 )
             }
 
+            // Shown, so the next poll tells the server it can let these go. Stored after they are
+            // raised: a run that dies in between raises them again, which replaces them in place.
+            result.deliveredUpTo?.let { upTo ->
+                saveDeviceSettings(loadDeviceSettings() + (ACK_SETTING to upTo.toString()))
+            }
+
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // WorkManager stopped the work (constraints no longer met); it reschedules it itself.
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
@@ -89,8 +100,18 @@ class FreeItemPollWorker(
     companion object {
         private const val WORK_NAME = "free_item_poll"
 
+        private const val INTERVAL_SETTING = "pollEveryMinutes"
+        private const val ACK_SETTING = "notificationsRaisedUpTo"
+
+        /** The interval last chosen in Settings, which app start schedules with. Scheduling app
+         *  start with a fixed hour replaced the chosen interval every time the app was opened. */
+        private fun chosenInterval(): Int = loadDeviceSettings()[INTERVAL_SETTING]?.toIntOrNull() ?: 60
+
         /** Ask this often. Called on app start and whenever the interval setting changes. */
-        fun schedule(context: Context, intervalMinutes: Int = 60) {
+        fun schedule(context: Context, intervalMinutes: Int = chosenInterval()) {
+            if (intervalMinutes != chosenInterval()) {
+                runCatching { saveDeviceSettings(loadDeviceSettings() + (INTERVAL_SETTING to intervalMinutes.toString())) }
+            }
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()

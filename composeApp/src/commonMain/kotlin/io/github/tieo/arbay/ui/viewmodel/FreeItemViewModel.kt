@@ -120,7 +120,7 @@ class FreeItemViewModel(
         viewModelScope.launch {
             try {
                 _profile.value = client.getFreeItemProfile()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
         }
     }
 
@@ -138,7 +138,7 @@ class FreeItemViewModel(
                 client.setFreeItemProfile(description, location, effectiveRadius, effectiveTracking)
                 _profile.value = FreeItemProfile(description = description, location = location, radiusKm = effectiveRadius, trackingEnabled = effectiveTracking)
                 logTelemetry("PROFILE_UPDATED", "radius=${effectiveRadius}km location=$location tracking=$effectiveTracking")
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = "Could not save profile: ${e.message}"
             }
         }
@@ -161,7 +161,7 @@ class FreeItemViewModel(
                     val idsToAdd = insights.seenIds.filter { it !in _undoneIds }
                     _dismissedIds.value = _dismissedIds.value + idsToAdd
                 }
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
         }
     }
 
@@ -171,7 +171,7 @@ class FreeItemViewModel(
         viewModelScope.launch {
             try {
                 _history.value = client.getFreeItemHistory()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
             _historyLoading.value = false
         }
     }
@@ -181,7 +181,7 @@ class FreeItemViewModel(
         viewModelScope.launch {
             try {
                 _stats.value = client.getFreeItemStats()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
         }
     }
 
@@ -332,7 +332,7 @@ class FreeItemViewModel(
             // message ("StandaloneCoroutine was cancelled") is machinery nobody should be shown.
             _loading.value = false
             throw e
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
             // A cancelling parent surfaces here as an ordinary exception whose message only
             // mentions cancelling — same non-event, same silence.
             if (e.message?.contains("Cancel", ignoreCase = true) == true) {
@@ -401,7 +401,12 @@ class FreeItemViewModel(
                 if (action == FeedbackAction.LOVE || action == FeedbackAction.DISLIKE) {
                     refreshAfterFeedback()
                 }
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The verdict is what the model learns from; one that did not arrive has to be said.
+                _error.value = "That verdict did not reach the server: ${e.message}"
+            }
         }
     }
 
@@ -442,7 +447,11 @@ class FreeItemViewModel(
                 client.undoFreeItemFeedback(listingId)
                 _dismissedIds.value = _dismissedIds.value - listingId
                 refreshAfterFeedback()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _error.value = "The undo did not reach the server: ${e.message}"
+            }
         }
     }
 
@@ -465,7 +474,11 @@ class FreeItemViewModel(
             try {
                 client.undoFreeItemFeedback(id)
                 refreshAfterFeedback()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _error.value = "The undo did not reach the server: ${e.message}"
+            }
             // After server has removed the feedback, unprotect so future sessions work normally
             _undoneIds.remove(id)
         }
@@ -492,7 +505,7 @@ class FreeItemViewModel(
                         val body = matches.first().title
                         showMatchNotification(title, body)
                     }
-                } catch (_: Exception) {}
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
             }
         }
     }
@@ -505,7 +518,7 @@ class FreeItemViewModel(
             try {
                 _models.value = client.getModels()
                 _arenaLeaderboard.value = client.getArenaLeaderboard()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
         }
     }
 
@@ -515,7 +528,7 @@ class FreeItemViewModel(
                 client.setActiveModel(modelId)
                 loadModels()
                 logTelemetry("MODEL_CHANGED", "modelId=$modelId")
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = "Could not change model: ${e.message}"
             }
         }
@@ -527,7 +540,7 @@ class FreeItemViewModel(
                 client.retrainModels()
                 loadModels()
                 logTelemetry("MODELS_RETRAINED", "")
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _error.value = "Could not retrain: ${e.message}"
             }
         }
@@ -537,7 +550,7 @@ class FreeItemViewModel(
         viewModelScope.launch {
             try {
                 _rejectedItems.value = client.getRejectedItems()
-            } catch (_: Exception) {}
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {}
         }
     }
 

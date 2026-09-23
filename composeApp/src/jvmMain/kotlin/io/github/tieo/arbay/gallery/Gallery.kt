@@ -310,6 +310,11 @@ private fun Filters(
             io.github.tieo.arbay.model.Condition.PARTS_ONLY to 2,
             null to 4,
         ),
+        saleTypes = emptySet(), onSaleTypes = {}, unstatedSaleType = true, onUnstatedSaleType = {},
+        saleTypeCounts = if (markets.isEmpty()) emptyMap() else mapOf(
+            io.github.tieo.arbay.model.SaleType.FIXED_PRICE to 12,
+            io.github.tieo.arbay.model.SaleType.AUCTION to 6,
+        ),
         sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
         markets = markets,
         shownMarkets = shownMarkets, shownCountries = shownCountries, onOpenMarkets = {},

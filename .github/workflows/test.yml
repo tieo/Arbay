@@ -1,0 +1,45 @@
+name: Tests
+
+# Everything that can be checked without a device, on every push: the server's tests, the shared
+# model's tests, the app's unit tests, and a compile of the desktop target the gallery renders
+# with. The image workflow runs only the server's tests, so for a long time a broken app test or
+# a desktop build that no longer compiled went unnoticed until someone ran it by hand.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Point the build at the runner's Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - name: Run the tests
+        run: >
+          ./gradlew --no-daemon --continue
+          :server:test
+          :shared:jvmTest
+          :composeApp:testDebugUnitTest
+          :composeApp:compileKotlinJvm
+      - name: Publish test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            server/build/reports/tests
+            shared/build/reports/tests
+            composeApp/build/reports/tests

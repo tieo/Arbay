@@ -171,6 +171,7 @@ fun ListingsSheet(
     val listings by listingViewModel.listings.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
     val notSearched by listingViewModel.notSearched.collectAsState()
+    val actionFailed by listingViewModel.error.collectAsState()
     val marketBasis by listingViewModel.marketBasis.collectAsState()
     val facets by listingViewModel.facets.collectAsState()
     val droppedBySearch by listingViewModel.droppedBySearch.collectAsState()
@@ -997,6 +998,24 @@ fun ListingsSheet(
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    }
+                }
+
+                actionFailed?.let { what ->
+                    item("action-failed") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(what, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { listingViewModel.clearError() }) { Text("OK") }
+                            }
                         }
                     }
                 }

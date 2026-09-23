@@ -148,13 +148,17 @@ fun SettingsSheet(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            client.updateBaseUrl(serverUrl)
+                            val stored = runCatching { client.updateBaseUrl(serverUrl) }.isSuccess
                             status = Status.Testing
                             scope.launch {
                                 status = try {
                                     client.getProducts()
                                     onServerUrlChanged()
-                                    Status.Ok
+                                    // The address holds for this run either way; one the device
+                                    // could not store is back to the old one after a restart.
+                                    if (stored) Status.Ok else Status.Err("Connected, but the address could not be stored on this device")
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
                                 } catch (e: Exception) {
                                     Status.Err(e.message ?: "Connection failed")
                                 }
@@ -167,8 +171,8 @@ fun SettingsSheet(
                     OutlinedButton(
                         onClick = {
                             serverUrl = configuredDefault
-                            client.updateBaseUrl(serverUrl)
-                            status = Status.Idle
+                            status = if (runCatching { client.updateBaseUrl(serverUrl) }.isSuccess) Status.Idle
+                            else Status.Err("The default is in use, but could not be stored on this device")
                         },
                         shape = RoundedCornerShape(12.dp),
                     ) {
@@ -198,8 +202,8 @@ fun SettingsSheet(
                             onClick = {
                                 displayCurrency = cur
                                 DisplayCurrency.current = cur
-                                saveDeviceSettings(loadDeviceSettings() + ("currency" to cur))
-                                scope.launch { try { client.getExchangeRates() } catch (_: Exception) {} }
+                                // The currency holds for this run whether or not the device kept it.
+                                runCatching { saveDeviceSettings(loadDeviceSettings() + ("currency" to cur)) }
                             },
                             label = { Text(cur) },
                         )
@@ -238,15 +242,24 @@ fun SettingsSheet(
 
                 Spacer(Modifier.height(12.dp))
 
+                var saved by remember { mutableStateOf<SaveOutcome?>(null) }
                 Button(
                     onClick = {
                         scope.launch {
-                            try { client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500)) } catch (_: Exception) {}
+                            saved = try {
+                                client.updateCrawlerConfig((maxResults.toIntOrNull() ?: 60).coerceIn(10, 500))
+                                SaveOutcome(true, "Saved on the server")
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                SaveOutcome(false, "Not saved: ${e.message ?: "the server did not answer"}")
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                 ) { Text("Save") }
+                SaveNote(saved)
             }
 
             SettingSection(
@@ -441,18 +454,25 @@ fun SettingsSheet(
 
                 Spacer(Modifier.height(16.dp))
 
+                var saved by remember { mutableStateOf<SaveOutcome?>(null) }
                 Button(
                     onClick = {
                         scope.launch {
-                            try {
+                            saved = try {
                                 client.updateNotificationSettings(notifSettings)
                                 schedulePolling(notifSettings.checkEveryMinutes)
-                            } catch (_: Exception) {}
+                                SaveOutcome(true, "Saved; the phone now asks every ${notifSettings.checkEveryMinutes} min")
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                SaveOutcome(false, "Not saved: ${e.message ?: "the server did not answer"}")
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                 ) { Text("Save alerts") }
+                SaveNote(saved)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -464,7 +484,21 @@ fun SettingsSheet(
     }
 }
 
-/** A titled, bordered group with a one-line plain-language explanation of what it controls. */
+/** What the last press of a Save button did. */
+private data class SaveOutcome(val saved: Boolean, val text: String)
+
+/** Says under a Save button whether the last press landed, so a refused save does not look done. */
+@Composable
+private fun SaveNote(outcome: SaveOutcome?) {
+    outcome ?: return
+    Spacer(Modifier.height(6.dp))
+    Text(
+        outcome.text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (outcome.saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+    )
+}
+
 /** Names who a group of settings belongs to: this device, or the server every device shares. */
 @Composable
 private fun SettingSectionHeading(title: String, detail: String? = null) {
@@ -484,6 +518,7 @@ private fun SettingSectionHeading(title: String, detail: String? = null) {
     }
 }
 
+/** A titled, bordered group with a one-line plain-language explanation of what it controls. */
 @Composable
 private fun SettingSection(
     icon: ImageVector,

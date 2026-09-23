@@ -20,6 +20,7 @@ import io.github.tieo.arbay.crawler.classifyException
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.AuctionReminderStore
+import io.github.tieo.arbay.repo.NotificationOutbox
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -585,10 +586,17 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
 
         // What the device asks for on its schedule, drained so the same match is not raised twice.
         get("/notifications/poll") {
+            // The number of the last notification the phone raised; absent from an app built
+            // before notifications were acknowledged, which is served the way it always was.
+            val acknowledged = call.queryParameters["ack"]?.toLongOrNull()
             val result = FreeItemMonitor.pollNow()
+            NotificationOutbox.hold(savedSearches.drainSubfilterMatches(), AuctionReminderStore.drainDue())
+            val delivery = if (acknowledged == null) NotificationOutbox.takeAll()
+            else NotificationOutbox.afterAcknowledging(acknowledged)
             call.respond(result.copy(
-                subfilterMatches = savedSearches.drainSubfilterMatches(),
-                auctionReminders = AuctionReminderStore.drainDue(),
+                subfilterMatches = delivery.subfilterMatches,
+                auctionReminders = delivery.auctionReminders,
+                deliveredUpTo = delivery.upTo,
             ))
         }
 

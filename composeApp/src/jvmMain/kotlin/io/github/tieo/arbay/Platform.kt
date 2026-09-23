@@ -11,54 +11,47 @@ actual fun openBrowser(url: String) {
     } catch (_: Exception) {}
 }
 
-private val bannedFile = File(System.getProperty("user.home"), ".arbay/banned_ids.txt")
+private val dataDir = File(System.getProperty("user.home"), ".arbay")
 
-actual fun loadBannedIds(): Set<String> {
-    return try {
-        if (!bannedFile.exists()) return emptySet()
-        bannedFile.readLines().filter { it.isNotBlank() }.toSet()
-    } catch (_: Exception) { emptySet() }
-}
-
-actual fun saveBannedIds(ids: Set<String>) {
+// Each write lands whole and a failed one says so, the same as on Android.
+private fun writeText(name: String, text: String) {
+    dataDir.mkdirs()
+    val target = File(dataDir, name)
+    val tmp = File.createTempFile("$name.", ".tmp", dataDir)
     try {
-        bannedFile.parentFile.mkdirs()
-        bannedFile.writeText(ids.joinToString("\n"))
-    } catch (_: Exception) {}
+        tmp.writeText(text)
+        java.nio.file.Files.move(
+            tmp.toPath(), target.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+        )
+    } finally {
+        tmp.delete()
+    }
 }
 
-private val searchHistoryFile = File(System.getProperty("user.home"), ".arbay/search_history.json")
+private fun readText(name: String): String? =
+    try { File(dataDir, name).takeIf { it.exists() }?.readText() } catch (_: java.io.IOException) { null }
 
-actual fun loadSearchHistory(): String = try {
-    if (searchHistoryFile.exists()) searchHistoryFile.readText() else ""
-} catch (_: Exception) { "" }
+actual fun loadBannedIds(): Set<String> =
+    readText("banned_ids.txt")?.lines()?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
 
-actual fun saveSearchHistory(json: String) {
-    try {
-        searchHistoryFile.parentFile.mkdirs()
-        searchHistoryFile.writeText(json)
-    } catch (_: Exception) {}
-}
+actual fun saveBannedIds(ids: Set<String>) = writeText("banned_ids.txt", ids.joinToString("\n"))
+
+actual fun loadSearchHistory(): String = readText("search_history.json") ?: ""
+
+actual fun saveSearchHistory(json: String) = writeText("search_history.json", json)
 
 actual fun imageModel(address: String): Any =
     if (address.startsWith("http")) address
     else File(address.removePrefix("file://"))
 
-private val settingsFile = File(System.getProperty("user.home"), ".arbay/settings.txt")
-
-actual fun loadDeviceSettings(): Map<String, String> = try {
-    if (!settingsFile.exists()) emptyMap()
-    else settingsFile.readLines().mapNotNull { line ->
+actual fun loadDeviceSettings(): Map<String, String> =
+    readText("settings.txt")?.lines()?.mapNotNull { line ->
         line.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
-    }.toMap()
-} catch (_: Exception) { emptyMap() }
+    }?.toMap() ?: emptyMap()
 
-actual fun saveDeviceSettings(settings: Map<String, String>) {
-    try {
-        settingsFile.parentFile.mkdirs()
-        settingsFile.writeText(settings.entries.joinToString("\n") { "${it.key}=${it.value}" })
-    } catch (_: Exception) {}
-}
+actual fun saveDeviceSettings(settings: Map<String, String>) =
+    writeText("settings.txt", settings.entries.joinToString("\n") { "${it.key}=${it.value}" })
 
 actual fun showMatchNotification(title: String, body: String) {}
 actual fun schedulePolling(intervalMinutes: Int) {}

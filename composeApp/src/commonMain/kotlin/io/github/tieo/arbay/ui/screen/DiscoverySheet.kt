@@ -72,7 +72,7 @@ fun DiscoverySheet(
     // Searches run before, most recent first, each carrying whatever it was last narrowed to.
     history: List<SearchHistoryEntry> = emptyList(),
     onOpenHistory: (SearchHistoryEntry) -> Unit = {},
-    onRemoveHistory: (String) -> Unit = {},
+    onRemoveHistory: (SearchHistoryEntry) -> Unit = {},
     onClearHistory: () -> Unit = {},
     // Which countries a search covers, and the sink that stores a change. Shown on the search
     // itself rather than left in settings: it decides half of what a search can possibly find.
@@ -231,7 +231,7 @@ fun DiscoverySheet(
                             HistoryRow(
                                 entry = entry,
                                 onClick = { onOpenHistory(entry) },
-                                onRemove = { onRemoveHistory(entry.searchQuery.text) },
+                                onRemove = { onRemoveHistory(entry) },
                             )
                         }
                     }

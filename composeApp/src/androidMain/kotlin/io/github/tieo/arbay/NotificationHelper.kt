@@ -134,7 +134,6 @@ object NotificationHelper {
 
     /** The in-app seam for raising the free-item notification from shared code. */
     fun showNewMatchNotification(title: String, body: String) {
-        val context = MainActivity.instance ?: return
-        show(context, CHANNEL_FREE_ITEM, title.hashCode(), title, body, null)
+        show(ArbayApplication.context, CHANNEL_FREE_ITEM, title.hashCode(), title, body, null)
     }
 }

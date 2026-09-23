@@ -140,4 +140,7 @@ data class PollResult(
     // Auctions someone asked to hear about, now that their chosen moment before the end has come.
     val auctionReminders: List<AuctionReminder> = emptyList(),
     val lastPollTime: Instant? = null,
+    // The number to send back as `ack` on the next poll once these are shown, so the server lets
+    // them go; anything it does not hear back about is sent again.
+    val deliveredUpTo: Long? = null,
 )

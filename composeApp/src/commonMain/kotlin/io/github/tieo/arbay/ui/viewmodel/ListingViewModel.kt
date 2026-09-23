@@ -73,8 +73,15 @@ class ListingViewModel(
     private val _loading = MutableStateFlow(sampleLoading)
     val loading: StateFlow<Boolean> = _loading
 
+    // Something asked for from the results screen that did not happen, such as a reminder the
+    // server refused. Shown on the screen until dismissed; a search that did not run says so
+    // through [notSearched] instead.
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
+
+    fun clearError() {
+        _error.value = null
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -312,7 +319,7 @@ class ListingViewModel(
         if (rendersASample) return
         val endsAt = listing.auctionEndsAt ?: return
         viewModelScope.launch {
-            runCatching {
+            try {
                 if (leadMinutes == null) client.clearAuctionReminder(listing.id)
                 else client.setAuctionReminder(AuctionReminder(
                     listingId = listing.id,
@@ -323,6 +330,13 @@ class ListingViewModel(
                     priceText = listing.price.format(),
                     platformName = listing.platformId.displayName,
                 ))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The reminder is the server's to send, so one it did not take will not come, and
+                // nothing on the card would show that.
+                _error.value = if (leadMinutes == null) "The reminder could not be removed: ${e.message}"
+                else "The reminder could not be set: ${e.message}"
             }
         }
     }
@@ -349,20 +363,30 @@ class ListingViewModel(
     fun unban(listing: Listing) {
         val updated = _bannedIds.value - listing.id
         _bannedIds.value = updated
-        saveBannedIds(updated)
+        storeBanned(updated)
     }
 
     /** Put back everything sent away by hand on this device. The bin is one tap and its listings
      *  went somewhere nobody could look; this is the way back. */
     fun unbanAll() {
         _bannedIds.value = emptySet()
-        saveBannedIds(emptySet())
+        storeBanned(emptySet())
     }
 
     fun ban(listing: Listing) {
         val updated = _bannedIds.value + listing.id
         _bannedIds.value = updated
-        saveBannedIds(updated)
+        storeBanned(updated)
+    }
+
+    // The change holds on screen either way; one the device could not store is undone by the next
+    // start, and that is worth saying now rather than finding out then.
+    private fun storeBanned(ids: Set<String>) {
+        try {
+            saveBannedIds(ids)
+        } catch (e: Exception) {
+            _error.value = "This device could not store that change: ${e.message}"
+        }
     }
 
     // Why this search never reached the markets, when it did not: the server's own words.
@@ -433,7 +457,7 @@ class ListingViewModel(
         viewModelScope.launch {
             _soldLoading.value = true
             try {
-                val history = try { client.getPriceHistory(query) } catch (_: Exception) { emptyList() }
+                val history = try { client.getPriceHistory(query) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptyList() }
                 // Sold data is an eBay capability (LH_Sold): query every eBay locale, not just DE/COM,
                 // for more completed listings. The active car filters are applied server-side so the
                 // sold history matches the same year/mileage/power constraints as the live results.
@@ -448,13 +472,13 @@ class ListingViewModel(
                             query, platform, limit = 500, sold = true, carFilters = filters,
                             excludeKeywords = excludeKeywords, aliases = aliases,
                         )
-                    } catch (_: Exception) { emptyList() }
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptyList() }
                 }
                 val seen = mutableSetOf<String>()
                 _priceHistory.value = (freshSold + history + _priceHistory.value)
                     .filter { it.sold && seen.add(it.id) }
                     .sortedByDescending { it.soldDate ?: it.scrapedAt }
-            } catch (_: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
             } finally {
                 _soldLoading.value = false
             }
@@ -769,7 +793,6 @@ class ListingViewModel(
                 // fallback fetches below would be work done for a screen already gone.
                 throw e
             } catch (e: Exception) {
-                if (e.message?.contains("Cancel", ignoreCase = true) == true) return@launch
                 // The server refuses a search it has no capacity for. Falling back to what is
                 // stored is right, but silently is not: without this the markets look like they
                 // were asked and said nothing, when in truth none of them was asked at all.
@@ -793,8 +816,10 @@ class ListingViewModel(
                     } catch (e2: Exception) {
                         try {
                             _allListings.value = client.searchListings(query)
-                        } catch (e3: Exception) {
-                            _error.value = e3.message
+                        } catch (e3: kotlinx.coroutines.CancellationException) {
+                            throw e3
+                        } catch (_: Exception) {
+                            // Nothing stored either; the not-searched banner already says why.
                         }
                     }
                 }
