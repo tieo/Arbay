@@ -29,6 +29,12 @@ expect fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Un
 @Composable
 expect fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit)
 
+// Device storage. Android and the desktop build keep these on disk, written whole and reporting a
+// write that failed by throwing. iOS and the web build do not keep anything: their actuals are
+// empty stubs, so on those targets every load returns nothing and every save is dropped. Nothing
+// ships for either target; before one does, these need real implementations there, and code that
+// works on Android must not be taken as proof that storage works on them.
+
 expect fun loadBannedIds(): Set<String>
 expect fun saveBannedIds(ids: Set<String>)
 
@@ -38,13 +44,13 @@ expect fun saveBannedIds(ids: Set<String>)
 expect fun loadSearchHistory(): String
 expect fun saveSearchHistory(json: String)
 
-/** Settings that belong to this device rather than to the server it talks to: which server that is,
- *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
 /** What the image loader should be handed for a picture's address. A listing off a market carries
  *  an http address, which every platform loads as it stands; one drawn off-screen carries a path,
  *  which the JVM has to be given as a file rather than as an unresolvable URI. */
 expect fun imageModel(address: String): Any
 
+/** Settings that belong to this device rather than to the server it talks to: which server that is,
+ *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
 expect fun loadDeviceSettings(): Map<String, String>
 expect fun saveDeviceSettings(settings: Map<String, String>)
 

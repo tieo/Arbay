@@ -1,5 +1,10 @@
 package io.github.tieo.arbay
 
+// STUBS, NOT AN IMPLEMENTATION. Nothing on the web build is stored or scheduled: every load below returns
+// nothing and every save, notification and poll is silently dropped. This target is not shipped.
+// A settings change, a banned listing or a search history "working" here means nothing; Android
+// (androidMain/Platform.kt) is the implementation to follow when this target is built for real.
+
 actual fun openBrowser(url: String) {}
 actual fun loadBannedIds(): Set<String> = emptySet()
 actual fun saveBannedIds(ids: Set<String>) {}
