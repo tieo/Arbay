@@ -307,6 +307,7 @@ internal suspend fun fetchWithFallback(
             RequestMonitor.recordTier(platformName, "Rnet")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            if (isPageMissing(e)) throw e
             errors.add("Rnet: ${e.message?.take(60)}")
             fetchLog.debug("[{}] Rnet failed: {}", platformName, e.message?.take(80))
         }
@@ -319,6 +320,7 @@ internal suspend fun fetchWithFallback(
             RequestMonitor.recordTier(platformName, "CurlCffi")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            if (isPageMissing(e)) throw e
             errors.add("CurlCffi: ${e.message?.take(60)}")
             fetchLog.debug("[{}] CurlCffi failed: {}", platformName, e.message?.take(80))
         }
@@ -431,6 +433,7 @@ internal suspend fun fetchHttp(client: HttpClient, url: String, platformName: St
 
 private fun isRetryable(e: Exception): Boolean {
     val msg = e.message?.lowercase() ?: ""
+    if (isPageMissing(e)) return false
     return e is CrawlerBlockedException ||
         e is io.ktor.client.plugins.HttpRequestTimeoutException ||
         e is io.ktor.client.network.sockets.ConnectTimeoutException ||
@@ -446,11 +449,29 @@ internal fun classifyHttpError(response: HttpResponse): ErrorType {
     return when (response.status.value) {
         401 -> ErrorType.AUTH_REQUIRED_401
         403 -> ErrorType.BLOCKED_403
+        404, 410 -> ErrorType.NOT_FOUND_404
         429 -> ErrorType.RATE_LIMITED_429
         503 -> ErrorType.SERVICE_UNAVAILABLE_503
         else -> ErrorType.UNKNOWN
     }
 }
+
+/**
+ * The page arrived but not in the shape its parser reads, which is what a market redesign looks
+ * like. Reported as a parse error with the page attached for the snapshot: returning no listings
+ * instead made a broken parser indistinguishable from a search nothing matched.
+ */
+internal fun unreadablePage(platformName: String, what: String, page: String, cause: Exception? = null) =
+    CrawlerBlockedException(
+        "$platformName: $what" + (cause?.message?.let { " (${it.take(120)})" } ?: ""),
+        ErrorType.PARSE_ERROR,
+        html = page.take(500_000),
+    )
+
+/** A page the site says does not exist. Every engine would be told the same, so the fetch chain
+ *  stops at it instead of starting a browser to hear it again. */
+internal fun isPageMissing(e: Exception): Boolean =
+    e is CrawlerBlockedException && e.errorType == ErrorType.NOT_FOUND_404
 
 internal fun classifyException(e: Exception): ErrorType {
     val msg = e.message?.lowercase() ?: ""

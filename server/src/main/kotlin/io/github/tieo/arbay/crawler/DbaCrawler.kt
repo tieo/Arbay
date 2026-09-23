@@ -78,7 +78,8 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
 
     internal fun parse(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
-        val structuredData = doc.selectFirst("script#seoStructuredData")?.data() ?: return emptyList()
+        val structuredData = doc.selectFirst("script#seoStructuredData")?.data()
+            ?: throw unreadablePage("DBA", "no structured data on the page", html)
         val now = Clock.System.now()
 
         return try {
@@ -118,8 +119,8 @@ class DbaCrawler(private val client: HttpClient) : Crawler {
                     scrapedAt = now,
                 )
             }
-        } catch (_: Exception) {
-            emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("DBA", "structured data does not decode", html, e)
         }
     }
 }

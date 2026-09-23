@@ -49,15 +49,10 @@ object ClipImageModel {
 
     private val env: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
 
-    private val session: OrtSession? by lazy {
-        try {
-            val modelFile = ensureDownloaded()
-            env.createSession(modelFile.absolutePath)
-        } catch (e: Exception) {
-            log.error("Failed to load CLIP image model: ${e.message}. Image embeddings unavailable.")
-            null
-        }
+    private val loadedSession = Reloadable("CLIP image model", log) {
+        env.createSession(ensureDownloaded().absolutePath)
     }
+    private val session: OrtSession? get() = loadedSession.get()
 
     val isAvailable: Boolean get() = session != null
 

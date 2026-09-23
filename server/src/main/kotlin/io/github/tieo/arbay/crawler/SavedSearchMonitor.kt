@@ -23,6 +23,7 @@ import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -205,10 +206,15 @@ class SavedSearchMonitor(
             // searcher accepted for this market's language. A watch that asked something else
             // would notify about a different set of listings than the screen shows.
             val query = localizedQuery(product.searchQuery.copy(platforms = listOf(platformId)), platformId)
+            // A time limit that runs out is this market failing, not the watch being stopped, so
+            // it is an answer of null here rather than a cancellation that would end the loop.
             val results = try {
-                withTimeout(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
+                withTimeoutOrNull(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
+                continue
+            } ?: run {
+                log.debug("saved-search {} on {} gave nothing within 120s", product.id, platformId)
                 continue
             }
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }

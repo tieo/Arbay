@@ -29,8 +29,8 @@ class IdealoCrawler(private val client: HttpClient) : Crawler {
         val now = Clock.System.now()
         val arr = try {
             json.parseToJsonElement(jsonStr).jsonArray
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("Idealo", "answer is not the JSON it reads", jsonStr, e)
         }
 
         return arr.mapNotNull { elem ->

@@ -170,7 +170,8 @@ class OtomotoCrawler(
 
     internal fun parse(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
-        val nextDataScript = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
+        val nextDataScript = doc.selectFirst("script#__NEXT_DATA__")?.data()
+            ?: throw unreadablePage("Otomoto", "no page data", html)
         val now = Clock.System.now()
 
         return try {
@@ -196,8 +197,8 @@ class OtomotoCrawler(
             // A single malformed edge is dropped rather than failing the whole page.
             edges.mapNotNull { edge -> runCatching { parseNode(edge, now) }.getOrNull() }
                 .distinctBy { it.externalId }
-        } catch (_: Exception) {
-            emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("Otomoto", "page data does not decode", html, e)
         }
     }
 

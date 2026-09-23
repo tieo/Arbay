@@ -23,7 +23,11 @@ class RefurbedCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val raw = CurlCffiClient.refurbedSearch(query.positiveText)
-        val items = runCatching { json.decodeFromString<List<RefurbedItem>>(raw) }.getOrElse { return emptyList() }
+        val items = try {
+            json.decodeFromString<List<RefurbedItem>>(raw)
+        } catch (e: Exception) {
+            throw unreadablePage("Refurbed", "answer is not the JSON it reads", raw, e)
+        }
         val now = Clock.System.now()
 
         return items.map { item ->

@@ -40,7 +40,8 @@ class SubitoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage,
     }
 
     internal fun parse(html: String): List<Listing> {
-        val script = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
+        val script = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data()
+            ?: throw unreadablePage("Subito", "no page data", html)
         val now = Clock.System.now()
 
         return try {
@@ -53,8 +54,8 @@ class SubitoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage,
 
             items.mapNotNull { runCatching { parseItem(it, now) }.getOrNull() }
                 .distinctBy { it.externalId }
-        } catch (_: Exception) {
-            emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("Subito", "page data does not decode", html, e)
         }
     }
 

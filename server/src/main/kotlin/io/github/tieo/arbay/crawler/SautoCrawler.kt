@@ -127,8 +127,8 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
         val now = Clock.System.now()
         val root = try {
             Json.parseToJsonElement(json).jsonObject
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("Sauto", "answer is not the JSON it reads", json, e)
         }
         val results = root["results"]?.jsonArray ?: return emptyList()
 

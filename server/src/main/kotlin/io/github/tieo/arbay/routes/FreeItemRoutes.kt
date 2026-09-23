@@ -1,29 +1,30 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.classifier.ClipImageModel
-import io.github.tieo.arbay.repo.AuctionReminderStore
 import io.github.tieo.arbay.classifier.EmbeddingModel
 import io.github.tieo.arbay.classifier.FeedbackAction
 import io.github.tieo.arbay.classifier.FreeItemFeedbackStore
+import io.github.tieo.arbay.classifier.FreeItemMonitor
 import io.github.tieo.arbay.classifier.FreeItemProfileStore
 import io.github.tieo.arbay.classifier.FreeItemScorer
-import io.github.tieo.arbay.classifier.FreeItemMonitor
-import io.github.tieo.arbay.crawler.SavedSearchMonitor
 import io.github.tieo.arbay.classifier.FreeItemStore
 import io.github.tieo.arbay.classifier.ModelArena
 import io.github.tieo.arbay.classifier.ModelRegistry
-import io.github.tieo.arbay.crawler.KleinanzeigenCrawler
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
 import io.github.tieo.arbay.crawler.FetchProgressEmitter
+import io.github.tieo.arbay.crawler.KleinanzeigenCrawler
+import io.github.tieo.arbay.crawler.SavedSearchMonitor
 import io.github.tieo.arbay.crawler.classifyException
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.plugins.BadRequestException
+import io.github.tieo.arbay.repo.AuctionReminderStore
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
@@ -439,6 +440,9 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
                         totalPlatforms = 1,
                     )) + "\n")
                     flush()
+                } catch (e: CancellationException) {
+                    // The app hung up: nothing is wrong with the market and nobody is left to tell.
+                    throw e
                 } catch (e: CrawlerBlockedException) {
                     val snapId = try { ErrorSnapshotStore.capture(PlatformId.KLEINANZEIGEN.name, searchText, e, e.errorType) } catch (_: Exception) { "?" }
                     write(json.encodeToString(CrawlerSearchEvent(

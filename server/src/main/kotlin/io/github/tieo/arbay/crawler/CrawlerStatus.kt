@@ -29,6 +29,8 @@ enum class ErrorType {
     RATE_LIMITED_429,
     AUTH_REQUIRED_401,
     SERVICE_UNAVAILABLE_503,
+    // The page is not there (404/410). An answer, not a refusal: another engine gets the same.
+    NOT_FOUND_404,
     TIMEOUT,
     PARSE_ERROR,
     NETWORK_ERROR,

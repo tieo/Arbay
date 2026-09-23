@@ -43,13 +43,14 @@ object RnetClient {
         if (exitCode != 0) {
             // Exit codes from rnet_fetch.py: 2=403, 3=429, 4=503, 5=other non-200, 1=script error
             log.debug("rnet exited {} for {}: {}", exitCode, url, stderr.take(200))
-            val errorType = when (exitCode) {
-                2 -> ErrorType.BLOCKED_403
-                3 -> ErrorType.RATE_LIMITED_429
-                4 -> ErrorType.SERVICE_UNAVAILABLE_503
+            val httpStatus = Regex("HTTP (\\d{3})").find(stderr)?.groupValues?.get(1)
+            val errorType = when {
+                exitCode == 2 -> ErrorType.BLOCKED_403
+                exitCode == 3 -> ErrorType.RATE_LIMITED_429
+                exitCode == 4 -> ErrorType.SERVICE_UNAVAILABLE_503
+                httpStatus == "404" || httpStatus == "410" -> ErrorType.NOT_FOUND_404
                 else -> ErrorType.UNKNOWN
             }
-            val httpStatus = Regex("HTTP (\\d{3})").find(stderr)?.groupValues?.get(1)
             throw CrawlerBlockedException("rnet $url: ${httpStatus?.let { "HTTP $it" } ?: "exit $exitCode"}", errorType)
         }
         return outcome.stdout.toString(Charsets.UTF_8)

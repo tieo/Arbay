@@ -163,18 +163,11 @@ suspend fun Crawler.trackedSearch(
         )
         log.warn("{}: blocked — {} [snapshot:{}]", platformId.displayName, e.message, snapId)
         emptyList()
-    } catch (e: java.util.concurrent.CancellationException) {
-        // Coroutine cancelled (client disconnected) — not a real crawler error
-        log.debug("{}: cancelled for '{}'", platformId.displayName, query.text)
-        emptyList()
-    } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        // A cancelling parent scope (the client disconnected mid-search) surfaces as an
-        // exception whose message mentions Cancelling/Cancelled but is not a CancellationException.
-        // That is not a crawler failure — don't record it as an error or a snapshot.
-        if (e.message?.contains("Cancelling") == true || e.message?.contains("Cancelled") == true) {
-            log.debug("{}: cancelled — {}", platformId.displayName, e.message)
-            return emptyList()
-        }
+    } catch (e: CancellationException) {
+        // Called off, by a caller's time limit or by shutdown. Not the market failing, and the
+        // caller has to see it: an empty answer here would read as a search that found nothing.
+        throw e
+    } catch (e: Exception) {
         val errorType = classifyException(e)
         CrawlerStatusTracker.recordError(platformId, e.message ?: "Unknown error", errorType)
         if (BlockCooldown.isBlock(errorType)) BlockCooldown.record(platformId)

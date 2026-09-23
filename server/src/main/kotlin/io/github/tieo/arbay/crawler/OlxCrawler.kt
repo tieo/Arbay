@@ -73,16 +73,17 @@ class OlxCrawler(
     private fun extractAds(html: String): JsonArray? {
         val script = Jsoup.parse(html).select("script").firstOrNull {
             it.data().contains("__PRERENDERED_STATE__")
-        }?.data() ?: return null
+        }?.data() ?: throw unreadablePage("OLX", "no listing state on the page", html)
 
-        val encoded = STATE_REGEX.find(script)?.groupValues?.get(1) ?: return null
+        val encoded = STATE_REGEX.find(script)?.groupValues?.get(1)
+            ?: throw unreadablePage("OLX", "listing state not in the form it reads", html)
         return try {
             val decoded = json.parseToJsonElement("\"$encoded\"").jsonPrimitive.content
             json.parseToJsonElement(decoded).jsonObject["listing"]?.jsonObject
                 ?.get("listing")?.jsonObject
                 ?.get("ads")?.jsonArray
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            throw unreadablePage("OLX", "listing state does not decode", html, e)
         }
     }
 

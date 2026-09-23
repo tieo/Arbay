@@ -34,8 +34,8 @@ class RebuyCrawler(private val client: HttpClient) : Crawler {
             ?: throw CrawlerBlockedException("reBuy: product data not found in page (rate limited?)", ErrorType.RATE_LIMITED_429)
         val rootJson = try {
             json.parseToJsonElement(scriptEl.data()).jsonObject
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("reBuy", "product data does not decode", html, e)
         }
 
         val docs = rootJson["productListViewDto"]

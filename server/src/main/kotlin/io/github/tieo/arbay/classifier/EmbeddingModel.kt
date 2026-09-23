@@ -26,26 +26,16 @@ object EmbeddingModel {
 
     private val env: OrtEnvironment by lazy { OrtEnvironment.getEnvironment() }
 
-    private val session: OrtSession? by lazy {
-        try {
-            val modelFile = ensureDownloaded("distiluse-multilingual-v1.onnx", MODEL_URL)
-            env.createSession(modelFile.absolutePath)
-        } catch (e: Exception) {
-            log.error("Failed to load embedding model: ${e.message}. Embeddings unavailable.")
-            null
-        }
+    private val loadedSession = Reloadable("Embedding model", log) {
+        env.createSession(ensureDownloaded("distiluse-multilingual-v1.onnx", MODEL_URL).absolutePath)
     }
+    private val session: OrtSession? get() = loadedSession.get()
 
-    private val tokenizer: WordPieceTokenizer? by lazy {
-        try {
-            val vocabFile = ensureDownloaded("distiluse-multilingual-v1-vocab.txt", VOCAB_URL)
-            // stripAccents=false: multilingual vocab contains ä/ö/ü/etc. as distinct tokens
-            WordPieceTokenizer(vocabFile, stripAccents = false)
-        } catch (e: Exception) {
-            log.error("Failed to load tokenizer: ${e.message}. Embeddings unavailable.")
-            null
-        }
+    private val loadedTokenizer = Reloadable("Embedding tokenizer", log) {
+        // stripAccents=false: multilingual vocab contains ä/ö/ü/etc. as distinct tokens
+        WordPieceTokenizer(ensureDownloaded("distiluse-multilingual-v1-vocab.txt", VOCAB_URL), stripAccents = false)
     }
+    private val tokenizer: WordPieceTokenizer? get() = loadedTokenizer.get()
 
     val isAvailable: Boolean get() = session != null && tokenizer != null
 

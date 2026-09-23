@@ -64,10 +64,11 @@ object CurlCffiClient {
             // stderr contains "HTTP <status>" for non-200 responses
             log.warn("CurlCffi exited {} for {}: {}", exitCode, desc, stderr.take(300))
             val httpStatus = Regex("HTTP (\\d{3})").find(stderr)?.groupValues?.get(1)?.toIntOrNull()
-            val errorType = when (exitCode) {
-                2 -> ErrorType.BLOCKED_403
-                3 -> ErrorType.RATE_LIMITED_429
-                4 -> ErrorType.SERVICE_UNAVAILABLE_503
+            val errorType = when {
+                exitCode == 2 -> ErrorType.BLOCKED_403
+                exitCode == 3 -> ErrorType.RATE_LIMITED_429
+                exitCode == 4 -> ErrorType.SERVICE_UNAVAILABLE_503
+                httpStatus == 404 || httpStatus == 410 -> ErrorType.NOT_FOUND_404
                 else -> ErrorType.UNKNOWN
             }
             val statusStr = if (httpStatus != null) "HTTP $httpStatus" else "exit $exitCode"

@@ -50,6 +50,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -592,11 +593,19 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 coroutineScope {
                     // Keepalive: send a blank line every 5s so the client TCP connection stays alive
                     // (without this, Android drops idle connections after ~30s)
+                    // It is also how a hang-up is noticed while every market is still crawling and
+                    // nothing else is written: the write fails, and the search is called off so its
+                    // crawlers, browsers and permit are let go instead of working for nobody.
                     val keepalive = launch {
                         while (true) {
                             delay(5_000L)
-                            try { synchronized(this@respondTextWriter) { write("\n"); flush() } }
-                            catch (_: Exception) { break }
+                            try {
+                                synchronized(this@respondTextWriter) { write("\n"); flush() }
+                            } catch (e: Exception) {
+                                routesLog.info("Search for '{}' ended: the app hung up", query)
+                                this@coroutineScope.cancel(CancellationException("the app hung up", e))
+                                break
+                            }
                         }
                     }
 
@@ -824,8 +833,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             } catch (e: CrawlerBlockedException) {
                                 CrawlerStatusTracker.recordError(platformId, e.message ?: "Blocked", e.errorType)
                                 if (BlockCooldown.isBlock(e.errorType)) BlockCooldown.record(platformId)
+                                // The page the market answered with is the evidence, so it goes
+                                // into the snapshot along with where it came from.
                                 val snapId = ErrorSnapshotStore.capture(
                                     platform = platformId.name, query = query, error = e, errorType = e.errorType,
+                                    url = e.url, html = e.html, statusCode = e.statusCode,
                                 )
                                 CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_ERROR,

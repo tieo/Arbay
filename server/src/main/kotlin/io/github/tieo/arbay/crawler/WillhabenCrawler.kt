@@ -120,8 +120,8 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
             ?: throw CrawlerBlockedException("willhaben: page data not found (blocked?)", ErrorType.BLOCKED_403)
         val rootJson = try {
             json.parseToJsonElement(scriptEl.data()).jsonObject
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("willhaben", "page data does not decode", html, e)
         }
 
         val pageProps = rootJson["props"]?.jsonObject?.get("pageProps")?.jsonObject

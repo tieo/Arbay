@@ -40,7 +40,8 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
 
     /** @param modelSlug when set, keep only ads whose car_model_name matches, since the keyword is loose. */
     internal fun parse(html: String, modelSlug: String? = null): List<Listing> {
-        val script = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
+        val script = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data()
+            ?: throw unreadablePage("KupujemProdajem", "no page data", html)
         val now = Clock.System.now()
         val model = modelSlug?.replace("-", " ")?.lowercase()
 
@@ -54,8 +55,8 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
 
             ads.mapNotNull { runCatching { parseAd(it, now, model) }.getOrNull() }
                 .distinctBy { it.externalId }
-        } catch (_: Exception) {
-            emptyList()
+        } catch (e: Exception) {
+            throw unreadablePage("KupujemProdajem", "page data does not decode", html, e)
         }
     }
 

@@ -13,6 +13,7 @@ import io.github.tieo.arbay.repo.writeTextAtomically
 import java.io.File
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
@@ -121,10 +122,15 @@ object FreeItemMonitor {
         )
 
         log.info("Running background check for new free items...")
+        // A time limit that runs out is this crawl failing, not the monitor being stopped, so it
+        // is an answer of null here rather than a cancellation that would end the loop.
         val results = try {
-            withTimeout(120_000L) { crawler.search(query) }
+            withTimeoutOrNull(120_000L) { crawler.search(query) }
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Background crawl failed: ${e.message}")
+            return
+        } ?: run {
+            log.warn("Background crawl gave nothing within 120s")
             return
         }
 
