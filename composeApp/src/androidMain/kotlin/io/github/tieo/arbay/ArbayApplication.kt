@@ -11,10 +11,15 @@ import android.content.Context
  * which is every time the background poll runs, reads came back empty and writes were dropped:
  * the poll asked the default server instead of the one chosen in Settings.
  */
-class ArbayApplication : Application() {
+open class ArbayApplication : Application() {
+    /** The server address and sign-in the build carries. Given by the app module, which is the one
+     *  with the build's secrets; this library has none of its own. */
+    open val secrets: AppSecrets get() = AppSecrets(serverUrl = null, authHeader = null)
+
     override fun onCreate() {
         super.onCreate()
         contextOrNull = applicationContext
+        current = this
     }
 
     companion object {
@@ -25,5 +30,9 @@ class ArbayApplication : Application() {
 
         val context: Context
             get() = contextOrNull ?: error("No ArbayApplication in this process")
+
+        /** The running application, or null in unit tests and previews. */
+        var current: ArbayApplication? = null
+            private set
     }
 }

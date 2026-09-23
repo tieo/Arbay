@@ -16,7 +16,8 @@ The app connects to a backend server that periodically crawls supported platform
 
 ## Project structure
 
-- `composeApp/` - Android app (Compose Multiplatform + Material 3)
+- `androidApp/` - the installable Android app: application id, manifest, icons, build secrets
+- `composeApp/` - the app itself as a library (Compose Multiplatform + Material 3)
 - `server/` - Ktor backend with REST API
 - `shared/` - Shared models and config (Kotlin Multiplatform)
 
@@ -24,7 +25,7 @@ The app connects to a backend server that periodically crawls supported platform
 
 ```sh
 # Android app
-./gradlew :composeApp:assembleDebug
+./gradlew :androidApp:assembleDebug
 
 # Server
 ./gradlew :server:run

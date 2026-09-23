@@ -20,7 +20,8 @@ class MainActivity : ComponentActivity() {
 
         // Debug-only: lets a dev pull the app's live state over adb instead of screenshotting
         // through a session. See DebugDumpReceiver.kt.
-        if (BuildConfig.DEBUG) registerDebugDumpReceiver()
+        val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (debuggable) registerDebugDumpReceiver()
 
         setContent { App() }
     }

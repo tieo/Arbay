@@ -32,7 +32,8 @@ jobs:
           ./gradlew --no-daemon --continue
           :server:test
           :shared:jvmTest
-          :composeApp:testDebugUnitTest
+          :composeApp:testAndroidHostTest
+          :composeApp:jvmTest
           :composeApp:compileKotlinJvm
       - name: Publish test reports
         if: always()

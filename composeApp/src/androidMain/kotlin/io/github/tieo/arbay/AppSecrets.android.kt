@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-actual fun appSecrets(): AppSecrets = AppSecrets(
-    serverUrl = BuildConfig.ARBAY_SERVER_URL.ifBlank { null },
-    authHeader = BuildConfig.ARBAY_AUTH.ifBlank { null },
-)
+// The secrets are compiled into the app module (androidApp), and handed over by its Application.
+// Without one (unit tests, previews) there are none, which is the no-server, no-sign-in default.
+actual fun appSecrets(): AppSecrets =
+    ArbayApplication.current?.secrets ?: AppSecrets(serverUrl = null, authHeader = null)

@@ -3,19 +3,10 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
-// Server URL + non-interactive auth header live in a gitignored secret.properties
-// (see secret.properties.example). Baked into BuildConfig so the app needs no manual
-// sign-in; an absent file falls back to the localhost/LAN default and no auth.
-val arbaySecrets = Properties().apply {
-    val f = rootProject.file("secret.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-fun arbaySecret(key: String): String = arbaySecrets.getProperty(key).orEmpty()
-
 plugins {
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.androidKotlinMultiplatformLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
@@ -27,9 +18,19 @@ kotlin {
         freeCompilerArgs.add("-opt-in=androidx.compose.ui.ExperimentalComposeUiApi")
     }
 
-    androidTarget {
+    // The screens, view models and Android glue as a library; the installable app, its id, icons,
+    // manifest and baked-in secrets are the androidApp module around it.
+    androidLibrary {
+        namespace = "io.github.tieo.arbay.ui"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
+        }
+        // Compose Multiplatform resources are packaged as Android resources.
+        androidResources { enable = true }
+        withHostTest {
+            isIncludeAndroidResources = true
         }
     }
     
@@ -84,9 +85,10 @@ kotlin {
             implementation(libs.coil.network.ktor3)
             implementation(projects.shared)
         }
+
         // The other way of drawing a screen without a device: Robolectric renders the @Preview
         // functions in androidMain. Kept beside the off-screen renderer so the two can be timed.
-        androidUnitTest.dependencies {
+        getByName("androidHostTest").dependencies {
             implementation(libs.junit)
             implementation(libs.robolectric)
             implementation(libs.roborazzi)
@@ -108,46 +110,6 @@ kotlin {
     }
 }
 
-android {
-    namespace = "io.github.tieo.arbay"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-
-    defaultConfig {
-        applicationId = "io.github.tieo.arbay"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
-        buildConfigField("String", "ARBAY_SERVER_URL", "\"${arbaySecret("ARBAY_SERVER_URL")}\"")
-        buildConfigField("String", "ARBAY_AUTH", "\"${arbaySecret("ARBAY_AUTH")}\"")
-    }
-    buildFeatures {
-        buildConfig = true
-    }
-    testOptions.unitTests {
-        isIncludeAndroidResources = true
-        all { it.systemProperty("robolectric.graphicsMode", "NATIVE") }
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-        }
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-}
-
-dependencies {
-    debugImplementation(libs.compose.uiTooling)
-}
-
 compose.desktop {
     application {
         mainClass = "io.github.tieo.arbay.MainKt"
@@ -161,7 +123,9 @@ compose.desktop {
 }
 
 // Off-screen gallery renderer: dumps a PNG per view to build/gallery for design review.
-configurations.named("jvmRuntimeClasspath") {
+// Pinned on every JVM runtime classpath, tests included: the code is compiled against 0.6.2, and a
+// test classpath left to resolve a newer one transitively lost kotlinx.datetime.Clock at runtime.
+configurations.matching { it.name.startsWith("jvm") && it.name.endsWith("RuntimeClasspath") }.configureEach {
     resolutionStrategy { force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2") }
 }
 
@@ -179,4 +143,9 @@ tasks.register<JavaExec>("renderGallery") {
     systemProperty("java.awt.headless", "true")
     systemProperty("skiko.renderApi", "SOFTWARE")
     environment("LD_LIBRARY_PATH", "/nix/store/fdqacryg2w9kiwb94c9rzfsyff4im8xj-libglvnd-1.7.0/lib:/nix/store/5m91jqg1526jzsahrgmd37k4ml3nc5l4-libx11-1.8.13/lib:/nix/store/fc1g44pg3i10wfzh3gb4m54pfgclsn76-libxcb-1.17.0/lib:/nix/store/2krkc90x3ch0mgkk48fxlglq14nqapdr-libxau-1.0.12/lib:/nix/store/yr83qw7bdfdxf5lb2xmfs70qb5hap0hj-libxdmcp-1.1.5/lib:/nix/store/bg6ms0vw071g1fdbx2my6bbzsk62p6vd-fontconfig-2.17.1-lib/lib:/nix/store/zr22ggqbv79yv4y4wv06r4grla9h59yx-freetype-2.14.2/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/nix/store/wrxyd3k2f4bmh52pr5rpdjxxsm5r2qxm-gcc-15.2.0-libgcc/lib")
+}
+
+// Robolectric draws the previews with the real graphics stack rather than its shadow one.
+tasks.withType<Test>().configureEach {
+    systemProperty("robolectric.graphicsMode", "NATIVE")
 }
