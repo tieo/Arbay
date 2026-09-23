@@ -461,7 +461,7 @@ class EbayDeCrawler(
     /** Words that actually mark a listing as ended/sold. A price is not one of them. */
     private val SOLD_MARKER = Regex("""\b(verkauft|sold|beendet|ended)\b""", RegexOption.IGNORE_CASE)
 
-    private fun parseSoldDate(text: String?): Instant? {
+    internal fun parseSoldDate(text: String?, now: Instant = Clock.System.now()): Instant? {
         if (text == null) return null
         return try {
             // Formats seen:
@@ -480,20 +480,22 @@ class EbayDeCrawler(
 
             if (parts.size < 2) return null
 
-            val currentYear = Clock.System.now().let {
-                it.toLocalDateTime(TimeZone.UTC).year
-            }
+            // eBay writes these dates in German time, so that is the calendar they are read in.
+            val berlin = TimeZone.of("Europe/Berlin")
+            val today = now.toLocalDateTime(berlin).date
 
-            val (day, month, year) = if (parts[0].all { it.isDigit() }) {
+            val (day, month, statedYear) = if (parts[0].all { it.isDigit() }) {
                 // German: day month [year]
-                val y = parts.getOrNull(2)?.toIntOrNull() ?: currentYear
-                Triple(parts[0].toInt(), MONTH_MAP[parts[1].take(3).lowercase()] ?: return null, y)
+                Triple(parts[0].toInt(), MONTH_MAP[parts[1].take(3).lowercase()] ?: return null, parts.getOrNull(2)?.toIntOrNull())
             } else {
                 // English: month day [year]
-                val y = parts.getOrNull(2)?.toIntOrNull() ?: currentYear
-                Triple(parts[1].toInt(), MONTH_MAP[parts[0].take(3).lowercase()] ?: return null, y)
+                Triple(parts[1].toInt(), MONTH_MAP[parts[0].take(3).lowercase()] ?: return null, parts.getOrNull(2)?.toIntOrNull())
             }
-            LocalDate(year, month, day).atStartOfDayIn(TimeZone.UTC)
+            // A date with no year is the last time that day came round: a sale on "31. Dez" read on
+            // 3 January was last year's, not one eleven months ahead.
+            val date = statedYear?.let { LocalDate(it, month, day) }
+                ?: LocalDate(today.year, month, day).let { if (it > today) LocalDate(today.year - 1, month, day) else it }
+            date.atStartOfDayIn(berlin)
         } catch (_: Exception) { null }
     }
 

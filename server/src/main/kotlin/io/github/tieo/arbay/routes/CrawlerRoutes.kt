@@ -424,12 +424,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
          *  fixed against the markup in front of it, and a market that answers a crawl while
          *  refusing everything else leaves no other way to see it. */
         get("/page") {
-            val url = call.request.queryParameters["url"] ?: throw BadRequestException("Missing url")
+            val url = requirePublicHttpUrl(call.request.queryParameters["url"] ?: throw BadRequestException("Missing url"))
             // The page a crawler would see, through the same tiers a crawl uses: eBay answers a
             // plain client with a 1.8 KB challenge, and answers TLS impersonation with a 403 on the
             // pages it defends hardest, which is no use to anyone fixing a parser against its
             // markup. `prime` is the page to arrive from, the way a real reader would.
-            val prime = call.request.queryParameters["prime"]
+            val prime = call.request.queryParameters["prime"]?.let(::requirePublicHttpUrl)
             // mobile.de answers a plain client, TLS impersonation and the ordinary browser tier
             // with nothing at all — it is reachable only through the stealth sidecar its crawler
             // uses, which is also the only way to check one of its filter parameters by hand.
@@ -460,7 +460,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // them — a price worth paying for the one listing being read and not for fifty being
         // scrolled past.
         get("/listing-detail") {
-            val url = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
+            val url = requirePublicHttpUrl(call.queryParameters["url"] ?: throw BadRequestException("Missing url"))
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
                 ?: throw BadRequestException("Missing or unknown platform")
             val id = call.queryParameters["id"] ?: url

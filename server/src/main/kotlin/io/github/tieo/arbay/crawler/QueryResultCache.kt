@@ -1,6 +1,5 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
@@ -30,17 +29,30 @@ object QueryResultCache {
 
     private val entries = ConcurrentHashMap<String, Entry>()
 
+    // Past this many answers the oldest go, so the cache stays a size it can hold.
+    private const val MAX_ENTRIES = 500
+
+    /**
+     * Everything about a query that changes what a crawler fetches. Leaving a field out serves
+     * one search's answer to another that would have fetched differently: the key used to name a
+     * few car criteria by hand, while crawlers put minimum mileage, maximum power, body type,
+     * seats, doors, drive and seller type into their URLs too. So the car filters key the entry
+     * whole. The results screen narrows what came back without changing the query, so that
+     * costs no hits; what stays out is only what is judged after the cache (the words blocked,
+     * the order, which markets and countries are shown, how a thing is sold).
+     */
     fun key(platformId: PlatformId, query: SearchQuery): String = listOf(
         platformId.name,
         query.positiveText.lowercase().trim(),
+        query.category,
         query.minPrice?.amount, query.maxPrice?.amount,
-        query.carCriteria.firstRegFromYear, query.carCriteria.firstRegToYear,
-        query.carCriteria.maxMileageKm, query.carCriteria.minPowerKw, query.carCriteria.transmission,
+        query.condition?.sorted(),
+        query.freeOnly,
         query.location?.lowercase()?.trim(), query.radiusKm,
-        // Fuel is baked into some crawlers' fetch URL (Kleinanzeigen native filter), so it
-        // changes what is fetched and must key the entry. Post-filter-only dims (body, colour,
-        // van size, description, …) are enforced after the cache and stay out of the key.
-        query.carFilters?.fuels?.map { it.name }?.sorted()?.joinToString(","),
+        query.maxPages, query.startPage,
+        query.carFilters,
+        // The follow-up searches this decides are part of the answer that is stored.
+        query.reach.otherWords, query.reach.extraTerms.map { it.lowercase().trim() }.sorted(),
     ).joinToString("|") { it?.toString() ?: "" }
 
     /** The market's whole answer if a fresh entry exists, else null. Sold-only queries never hit. */
@@ -60,6 +72,14 @@ object QueryResultCache {
         // anti-flag request cutoff), and caching it would hide real listings for the whole TTL.
         // The next request re-crawls instead.
         if (listings.isEmpty()) return
-        entries[key(platformId, query)] = Entry(listings, Clock.System.now().toEpochMilliseconds())
+        val now = Clock.System.now().toEpochMilliseconds()
+        entries[key(platformId, query)] = Entry(listings, now)
+        if (entries.size > MAX_ENTRIES) {
+            entries.entries.removeIf { now - it.value.storedAtMs > TTL_MS }
+            val overflow = entries.size - MAX_ENTRIES
+            if (overflow > 0) {
+                entries.entries.sortedBy { it.value.storedAtMs }.take(overflow).forEach { entries.remove(it.key) }
+            }
+        }
     }
 }

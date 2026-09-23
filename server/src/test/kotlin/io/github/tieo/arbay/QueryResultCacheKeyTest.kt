@@ -1,48 +1,29 @@
-package io.github.tieo.arbay
+package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.crawler.QueryResultCache
 import io.github.tieo.arbay.model.CarFilters
-import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.SortMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 class QueryResultCacheKeyTest {
-
-    private fun query(cf: CarFilters?) = SearchQuery(text = "volkswagen crafter", carFilters = cf, category = MarketGroup.VEHICLES)
+    private val base = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES, carFilters = CarFilters())
+    private fun key(q: SearchQuery) = QueryResultCache.key(PlatformId.KLEINANZEIGEN, q)
 
     @Test
-    fun postFilterDimsShareCacheEntry() {
-        // Van size / body / colour / description are enforced after the cache, so changing them
-        // must NOT change the key — else every filter tweak re-crawls.
-        val a = query(CarFilters(vanHeights = setOf(2)))
-        val b = query(CarFilters(vanHeights = setOf(3), bodyTypes = setOf(io.github.tieo.arbay.model.BodyType.TRANSPORTER), descriptionContains = "camper"))
-        assertEquals(
-            QueryResultCache.key(PlatformId.KLEINANZEIGEN, a),
-            QueryResultCache.key(PlatformId.KLEINANZEIGEN, b),
-        )
+    fun `a filter a crawler sends to the market keys the answer`() {
+        // Kleinanzeigen puts minimum mileage into its URL, so the answer fetched with it is not
+        // the answer to the search without it.
+        assertNotEquals(key(base), key(base.copy(carFilters = CarFilters(minMileageKm = 50_000))))
+        assertNotEquals(key(base), key(base.copy(startPage = 2)))
+        assertNotEquals(key(base), key(base.copy(reach = base.reach.copy(otherWords = true))))
     }
 
     @Test
-    fun fuelSplitsCacheEntry() {
-        // Fuel is baked into Kleinanzeigen's fetch URL, so it changes what is crawled.
-        val diesel = query(CarFilters(fuels = setOf(Fuel.DIESEL)))
-        val petrol = query(CarFilters(fuels = setOf(Fuel.PETROL)))
-        assertNotEquals(
-            QueryResultCache.key(PlatformId.KLEINANZEIGEN, diesel),
-            QueryResultCache.key(PlatformId.KLEINANZEIGEN, petrol),
-        )
-    }
-
-    @Test
-    fun platformSplitsCacheEntry() {
-        val q = query(CarFilters())
-        assertNotEquals(
-            QueryResultCache.key(PlatformId.KLEINANZEIGEN, q),
-            QueryResultCache.key(PlatformId.MOBILE_DE, q),
-        )
+    fun `what is judged after the cache shares the answer`() {
+        assertEquals(key(base), key(base.copy(sort = SortMode.PRICE_ASC, excludeKeywords = listOf("defekt"))))
     }
 }

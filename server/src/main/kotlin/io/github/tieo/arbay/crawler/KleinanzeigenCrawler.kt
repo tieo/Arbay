@@ -204,9 +204,17 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
 
             if (page == query.startPage) emitSuggestedTerms(parseSuggestedTerms(doc))
             val pageResults = parseSearchResults(html, freeOnly = false)
+            // Cards on the page and none of them read is the parser no longer fitting the markup,
+            // which would otherwise pass for a search nothing matched.
+            if (pageResults.isEmpty() && rawItemCount >= 5 && allResults.isEmpty()) {
+                throw unreadablePage("Kleinanzeigen", "$rawItemCount cards on the page, none of them read", html)
+            }
             val newResults = pageResults.filter { seenIds.add(it.externalId) }
             allResults.addAll(newResults)
 
+            // A later page holding nothing the earlier ones did not is the site ignoring the page
+            // number; asking for the next one would fetch the same page again.
+            if (page > query.startPage && newResults.isEmpty()) break
             if (rawItemCount < 10) break
             if (allResults.size >= CrawlerConfig.current.maxResultsPerPlatform) break
         }
