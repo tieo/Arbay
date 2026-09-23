@@ -1,12 +1,13 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
-import kotlinx.datetime.Instant
-import org.jsoup.Jsoup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.datetime.Instant
+import org.jsoup.Jsoup
 
 /**
  * eBay says on the card whether a price is a bid. Nothing read it, so an auction's current bid was
@@ -15,7 +16,7 @@ import kotlin.test.assertNull
  */
 class EbayAuctionParseTest {
 
-    private val crawler = EbayDeCrawler(HttpClient())
+    private val crawler = EbayDeCrawler(offlineClient())
     private val now = Instant.parse("2026-09-10T12:00:00Z")
 
     private fun card(inner: String) = Jsoup.parse("<li class='s-card'>$inner</li>").selectFirst("li")!!

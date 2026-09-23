@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
  */
 class RicardoAuctionParseTest {
 
-    private val crawler = RicardoCrawler(HttpClient())
+    private val crawler = RicardoCrawler(offlineClient())
     private val html by lazy {
         requireNotNull(javaClass.getResourceAsStream("/fixtures/ricardo_search_2026.html"))
             .bufferedReader().readText()

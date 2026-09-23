@@ -1,10 +1,11 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.VintedDeCrawler
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
-import org.jsoup.Jsoup
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.jsoup.Jsoup
 
 /**
  * What a Vinted card's title attribute actually holds.
@@ -16,7 +17,7 @@ import kotlin.test.assertEquals
  */
 class VintedTitleTest {
 
-    private val crawler = VintedDeCrawler(HttpClient())
+    private val crawler = VintedDeCrawler(offlineClient())
 
     private fun titleOf(attr: String): String {
         val html = """<div><a data-testid="x--overlay-link" title="$attr"></a></div>"""

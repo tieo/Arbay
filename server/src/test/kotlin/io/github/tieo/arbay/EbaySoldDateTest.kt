@@ -1,15 +1,16 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 class EbaySoldDateTest {
-    private val crawler = EbayDeCrawler(HttpClient())
+    private val crawler = EbayDeCrawler(offlineClient())
     private val berlin = TimeZone.of("Europe/Berlin")
 
     private fun soldOn(text: String, now: String): LocalDate? =

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,7 +16,7 @@ import kotlin.test.assertTrue
  */
 class KleinanzeigenParseTest {
 
-    private val crawler = KleinanzeigenCrawler(HttpClient())
+    private val crawler = KleinanzeigenCrawler(offlineClient())
     private val html by lazy {
         requireNotNull(javaClass.getResourceAsStream("/fixtures/kleinanzeigen_grigri_2026.html"))
             .bufferedReader().readText()

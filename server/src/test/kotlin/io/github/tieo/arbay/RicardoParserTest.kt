@@ -5,8 +5,8 @@ import io.github.tieo.arbay.crawler.RicardoCrawler
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.VehicleCondition
+import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
 import kotlin.test.*
 
 /**
@@ -15,7 +15,7 @@ import kotlin.test.*
  */
 class RicardoParserTest {
 
-    private val crawler = RicardoCrawler(HttpClient(CIO))
+    private val crawler = RicardoCrawler(offlineClient())
 
     /** Wrap a payload the way the page does: a JSON-encoded string inside a push call. */
     private fun rscHtml(vararg payloads: String): String = payloads.joinToString("\n") { payload ->
