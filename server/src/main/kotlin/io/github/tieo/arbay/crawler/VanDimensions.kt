@@ -16,23 +16,29 @@ import io.github.tieo.arbay.model.VanSize
  * Hochdach Crafters from a search for a tall one.
  *
  * What a value may exclude on is therefore decided per make:
- *  - A Crafter is read in VW's terms where the listing leaves no doubt. A code is sure only where
- *    the two scales cannot both fit it: an H4 or L5 is VW's, an H1, L1 or L2 the common scale's;
- *    anything else is left unchecked. Of the roof words only the two ends are sure: sellers write
- *    "Hochdach" for any tall roof, Superhochdach included ("Lang Hochdach … L3H2" on the same
- *    listing), so it says high or higher and never excludes, while "Superhochdach" and
- *    "Normaldach" are not said of anything else. For the length, the medium wheelbase
- *    (3640 mm) and the overhang are sure; "lang" and 4490 mm fit both long vans and are not.
+ *  - A Crafter's reading is a range: every size its words, wheelbase and codes could mean,
+ *    narrowed to what they all allow. A code stands for what it names on either scale ("L3H2":
+ *    medium or long, normal or high roof), "Hochdach" and "lang" for high or higher and long or
+ *    longer, and "Superhochdach", "Normaldach", the overhang and 3640 mm for one size. So a van
+ *    is excluded only when none of the sizes it could be is wanted, and unchecked while more
+ *    than one could.
  *  - Any other van is read on the common scale. Its codes are sure, and its words are only a
  *    hint, since every maker names its own variants and the same word means a different size.
  */
 object VanDimensions {
 
+    /**
+     * What a listing says about its size. [length]..[lengthMax] and [height]..[heightMax] are the
+     * sizes it can be; a filter excludes it only when none of them is wanted. A null max means the
+     * value is a hint and bounds nothing. Sure means the range is a single size.
+     */
     data class Reading(
         val length: Int?,
         val height: Int?,
         val lengthSure: Boolean,
         val heightSure: Boolean,
+        val lengthMax: Int? = if (lengthSure) length else null,
+        val heightMax: Int? = if (heightSure) height else null,
     ) {
         val isEmpty: Boolean get() = length == null && height == null
     }
@@ -100,47 +106,72 @@ object VanDimensions {
 
     // ── the Crafter, in VW's terms ────────────────────────────────────────────────────────────
 
+    // A code on a Crafter may be written on either scale, so it stands for every size it names on
+    // either: L3H2 is VW's medium Normaldach or the common scale's long Hochdach, so medium or
+    // long, normal or high roof. VW's lengths: L3 3640 mm, L4 4490 mm, L5 4490 mm with the
+    // extended overhang; its roofs: H2 Normaldach, H3 Hochdach, H4 Superhochdach.
+    private val vwLength = mapOf(3 to VanSize.MEDIUM, 4 to VanSize.LONG, 5 to VanSize.EXTRA_LONG)
+    private val vwRoof = mapOf(2 to VanSize.NORMAL_ROOF, 3 to VanSize.HIGH_ROOF, 4 to VanSize.SUPER_HIGH_ROOF)
+
     private val superHighRoof = Regex("""\bsuperhochdach\b""", RegexOption.IGNORE_CASE)
+    // Sellers write "Hochdach" of any tall roof, Superhochdach included ("Lang Hochdach … L3H2" on
+    // one listing), so it says high or higher.
     private val highRoof = Regex("""\bhochdach\b""", RegexOption.IGNORE_CASE)
     private val normalRoof = Regex("""\bnormaldach\b""", RegexOption.IGNORE_CASE)
-    // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5 (the same wheelbase
-    // with an extended overhang), so they say long or longer and are not sure. The overhang, the
-    // medium wheelbase and its 3640 mm are.
+    // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5.
     private val overhang = Regex("""\b(verlängerte[mnr]? überhang|überhang)\b""", RegexOption.IGNORE_CASE)
     private val longWords = Regex("""\b(langer radstand|lang)\b""", RegexOption.IGNORE_CASE)
-    private val mediumWords = Regex("""\bmittlere[rn]? radstand\b""", RegexOption.IGNORE_CASE)
+    private val mediumWords = Regex("""\b(mittlere[rn]? radstand|mittellang|mittel lang)\b""", RegexOption.IGNORE_CASE)
+
+    /** The sizes every source allows, taken in the order given; a source that would leave none is
+     *  passed over, so a seller's slip does not erase what a surer source said. */
+    private fun narrowed(sources: List<Set<Int>>): Set<Int>? =
+        sources.fold(null as Set<Int>?) { acc, next ->
+            when {
+                acc == null -> next
+                (acc intersect next).isNotEmpty() -> acc intersect next
+                else -> acc
+            }
+        }
 
     private fun readCrafter(text: String, wheelbaseMm: Int?): Reading {
         val c = codes(text)
-        val vwOnly = c.height == 4 || c.length == 5
-        val commonOnly = c.height == 1 || c.length == 1 || c.length == 2
-        val codeLength = when {
-            vwOnly && !commonOnly -> when (c.length) { 3 -> VanSize.MEDIUM; 4 -> VanSize.LONG; 5 -> VanSize.EXTRA_LONG; else -> null }
-            commonOnly && !vwOnly -> c.length?.takeIf { it in 1..4 }
-            else -> null
-        }
-        val codeHeight = when {
-            vwOnly && !commonOnly -> when (c.height) { 2 -> VanSize.NORMAL_ROOF; 3 -> VanSize.HIGH_ROOF; 4 -> VanSize.SUPER_HIGH_ROOF; else -> null }
-            commonOnly && !vwOnly -> c.height?.takeIf { it in 1..3 }
-            else -> null
-        }
+        // A code is written on one scale. A part only one scale has (VW's H4 and L5, the common
+        // H1, L1 and L2) says which; so can the length, once something surer has settled it: an
+        // L3 on a van with the 3640 mm wheelbase is VW's L3, and then its H2 is VW's Normaldach.
+        var vw = !(c.height == 1 || c.length == 1 || c.length == 2) || c.height == 4 || c.length == 5
+        var common = !(c.height == 4 || c.length == 5) || c.height == 1 || c.length == 1 || c.length == 2
+        fun lengthsOf(code: Int): Set<Int> =
+            setOfNotNull(vwLength[code].takeIf { vw }, code.takeIf { it in 1..4 && common })
+        fun roofsOf(code: Int): Set<Int> =
+            setOfNotNull(vwRoof[code].takeIf { vw }, code.takeIf { it in 1..3 && common })
 
-        // Length, surest source first.
-        val (length, lengthSure) = when {
-            overhang.containsMatchIn(text) -> VanSize.EXTRA_LONG to true
-            codeLength != null -> codeLength to true
-            wheelbaseMm in 3500..3800 || mediumWords.containsMatchIn(text) -> VanSize.MEDIUM to true
-            wheelbaseMm in 4300..4600 || longWords.containsMatchIn(text) -> VanSize.LONG to false
-            else -> null to false
+        val surerLengths = narrowed(listOfNotNull(
+            setOf(VanSize.EXTRA_LONG).takeIf { overhang.containsMatchIn(text) },
+            setOf(VanSize.MEDIUM).takeIf { wheelbaseMm in 3500..3800 },
+            setOf(VanSize.LONG, VanSize.EXTRA_LONG).takeIf { wheelbaseMm in 4300..4600 },
+            setOf(VanSize.MEDIUM).takeIf { mediumWords.containsMatchIn(text) },
+        ))
+        if (vw && common && c.length != null && surerLengths != null) {
+            val vwFits = vwLength[c.length] in surerLengths
+            val commonFits = c.length in surerLengths
+            if (vwFits != commonFits) { vw = vwFits; common = commonFits }
         }
-        // Roof, surest source first; a loose "Hochdach" only fills in what nothing sure said.
-        val (height, heightSure) = when {
-            superHighRoof.containsMatchIn(text) -> VanSize.SUPER_HIGH_ROOF to true
-            codeHeight != null -> codeHeight to true
-            normalRoof.containsMatchIn(text) -> VanSize.NORMAL_ROOF to true
-            highRoof.containsMatchIn(text) -> VanSize.HIGH_ROOF to false
-            else -> null to false
-        }
-        return Reading(length = length, height = height, lengthSure = lengthSure, heightSure = heightSure)
+        val lengths = narrowed(listOfNotNull(
+            surerLengths,
+            c.length?.let(::lengthsOf)?.takeIf { it.isNotEmpty() },
+            setOf(VanSize.LONG, VanSize.EXTRA_LONG).takeIf { longWords.containsMatchIn(text) },
+        ))
+        val roofs = narrowed(listOfNotNull(
+            setOf(VanSize.SUPER_HIGH_ROOF).takeIf { superHighRoof.containsMatchIn(text) },
+            setOf(VanSize.NORMAL_ROOF).takeIf { normalRoof.containsMatchIn(text) },
+            c.height?.let(::roofsOf)?.takeIf { it.isNotEmpty() },
+            setOf(VanSize.HIGH_ROOF, VanSize.SUPER_HIGH_ROOF).takeIf { highRoof.containsMatchIn(text) },
+        ))
+        return Reading(
+            length = lengths?.min(), height = roofs?.min(),
+            lengthSure = lengths?.size == 1, heightSure = roofs?.size == 1,
+            lengthMax = lengths?.max(), heightMax = roofs?.max(),
+        )
     }
 }

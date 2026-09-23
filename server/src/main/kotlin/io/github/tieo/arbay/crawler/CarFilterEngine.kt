@@ -126,7 +126,11 @@ object CarFilterEngine {
         if (reading.lengthSure) verified += VehicleField.VAN_LENGTH else verified -= VehicleField.VAN_LENGTH
         if (reading.heightSure) verified += VehicleField.VAN_HEIGHT else verified -= VehicleField.VAN_HEIGHT
         return listing.copy(
-            vehicle = v.copy(vanLength = reading.length, vanHeight = reading.height, verified = verified),
+            vehicle = v.copy(
+                vanLength = reading.length, vanHeight = reading.height,
+                vanLengthMax = reading.lengthMax, vanHeightMax = reading.heightMax,
+                verified = verified,
+            ),
         )
     }
 
@@ -186,19 +190,14 @@ object CarFilterEngine {
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
         if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return "emission"
         if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return "colour"
-        // Only a stated code narrows a van's size. A word ("Lang", "Hochdach") names a variant of
-        // one model and says nothing about another model's classes, so a van described in words is
-        // kept and marked unchecked rather than measured against a guess.
-        if (drop(
-                filters.vanLengths.isNotEmpty(),
-                v?.vanLength != null && v.isVerified(VehicleField.VAN_LENGTH),
-            ) { v!!.vanLength in filters.vanLengths }
-        ) return "length"
-        if (drop(
-                filters.vanHeights.isNotEmpty(),
-                v?.vanHeight != null && v.isVerified(VehicleField.VAN_HEIGHT),
-            ) { v!!.vanHeight in filters.vanHeights }
-        ) return "height"
+        // A van's size is judged on the sizes its listing could mean (see VanDimensions): it goes
+        // only when none of them is wanted. One read as a mere hint bounds nothing and is kept,
+        // marked unchecked, like any criterion a listing does not state.
+        fun sizes(from: Int?, to: Int?): IntRange? = if (from != null && to != null) from..to else null
+        val lengths = sizes(v?.vanLength, v?.vanLengthMax)
+        if (drop(filters.vanLengths.isNotEmpty(), lengths != null) { lengths!!.any { it in filters.vanLengths } }) return "length"
+        val roofs = sizes(v?.vanHeight, v?.vanHeightMax)
+        if (drop(filters.vanHeights.isNotEmpty(), roofs != null) { roofs!!.any { it in filters.vanHeights } }) return "height"
         if (drop(filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null, v?.wheelbaseMm != null) {
                 val mm = v!!.wheelbaseMm!!
                 (filters.minWheelbaseMm?.let { mm >= it } ?: true) && (filters.maxWheelbaseMm?.let { mm <= it } ?: true)

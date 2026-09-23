@@ -63,11 +63,22 @@ class VanDimensionsTest {
     }
 
     @Test
-    fun `a seller's Hochdach is high or higher and never sure`() {
-        // "Lang Hochdach" on a van its own seller also calls L3H2: the word is used for any tall roof.
+    fun `a seller's Hochdach is high or higher`() {
+        val d = VanDimensions.read("VW Crafter 35 Kastenwagen Hochdach Automatik")
+        assertEquals(VanSize.HIGH_ROOF, d.height)
+        assertEquals(VanSize.SUPER_HIGH_ROOF, d.heightMax)
+        assertFalse(d.heightSure)
+    }
+
+    @Test
+    fun `words and a code narrow each other`() {
+        // Hochdach is high or higher; L3H2 is normal or high on its two scales: together, high.
         val d = VanDimensions.read("Volkswagen Crafter 2.0 TDI 35 Lang Hochdach DSG L3H2")
         assertEquals(VanSize.HIGH_ROOF, d.height)
-        assertFalse(d.heightSure)
+        assertTrue(d.heightSure)
+        // Lang is long or longer; L3 is medium or long: together, long.
+        assertEquals(VanSize.LONG, d.length)
+        assertTrue(d.lengthSure)
     }
 
     @Test
@@ -84,17 +95,19 @@ class VanDimensionsTest {
     }
 
     @Test
-    fun `a Crafter code that fits both scales is not judged on`() {
+    fun `a Crafter code stands for what it names on either scale`() {
         // L3H2 is a medium Normaldach to VW and a long Hochdach on the common scale.
         val d = VanDimensions.read("VW Crafter 35 2.0 TDI Trendline L3H2 Aut.")
-        assertNull(d.height)
-        assertFalse(d.heightSure)
-        assertFalse(d.lengthSure)
+        assertEquals(VanSize.MEDIUM, d.length)
+        assertEquals(VanSize.LONG, d.lengthMax)
+        assertEquals(VanSize.NORMAL_ROOF, d.height)
+        assertEquals(VanSize.HIGH_ROOF, d.heightMax)
+        assertFalse(d.heightSure || d.lengthSure)
     }
 
     @Test
     fun `a Crafter code only the common scale has is read on it`() {
-        val d = VanDimensions.read("VW Crafter L2H1 kurz")
+        val d = VanDimensions.read("VW Crafter L2H1 Kasten")
         assertEquals(VanSize.MEDIUM, d.length)
         assertEquals(VanSize.NORMAL_ROOF, d.height)
         assertTrue(d.lengthSure && d.heightSure)
@@ -104,6 +117,7 @@ class VanDimensionsTest {
     fun `the long wheelbase is long or longer, the medium one is settled`() {
         val long = VanDimensions.read("VW Crafter Kasten", wheelbaseMm = 4490)
         assertEquals(VanSize.LONG, long.length)
+        assertEquals(VanSize.EXTRA_LONG, long.lengthMax)
         assertFalse(long.lengthSure)
         val medium = VanDimensions.read("VW Crafter Kasten", wheelbaseMm = 3640)
         assertEquals(VanSize.MEDIUM, medium.length)
@@ -116,5 +130,19 @@ class VanDimensionsTest {
         assertEquals(VanSize.SUPER_HIGH_ROOF, d.height)
         // A listing naming another model is read as that model, whatever was searched.
         assertNull(VanDimensions.read("Mercedes Sprinter L4H4", modelHint = "crafter").height)
+    }
+
+    @Test
+    fun `a settled wheelbase tells which scale the code was written on`() {
+        // On the 3640 mm wheelbase L3 is VW's L3, so its H2 is VW's Normaldach, not a Hochdach.
+        val d = VanDimensions.read("Volkswagen Crafter 35 L3H2 4M Aut", wheelbaseMm = 3640)
+        assertEquals(VanSize.MEDIUM, d.length)
+        assertEquals(VanSize.NORMAL_ROOF, d.height)
+        assertTrue(d.lengthSure && d.heightSure)
+    }
+
+    @Test
+    fun `mittellang is medium`() {
+        assertEquals(VanSize.MEDIUM, VanDimensions.read("vw crafter weiss mittel lang").length)
     }
 }

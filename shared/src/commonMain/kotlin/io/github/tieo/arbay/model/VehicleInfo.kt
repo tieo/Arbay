@@ -47,6 +47,10 @@ data class VehicleInfo(
     val upholstery: String? = null,        // Material Innenausstattung (Stoff/Leder/…)
     val vanLength: Int? = null,            // panel-van length on the VanSize scale
     val vanHeight: Int? = null,            // panel-van roof on the VanSize scale
+    // The largest size the listing could be, where what it says spans more than one: from
+    // vanLength to vanLengthMax, from vanHeight to vanHeightMax. Null where it bounds nothing.
+    val vanLengthMax: Int? = null,
+    val vanHeightMax: Int? = null,
     // Wheelbase in millimetres. Almost no market has a field for it: AutoScout24 ships a
     // wheelBase key that its dealers leave empty on every Crafter measured, and what states a
     // number is the equipment prose ("Radstand 3640 mm"), on about half the AutoScout24 ads and a
