@@ -46,9 +46,10 @@ data class Listing(
     val isExploration: Boolean = false,
     val vehicle: VehicleInfo? = null,
 ) {
-    /** All-in price including shipping and platform fees */
+    /** All-in price including shipping and platform fees. A delivery charge in another currency
+     *  than the price is left out rather than added as if it were the same one. */
     val effectivePrice: Money get() = Money(
-        price.amount + (shipping?.cost?.amount ?: 0L),
+        price.amount + (shipping?.cost?.takeIf { it.currency == price.currency }?.amount ?: 0L),
         price.currency,
     )
 }

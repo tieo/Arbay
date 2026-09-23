@@ -68,7 +68,7 @@ class StoreFileTest {
                     sold = true, scrapedAt = Instant.fromEpochMilliseconds(0),
                 ),
             )
-            Thread.sleep(3_000)
+            // The unreadable file is moved aside when the repo loads, before any write is scheduled.
             val aside = stored.parentFile.listFiles().orEmpty().single { it.name.startsWith("sold_listings.json.unreadable-") }
             assertEquals("[{\"id\": \"cut off mid", aside.readText())
         } finally {

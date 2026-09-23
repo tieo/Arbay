@@ -333,8 +333,15 @@ fun ListingsSheet(
         )))
     }
 
-    fun persistPriceRange() {
-        persistFilters { it.withPriceRangeEur(priceRange.start.toInt(), priceRange.endInclusive.toInt()) }
+    // The band comes with the call: [priceRange] is what this composition read, and a typed price
+    // commits in the same event that sets it, before the screen has composed again.
+    // An end resting on the end of the track is no bound, here as on screen (see inPriceRange).
+    // Saved as the price it happened to sit at, raising only the minimum also kept a maximum of
+    // today's dearest listing, and for a car search that went to the markets as a price cap.
+    fun persistPriceRange(band: ClosedFloatingPointRange<Float>) {
+        val min = band.start.takeIf { it > priceMin }?.toInt()
+        val max = band.endInclusive.takeIf { it < priceMax }?.toInt()
+        persistFilters { it.withPriceRangeEur(min, max) }
     }
 
     // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
@@ -1252,7 +1259,7 @@ fun ListingsSheet(
                 priceMax = priceMax,
                 priceRange = priceRange,
                 onPriceRange = { chosenBand = it },
-                onPriceCommitted = { persistPriceRange() },
+                onPriceCommitted = { band -> persistPriceRange(band) },
                 conditions = conditions,
                 onConditions = { chosen ->
                     conditions = chosen

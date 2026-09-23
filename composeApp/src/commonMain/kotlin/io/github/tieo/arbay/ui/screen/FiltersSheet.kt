@@ -1,8 +1,9 @@
 package io.github.tieo.arbay.ui.screen
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -11,9 +12,13 @@ import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.model.Condition
@@ -22,9 +27,9 @@ import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
+import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
-import kotlin.math.exp
 
 /**
  * Everything that narrows a search, in one place.
@@ -41,7 +46,8 @@ fun FiltersSheet(
     priceMax: Float,
     priceRange: ClosedFloatingPointRange<Float>,
     onPriceRange: (ClosedFloatingPointRange<Float>) -> Unit,
-    onPriceCommitted: () -> Unit,
+    /** The band to keep, once it is settled: the slider let go, or a typed price entered. */
+    onPriceCommitted: (ClosedFloatingPointRange<Float>) -> Unit,
     // Which conditions are being looked at, and whether listings whose market never said are
     // among them. An empty set is every condition.
     conditions: Set<Condition>,
@@ -369,7 +375,7 @@ private fun PriceBand(
     priceMax: Float,
     range: ClosedFloatingPointRange<Float>,
     onRange: (ClosedFloatingPointRange<Float>) -> Unit,
-    onCommitted: () -> Unit,
+    onCommitted: (ClosedFloatingPointRange<Float>) -> Unit,
 ) {
     fun toLog(value: Float): Float {
         val lo = ln((priceMin + 1f).toDouble())
@@ -383,47 +389,67 @@ private fun PriceBand(
         return (exp(lo + (hi - lo) * fraction.toDouble()) - 1.0).toFloat().coerceIn(priceMin, priceMax)
     }
 
-    var minText by remember(range.start) { mutableStateOf(range.start.toInt().toString()) }
-    var maxText by remember(range.endInclusive) { mutableStateOf(range.endInclusive.toInt().toString()) }
-
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         RangeSlider(
             value = toLog(range.start)..toLog(range.endInclusive),
             onValueChange = { onRange(fromLog(it.start)..fromLog(it.endInclusive)) },
-            onValueChangeFinished = onCommitted,
+            onValueChangeFinished = { onCommitted(range) },
             valueRange = 0f..1f,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = minText,
-                onValueChange = { text ->
-                    minText = text.filter { it.isDigit() }
-                    minText.toFloatOrNull()?.let {
-                        onRange(it.coerceIn(priceMin, range.endInclusive)..range.endInclusive)
-                        onCommitted()
-                    }
+            PriceField(
+                label = "From",
+                value = range.start,
+                onEntered = { typed ->
+                    val band = typed.coerceIn(priceMin, range.endInclusive)..range.endInclusive
+                    onRange(band)
+                    onCommitted(band)
                 },
-                label = { Text("From") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
-            OutlinedTextField(
-                value = maxText,
-                onValueChange = { text ->
-                    maxText = text.filter { it.isDigit() }
-                    maxText.toFloatOrNull()?.let {
-                        onRange(range.start..it.coerceIn(range.start, priceMax))
-                        onCommitted()
-                    }
+            PriceField(
+                label = "To",
+                value = range.endInclusive,
+                onEntered = { typed ->
+                    val band = range.start..typed.coerceIn(range.start, priceMax)
+                    onRange(band)
+                    onCommitted(band)
                 },
-                label = { Text("To") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
         }
     }
+}
+
+/**
+ * A price typed in whole, and applied once it is entered (the keyboard's Done, or leaving the
+ * field), not digit by digit. Applied per keystroke, the first digit of "450" was already a band
+ * of 4, clamped to the lowest price, which reset the field under the finger and was saved on the
+ * search before the rest could be typed. What the slider sets shows here while the field is not
+ * being typed in.
+ */
+@Composable
+private fun PriceField(label: String, value: Float, onEntered: (Float) -> Unit, modifier: Modifier) {
+    val focusManager = LocalFocusManager.current
+    var text by remember { mutableStateOf(value.toInt().toString()) }
+    var typing by remember { mutableStateOf(false) }
+    LaunchedEffect(value) { if (!typing) text = value.toInt().toString() }
+    fun enter() {
+        val typed = text.toFloatOrNull()
+        if (typed == null) text = value.toInt().toString() else onEntered(typed)
+    }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { changed -> text = changed.filter { it.isDigit() }.take(9) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+        modifier = modifier.onFocusChanged { focus ->
+            if (typing && !focus.isFocused) enter()
+            typing = focus.isFocused
+        },
+    )
 }
 
 /** What a condition is called on a chip and in a sentence. */

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.model
 
+import kotlin.math.roundToLong
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -13,8 +14,20 @@ data class Money(
         /** One written number: digits, and the separators that sit between digits. */
         private val AMOUNT = Regex("""\d+(?:[ \u00A0.,]\d+)*""")
 
-        fun parse(text: String): Money? {
-            val currency = when {
+        fun parse(text: String): Money? = parse(text, currencyIn(text) ?: Currency.EUR)
+
+        /**
+         * The amount in [text], in the currency it names, or in [marketCurrency] when it names none.
+         *
+         * For a line that belongs to a priced listing, such as its delivery charge: "+ 4,50" on a
+         * pound-priced market is pounds. Read with [parse] it defaulted to euros and was then
+         * added to the price as if it were pounds.
+         */
+        fun parseAtMarket(text: String, marketCurrency: Currency): Money? =
+            parse(text, currencyIn(text) ?: marketCurrency)
+
+        private fun currencyIn(text: String): Currency? {
+            return when {
                 "€" in text || "EUR" in text -> Currency.EUR
                 "$" in text || "USD" in text -> Currency.USD
                 "CHF" in text -> Currency.CHF
@@ -24,9 +37,8 @@ data class Money(
                 "DKK" in text -> Currency.DKK
                 "SEK" in text -> Currency.SEK
                 "NOK" in text -> Currency.NOK
-                else -> Currency.EUR
+                else -> null
             }
-            return parse(text, currency)
         }
 
         /** Parse the numeric amount from [text] and attach [currency] regardless of any
@@ -90,7 +102,9 @@ data class Money(
             }
 
             val amount = normalized.toDoubleOrNull() ?: return null
-            return Money((amount * 100).toLong(), currency)
+            // Rounded, not truncated: 19.99 * 100 is 1998.9999999999998 in binary floating point,
+            // which truncation turned into 1998 cents.
+            return Money((amount * 100).roundToLong(), currency)
         }
     }
 }

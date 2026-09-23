@@ -328,7 +328,7 @@ class EbayDeCrawler(
                      t.contains("Lieferung", true) || t.contains("postage", true)) &&
                     saysWhatDeliveryCosts(t)
                 }?.text()
-            val shipping = parseShipping(shippingText)
+            val shipping = parseShipping(shippingText, price.currency)
 
             // Sold date: "Verkauft 28. Mrz 2026" / "Sold Mar 25, 2026" / "Ended ...".
             // eBay styles the price with the same "positive" class as the sold date, so the span
@@ -389,7 +389,7 @@ class EbayDeCrawler(
             val shippingText = item.selectFirst(".s-item__shipping")?.text()
                 ?: item.selectFirst(".s-item__freeXDays")?.text()
                 ?: item.selectFirst("[class*=shipping]")?.text()
-            val shipping = parseShipping(shippingText)
+            val shipping = parseShipping(shippingText, price.currency)
 
             // Sold date & status
             val soldEl = item.selectFirst(".s-item__caption--signal .POSITIVE")
@@ -435,7 +435,7 @@ class EbayDeCrawler(
             "not specified" in lower || "nicht angegeben" in lower
     }
 
-    private fun parseShipping(text: String?): Shipping? {
+    private fun parseShipping(text: String?, marketCurrency: Currency): Shipping? {
         if (text == null || !saysWhatDeliveryCosts(text)) return null
         val lower = text.lowercase()
         return when {
@@ -443,7 +443,7 @@ class EbayDeCrawler(
                 Shipping(free = true)
             lower.contains("not specified") || lower.contains("nicht angegeben") -> null
             else -> {
-                val cost = Money.parse(text)
+                val cost = Money.parseAtMarket(text, marketCurrency)
                 if (cost != null) Shipping(cost = cost)
                 else null
             }

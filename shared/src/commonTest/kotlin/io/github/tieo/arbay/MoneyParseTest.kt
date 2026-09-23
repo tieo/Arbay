@@ -191,4 +191,17 @@ class MoneyParseTest {
     fun `thousands written with spaces still parse`() {
         assertEquals(4900000L, Money.parse("49 000 kr", Currency.SEK)?.amount)
     }
+
+    @Test
+    fun `cents are rounded not truncated`() {
+        // 19.99 * 100 is 1998.9999999999998 in binary floating point.
+        assertEquals(1999L, Money.parse("19,99 €")?.amount)
+        assertEquals(115L, Money.parse("1,15 €")?.amount)
+    }
+
+    @Test
+    fun `a delivery charge with no currency is in the market's own`() {
+        assertEquals(Money(450, Currency.GBP), Money.parseAtMarket("+ 4,50 Versand", Currency.GBP))
+        assertEquals(Money(450, Currency.EUR), Money.parseAtMarket("+ 4,50 € Versand", Currency.GBP))
+    }
 }

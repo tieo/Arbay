@@ -275,9 +275,12 @@ fun FreeItemsSheet(
                         canUndo = lastAction != null,
                         onUndo = { viewModel.undoLast() },
                         onSavedClick = { showSavedSheet = true },
-                        onDislike = { buttonAction = "dislike" },
-                        onLike = { buttonAction = "down" },
-                        onLove = { buttonAction = "right" },
+                        // A tap while a card is still flying out is ignored: setting the action
+                        // again restarted the animation keyed on it, and the first verdict, the
+                        // one that card was given, was never sent.
+                        onDislike = { if (buttonAction == null) buttonAction = "dislike" },
+                        onLike = { if (buttonAction == null) buttonAction = "down" },
+                        onLove = { if (buttonAction == null) buttonAction = "right" },
                     )
                 }
             }
