@@ -121,7 +121,7 @@ class MarktplaatsCrawler(
      */
     internal fun parseCarsCategory(html: String): List<Listing> {
         val island = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = runCatching { Json { ignoreUnknownKeys = true }.parseToJsonElement(island) }
+        val root = runCatching { Json.parseToJsonElement(island) }
             .getOrNull() ?: return emptyList()
         val listings = mutableListOf<JsonObject>()
         fun walk(element: JsonElement) {

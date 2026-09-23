@@ -59,7 +59,7 @@ object Geocoder {
         if (f.exists() && f.length() > 0) return f.readText()
         // Bounded, so an unanswered download fails and is retried on the next start instead of
         // holding the thread that builds the index.
-        val connection = URL("https://download.geonames.org/export/zip/$cc.zip").openConnection().apply {
+        val connection = java.net.URI("https://download.geonames.org/export/zip/$cc.zip").toURL().openConnection().apply {
             connectTimeout = 15_000
             readTimeout = 60_000
         }

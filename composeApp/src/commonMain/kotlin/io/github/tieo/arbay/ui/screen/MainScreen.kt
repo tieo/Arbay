@@ -1,9 +1,5 @@
 package io.github.tieo.arbay.ui.screen
 
-import io.github.tieo.arbay.SearchCountries
-import io.github.tieo.arbay.model.MarketSettings
-import io.github.tieo.arbay.model.platformsIn
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -18,15 +14,19 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
+import io.github.tieo.arbay.CarTaxonomyStore
+import io.github.tieo.arbay.SearchCountries
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.catalog.KnownProduct
 import io.github.tieo.arbay.catalog.ProductCategory
@@ -34,23 +34,21 @@ import io.github.tieo.arbay.debug.DebugRegistry
 import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.history.SearchHistoryEntry
 import io.github.tieo.arbay.history.SearchHistoryStore
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import io.github.tieo.arbay.model.FreeItemProfile
-import io.github.tieo.arbay.model.FreeItemStats
-import io.github.tieo.arbay.model.MarketGroup
-import io.github.tieo.arbay.model.MarketSets
-import io.github.tieo.arbay.model.PlatformId
-import kotlinx.coroutines.launch
-import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.SavedSearchStatus
-import io.github.tieo.arbay.model.SearchQuery
-import io.github.tieo.arbay.model.ProductIdentifier
-import io.github.tieo.arbay.CarTaxonomyStore
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
+import io.github.tieo.arbay.model.FreeItemProfile
+import io.github.tieo.arbay.model.FreeItemStats
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.MarketSets
+import io.github.tieo.arbay.model.MarketSettings
+import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.ProductIdentifier
+import io.github.tieo.arbay.model.SavedSearchStatus
+import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.TrackedProduct
+import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.model.withCarFilters
 import io.github.tieo.arbay.model.withPriceRangeEur
@@ -59,6 +57,9 @@ import io.github.tieo.arbay.ui.LocalDesktopMode
 import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
 import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 
 /**
  * Best-effort make/model nodes for prefilling the vehicle-search form's dropdowns, from the text of
@@ -408,7 +409,7 @@ fun MainScreen(
                 )
 
                 TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                     tooltip = { PlainTooltip { Text(if (isDesktop) "Settings (Ctrl+,)" else "Settings") } },
                     state = rememberTooltipState(),
                 ) {
@@ -680,8 +681,7 @@ fun MainScreen(
                             name = name,
                             searchQuery = saved.searchQuery.withCarFilters(filters).copy(
                                 text = query,
-                                platforms = platforms
-                                    ?: MarketSets.platformsIn(MarketGroup.VEHICLES, SearchCountries.current.countries),
+                                platforms = platforms,
                                 category = MarketGroup.VEHICLES,
                                 // Where to look, carried on the search itself: the markets that
                                 // take a place are asked with it, and the rest are measured

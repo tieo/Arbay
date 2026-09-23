@@ -12,21 +12,25 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -35,33 +39,30 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.ImportRules
+import io.github.tieo.arbay.comparablePrice
+import io.github.tieo.arbay.model.*
+import io.github.tieo.arbay.model.SortMode
+import io.github.tieo.arbay.model.importVat
+import io.github.tieo.arbay.rememberCoordDetector
+import io.github.tieo.arbay.ui.AdaptiveSheet
+import io.github.tieo.arbay.ui.READABLE_WIDTH
+import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
+import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.roundToInt
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import io.github.tieo.arbay.ImportRules
-import io.github.tieo.arbay.comparablePrice
-import io.github.tieo.arbay.model.importVat
-import io.github.tieo.arbay.DisplayCurrency
-import io.github.tieo.arbay.rememberCoordDetector
-import io.github.tieo.arbay.model.*
-import io.github.tieo.arbay.ui.AdaptiveSheet
-import io.github.tieo.arbay.ui.READABLE_WIDTH
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
-import io.github.tieo.arbay.model.SortMode
-import androidx.compose.ui.geometry.Size
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -471,7 +472,7 @@ internal fun ListingCard(
                             modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
-                                Icons.Outlined.Undo, restoreLabel,
+                                Icons.AutoMirrored.Outlined.Undo, restoreLabel,
                                 modifier = Modifier.size(22.dp),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
@@ -505,7 +506,7 @@ internal fun ListingCard(
             text = {
                 Column {
                     Text(
-                        endsAt?.let { "It ends ${endsInLabel(it) ?: "shortly"}." }
+                        endsAt?.let { "It ${endsInLabel(it)}." }
                             ?: "This market does not say when it ends.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

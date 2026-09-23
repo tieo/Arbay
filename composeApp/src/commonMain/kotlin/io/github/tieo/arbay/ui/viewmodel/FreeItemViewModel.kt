@@ -384,7 +384,7 @@ class FreeItemViewModel(
                     remainingIds = remainingIds,
                 )
                 // Apply rescored results — update scores and resort, pinning current card
-                val rescored = response?.rescored
+                val rescored = response.rescored
                 if (!rescored.isNullOrEmpty()) {
                     val dismissed = _dismissedIds.value
                     val currentCardId = _listings.value.firstOrNull { it.id !in dismissed }?.id

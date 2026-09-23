@@ -292,7 +292,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
                 priceText.trim() == "Zu verschenken"
             // When searching free items, drop anything with a price tag
             if (freeOnly && !isFreeItem) return@mapNotNull null
-            val price = if (isFreeItem) Money.cents(0) else Money.parse(priceText ?: "") ?: return@mapNotNull null
+            val price = if (isFreeItem) Money.cents(0) else Money.parse(priceText) ?: return@mapNotNull null
 
             val spanTexts = item.select("span").map { it.text().trim() }
             val locationText = item.selectFirst("div.aditem-main--top--left")?.text()?.trim()

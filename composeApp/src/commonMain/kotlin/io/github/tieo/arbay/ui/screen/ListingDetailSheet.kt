@@ -1,11 +1,5 @@
 package io.github.tieo.arbay.ui.screen
 
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.TimeZone
-import kotlin.math.roundToInt
-import io.github.tieo.arbay.model.importVat
-import io.github.tieo.arbay.model.SaleType
-import io.github.tieo.arbay.ImportRules
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,8 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,15 +20,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import io.github.tieo.arbay.ImportRules
+import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.imageModel
-import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
-import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.Location
+import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.VehicleField
+import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
+import kotlin.math.roundToInt
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * A listing's full content, in the app — the whole reason it needs to be here at all rather than
@@ -291,7 +291,7 @@ fun ListingDetailSheet(
                 onClick = { openBrowser(listing.url) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(if (isArchived) "Try the original page" else "Open on ${listing.platformId.displayName}")
             }

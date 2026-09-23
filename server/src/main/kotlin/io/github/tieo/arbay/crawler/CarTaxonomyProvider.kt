@@ -72,7 +72,7 @@ object CarTaxonomyProvider {
      *  entry) and turn each into a CarModelNode carrying the AutoScout24 model token. */
     internal fun parseAutoScout24Models(html: String, siteId: String?): List<CarModelNode> {
         val nextData = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(nextData).jsonObject
+        val root = json.parseToJsonElement(nextData).jsonObject
         val models = root["props"]?.jsonObject?.get("pageProps")?.jsonObject
             ?.get("taxonomy")?.jsonObject?.get("models")?.jsonObject ?: return emptyList()
         val entry = (siteId?.let { models[it] } ?: models.values.singleOrNull())?.jsonArray ?: return emptyList()
@@ -141,7 +141,7 @@ object CarTaxonomyProvider {
     /** Parse AutoScout24 __NEXT_DATA__ props.pageProps.taxonomy.makesSorted -> (name, siteId). */
     internal fun parseAutoScout24Makes(html: String): List<Pair<String, String>> {
         val nextData = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(nextData).jsonObject
+        val root = json.parseToJsonElement(nextData).jsonObject
         val makesSorted = root["props"]?.jsonObject
             ?.get("pageProps")?.jsonObject
             ?.get("taxonomy")?.jsonObject

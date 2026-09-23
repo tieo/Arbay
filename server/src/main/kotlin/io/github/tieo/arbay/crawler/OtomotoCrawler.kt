@@ -58,7 +58,7 @@ class OtomotoCrawler(
 
         val filters = buildString {
             append(filterParams(query))
-            if (citySlug != null && area != null) {
+            if (citySlug != null) {
                 if (isNotEmpty()) append("&")
                 append("search%5Bdist%5D=${area.radiusKm}")
             }

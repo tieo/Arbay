@@ -29,6 +29,9 @@ dependencies {
     implementation(libs.ktor.clientCioJvm)
     implementation(libs.ktor.clientContentNegotiationJvm)
     implementation(libs.jsoup)
+    // Jsoup marks its API with these but leaves them out of its own dependencies; without them
+    // Kotlin cannot read which of its returns may be null.
+    compileOnly(libs.jspecify)
     implementation(libs.playwright)
     implementation(libs.onnxruntime)
     implementation(libs.kotlinx.serialization.json)
