@@ -7,8 +7,9 @@ import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.options.LoadState
 import com.microsoft.playwright.options.WaitForSelectorState
 import com.microsoft.playwright.options.WaitUntilState
-import org.slf4j.LoggerFactory
+import java.io.File
 import java.util.concurrent.Semaphore
+import org.slf4j.LoggerFactory
 
 enum class BrowserEngine { CHROMIUM, FIREFOX, WEBKIT }
 
@@ -75,15 +76,33 @@ object HeadlessBrowser {
         }
     }
 
-    private val xvfbStarted: Boolean by lazy {
+    // The virtual display the non-headless Chromium draws on. Its output is discarded rather than
+    // piped: a pipe nobody reads is closed once the Process is collected, and Xvfb writes keymap
+    // warnings for every client that connects, so the first Chromium to connect killed it with
+    // SIGPIPE and every launch after fell back to headless, the mode bot checks catch first.
+    @Volatile private var xvfb: Process? = null
+
+    /** Whether display :99 is up, starting (or restarting) Xvfb when it is not. */
+    private fun ensureXvfb(): Boolean = synchronized(browserLock) {
+        if (xvfb?.isAlive == true) return true
         try {
-            ProcessBuilder("Xvfb", ":99", "-screen", "0", "1366x768x24", "-nolisten", "tcp")
-                .redirectErrorStream(true).start()
+            // Whatever held :99 before is dead, so its lock would only keep the new one from starting.
+            File("/tmp/.X99-lock").delete()
+            File("/tmp/.X11-unix/X99").delete()
+            val process = ProcessBuilder("Xvfb", ":99", "-screen", "0", "1366x768x24", "-nolisten", "tcp")
+                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .start()
             Thread.sleep(500)
+            if (!process.isAlive) {
+                log.warn("Xvfb exited at once with {}; Chromium runs headless", process.exitValue())
+                return false
+            }
+            xvfb = process
             log.info("Started Xvfb on :99")
             true
         } catch (e: Exception) {
-            log.warn("Xvfb not available: ${e.message}")
+            log.warn("Xvfb not available: {}", e.message)
             false
         }
     }
@@ -103,8 +122,7 @@ object HeadlessBrowser {
     )
 
     private fun launchChromium(): Browser {
-        xvfbStarted // ensure Xvfb is started
-        if (xvfbStarted) {
+        if (ensureXvfb()) {
             // Non-headless via Xvfb — best for PoW challenges
             val env = mutableMapOf(
                 "DISPLAY" to ":99",
@@ -120,7 +138,7 @@ object HeadlessBrowser {
                 )
             } catch (e: Exception) {
                 // Xvfb might be stale — fall back to headless
-                log.warn("Non-headless Chromium failed, falling back to headless: {}", e.message?.take(80))
+                log.warn("Non-headless Chromium failed, falling back to headless: {}", e.message?.take(600))
                 playwright.chromium().launch(
                     BrowserType.LaunchOptions()
                         .setHeadless(true)

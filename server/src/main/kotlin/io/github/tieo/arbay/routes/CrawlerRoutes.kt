@@ -775,7 +775,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // A market answering with one title over and over is a parser
                                 // reading the wrong node, which otherwise shows up only as results
                                 // quietly going missing.
-                                io.github.tieo.arbay.crawler.repeatedTitleReport(rawResults)?.let { report ->
+                                io.github.tieo.arbay.crawler.repeatedTitleReport(rawResults, pq)?.let { report ->
                                     CrawlerStatusTracker.recordError(platformId, report, ErrorType.PARSE_ERROR)
                                     ErrorSnapshotStore.capture(
                                         platform = platformId.name, query = pq.text,

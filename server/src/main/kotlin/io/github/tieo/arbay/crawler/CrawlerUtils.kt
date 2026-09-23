@@ -82,8 +82,12 @@ internal suspend fun emitTermUsed(term: String) {
  * that is not the listing's title still parses, and the listings were then dropped one by one for
  * carrying none of the words searched for. A market answering with the same title over and over is
  * the shape of that, whatever the cause, and it is worth saying out loud.
+ *
+ * Unless the repeated title is the thing searched for: mobile.de titles a listing with its make
+ * and model and nothing else, so the T6s answering "vw t6 california" read "Volkswagen T6 Kombi"
+ * one after the other, each a different van. A title carrying a word of the search is the market answering.
  */
-fun repeatedTitleReport(listings: List<Listing>): String? {
+fun repeatedTitleReport(listings: List<Listing>, query: SearchQuery): String? {
     if (listings.size < MIN_ANSWER_TO_JUDGE_TITLES) return null
     val (title, count) = listings
         .groupingBy { it.title.trim().lowercase() }
@@ -91,6 +95,8 @@ fun repeatedTitleReport(listings: List<Listing>): String? {
         .maxByOrNull { it.value } ?: return null
     if (count < MIN_ANSWER_TO_JUDGE_TITLES) return null
     if (count.toDouble() / listings.size < SAME_TITLE_SHARE) return null
+    val example = listings.first { it.title.trim().lowercase() == title }
+    if (RelevanceFilter.carriesAWordOfTheSearch(example, query)) return null
     return "$count of ${listings.size} listings are titled \"$title\" — the title is being read " +
         "off the wrong part of the card"
 }
