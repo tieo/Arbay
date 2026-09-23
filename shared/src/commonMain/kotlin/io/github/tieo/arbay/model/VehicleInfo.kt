@@ -45,8 +45,8 @@ data class VehicleInfo(
     val emissionSticker: Int? = null,      // Umweltplakette 1-4 (green = 4)
     val inspectionUntil: String? = null,   // HU/TÜV valid until, "YYYY-MM"
     val upholstery: String? = null,        // Material Innenausstattung (Stoff/Leder/…)
-    val vanLength: Int? = null,            // panel-van length class 1-4 (L1..L4)
-    val vanHeight: Int? = null,            // panel-van roof height class 1-3 (H1..H3)
+    val vanLength: Int? = null,            // panel-van length on the VanSize scale
+    val vanHeight: Int? = null,            // panel-van roof on the VanSize scale
     // Wheelbase in millimetres. Almost no market has a field for it: AutoScout24 ships a
     // wheelBase key that its dealers leave empty on every Crafter measured, and what states a
     // number is the equipment prose ("Radstand 3640 mm"), on about half the AutoScout24 ads and a

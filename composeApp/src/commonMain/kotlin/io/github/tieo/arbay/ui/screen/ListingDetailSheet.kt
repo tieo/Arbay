@@ -28,6 +28,7 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.openBrowser
@@ -227,8 +228,8 @@ fun ListingDetailSheet(
                     v.emissionSticker?.let { spec("Sticker", "$it", VehicleField.EMISSION_STICKER) }
                     v.inspectionUntil?.let { spec("Inspection until", it, VehicleField.INSPECTION) }
                     v.upholstery?.let { spec("Upholstery", it, VehicleField.UPHOLSTERY) }
-                    v.vanLength?.let { spec("Length", "L$it", VehicleField.VAN_LENGTH) }
-                    v.vanHeight?.let { spec("Roof", "H$it", VehicleField.VAN_HEIGHT) }
+                    v.vanLength?.let { spec("Length", VanSize.lengthLabel(it), VehicleField.VAN_LENGTH) }
+                    v.vanHeight?.let { spec("Roof", VanSize.roofLabel(it), VehicleField.VAN_HEIGHT) }
                     v.wheelbaseMm?.let { spec("Wheelbase", "$it mm", VehicleField.WHEELBASE) }
                 }
                 if (specs.isNotEmpty()) {

@@ -52,6 +52,7 @@ import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.SortMode
+import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.ui.AdaptiveSheet
@@ -148,15 +149,8 @@ private fun MetaLine(
             v.fuel?.takeIf { it != Fuel.OTHER }?.let {
                 add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() } to v.isVerified(VehicleField.FUEL))
             }
-            val vanCode = buildString {
-                v.vanLength?.let { append("L$it") }
-                v.vanHeight?.let { append("H$it") }
-            }
-            if (vanCode.isNotEmpty()) {
-                add(vanCode to v.isVerified(
-                    if (v.vanLength != null) VehicleField.VAN_LENGTH else VehicleField.VAN_HEIGHT,
-                ))
-            }
+            v.vanLength?.let { add(VanSize.lengthLabel(it) to v.isVerified(VehicleField.VAN_LENGTH)) }
+            v.vanHeight?.let { add(VanSize.roofLabel(it) to v.isVerified(VehicleField.VAN_HEIGHT)) }
         }
     }
     var explaining by remember { mutableStateOf(false) }

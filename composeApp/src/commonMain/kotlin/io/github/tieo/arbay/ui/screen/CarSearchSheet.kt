@@ -32,11 +32,12 @@ import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Transmission
+import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
+import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlin.math.roundToInt
 
 /** Car marketplaces, paired with the country whose stock they surface. Kept in the
  *  order a buyer scans: home market first, then the cross-border sourcing markets. */
@@ -346,22 +347,27 @@ fun CarSearchSheet(
                 Spacer(Modifier.height(12.dp))
                 SliderNumberField("Min seats", minSeats, { minSeats = it.take(1) }, 0f, 9f, 1)
                 Spacer(Modifier.height(14.dp))
-                // Van size filters only on an explicit L/H code in the listing text; listings that
-                // do not state one are kept, since a roof word is model-specific.
-                SectionLabel("Van size (length / height)")
+                // Named, not numbered: makers number their sizes differently (VW's Crafter roofs are
+                // H2, H3 and H4), so the server reads each listing in its maker's terms and a size
+                // it cannot place is kept and marked unchecked.
+                SectionLabel("Van length")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (1..4).forEach { l ->
+                    VanSize.lengths.forEach { l ->
                         FilterChip(
                             selected = l in vanLengths,
                             onClick = { if (l in vanLengths) vanLengths.remove(l) else vanLengths.add(l) },
-                            label = { Text("L$l", style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(VanSize.lengthLabel(l), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
-                    (1..3).forEach { h ->
+                }
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("Roof")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    VanSize.roofs.forEach { h ->
                         FilterChip(
                             selected = h in vanHeights,
                             onClick = { if (h in vanHeights) vanHeights.remove(h) else vanHeights.add(h) },
-                            label = { Text("H$h", style = MaterialTheme.typography.labelSmall) },
+                            label = { Text(VanSize.roofLabel(h), style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }

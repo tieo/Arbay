@@ -138,7 +138,10 @@ private suspend fun finishedResults(
     val listings = asDelivered(inside, query)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
-        CarFilterEngine.facetCounts(raw, query.toCarFilters() ?: CarFilters()) else emptyMap()
+        CarFilterEngine.facetCounts(
+        raw, query.toCarFilters() ?: CarFilters(),
+        modelHint = CarQueryResolver.resolve(query.positiveText)?.modelSlug,
+    ) else emptyMap()
     return FinishedResults(listings, asDelivered(outside, query), criteriaDropped, facets)
 }
 
@@ -249,9 +252,10 @@ private suspend fun carPostFilter(
     // guard strip those parts out; then it returns the parts the user asked for.
     val partsIntent = CarFilterEngine.isPartQuery(searchQuery.positiveText)
     val enriched = listings.map { VehicleTextParser.enrich(it) }
-    val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent)
+    val model = CarQueryResolver.resolve(searchQuery.positiveText)?.modelSlug
+    val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent, modelHint = model)
     val detailed = DetailEnricher.enrich(onTheCard.kept, filters, crawler)
-    val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent)
+    val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent, modelHint = model)
     // What the criteria removed, named by the criterion that removed it — both passes, since a
     // listing can fail on its card and another only once its own page has been read.
     val dropped = (onTheCard.dropped + afterDetail.dropped).map { (listing, criterion) ->
@@ -728,7 +732,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val relevant = RelevanceFilter.filter(pageListings, pq)
                                 val classified = relevant.map { SoldDetector.classify(it) }
                                 val card = if (isCarQuery)
-                                    CarFilterEngine.apply(classified.map { VehicleTextParser.enrich(it) }, partialFilters, keepNonVehicles = partsIntent)
+                                    CarFilterEngine.apply(
+                                        classified.map { VehicleTextParser.enrich(it) }, partialFilters,
+                                        keepNonVehicles = partsIntent,
+                                        modelHint = CarQueryResolver.resolve(pq.positiveText)?.modelSlug,
+                                    )
                                 else classified
                                 val fresh = asDelivered(card.filter { emittedIds.add(it.id) }, pq)
                                 if (fresh.isNotEmpty()) {

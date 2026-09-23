@@ -44,10 +44,11 @@ data class CarFilters(
     val minSeats: Int? = null,
     val minEmissionEuro: Int? = null,   // e.g. 6 = at least Euro 6
     val sellerType: SellerType? = null,
-    // Panel-van size classes (multi-select): a listing matches if its explicit L/H code is in
-    // the set. Listings with no stated code pass (unknown != excluded).
-    val vanLengths: Set<Int> = emptySet(),   // L1..L4
-    val vanHeights: Set<Int> = emptySet(),   // H1..H3
+    // Panel-van sizes on the app's own scale (VanSize), multi-select: a listing matches if what
+    // it verifiably states is in the set. The server reads each listing in its maker's terms, so a
+    // size it cannot place for sure, like a Crafter's "L3H2", passes as unchecked.
+    val vanLengths: Set<Int> = emptySet(),   // VanSize.SHORT..EXTRA_LONG
+    val vanHeights: Set<Int> = emptySet(),   // VanSize.NORMAL_ROOF..SUPER_HIGH_ROOF
     // Wheelbase band in millimetres. No market filters on it and few state it, so this narrows
     // what states one and leaves the rest marked unchecked, like every other criterion here.
     val minWheelbaseMm: Int? = null,

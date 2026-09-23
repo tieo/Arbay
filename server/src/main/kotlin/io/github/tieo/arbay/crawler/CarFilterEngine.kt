@@ -34,8 +34,12 @@ object CarFilterEngine {
 
     /** @param keepNonVehicles when true, the parts/accessories guard is skipped, for a query that
      *  is itself asking for a part ("Crafter Drehkonsole") rather than a whole vehicle. */
-    fun apply(listings: List<Listing>, filters: CarFilters, keepNonVehicles: Boolean = false): List<Listing> =
-        partition(listings, filters, keepNonVehicles).kept
+    fun apply(
+        listings: List<Listing>,
+        filters: CarFilters,
+        keepNonVehicles: Boolean = false,
+        modelHint: String? = null,
+    ): List<Listing> = partition(listings, filters, keepNonVehicles, modelHint).kept
 
     /** What the vehicle criteria keep, and what they take away with the criterion that took it. */
     data class Partitioned(val kept: List<Listing>, val dropped: List<Pair<Listing, String>>)
@@ -49,14 +53,17 @@ object CarFilterEngine {
      * taken off the screen either — so the one filter that removes most of a vehicle search was
      * the one filter nobody could check.
      */
+    /** @param modelHint the model the search is for, which decides how a listing that does not
+     *  name its own model reads its van size codes (see [VanDimensions]). */
     fun partition(
         listings: List<Listing>,
         filters: CarFilters,
         keepNonVehicles: Boolean = false,
+        modelHint: String? = null,
     ): Partitioned {
         val kept = mutableListOf<Listing>()
         val dropped = mutableListOf<Pair<Listing, String>>()
-        listings.map { annotateVanDims(it) }.forEach { listing ->
+        listings.map { annotateVanDims(it, modelHint) }.forEach { listing ->
             val rejectedBy = rejectedBy(listing, filters, keepNonVehicles)
             if (rejectedBy == null) kept += listing else dropped += listing to rejectedBy
         }
@@ -76,12 +83,12 @@ object CarFilterEngine {
      *  filter were dropped (all others kept): the count a chip is hiding. Computed locally over
      *  the fetched candidate set; only card/text-derived specs are known, so it is an estimate
      *  for detail-only fields (fuel/gearbox), exact for price/year/mileage/power/van size. */
-    fun facetCounts(candidates: List<Listing>, filters: CarFilters): Map<String, Int> {
+    fun facetCounts(candidates: List<Listing>, filters: CarFilters, modelHint: String? = null): Map<String, Int> {
         if (filters.isEmpty) return emptyMap()
-        val base = apply(candidates, filters).size
+        val base = apply(candidates, filters, modelHint = modelHint).size
         val out = mutableMapOf<String, Int>()
         fun probe(key: String, relaxed: CarFilters) {
-            if (relaxed != filters) out[key] = apply(candidates, relaxed).size - base
+            if (relaxed != filters) out[key] = apply(candidates, relaxed, modelHint = modelHint).size - base
         }
         probe("price", filters.copy(minPriceEur = null, maxPriceEur = null))
         probe("year", filters.copy(firstRegFromYear = null, firstRegToYear = null))
@@ -105,26 +112,21 @@ object CarFilterEngine {
     }
 
     /**
-     * Fill the van size classes from the listing text.
-     *
-     * An explicit code ("L3H2") is what the ad says, and a filter may exclude on it. A word is
-     * not: every maker names its own variants, and each name means a different class. "Crafter 35
-     * Lang Plus XXL" was read as L3 and shown as a fact, while VW's own papers call that van's
-     * 4490 mm wheelbase "lang" and it is the longest one they build. So a word fills the value in
-     * for display and is left unverified, which is how the rest of the app already writes a figure
-     * it only inferred — and unverified is what keeps it from dropping anything.
+     * Fill the van size from the listing text, on the app's own scale, marking verified only what
+     * may exclude (see [VanDimensions]): a code on a Crafter can mean two different vans, and a
+     * roof word is exact for one maker and a guess for the next. A value that is only a hint is
+     * shown and left unverified, which is what keeps it from dropping anything.
      */
-    private fun annotateVanDims(listing: Listing): Listing {
+    private fun annotateVanDims(listing: Listing, modelHint: String?): Listing {
         val text = "${listing.title} ${listing.description ?: ""}"
-        val stated = VanDimensions.excludable(text)
-        val inferred = VanDimensions.inferred(text)
-        if (inferred.length == null && inferred.height == null) return listing
         val v = listing.vehicle ?: VehicleInfo()
+        val reading = VanDimensions.read(text, modelHint, v.wheelbaseMm)
+        if (reading.isEmpty) return listing
         val verified = v.verified.toMutableSet()
-        if (stated.length != null) verified += VehicleField.VAN_LENGTH
-        if (stated.height != null) verified += VehicleField.VAN_HEIGHT
+        if (reading.lengthSure) verified += VehicleField.VAN_LENGTH else verified -= VehicleField.VAN_LENGTH
+        if (reading.heightSure) verified += VehicleField.VAN_HEIGHT else verified -= VehicleField.VAN_HEIGHT
         return listing.copy(
-            vehicle = v.copy(vanLength = inferred.length, vanHeight = inferred.height, verified = verified),
+            vehicle = v.copy(vanLength = reading.length, vanHeight = reading.height, verified = verified),
         )
     }
 

@@ -1,6 +1,7 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.CarFilterEngine
+import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
@@ -220,8 +221,8 @@ class CarFilterEngineTest {
     @Test
     fun vanCodeExcludesOnExplicitMismatch() {
         val filters = CarFilters(vanLengths = setOf(3), vanHeights = setOf(2))
-        val match = carListing("m", PlatformId.KLEINANZEIGEN, "VW Crafter L3H2 Kastenwagen")
-        val wrong = carListing("w", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 kurz")
+        val match = carListing("m", PlatformId.KLEINANZEIGEN, "Fiat Ducato L3H2 Kastenwagen")
+        val wrong = carListing("w", PlatformId.KLEINANZEIGEN, "Fiat Ducato L1H1 kurz")
         val kept = CarFilterEngine.apply(listOf(match, wrong), filters)
         assertEquals(listOf("KLEINANZEIGEN:m"), kept.map { it.id })
     }
@@ -235,16 +236,14 @@ class CarFilterEngineTest {
     }
 
     @Test
-    fun vanSizeWordsNeverExclude() {
-        // A word names one maker's variant, not a class: VW's own papers call the Crafter's
-        // 4490 mm wheelbase "lang", and it is the longest one they build, so reading "Crafter 35
-        // Lang Plus XXL" as L3 and dropping it against an L4 filter throws away the very van
-        // being looked for. Every van described in words is kept, and the results mark it
-        // unchecked for that criterion.
+    fun vanSizeWordsNeverExcludeOnVansWithoutAScheme() {
+        // A word names one maker's variant, not a class: the same "lang" or "Hochdach" is a
+        // different size on each make. On a van whose maker's names are not known here, every
+        // van described in words is kept, and the results mark it unchecked for that criterion.
         val lengths = CarFilters(vanLengths = setOf(3))
-        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "VW Crafter Maxi 7 Meter")
-        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "VW Crafter lang Hochdach")
-        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "VW Crafter kompakt kurz")
+        val maxi = carListing("x", PlatformId.KLEINANZEIGEN, "Fiat Ducato Maxi 7 Meter")
+        val lang = carListing("l", PlatformId.KLEINANZEIGEN, "Fiat Ducato lang Hochdach")
+        val kurz = carListing("k", PlatformId.KLEINANZEIGEN, "Fiat Ducato kompakt kurz")
         assertEquals(
             listOf("KLEINANZEIGEN:x", "KLEINANZEIGEN:l", "KLEINANZEIGEN:k"),
             CarFilterEngine.apply(listOf(maxi, lang, kurz), lengths).map { it.id },
@@ -254,18 +253,34 @@ class CarFilterEngineTest {
         ))
 
         val heights = CarFilters(vanHeights = setOf(1))
-        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "VW Crafter Hochdach lang")
-        val flach = carListing("f", PlatformId.KLEINANZEIGEN, "VW Crafter Flachdach kurz")
+        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "Fiat Ducato Hochdach lang")
+        val flach = carListing("f", PlatformId.KLEINANZEIGEN, "Fiat Ducato Flachdach kurz")
         assertEquals(2, CarFilterEngine.apply(listOf(hochdach, flach), heights).size)
     }
 
     @Test
     fun vanSizeCodeExcludes() {
-        // A code is what the ad itself says, and it means the same thing on every van.
+        // A code is what the ad itself says, on a van whose maker counts the common way.
         val filters = CarFilters(vanLengths = setOf(3))
-        val l3 = carListing("a", PlatformId.KLEINANZEIGEN, "VW Crafter L3H2 Kasten")
-        val l1 = carListing("b", PlatformId.KLEINANZEIGEN, "VW Crafter L1H1 Kasten")
+        val l3 = carListing("a", PlatformId.KLEINANZEIGEN, "Fiat Ducato L3H2 Kasten")
+        val l1 = carListing("b", PlatformId.KLEINANZEIGEN, "Fiat Ducato L1H1 Kasten")
         assertEquals(listOf("KLEINANZEIGEN:a"), CarFilterEngine.apply(listOf(l3, l1), filters).map { it.id })
+    }
+
+    @Test
+    fun aCrafterSearchForTheTallestRoofKeepsWhatCouldBeIt() {
+        // The search this was found on: a Crafter with the super-high roof. Nine listings saying
+        // "Hochdach" or "L3H2" were dropped, and some of them were tall enough: sellers say
+        // Hochdach of any tall roof, and L3H2 means two different vans. Both stay, unchecked.
+        // What does go is a van that says for sure it is not super-high.
+        val filters = CarFilters(vanHeights = setOf(VanSize.SUPER_HIGH_ROOF))
+        val hochdach = carListing("h", PlatformId.KLEINANZEIGEN, "Volkswagen Crafter 2.0 TDI 35 Lang Hochdach DSG L3H2")
+        val bareCode = carListing("c", PlatformId.KLEINANZEIGEN, "Volkswagen Crafter 35 2.0 TDI Trendline L3H2 Aut.")
+        val superHigh = carListing("s", PlatformId.KLEINANZEIGEN, "VW Crafter 35 Kastenwagen L4H4 TDI 4MOTION")
+        val normal = carListing("n", PlatformId.KLEINANZEIGEN, "VW Crafter 35 Kastenwagen Normaldach")
+        val kept = CarFilterEngine.apply(listOf(hochdach, bareCode, superHigh, normal), filters)
+        assertEquals(listOf("KLEINANZEIGEN:h", "KLEINANZEIGEN:c", "KLEINANZEIGEN:s"), kept.map { it.id })
+        assertEquals(listOf("height"), filters.uncheckedFor(kept.first().vehicle))
     }
 
     @Test
