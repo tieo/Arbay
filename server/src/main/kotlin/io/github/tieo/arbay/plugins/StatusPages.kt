@@ -22,6 +22,14 @@ fun Application.configureStatusPages() {
         exception<SerializationException> { call, cause ->
             call.respondText(cause.message ?: "Invalid request body", status = HttpStatusCode.BadRequest)
         }
+        // A market turning a fetch away is the market's answer, not the server failing: said as
+        // such, with its reason, rather than as an internal error.
+        exception<io.github.tieo.arbay.crawler.CrawlerBlockedException> { call, cause ->
+            call.respondText(
+                "The market refused: ${cause.message ?: cause.errorType.name}",
+                status = HttpStatusCode.BadGateway,
+            )
+        }
         exception<Throwable> { call, cause ->
             // A call that was called off (the app hung up mid-stream) has nobody to answer and
             // nothing wrong with it; the route has already said why in the log.
