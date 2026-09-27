@@ -91,6 +91,9 @@ private val SCENES: List<Scene> = buildList {
     add(scene("results", "an-auction-among-the-prices") {
         Results(PreviewData.withAuction, PreviewData.marketAnswers)
     })
+    add(scene("results", "one-offer-on-two-markets") {
+        Results(PreviewData.onTwoMarkets, PreviewData.marketAnswers)
+    })
     add(scene("results", "empty") { Results(emptyList(), PreviewData.nobodyHadAnything) })
     add(scene("results", "failed") { Results(emptyList(), PreviewData.everyoneFailed) })
     add(scene("results", "some-markets-failed") {
@@ -125,6 +128,10 @@ private val SCENES: List<Scene> = buildList {
             listing = PreviewData.fullyDescribed,
             onDismiss = {},
         )
+    })
+    add(scene("listing", "also-on-another-market", tall = true) {
+        val (lead, copy) = PreviewData.onTwoMarkets.let { it.first() to it.last() }
+        io.github.tieo.arbay.ui.screen.ListingDetailSheet(listing = lead, elsewhere = listOf(copy), onDismiss = {})
     })
     add(scene("hidden", "everything-not-on-the-screen") {
         io.github.tieo.arbay.ui.screen.HiddenSheet(

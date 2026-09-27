@@ -230,6 +230,8 @@ private fun UncheckedDialog(unchecked: List<String>, onClose: () -> Unit) {
 @Composable
 internal fun ListingCard(
     listing: Listing,
+    // The same offer on other markets, which this card stands for as well.
+    elsewhere: List<Listing> = emptyList(),
     onBan: (() -> Unit)? = null,
     // Ask to be told this many minutes before this auction ends, or null to stop asking. Only ever
     // called for an auction: everything else has no end to count back from.
@@ -366,8 +368,10 @@ internal fun ListingCard(
                 // metadata like the rest of it, not a badge.
                 val origin = originCountry(listing)
                 MetaLine(
-                    source = if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
-                    else listing.platformId.displayName,
+                    source = (if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
+                    else listing.platformId.displayName) +
+                        elsewhere.map { it.platformId }.distinct().filter { it != listing.platformId }
+                            .joinToString("") { " + ${it.displayName}" },
                     sold = listing.sold,
                     condition = listing.condition?.takeIf { !listing.sold },
                     vehicle = listing.vehicle,
@@ -537,7 +541,7 @@ internal fun ListingCard(
         )
     }
     if (showDetail) {
-        ListingDetailSheet(listing = listing, onDismiss = { showDetail = false })
+        ListingDetailSheet(listing = listing, elsewhere = elsewhere, onDismiss = { showDetail = false })
     }
 }
 

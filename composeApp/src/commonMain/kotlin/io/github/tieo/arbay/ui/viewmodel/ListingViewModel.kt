@@ -218,7 +218,12 @@ class ListingViewModel(
             sortListings(sample.filter { kept(it, emptySet(), sampleBlocked) }),
         )
 
-    val listings: StateFlow<List<Listing>> = combine(marketBasis, _marketFilter) { kept, filter ->
+    /**
+     * One entry per thing offered, not one per market offering it: copies of one offer (see
+     * [SameOffer.group]) are folded, the cheapest leading, since the point of the app is the
+     * cheapest way to get the thing. The other copies stay reachable from the lead.
+     */
+    val offers: StateFlow<List<SameOffer>> = combine(marketBasis, _marketFilter) { kept, filter ->
         val (markets, countries) = filter
         // Markets and countries are one list of picks at two grains, so they add up rather than
         // narrow each other: picking Germany and ricardo.ch shows both, where requiring both at
@@ -229,44 +234,25 @@ class ListingViewModel(
                 listing.platformId in markets ||
                 MarketSets.countryOf(listing.platformId) in countries
         }
-        collapseRepeats(picked)
+        SameOffer.group(picked, ::priceOf)
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        sample.filter { kept(it, emptySet(), sampleBlocked) },
+        SameOffer.group(sample.filter { kept(it, emptySet(), sampleBlocked) }, ::priceOf),
     )
 
-    /**
-     * One row per thing offered, not one per market offering it.
-     *
-     * The same seller lists the same item on every eBay locale, so a search comes back with the
-     * identical title three or six times over — in one measured search, 106 of 400 results were
-     * repeats of 42 titles. Which of the copies to keep is not a matter of taste here: the point of
-     * the app is the cheapest way to get the thing, so the cheapest copy stays and the rest go. The
-     * comparison across borders is not lost, it is the thing being decided.
-     */
-    private fun collapseRepeats(listings: List<Listing>): List<Listing> {
-        if (listings.size < 2) return listings
-        val seen = HashMap<String, Listing>(listings.size)
-        val order = ArrayList<String>(listings.size)
-        for (l in listings) {
-            val key = l.title.lowercase().filter { it.isLetterOrDigit() }
-            if (key.length < 12) {
-                // Too short to be sure two listings with it are the same thing.
-                order.add(l.id)
-                seen[l.id] = l
-                continue
-            }
-            val existing = seen[key]
-            if (existing == null) {
-                order.add(key)
-                seen[key] = l
-            } else if (priceOf(l) < priceOf(existing)) {
-                seen[key] = l
-            }
-        }
-        return order.mapNotNull { seen[it] }
-    }
+    /** The lead of each offer: what the results list, count and price. */
+    val listings: StateFlow<List<Listing>> = offers
+        .map { all -> all.map { it.lead } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), offers.value.map { it.lead })
+
+    /** The other copies of each offer, by its lead's id. */
+    val elsewhere: StateFlow<Map<String, List<Listing>>> = offers
+        .map { all -> copiesByLead(all) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), copiesByLead(offers.value))
+
+    private fun copiesByLead(offers: List<SameOffer>): Map<String, List<Listing>> =
+        offers.filter { it.elsewhere.isNotEmpty() }.associate { it.lead.id to it.elsewhere }
 
     /** Everything the markets returned, before any filter of ours. What the empty results screen
      *  needs to tell "nobody had one" apart from "the filters hide all of them". */

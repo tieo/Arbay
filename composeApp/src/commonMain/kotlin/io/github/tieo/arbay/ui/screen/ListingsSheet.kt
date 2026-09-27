@@ -168,6 +168,8 @@ fun ListingsSheet(
     openTermEditor: Boolean = false,
 ) {
     val listings by listingViewModel.listings.collectAsState()
+    // An offer on several markets is one card, whose detail leads to each market carrying it.
+    val elsewhere by listingViewModel.elsewhere.collectAsState()
     val fetchedListings by listingViewModel.fetched.collectAsState()
     val notSearched by listingViewModel.notSearched.collectAsState()
     val actionFailed by listingViewModel.error.collectAsState()
@@ -1215,6 +1217,7 @@ fun ListingsSheet(
                     val undatedFrom = if (sortMode != SortMode.NEWEST) -1
                     else displayedActiveListings.indexOfFirst { it.listingDate == null }
                     itemsIndexed(displayedActiveListings, key = { _, l -> "active-${l.id}" }) { index, listing ->
+                        val copies = elsewhere[listing.id].orEmpty()
                         if (index == undatedFrom && undatedFrom > 0) {
                             Text(
                                 "Below: offers from markets that do not publish a date, so they " +
@@ -1226,8 +1229,9 @@ fun ListingsSheet(
                         }
                         ListingCard(
                             listing = listing,
+                            elsewhere = copies,
                             carFilters = carFilters,
-                            onBan = { listingViewModel.ban(listing) },
+                            onBan = { (listOf(listing) + copies).forEach { listingViewModel.ban(it) } },
                             onAuctionReminder = { lead -> listingViewModel.remindBeforeAuction(listing, lead) },
                             onBlockWord = blockWord,
                             searchQuery = searchQuery,

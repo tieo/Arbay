@@ -51,6 +51,8 @@ fun ListingDetailSheet(
     // shown as a banner, since "removed from the platform" is worth knowing before "open on site"
     // is tapped and does nothing.
     isArchived: Boolean = false,
+    // The same offer on other markets. Each is a way to the seller, and a market can ask less.
+    elsewhere: List<Listing> = emptyList(),
     onDismiss: () -> Unit,
 ) {
     // eBay says where a thing is on the item page and nowhere on the card it was found through, so
@@ -295,6 +297,20 @@ fun ListingDetailSheet(
                 Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(if (isArchived) "Try the original page" else "Open on ${listing.platformId.displayName}")
+            }
+            elsewhere.forEach { copy ->
+                OutlinedButton(
+                    onClick = { openBrowser(copy.url) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    val price = copy.comparablePrice
+                    Text(
+                        "Also on ${copy.platformId.displayName}" +
+                            if (price != listing.comparablePrice) " · ${price.format()}" else "",
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))

@@ -151,6 +151,13 @@ object PreviewData {
         ),
     )
 
+    /** The first offer again on a second market, as a seller who lists everywhere puts it: same
+     *  words, price and place, so the results show it as one offer on two markets. */
+    val onTwoMarkets: List<Listing> = active + active[0].copy(
+        id = "${PlatformId.EBAY_DE}:1b", platformId = PlatformId.EBAY_DE, externalId = "1b",
+        url = "https://example.com/1b",
+    )
+
     /** An auction among the fixed prices, so a render shows what a bid looks like beside a price.
      *  Ends soon enough to be the case that is allowed to interrupt. */
     val withAuction: List<Listing> = active.mapIndexed { i, l ->
