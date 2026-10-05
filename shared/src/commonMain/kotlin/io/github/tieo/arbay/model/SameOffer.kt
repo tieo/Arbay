@@ -27,8 +27,9 @@ data class SameOffer(val listings: List<Listing>) {
          * markets are copies as well when they ask the same price in the same currency, are in the
          * same place, and say the same thing: their titles share most of their words, or both
          * state the same first registration and mileage. Any vehicle fact both state and disagree
-         * on keeps them apart, under either rule: a dealer titles every van of a kind alike. A dealer with many vans at one address prices several of them
-         * alike, which is why price and place alone are not enough.
+         * on keeps them apart, under either rule: a dealer titles every van of a kind alike. A
+         * dealer with many vans at one address prices several of them alike, which is why price
+         * and place alone are not enough.
          */
         fun group(listings: List<Listing>, price: (Listing) -> Long = { it.effectivePrice.amount }): List<SameOffer> {
             if (listings.size < 2) return listings.map { SameOffer(listOf(it)) }
