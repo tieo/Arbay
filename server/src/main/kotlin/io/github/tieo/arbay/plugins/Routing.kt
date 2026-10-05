@@ -15,6 +15,8 @@ import io.github.tieo.arbay.routes.placeRoutes
 import io.github.tieo.arbay.routes.productRoutes
 import io.github.tieo.arbay.routes.taxonomyRoutes
 import io.ktor.server.application.*
+import io.ktor.http.CacheControl
+import io.ktor.server.http.content.CompressedFileType
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.routing.*
 
@@ -40,7 +42,19 @@ fun Application.configureRouting() {
         imageProxyRoutes()
         placeRoutes()
         // The web app, when this server was built with it (see the shadowJar task): every other
-        // path is one of its files, and the app itself is index.html.
-        staticResources("/", "web", index = "index.html")
+        // path is one of its files, and the app itself is index.html. A wasm module is named by
+        // its content, so a browser may keep it for good; everything else is asked about again,
+        // since index.html and the script chunks keep their names from one build to the next.
+        staticResources("/", "web", index = "index.html") {
+            preCompressed(CompressedFileType.GZIP)
+            cacheControl { url ->
+                if (url.path.substringAfterLast('/').contains(".wasm")) listOf(CacheControl.MaxAge(maxAgeSeconds = 31_536_000, visibility = CacheControl.Visibility.Public), immutable)
+                else listOf(CacheControl.NoCache(null))
+            }
+        }
     }
+}
+
+private val immutable = object : CacheControl(null) {
+    override fun toString() = "immutable"
 }

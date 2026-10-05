@@ -1,3 +1,5 @@
+import java.util.zip.GZIPOutputStream
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.ktor)
@@ -74,10 +76,30 @@ tasks.register<JavaExec>("dumpCapabilities") {
     classpath = sourceSets["main"].runtimeClasspath
 }
 // The web app, the phone app's screens built for a browser, rides in the server's jar and is
-// served at /. Only the jar carries it, so tests and local runs need no browser build.
-tasks.named<Jar>("shadowJar") {
+// served at /. Only the jar carries it, so tests and local runs need no browser build. Each file
+// sits beside a gzip copy, which the server sends to a browser that accepts it: the two wasm
+// modules are 15 MB as built and 5 MB compressed, and that is the wait before the first screen.
+val webAppDist = rootProject.layout.projectDirectory.dir("composeApp/build/dist/wasmJs/productionExecutable")
+val compressWebApp by tasks.registering {
     dependsOn(":composeApp:wasmJsBrowserDistribution")
-    from(rootProject.layout.projectDirectory.dir("composeApp/build/dist/wasmJs/productionExecutable")) {
-        into("web")
+    val source = webAppDist
+    val target = layout.buildDirectory.dir("webapp/web")
+    inputs.dir(source)
+    outputs.dir(target)
+    doLast {
+        val out = target.get().asFile
+        out.deleteRecursively()
+        source.asFile.copyRecursively(out)
+        out.walkTopDown()
+            .filter { it.isFile && it.extension in setOf("wasm", "js", "html", "css", "json") }
+            .forEach { file ->
+                GZIPOutputStream(File(file.path + ".gz").outputStream()).use { gz ->
+                    file.inputStream().use { it.copyTo(gz) }
+                }
+            }
     }
+}
+tasks.named<Jar>("shadowJar") {
+    dependsOn(compressWebApp)
+    from(layout.buildDirectory.dir("webapp"))
 }
