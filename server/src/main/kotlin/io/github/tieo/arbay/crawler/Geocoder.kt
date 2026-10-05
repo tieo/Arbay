@@ -54,7 +54,13 @@ object Geocoder {
                 val lat = c[9].toDoubleOrNull() ?: return@forEach
                 val lon = c[10].toDoubleOrNull() ?: return@forEach
                 c[1].trim().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
-                if (c[1].isNotBlank() && c[2].isNotBlank()) placeRows.add(Place(country, c[1].trim(), c[2].trim(), lat, lon))
+                // Germany gives courts, authorities and companies postcodes of their own, listed
+                // under their names with a numeric state code and no accuracy; real places carry
+                // the state's letters ("BW"). Austria and Switzerland have no such rows.
+                val organisation = c.getOrNull(11).isNullOrBlank() && c[4].isNotEmpty() && c[4].all { it.isDigit() }
+                if (!organisation && c[1].isNotBlank() && c[2].isNotBlank()) {
+                    placeRows.add(Place(country, c[1].trim(), c[2].trim(), lat, lon))
+                }
                 c[2].trim().lowercase().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
             }
         }
