@@ -212,9 +212,9 @@ fun ListingDetailSheet(
                 ) = add(Triple(label, value, field))
                 val specs = buildList {
                     v.firstRegYear?.let {
-                        spec("First registered", v.firstRegMonth?.let { m -> "%02d/%d".format(m, it) } ?: "$it", VehicleField.FIRST_REG_YEAR)
+                        spec("First registered", v.firstRegMonth?.let { m -> monthYear(m, it) } ?: "$it", VehicleField.FIRST_REG_YEAR)
                     }
-                    v.mileageKm?.let { spec("Mileage", "${"%,d".format(it).replace(',', '.')} km", VehicleField.MILEAGE) }
+                    v.mileageKm?.let { spec("Mileage", "${grouped(it.toLong(), '.')} km", VehicleField.MILEAGE) }
                     v.powerKw?.let { spec("Power", "$it kW · ${(it * 1.35962).toInt()} hp", VehicleField.POWER) }
                     v.displacementCc?.let { spec("Engine", "$it cc", VehicleField.DISPLACEMENT) }
                     v.fuel?.let { spec("Fuel", it.name.lowercase().replace('_', ' '), VehicleField.FUEL) }
@@ -269,7 +269,7 @@ fun ListingDetailSheet(
 
             listing.seller?.let { seller ->
                 Text(
-                    "Sold by ${seller.name}" + (seller.rating?.let { " · ${"%.1f".format(it)}★" } ?: ""),
+                    "Sold by ${seller.name}" + (seller.rating?.let { " · ${decimals(it, 1)}★" } ?: ""),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

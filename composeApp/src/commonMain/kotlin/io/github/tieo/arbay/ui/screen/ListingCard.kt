@@ -137,10 +137,10 @@ private fun MetaLine(
         }
         if (v != null) {
             v.firstRegYear?.let {
-                val ym = if (v.firstRegMonth != null) "%02d/%d".format(v.firstRegMonth, it) else it.toString()
+                val ym = v.firstRegMonth?.let { month -> monthYear(month, it) } ?: it.toString()
                 add(ym to v.isVerified(VehicleField.FIRST_REG_YEAR))
             }
-            v.mileageKm?.let { add("${"%,d".format(it)} km" to v.isVerified(VehicleField.MILEAGE)) }
+            v.mileageKm?.let { add("${grouped(it.toLong())} km" to v.isVerified(VehicleField.MILEAGE)) }
             v.powerKw?.let { add("$it kW" to v.isVerified(VehicleField.POWER)) }
             v.gearbox?.let {
                 add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to

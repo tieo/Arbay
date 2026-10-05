@@ -102,6 +102,14 @@ class ArbayClient(
     suspend fun getProducts(): List<TrackedProduct> =
         client.get("$baseUrl/api/products").body()
 
+    /** The name of the place a point is in, or null when the server knows none near it. */
+    suspend fun placeAt(lat: Double, lon: Double): String? = orElse(null) {
+        client.get("$baseUrl/api/place") {
+            parameter("lat", lat)
+            parameter("lon", lon)
+        }.bodyAsText().takeIf { it.isNotBlank() }
+    }
+
     /** What every market can do, declared by its crawler. */
     suspend fun getMarketCapabilities(): List<MarketCapability> =
         client.get("$baseUrl/api/markets").body()

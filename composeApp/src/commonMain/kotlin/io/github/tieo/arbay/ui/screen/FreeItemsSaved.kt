@@ -367,7 +367,7 @@ internal fun SavedSheet(
                                         Text(item.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text(
-                                                "score: ${"%.2f".format(item.relevanceScore ?: 0.0)}",
+                                                "score: ${decimals(item.relevanceScore ?: 0.0, 2)}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.error,
                                             )

@@ -30,12 +30,19 @@ object Geocoder {
     private val dir = DataDir.file("geonames")
 
     // "CC:zip" and "CC:city" → (lat, lon). Built once, lazily.
-    private val index: Map<String, Pair<Double, Double>> by lazy { buildIndex() }
+    // Every postal row as well, for the way back from a point to the place it is in.
+    private val loaded: Pair<Map<String, Pair<Double, Double>>, List<Place>> by lazy { buildIndex() }
+    private val index: Map<String, Pair<Double, Double>> get() = loaded.first
+    private val places: List<Place> get() = loaded.second
+
+    /** A postcode with the place it belongs to, as written in GeoNames. */
+    data class Place(val country: String, val zip: String, val name: String, val lat: Double, val lon: Double)
 
     val isAvailable: Boolean get() = index.isNotEmpty()
 
-    private fun buildIndex(): Map<String, Pair<Double, Double>> {
+    private fun buildIndex(): Pair<Map<String, Pair<Double, Double>>, List<Place>> {
         val map = HashMap<String, Pair<Double, Double>>()
+        val placeRows = ArrayList<Place>()
         dir.mkdirs()
         for (cc in COUNTRIES) {
             val txt = try { ensureCountry(cc) } catch (e: Exception) { log.warn("geocode load {} failed: {}", cc, e.message); null }
@@ -47,11 +54,12 @@ object Geocoder {
                 val lat = c[9].toDoubleOrNull() ?: return@forEach
                 val lon = c[10].toDoubleOrNull() ?: return@forEach
                 c[1].trim().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
+                if (c[1].isNotBlank() && c[2].isNotBlank()) placeRows.add(Place(country, c[1].trim(), c[2].trim(), lat, lon))
                 c[2].trim().lowercase().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
             }
         }
         log.info("Geocoder indexed {} postal/place keys across {} countries", map.size, COUNTRIES.size)
-        return map
+        return map to placeRows
     }
 
     private fun ensureCountry(cc: String): String? {
@@ -100,6 +108,11 @@ object Geocoder {
         }
         return best
     }
+
+    /** The postal place nearest to a point, across every country indexed: where someone is, in
+     *  the words they would type it. Null when nothing is indexed. */
+    fun nearestPlace(lat: Double, lon: Double): Place? =
+        places.minByOrNull { haversine(lat, lon, it.lat, it.lon) }
 
     /** Coordinates for a listing location, or null if it cannot be resolved. Tries zip then city,
      *  scoped to the normalised country; if the country is unknown, tries the zip across all. */

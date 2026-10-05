@@ -1508,9 +1508,23 @@ internal fun Money.format(): String {
 }
 
 /** Thousands in groups, because a van at 10000 and one at 100000 are one glance apart otherwise. */
-private fun grouped(value: Long): String {
+/** A whole number with its thousands grouped by [separator]: 88700 reads 88,700. */
+internal fun grouped(value: Long, separator: Char = ','): String {
     val digits = value.toString()
     val sign = if (digits.startsWith("-")) "-" else ""
     val body = digits.removePrefix("-")
-    return sign + body.reversed().chunked(3).joinToString(",").reversed()
+    return sign + body.reversed().chunked(3).joinToString(separator.toString()).reversed()
+}
+
+/** A month and year as 03/2019. */
+internal fun monthYear(month: Int, year: Int): String = "${month.toString().padStart(2, '0')}/$year"
+
+/** A number with exactly [places] decimals, rounded half up: 4.25 to one place reads 4.3. */
+internal fun decimals(value: Double, places: Int): String {
+    var scale = 1L
+    repeat(places) { scale *= 10 }
+    val scaled = kotlin.math.floor(kotlin.math.abs(value) * scale + 0.5).toLong()
+    val sign = if (value < 0 && scaled != 0L) "-" else ""
+    if (places == 0) return "$sign$scaled"
+    return "$sign${scaled / scale}.${(scaled % scale).toString().padStart(places, '0')}"
 }

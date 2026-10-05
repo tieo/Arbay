@@ -73,3 +73,11 @@ tasks.register<JavaExec>("dumpCapabilities") {
     mainClass.set("io.github.tieo.arbay.tools.CapabilityDumpKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
+// The web app, the phone app's screens built for a browser, rides in the server's jar and is
+// served at /. Only the jar carries it, so tests and local runs need no browser build.
+tasks.named<Jar>("shadowJar") {
+    dependsOn(":composeApp:wasmJsBrowserDistribution")
+    from(rootProject.layout.projectDirectory.dir("composeApp/build/dist/wasmJs/productionExecutable")) {
+        into("web")
+    }
+}

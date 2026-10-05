@@ -288,7 +288,7 @@ internal fun SwipeCardStack(
                                 val dist = sqrt(tentativeX * tentativeX + tentativeY * tentativeY)
                                 if (dist >= lockThreshold) {
                                     // Angle from positive X axis: 0°=right, 90°=down, 180°=left
-                                    val angle = atan2(tentativeY, tentativeX.absoluteValue) * 180f / Math.PI.toFloat()
+                                    val angle = atan2(tentativeY, tentativeX.absoluteValue) * 180f / kotlin.math.PI.toFloat()
                                     // Dead zone: 30°-60° from horizontal (diagonal area)
                                     lockedAxis = when {
                                         angle < deadZoneAngle -> "horizontal"  // 0°-30° → horizontal
