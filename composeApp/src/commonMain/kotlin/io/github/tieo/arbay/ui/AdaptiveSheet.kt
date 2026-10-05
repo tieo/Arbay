@@ -52,9 +52,11 @@ fun AdaptiveSheet(
     ) {
         Surface(
             modifier = if (LocalDesktopMode.current) {
+                // The share of the window first, then the cap: the other way round took the share
+                // of the cap, and a results sheet on a laptop was a third of its intended width.
                 Modifier
-                    .widthIn(max = maxWidth.dp)
                     .fillMaxWidth(widthFraction)
+                    .widthIn(max = maxWidth.dp)
                     .fillMaxHeight(0.85f)
             } else {
                 Modifier.fillMaxSize()
@@ -90,8 +92,8 @@ fun AdaptiveFormSheet(
         Surface(
             modifier = if (LocalDesktopMode.current) {
                 Modifier
-                    .widthIn(max = maxWidth.dp)
                     .fillMaxWidth(0.45f)
+                    .widthIn(max = maxWidth.dp)
             } else {
                 Modifier.fillMaxSize()
             },
