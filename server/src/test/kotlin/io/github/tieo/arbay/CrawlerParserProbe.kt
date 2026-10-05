@@ -13,7 +13,12 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.test.*
 
-class CrawlerParserTest {
+/**
+ * Runs each market's parser over a results page saved by hand under /tmp, and prints what it read.
+ * A probe, so it stays out of the test run (`./gradlew :server:probes`): what lies in /tmp is
+ * whatever was saved there last, by anything, and the parsers' tests proper use fixtures.
+ */
+class CrawlerParserProbe {
 
     private val query = SearchQuery(text = "Sony WH-1000XM4", category = MarketGroup.GENERAL)
 
