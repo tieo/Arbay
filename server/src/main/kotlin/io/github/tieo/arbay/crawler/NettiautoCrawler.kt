@@ -2,7 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -60,7 +60,7 @@ class NettiautoCrawler(private val client: HttpClient) : Crawler {
         }.distinctBy { it.externalId }
     }
 
-    private fun parseCard(card: Element, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseCard(card: Element, scrapedAt: kotlin.time.Instant): Listing? {
         val href = card.selectFirst("a.product-card__image-link, a[href*=/]")?.attr("href")
             ?.takeIf { it.isNotBlank() } ?: return null
         val externalId = ID_REGEX.find(href)?.groupValues?.get(1) ?: return null

@@ -3,8 +3,8 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 

@@ -5,7 +5,7 @@ import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 

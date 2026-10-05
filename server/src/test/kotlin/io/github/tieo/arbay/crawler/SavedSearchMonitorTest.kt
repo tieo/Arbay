@@ -6,7 +6,7 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SaleType
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import io.github.tieo.arbay.model.displayName

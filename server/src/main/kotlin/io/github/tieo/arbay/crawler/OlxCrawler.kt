@@ -2,7 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import kotlin.math.roundToInt
 import org.jsoup.Jsoup
@@ -87,7 +87,7 @@ class OlxCrawler(
         }
     }
 
-    private fun parseAd(element: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseAd(element: JsonElement, scrapedAt: kotlin.time.Instant): Listing? {
         val obj = element.jsonObject
         val externalId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
         val title = obj["title"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }

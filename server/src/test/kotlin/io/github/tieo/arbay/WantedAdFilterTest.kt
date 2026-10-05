@@ -10,7 +10,7 @@ import io.github.tieo.arbay.model.SearchQuery
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /** An agent noun names both a machine and the tradesman who works it, so a compound search that
  *  looks under it must not return job postings. */

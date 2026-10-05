@@ -912,7 +912,7 @@ fun MainScreen(
 
 /** How long ago something happened, in the coarsest unit that still says it. */
 private fun ago(millis: Long): String {
-    val minutes = ((kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - millis) / 60_000L)
+    val minutes = ((kotlin.time.Clock.System.now().toEpochMilliseconds() - millis) / 60_000L)
         .coerceAtLeast(0L)
     return when {
         minutes < 2 -> "just now"

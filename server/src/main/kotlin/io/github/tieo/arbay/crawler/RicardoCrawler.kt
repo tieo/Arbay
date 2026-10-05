@@ -2,8 +2,8 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.json.*
 
 /**
@@ -107,7 +107,7 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage
         return sb.toString()
     }
 
-    private fun parseArticle(element: JsonElement, scrapedAt: kotlinx.datetime.Instant, vehiclesOnly: Boolean): Listing? {
+    private fun parseArticle(element: JsonElement, scrapedAt: kotlin.time.Instant, vehiclesOnly: Boolean): Listing? {
         val obj = element as? JsonObject ?: return null
         val externalId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
         val title = obj["title"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }

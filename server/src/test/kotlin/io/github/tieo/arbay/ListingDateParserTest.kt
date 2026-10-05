@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.ListingDateParser
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus

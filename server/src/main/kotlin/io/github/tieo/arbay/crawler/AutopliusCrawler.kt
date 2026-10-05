@@ -2,7 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -44,7 +44,7 @@ class AutopliusCrawler(private val client: HttpClient) : Crawler {
         }.distinctBy { it.externalId }
     }
 
-    private fun parseCard(card: Element, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseCard(card: Element, scrapedAt: kotlin.time.Instant): Listing? {
         val href = card.attr("href").takeIf { it.startsWith("http") } ?: return null
         val externalId = ID_REGEX.find(href)?.groupValues?.get(1) ?: return null
         val title = card.selectFirst(".announcement-title")?.text()?.trim()

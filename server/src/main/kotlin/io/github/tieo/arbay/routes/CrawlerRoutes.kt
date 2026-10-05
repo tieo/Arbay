@@ -473,7 +473,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(
                 id = id, platformId = platform, externalId = id, url = url, title = "",
-                price = Money(0, Currency.EUR), scrapedAt = kotlinx.datetime.Clock.System.now(),
+                price = Money(0, Currency.EUR), scrapedAt = kotlin.time.Clock.System.now(),
             )
             val detail = crawler.fetchDetail(stub)
             if (detail == null) {

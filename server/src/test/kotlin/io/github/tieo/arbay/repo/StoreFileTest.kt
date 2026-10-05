@@ -5,7 +5,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import org.slf4j.LoggerFactory
 import java.io.File
 import kotlin.concurrent.thread

@@ -123,12 +123,6 @@ compose.desktop {
 }
 
 // Off-screen gallery renderer: dumps a PNG per view to build/gallery for design review.
-// Pinned on every JVM runtime classpath, tests included: the code is compiled against 0.6.2, and a
-// test classpath left to resolve a newer one transitively lost kotlinx.datetime.Clock at runtime.
-configurations.matching { it.name.startsWith("jvm") && it.name.endsWith("RuntimeClasspath") }.configureEach {
-    resolutionStrategy { force("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2") }
-}
-
 tasks.register<JavaExec>("renderGallery") {
     group = "arbay"
     description = "Render every view to build/gallery/*.png"

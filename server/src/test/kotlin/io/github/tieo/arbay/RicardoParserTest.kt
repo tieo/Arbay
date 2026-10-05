@@ -134,7 +134,7 @@ class RicardoParserTest {
         url = "https://www.ricardo.ch/de/a/1/",
         title = title,
         price = io.github.tieo.arbay.model.Money(500_000, Currency.CHF),
-        scrapedAt = kotlinx.datetime.Clock.System.now(),
+        scrapedAt = kotlin.time.Clock.System.now(),
     )
 
     @Test

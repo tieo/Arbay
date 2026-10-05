@@ -2,7 +2,7 @@ package io.github.tieo.arbay.repo
 
 import io.github.tieo.arbay.model.AuctionReminder
 import io.github.tieo.arbay.model.SubfilterMatch
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * What has been handed to the phone to raise as notifications, kept until the phone says it

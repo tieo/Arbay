@@ -3,7 +3,7 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.classifier.EmbeddingModel
 import io.github.tieo.arbay.classifier.FreeItemScorer
 import io.github.tieo.arbay.model.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.*
 
 class FreeItemScorerTest {

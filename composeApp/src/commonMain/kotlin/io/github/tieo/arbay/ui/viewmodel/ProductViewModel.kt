@@ -7,7 +7,7 @@ import io.github.tieo.arbay.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 class ProductViewModel(
     private val client: ArbayClient = ArbayClient(),

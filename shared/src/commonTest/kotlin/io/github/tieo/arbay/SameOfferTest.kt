@@ -7,7 +7,7 @@ import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SameOffer
 import io.github.tieo.arbay.model.VehicleInfo
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

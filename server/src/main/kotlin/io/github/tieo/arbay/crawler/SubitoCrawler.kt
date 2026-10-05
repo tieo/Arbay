@@ -2,7 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
@@ -59,7 +59,7 @@ class SubitoCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage,
         }
     }
 
-    private fun parseItem(element: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseItem(element: JsonElement, scrapedAt: kotlin.time.Instant): Listing? {
         val obj = element.jsonObject
         val title = obj["subject"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
             ?: return null

@@ -4,8 +4,8 @@ import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.repo.writeTextAtomically
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json

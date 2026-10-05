@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.PlatformId
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 
 /**

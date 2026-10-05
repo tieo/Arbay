@@ -575,7 +575,7 @@ class FreeItemViewModel(
 
     private fun logTelemetry(action: String, detail: String) {
         val event = TelemetryEvent(
-            timestamp = kotlinx.datetime.Clock.System.now(),
+            timestamp = kotlin.time.Clock.System.now(),
             action = action,
             detail = detail,
         )
@@ -585,7 +585,7 @@ class FreeItemViewModel(
 
 @Serializable
 data class TelemetryEvent(
-    val timestamp: kotlinx.datetime.Instant,
+    val timestamp: kotlin.time.Instant,
     val action: String,
     val detail: String,
 )

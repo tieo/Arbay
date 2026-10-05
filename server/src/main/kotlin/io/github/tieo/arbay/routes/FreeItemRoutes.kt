@@ -82,7 +82,7 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
                     location = feedback.locationText?.let { Location.parse(it) },
                     description = feedback.description,
                     relevanceScore = feedback.relevanceScore,
-                    scrapedAt = kotlinx.datetime.Clock.System.now(),
+                    scrapedAt = kotlin.time.Clock.System.now(),
                 )
             } else null
             FreeItemFeedbackStore.add(feedback.listingId, feedback.title, action, listing)

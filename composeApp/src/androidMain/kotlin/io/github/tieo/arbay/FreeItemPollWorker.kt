@@ -140,8 +140,8 @@ class FreeItemPollWorker(
 }
 
 /** "ends in 40 min" / "ends in 3 h", or nothing once it is over. */
-private fun endsIn(endsAt: kotlinx.datetime.Instant): String? {
-    val minutes = (endsAt - kotlinx.datetime.Clock.System.now()).inWholeMinutes
+private fun endsIn(endsAt: kotlin.time.Instant): String? {
+    val minutes = (endsAt - kotlin.time.Clock.System.now()).inWholeMinutes
     return when {
         minutes < 0 -> null
         minutes < 60 -> "ends in $minutes min"

@@ -9,7 +9,7 @@ import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleInfo
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -394,7 +394,7 @@ class CarFilterEngineTest {
         url = "https://www.2dehands.be/v/1",
         title = title,
         price = Money(900_000, Currency.EUR),
-        scrapedAt = kotlinx.datetime.Clock.System.now(),
+        scrapedAt = kotlin.time.Clock.System.now(),
     )
 
     @Test
@@ -490,6 +490,6 @@ class CarFilterEngineTest {
         url = "https://x/1",
         title = title,
         price = io.github.tieo.arbay.model.Money(5000, io.github.tieo.arbay.model.Currency.EUR),
-        scrapedAt = kotlinx.datetime.Clock.System.now(),
+        scrapedAt = kotlin.time.Clock.System.now(),
     )
 }

@@ -4,7 +4,7 @@ import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.carCriteria
 import io.ktor.client.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 
 /**
@@ -137,7 +137,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler {
             .distinctBy { it.externalId }
     }
 
-    private fun parseItem(element: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseItem(element: JsonElement, scrapedAt: kotlin.time.Instant): Listing? {
         val obj = element as? JsonObject ?: return null
         val externalId = obj["id"]?.jsonPrimitive?.longOrNull?.toString() ?: return null
         val title = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }

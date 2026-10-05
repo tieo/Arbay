@@ -3,7 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import org.jsoup.Jsoup
 
 /**

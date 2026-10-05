@@ -4,7 +4,7 @@ import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime

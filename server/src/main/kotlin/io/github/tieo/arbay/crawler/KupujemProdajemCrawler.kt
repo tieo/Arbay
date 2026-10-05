@@ -2,7 +2,7 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
@@ -60,7 +60,7 @@ class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
         }
     }
 
-    private fun parseAd(element: JsonElement, scrapedAt: kotlinx.datetime.Instant, model: String?): Listing? {
+    private fun parseAd(element: JsonElement, scrapedAt: kotlin.time.Instant, model: String?): Listing? {
         val obj = element.jsonObject
         // Only real car ads carry is_car; skip the help/FAQ entries that share the ads channel.
         if (obj["is_car"]?.jsonPrimitive?.booleanOrNull != true) return null

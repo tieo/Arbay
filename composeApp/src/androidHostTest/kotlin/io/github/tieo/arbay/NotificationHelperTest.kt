@@ -48,8 +48,8 @@ class NotificationHelperTest {
     fun `an auction reminder says how long is left and what the bid is`() {
         // What the poll hands the phone for an auction someone asked to be told about, rendered
         // the way the worker renders it: the time left leads, because that is why it arrives now.
-        val endsAt = kotlinx.datetime.Clock.System.now().plus(kotlin.time.Duration.parse("40m"))
-        val minutes = (endsAt - kotlinx.datetime.Clock.System.now()).inWholeMinutes
+        val endsAt = kotlin.time.Clock.System.now().plus(kotlin.time.Duration.parse("40m"))
+        val minutes = (endsAt - kotlin.time.Clock.System.now()).inWholeMinutes
         NotificationHelper.showSubfilterMatch(
             context = context,
             title = "Bona Belt Parkettschleifmaschine",

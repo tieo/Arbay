@@ -4,7 +4,7 @@ import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.carCriteria
 import io.ktor.client.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 

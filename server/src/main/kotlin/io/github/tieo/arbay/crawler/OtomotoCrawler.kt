@@ -3,7 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
@@ -202,7 +202,7 @@ class OtomotoCrawler(
         }
     }
 
-    private fun parseNode(edge: JsonElement, scrapedAt: kotlinx.datetime.Instant): Listing? {
+    private fun parseNode(edge: JsonElement, scrapedAt: kotlin.time.Instant): Listing? {
         val node = edge.jsonObject["node"]?.jsonObject ?: return null
         val externalId = node["id"]?.jsonPrimitive?.contentOrNull ?: return null
         val title = node["title"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }

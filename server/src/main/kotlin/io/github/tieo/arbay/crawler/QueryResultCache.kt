@@ -3,7 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 
 /**

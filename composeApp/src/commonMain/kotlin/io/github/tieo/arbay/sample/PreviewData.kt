@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.sample
 
 import io.github.tieo.arbay.model.*
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /** Realistic sample listings for the gallery — a "parkettschleifmaschine" search: real machines,
  *  mixed platforms/countries, new and used, plus a few sold ones with dates for the history chart. */
@@ -166,7 +166,7 @@ object PreviewData {
             bidCount = 7,
             // Counted off the clock the render runs on, not off the sample's own fixed date: the
             // card says how long is left, and a fixed date makes every drawing of it say "ended".
-            auctionEndsAt = kotlinx.datetime.Clock.System.now().plus(kotlin.time.Duration.parse("95m")),
+            auctionEndsAt = kotlin.time.Clock.System.now().plus(kotlin.time.Duration.parse("95m")),
         ) else l
     }
 

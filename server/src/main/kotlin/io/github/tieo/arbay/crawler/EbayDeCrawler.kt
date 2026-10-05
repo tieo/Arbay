@@ -6,8 +6,8 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -243,7 +243,7 @@ class EbayDeCrawler(
     )
 
     /** The card's own words about bidding: how many bids, and when it ends. */
-    internal fun parseAuction(item: org.jsoup.nodes.Element, now: kotlinx.datetime.Instant): Triple<SaleType?, kotlinx.datetime.Instant?, Int?> {
+    internal fun parseAuction(item: org.jsoup.nodes.Element, now: kotlin.time.Instant): Triple<SaleType?, kotlin.time.Instant?, Int?> {
         val texts = item.select("span, div").filter { it.children().isEmpty() }.map { it.text().trim() }
         val bids = texts.firstNotNullOfOrNull { BID_MARKER.find(it) }?.groupValues?.get(1)?.toIntOrNull()
         val timeText = texts.firstOrNull { t ->
@@ -287,7 +287,7 @@ class EbayDeCrawler(
     // selector for it is still read above, for the pages that still come back that way. Getting a
     // location for the rest would cost one item-page fetch per listing.
 
-    private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
+    private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlin.time.Instant): List<Listing> {
         return items.mapNotNull { item ->
             val titleEl = item.selectFirst("div.s-card__title")
                 ?: item.selectFirst("a.s-card__link div")
@@ -362,7 +362,7 @@ class EbayDeCrawler(
         }
     }
 
-    private fun parseOldLayout(items: org.jsoup.select.Elements, now: kotlinx.datetime.Instant): List<Listing> {
+    private fun parseOldLayout(items: org.jsoup.select.Elements, now: kotlin.time.Instant): List<Listing> {
         return items.mapNotNull { item ->
             val titleEl = item.selectFirst(".s-item__title") ?: return@mapNotNull null
             val title = listingTitle(titleEl)

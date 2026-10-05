@@ -24,7 +24,7 @@ import kotlin.time.toDuration
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -334,7 +334,7 @@ class SavedSearchMonitor(
         internal fun worthInterrupting(
             listing: Listing,
             intervalMinutes: Int,
-            now: kotlinx.datetime.Instant = Clock.System.now(),
+            now: kotlin.time.Instant = Clock.System.now(),
         ): Boolean {
             if (listing.saleType != SaleType.AUCTION) return true
             val endsAt = listing.auctionEndsAt ?: return false

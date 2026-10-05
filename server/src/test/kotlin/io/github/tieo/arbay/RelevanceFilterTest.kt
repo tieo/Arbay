@@ -2,7 +2,7 @@ package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.model.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
