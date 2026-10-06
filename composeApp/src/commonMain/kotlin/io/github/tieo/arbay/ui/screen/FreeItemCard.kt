@@ -37,8 +37,8 @@ import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.rememberCityDetector
 import io.github.tieo.arbay.ui.AdaptiveSheet
-import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
-import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
+import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.math.absoluteValue

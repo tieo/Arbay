@@ -6,7 +6,7 @@ import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SortMode
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.ListingViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

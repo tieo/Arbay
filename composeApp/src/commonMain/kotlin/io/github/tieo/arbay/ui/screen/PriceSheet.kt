@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui.screen
 
+import io.github.tieo.arbay.format
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll

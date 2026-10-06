@@ -1,4 +1,5 @@
 package io.github.tieo.arbay.ui.screen
+import io.github.tieo.arbay.format
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,8 +56,8 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
+import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor

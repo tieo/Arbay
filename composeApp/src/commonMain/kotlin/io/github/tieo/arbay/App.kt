@@ -13,9 +13,9 @@ import io.github.tieo.arbay.ui.LocalDesktopMode
 import kotlinx.serialization.encodeToString
 import io.github.tieo.arbay.ui.screen.MainScreen
 import io.github.tieo.arbay.ui.theme.ArbayTheme
-import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.ProductViewModel
 
 @Composable
 fun App() {

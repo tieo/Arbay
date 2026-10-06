@@ -33,6 +33,7 @@ plugins {
 }
 
 include(":androidApp")
+include(":client")
 include(":composeApp")
 include(":server")
 include(":shared")

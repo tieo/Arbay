@@ -53,9 +53,9 @@ import io.github.tieo.arbay.model.withCarFilters
 import io.github.tieo.arbay.model.withPriceRangeEur
 import io.github.tieo.arbay.ui.AdaptiveFormSheet
 import io.github.tieo.arbay.ui.LocalDesktopMode
-import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.ProductViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString

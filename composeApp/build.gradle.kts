@@ -1,5 +1,4 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
@@ -46,14 +45,6 @@ kotlin {
     
     jvm()
     
-    // The web app. Wasm only: every current browser runs it, and a second build for Kotlin/JS
-    // would be a second copy of the same app to keep working.
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
-        binaries.executable()
-    }
-    
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
@@ -81,6 +72,7 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
             implementation(projects.shared)
+            api(projects.client)
         }
 
         // The other way of drawing a screen without a device: Robolectric renders the @Preview
@@ -98,24 +90,12 @@ kotlin {
             implementation(libs.kotlinx.coroutinesTest)
             implementation(libs.kotlin.test)
         }
-        webMain.dependencies {
-            implementation(libs.kotlinx.browser)
-        }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.clientCio)
             implementation(libs.kotlinx.datetime)
         }
-    }
-}
-
-// wasm-opt comes from the machine (binaryen in the Nix profile) instead of a download from a
-// GitHub release, which stalls on the build machine and holds the whole build with it.
-plugins.withType<org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenPlugin> {
-    the<org.jetbrains.kotlin.gradle.targets.wasm.binaryen.BinaryenEnvSpec>().apply {
-        download.set(false)
-        command.set("wasm-opt")
     }
 }
 

@@ -3,10 +3,10 @@ package io.github.tieo.arbay.debug
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SortMode
-import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
-import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.PlatformStatus
+import io.github.tieo.arbay.viewmodel.ProductViewModel
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -103,7 +103,7 @@ private data class FreeItemDebugSnapshot(
     val history: List<io.github.tieo.arbay.model.FeedbackHistoryItem>,
     // Bounded to the last 500 by the view model itself; kept whole here rather than trimmed
     // again, since 500 short events is a few tens of KB at most.
-    val telemetry: List<io.github.tieo.arbay.ui.viewmodel.TelemetryEvent>,
+    val telemetry: List<io.github.tieo.arbay.viewmodel.TelemetryEvent>,
 )
 
 fun FreeItemViewModel.debugSnapshotJson(): String = debugJson.encodeToString(

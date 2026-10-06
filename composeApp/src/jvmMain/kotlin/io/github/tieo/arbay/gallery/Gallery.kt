@@ -13,9 +13,9 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.ui.screen.*
-import io.github.tieo.arbay.ui.viewmodel.FreeItemViewModel
-import io.github.tieo.arbay.ui.viewmodel.ListingViewModel
-import io.github.tieo.arbay.ui.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.ProductViewModel
 import io.github.tieo.arbay.sample.PreviewData
 import java.io.File
 
@@ -251,7 +251,7 @@ private fun Search(
 @Composable
 private fun Results(
     listings: List<Listing>,
-    statuses: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus>,
+    statuses: List<io.github.tieo.arbay.viewmodel.PlatformStatus>,
     loading: Boolean = false,
     total: Int = 0,
     completed: Int = 0,
@@ -334,7 +334,7 @@ private fun Filters(
 
 @Composable
 private fun Markets(
-    statuses: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus>,
+    statuses: List<io.github.tieo.arbay.viewmodel.PlatformStatus>,
     shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
     shownCountries: Set<String> = emptySet(),
     reach: io.github.tieo.arbay.model.SearchReach = io.github.tieo.arbay.model.SearchReach(),

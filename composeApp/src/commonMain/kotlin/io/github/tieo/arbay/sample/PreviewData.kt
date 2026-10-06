@@ -89,10 +89,10 @@ object PreviewData {
 
     /** The markets a search covers that this crawl did not ask, which the picker lists so they can
      *  be ticked back in. */
-    val notAsked: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+    val notAsked: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         PlatformId.MOBILE_DE, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN, PlatformId.RICARDO,
     ).map {
-        io.github.tieo.arbay.ui.viewmodel.PlatformStatus(
+        io.github.tieo.arbay.viewmodel.PlatformStatus(
             platformId = it.name,
             platformName = it.displayName,
             status = PlatformSearchStatus.PENDING,
@@ -207,7 +207,7 @@ object PreviewData {
     }
 
     /** What each market answered, including the ways an answer can fail. */
-    val marketAnswers: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+    val marketAnswers: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
         answer(PlatformId.EBAY_DE, PlatformSearchStatus.DONE, raw = 18, kept = 12, hasMore = true),
         answer(PlatformId.SUBITO, PlatformSearchStatus.DONE, raw = 7, kept = 5, term = "levigatrice per parquet"),
@@ -224,7 +224,7 @@ object PreviewData {
         term: String? = null,
         error: String? = null,
         hasMore: Boolean = false,
-    ) = io.github.tieo.arbay.ui.viewmodel.PlatformStatus(
+    ) = io.github.tieo.arbay.viewmodel.PlatformStatus(
         platformId = platform.name,
         platformName = platform.displayName,
         status = status,
@@ -311,14 +311,14 @@ object PreviewData {
     // give: still working, all in, some unable, none of them holding anything.
 
     /** Two markets still out, the rest in. */
-    val stillAsking: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = marketAnswers.take(4) +
+    val stillAsking: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = marketAnswers.take(4) +
         listOf(
             answer(PlatformId.MARKTPLAATS, PlatformSearchStatus.SEARCHING, raw = 0, kept = 0),
             answer(PlatformId.EBAY_IT, PlatformSearchStatus.SEARCHING, raw = 0, kept = 0),
         )
 
     /** Every market answered, none of them badly. */
-    val allAnswered: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+    val allAnswered: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
         answer(PlatformId.EBAY_DE, PlatformSearchStatus.DONE, raw = 18, kept = 12, hasMore = true),
         answer(PlatformId.SUBITO, PlatformSearchStatus.DONE, raw = 7, kept = 5, term = "levigatrice per parquet"),
@@ -326,11 +326,11 @@ object PreviewData {
     )
 
     /** Nobody had anything: everyone answered, everyone empty. */
-    val nobodyHadAnything: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> =
+    val nobodyHadAnything: List<io.github.tieo.arbay.viewmodel.PlatformStatus> =
         allAnswered.map { it.copy(resultCount = 0, rawCount = 0, hasMore = false) }
 
     /** A market holding a captcha open, which is neither an answer nor a failure. */
-    val captchaHeld: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+    val captchaHeld: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
         answer(PlatformId.MOBILE_DE, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0)
             .copy(captchaUrl = "https://arbay.example/captcha/mobile-de"),
@@ -339,7 +339,7 @@ object PreviewData {
     )
 
     /** Every market failed, in each of the ways they fail. */
-    val everyoneFailed: List<io.github.tieo.arbay.ui.viewmodel.PlatformStatus> = listOf(
+    val everyoneFailed: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.IP_BLOCKED, raw = 0, kept = 0, error = "403"),
         answer(PlatformId.EBAY_DE, PlatformSearchStatus.TIMEOUT, raw = 0, kept = 0),
         answer(PlatformId.RICARDO, PlatformSearchStatus.BLOCKED, raw = 0, kept = 0,

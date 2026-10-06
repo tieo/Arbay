@@ -23,7 +23,7 @@ import io.github.tieo.arbay.model.TermSuggestions
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.ui.AdaptiveSheet
 import io.github.tieo.arbay.ui.READABLE_WIDTH
-import io.github.tieo.arbay.ui.viewmodel.PlatformStatus
+import io.github.tieo.arbay.viewmodel.PlatformStatus
 
 /**
  * What happened at each market, and which of them the results are narrowed to.

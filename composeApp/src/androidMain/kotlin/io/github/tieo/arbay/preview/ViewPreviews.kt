@@ -7,7 +7,7 @@ import io.github.tieo.arbay.ui.LocalRenderInline
 import io.github.tieo.arbay.ui.screen.*
 import io.github.tieo.arbay.ui.theme.ArbayTheme
 import io.github.tieo.arbay.sample.PreviewData
-import io.github.tieo.arbay.ui.viewmodel.*
+import io.github.tieo.arbay.viewmodel.*
 import androidx.compose.runtime.CompositionLocalProvider
 
 /**
