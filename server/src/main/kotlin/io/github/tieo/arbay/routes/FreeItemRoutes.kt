@@ -10,6 +10,8 @@ import io.github.tieo.arbay.classifier.FreeItemScorer
 import io.github.tieo.arbay.classifier.FreeItemStore
 import io.github.tieo.arbay.classifier.ModelArena
 import io.github.tieo.arbay.classifier.ModelRegistry
+import io.github.tieo.arbay.crawler.Geocoder
+import io.github.tieo.arbay.crawler.area
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.crawler.ErrorSnapshotStore
@@ -317,6 +319,8 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
             )
 
             val profileEmbedding = FreeItemProfileStore.getEmbedding()
+            // Home, as a point: how far each item is decides whether it is worth the drive.
+            val home = searchQuery.area()
 
             val crawler = CrawlerRegistry.crawlerFor(PlatformId.KLEINANZEIGEN)
                 ?: throw BadRequestException("Kleinanzeigen crawler not available")
@@ -380,7 +384,15 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
                             val imgEmb = ClipImageModel.embedUrl(listing.imageUrls.firstOrNull { it.startsWith("http") })
                             (activeScore + imageWeight * ClipImageModel.affinity(imgEmb, lovedImages, dislikedImages)).coerceIn(0.0, 1.0)
                         }
-                        listing.copy(relevanceScore = score, modelScores = allScores)
+                        val loc = listing.location
+                        val coords = loc?.let { Geocoder.resolve(it.country ?: "DE", it.zip, it.city) }
+                        listing.copy(
+                            relevanceScore = score,
+                            modelScores = allScores,
+                            location = if (coords != null) loc.copy(latitude = coords.first, longitude = coords.second) else loc,
+                            distanceKm = if (home != null && coords != null)
+                                Geocoder.haversine(home.latitude, home.longitude, coords.first, coords.second) else listing.distanceKm,
+                        )
                     }.sortedByDescending { it.relevanceScore }
 
                 try {
