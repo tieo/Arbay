@@ -1,6 +1,9 @@
 package io.github.tieo.arbay.web
 
 import androidx.compose.runtime.Composable
+import org.jetbrains.compose.web.attributes.AttrsScope
+import org.w3c.dom.HTMLImageElement
+import androidx.compose.runtime.key
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.Money
 import org.jetbrains.compose.web.attributes.InputType
@@ -41,9 +44,10 @@ enum class Glyph(val svg: String) {
 }
 
 /** An icon, sized to the text around it unless [size] says otherwise. Decorative: whatever it marks
- *  carries its own label. */
+ *  carries its own label. The SVG is written once as the element mounts, so a different glyph in the
+ *  same place is a new element. */
 @Composable
-fun Icon(glyph: Glyph, size: Int = 18) {
+fun Icon(glyph: Glyph, size: Int = 18) = key(glyph, size) {
     Span({
         classes("icon-glyph")
         attr("aria-hidden", "true")
@@ -128,5 +132,14 @@ fun Switch(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
 fun Price(money: Money, lowest: Boolean = false, big: Boolean = false) {
     Span({ classes(*listOfNotNull("price", "lowest".takeIf { lowest }, "big".takeIf { big }).toTypedArray()) }) {
         Text(money.format())
+    }
+}
+
+/** A photo the market has since taken down keeps its place as an empty frame instead of the
+ *  browser's broken-image mark. */
+fun AttrsScope<HTMLImageElement>.onPhotoGone() {
+    addEventListener("error") { event ->
+        val img = event.target as HTMLImageElement
+        img.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
     }
 }

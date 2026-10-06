@@ -25,7 +25,7 @@ fun Route.webAppRoutes() {
         cacheControl { listOf(CacheControl.NoCache(null)) }
     }
     val page by lazy { WebAppPage::class.java.classLoader.getResource("web/index.html")?.readBytes() }
-    for (place in listOf("/saved/{rest...}", "/search/{rest...}", "/free", "/settings")) {
+    for (place in listOf("/saved/{rest...}", "/search/{rest...}", "/vehicle", "/vehicle/{rest...}", "/free", "/settings")) {
         get(place) {
             val html = page ?: throw NotFoundException("This server was built without the web app")
             call.response.header(HttpHeaders.CacheControl, "no-cache")

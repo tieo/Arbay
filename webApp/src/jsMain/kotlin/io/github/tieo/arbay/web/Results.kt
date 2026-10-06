@@ -515,6 +515,7 @@ fun Thumb(listing: Listing, className: String) {
             classes(className)
             attr("loading", "lazy")
             attr("referrerpolicy", "no-referrer")
+            onPhotoGone()
         }
     } else {
         Div({ classes(className, "no-photo") }) { Icon(Glyph.Tag, 22) }

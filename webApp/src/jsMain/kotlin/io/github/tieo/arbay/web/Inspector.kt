@@ -530,6 +530,7 @@ private fun Gallery(listing: Listing) {
         Img(src = images[shown.coerceIn(0, images.lastIndex)], alt = listing.title) {
             classes("hero")
             attr("referrerpolicy", "no-referrer")
+            onPhotoGone()
         }
         if (images.size > 1) {
             Div({ classes("strip") }) {
@@ -539,7 +540,7 @@ private fun Gallery(listing: Listing) {
                         attr("aria-label", "Photo ${index + 1} of ${images.size}")
                         onClick { shown = index }
                     }) {
-                        Img(src = url, alt = "") { attr("loading", "lazy"); attr("referrerpolicy", "no-referrer") }
+                        Img(src = url, alt = "") { attr("loading", "lazy"); attr("referrerpolicy", "no-referrer"); onPhotoGone() }
                     }
                 }
             }

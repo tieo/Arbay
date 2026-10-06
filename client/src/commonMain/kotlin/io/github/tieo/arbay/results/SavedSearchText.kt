@@ -18,7 +18,7 @@ fun ago(millis: Long): String {
 /** What a saved search asks and where, in one line: its own term only when that says more than
  *  its name, since the two are usually the same words. */
 fun savedSearchSubtitle(product: TrackedProduct): String {
-    val markets = "${product.searchQuery.platforms.size} platforms"
+    val markets = product.searchQuery.platforms.size.let { if (it == 1) "1 market" else "$it markets" }
     val termDiffers = !product.searchQuery.text.trim().equals(product.name.trim(), ignoreCase = true)
     return if (termDiffers) "${product.searchQuery.text}  ·  $markets" else markets
 }

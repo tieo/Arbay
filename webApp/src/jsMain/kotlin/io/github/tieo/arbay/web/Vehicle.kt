@@ -18,7 +18,7 @@ import io.github.tieo.arbay.results.VehicleSearch
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.Aside
-import org.jetbrains.compose.web.dom.DataList
+import org.jetbrains.compose.web.dom.Datalist
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Fieldset
 import org.jetbrains.compose.web.dom.Form
@@ -30,6 +30,7 @@ import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Legend
 import org.jetbrains.compose.web.dom.Main
 import org.jetbrains.compose.web.dom.Option
+import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
@@ -50,7 +51,9 @@ fun VehicleScreen(app: WebApp) {
     Aside({ classes("inspector") }) {
         Div({ classes("panel") }) {
             H2({ classes("panel-title") }) { Text("Lately") }
-            history.filter { it.searchQuery.category == MarketGroup.VEHICLES }.forEach { entry ->
+            val vehicles = history.filter { it.searchQuery.category == MarketGroup.VEHICLES }
+            if (vehicles.isEmpty()) P({ classes("muted", "small") }) { Text("Vehicle searches you run show up here until you save them.") }
+            vehicles.forEach { entry ->
                 RouteLink(Route.Results(Source.Vehicle(entry.searchQuery.text)), classes = listOf("recent")) {
                     Span({ classes("recent-name") }) { Text(entry.name) }
                     Span({ classes("muted", "small") }) { Text(entry.summary()) }
@@ -107,7 +110,7 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
                         classes("control"); attr("list", "makes"); placeholder("Volkswagen, Ford, ...")
                         value(makeText); onInput { makeText = it.value; modelText = "" }
                     }
-                    DataList({ id("makes") }) { VehicleSearch.makes.forEach { Option(it.name) } }
+                    Datalist({ id("makes") }) { VehicleSearch.makes.forEach { Option(it.name) } }
                 }
                 Field("Model") {
                     Input(InputType.Text) {
@@ -115,7 +118,7 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
                         if (make == null) attr("disabled", "")
                         value(modelText); onInput { modelText = it.value }
                     }
-                    DataList({ id("models") }) { make?.models?.forEach { Option(it.name) } }
+                    Datalist({ id("models") }) { make?.models?.forEach { Option(it.name) } }
                 }
             }
         }
@@ -231,5 +234,9 @@ private fun NumberField(label: String, value: Int?, onChange: (Int?) -> Unit) {
     }
 }
 
-/** An enum name as words: PLUGIN_HYBRID reads "Plugin hybrid". */
-private fun words(name: String): String = name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+/** An enum name as words: PLUGIN_HYBRID reads "Plug-in hybrid", SUV stays SUV. */
+private fun words(name: String): String = when (name) {
+    "SUV", "LPG", "CNG" -> name
+    "PLUGIN_HYBRID" -> "Plug-in hybrid"
+    else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
