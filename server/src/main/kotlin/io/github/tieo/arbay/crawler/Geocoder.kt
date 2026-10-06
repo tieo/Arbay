@@ -121,7 +121,8 @@ object Geocoder {
         places.minByOrNull { haversine(lat, lon, it.lat, it.lon) }
 
     /** Coordinates for a listing location, or null if it cannot be resolved. Tries zip then city,
-     *  scoped to the normalised country; if the country is unknown, tries the zip across all. */
+     *  scoped to the normalised country; if the country is unknown, tries the zip and then the city
+     *  across all, home markets first. */
     fun resolve(country: String?, zip: String?, city: String?): Pair<Double, Double>? {
         val cc = normCountry(country)
         val z = zip?.trim()?.takeIf { it.isNotEmpty() }
@@ -131,8 +132,10 @@ object Geocoder {
             cty?.let { index["$cc:$it"]?.let { p -> return p } }
             return null
         }
-        // Unknown country: the zip alone is often unambiguous enough for a rough distance.
+        // Unknown country: the zip alone is often unambiguous enough for a rough distance, and a
+        // place name is taken from the first country, home markets first, that has one by that name.
         z?.let { zz -> COUNTRIES.forEach { c -> index["$c:$zz"]?.let { return it } } }
+        cty?.let { name -> COUNTRIES.forEach { c -> index["$c:$name"]?.let { return it } } }
         return null
     }
 
