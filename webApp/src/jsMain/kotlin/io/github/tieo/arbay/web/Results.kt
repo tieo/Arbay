@@ -1,5 +1,12 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.results.OpenSearch
+import io.github.tieo.arbay.results.ResultsState
+import io.github.tieo.arbay.results.rememberOpenSearch
+import io.github.tieo.arbay.results.rememberResultsState
+import io.github.tieo.arbay.navigation.Panel
+import io.github.tieo.arbay.navigation.Route
+import io.github.tieo.arbay.navigation.Source
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,75 +70,12 @@ import org.w3c.dom.HTMLSelectElement
 import org.w3c.dom.HTMLTextAreaElement
 import org.w3c.dom.events.KeyboardEvent
 
-/**
- * One open search: what it asks, the bookmark behind it if it is saved, where its narrowing is kept
- * (on the bookmark, else in history), and what it found before it was opened.
- */
-class OpenSearch(
-    val view: ResultsView,
-    val bookmark: TrackedProduct?,
-    val saved: SearchQuery?,
-    val newListingIds: Set<String>,
-) {
-    /** Writes a change to this search where it is kept. Never starts a crawl. */
-    fun persist(app: WebApp, edit: (SearchQuery) -> SearchQuery) {
-        val base = saved ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
-        val next = edit(base)
-        if (bookmark != null) app.products.updateProduct(bookmark.copy(searchQuery = next))
-        else SearchHistoryStore.record(view.name, next)
-    }
-}
-
-/** Everything the results screen and its side panels read, worked out once per change. */
-class ResultsState(
-    val open: OpenSearch,
-    val narrowing: Narrowing,
-    val narrowed: Narrowed,
-    val summary: PriceSummary,
-    val elsewhere: Map<String, List<Listing>>,
-    val hidden: List<Hidden>,
-    val markets: List<io.github.tieo.arbay.model.PlatformId>,
-    val setNarrowing: (Narrowing) -> Unit,
-)
-
 /** The middle and right panes of a search. */
 @Composable
 fun ResultsScreen(app: WebApp, route: Route.Results) {
     val products by app.products.products.collectAsState()
-    val status by app.products.status.collectAsState()
-    val history by SearchHistoryStore.entries.collectAsState()
-
-    // What a saved search found since it was last opened, read once as it opens: opening it is
-    // what clears it.
     val source = route.source
-    var backlog by remember(source) { mutableStateOf<Set<String>?>(null) }
-    LaunchedEffect(source, status.isNotEmpty()) {
-        if (source is Source.Saved && backlog == null && status.isNotEmpty()) {
-            backlog = status[source.id]?.newListingIds.orEmpty().toSet()
-            app.products.markOpened(source.id)
-        }
-        if (source is Source.Typed) SearchHistoryStore.recordOpen(source.text, source.text, null, null, MarketGroup.GENERAL)
-    }
-
-    val open: OpenSearch? = when (source) {
-        is Source.Saved -> products.firstOrNull { it.id == source.id }?.let {
-            OpenSearch(ResultsView.of(it), it, it.searchQuery, backlog.orEmpty())
-        }
-        is Source.Typed -> {
-            val bookmark = products.firstOrNull { p -> p.searchQuery.category == MarketGroup.GENERAL && p.searchQuery.text.equals(source.text, ignoreCase = true) }
-            val entry = history.firstOrNull { e -> e.searchQuery.category == MarketGroup.GENERAL && e.searchQuery.text.equals(source.text, ignoreCase = true) }
-            OpenSearch(ResultsView.of(source.text, source.text, null, MarketGroup.GENERAL), bookmark, bookmark?.searchQuery ?: entry?.searchQuery, emptySet())
-        }
-        is Source.Vehicle -> {
-            val bookmark = products.firstOrNull { p -> p.searchQuery.category == MarketGroup.VEHICLES && p.searchQuery.text.equals(source.text, ignoreCase = true) }
-            val entry = history.firstOrNull { e -> e.searchQuery.category == MarketGroup.VEHICLES && e.searchQuery.text.equals(source.text, ignoreCase = true) }
-            when {
-                bookmark != null -> OpenSearch(ResultsView.of(bookmark), bookmark, bookmark.searchQuery, emptySet())
-                entry != null -> OpenSearch(ResultsView.of(entry), null, entry.searchQuery, emptySet())
-                else -> null
-            }
-        }
-    }
+    val open = rememberOpenSearch(source, app.products)
 
     if (open == null) {
         Main({ classes("results") }) {
@@ -164,46 +108,11 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
     val marketBasis by vm.marketBasis.collectAsState()
     val dropped by vm.droppedBySearch.collectAsState()
 
-    // The search's own settings go into the view model as it opens.
-    val savedBlocked = open.saved?.excludeKeywords.orEmpty()
-    LaunchedEffect(view.query, view.category) {
-        vm.setBlockedTerms(savedBlocked)
-        open.saved?.let {
-            vm.showMarkets(it.showOnlyMarkets)
-            vm.showCountries(it.showOnlyCountries)
-            it.sort?.let(vm::setSortMode)
-        }
-    }
-    LaunchedEffect(DevicePosition.latitude, DevicePosition.longitude) {
-        val lat = DevicePosition.latitude
-        val lon = DevicePosition.longitude
-        if (lat != null && lon != null) vm.setLocation(lat, lon)
-    }
-
-    // Asked again only when what defines the crawl changes, compared by value.
-    val markets = remember(view.platforms, view.isCar, shownMarkets) { marketsToAsk(view.platforms, view.isCar, shownMarkets) }
-    val crawlKey = listOf(view.query, view.filters, view.aliases, markets.map { it.name }, open.saved?.location, open.saved?.radiusKm, open.saved?.reach).toString()
-    LaunchedEffect(crawlKey) {
-        vm.search(
-            view.query, markets, view.filters, excludeKeywords = savedBlocked, aliases = view.aliases,
-            reach = open.saved?.reach ?: SearchReach(),
-            near = open.saved?.location,
-            radiusKm = open.saved?.radiusKm?.takeIf { it > 0 },
-        )
-    }
-
-    // The reader's narrowing: read out of the search once as it opens, theirs from then on.
-    var narrowing by remember(view.name, view.query, view.category) { mutableStateOf<Narrowing?>(null) }
-    if (narrowing == null) narrowing = Narrowing.of(open.saved)
-    val current = narrowing ?: Narrowing()
-    val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
-    val narrowed = remember(listings, current, money, open.newListingIds) { narrow(listings, current, open.newListingIds) }
-    val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
-    val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped) {
-        hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds)
-    }
-    val state = ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets) { narrowing = it }
-
+    val state = rememberResultsState(vm, open)
+    val narrowed = state.narrowed
+    val summary = state.summary
+    val hidden = state.hidden
+    val markets = state.markets
     val shown = narrowed.displayed
     val selected = route.listing
     KeyboardWalk(route, shown.map { it.id })
@@ -215,7 +124,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                     H1 { Text(view.name) }
                     val where = listOfNotNull(
                         view.query.takeIf { !it.equals(view.name, ignoreCase = true) },
-                        open.saved?.location?.let { place -> "near $place" + (open.saved.radiusKm?.takeIf { it > 0 }?.let { " · $it km" } ?: "") },
+                        open.saved?.let { q -> q.location?.let { place -> "near $place" + (q.radiusKm.takeIf { it > 0 }?.let { " · $it km" } ?: "") } },
                     )
                     if (where.isNotEmpty()) P({ classes("subtitle") }) { Text(where.joinToString(" · ")) }
                 }
@@ -270,8 +179,9 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
     }
 
     Aside({ classes("inspector") }) {
+        val panel = route.panel
         when {
-            route.panel != null -> PanelView(app, route, route.panel, state)
+            panel != null -> PanelView(app, route, panel, state)
             selected != null -> DetailPane(app, route, selected, state)
             else -> PricesPanel(app, route, state)
         }
@@ -397,7 +307,7 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
                         readPosition { lat, lon -> DevicePosition.set(lat, lon); app.listings.setLocation(lat, lon) }
                     }
                     app.listings.setSortMode(mode)
-                    state.open.persist(app) { it.copy(sort = mode) }
+                    state.open.persist(app.products) { it.copy(sort = mode) }
                 }
             }
         }) {
@@ -408,20 +318,20 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
             BandInput(narrowed.priceRange.start, narrowed.priceMin, "Lowest price") { low ->
                 val band = (low ?: narrowed.priceMin)..narrowed.priceRange.endInclusive
                 state.setNarrowing(narrowing.copy(band = band))
-                state.open.persist(app) { it.withBand(band, narrowed) }
+                state.open.persist(app.products) { it.withBand(band, narrowed) }
             }
             Span({ classes("muted") }) { Text("–") }
             BandInput(narrowed.priceRange.endInclusive, narrowed.priceMax, "Highest price") { high ->
                 val band = narrowed.priceRange.start..(high ?: narrowed.priceMax)
                 state.setNarrowing(narrowing.copy(band = band))
-                state.open.persist(app) { it.withBand(band, narrowed) }
+                state.open.persist(app.products) { it.withBand(band, narrowed) }
             }
             Span({ classes("muted") }) { Text(DisplayCurrency.current) }
         }
 
         fun setConditions(next: Set<Condition>, unstated: Boolean) {
             state.setNarrowing(narrowing.copy(conditions = next, unstatedCondition = unstated))
-            state.open.persist(app) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
+            state.open.persist(app.products) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
         }
         Condition.entries.filter { (narrowed.conditionCounts[it] ?: 0) > 0 }.forEach { value ->
             Chip("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) {
@@ -437,7 +347,7 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
                 Chip("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) {
                     val next = if (value in narrowing.saleTypes) narrowing.saleTypes - value else narrowing.saleTypes + value
                     state.setNarrowing(narrowing.copy(saleTypes = next))
-                    state.open.persist(app) { it.copy(saleTypes = next.toList().takeIf { l -> l.isNotEmpty() }) }
+                    state.open.persist(app.products) { it.copy(saleTypes = next.toList().takeIf { l -> l.isNotEmpty() }) }
                 }
             }
         }

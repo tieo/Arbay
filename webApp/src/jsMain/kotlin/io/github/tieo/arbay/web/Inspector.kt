@@ -1,5 +1,9 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.results.ResultsState
+import io.github.tieo.arbay.navigation.Panel
+import io.github.tieo.arbay.navigation.Route
+import io.github.tieo.arbay.navigation.Source
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,6 +34,13 @@ import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.saidWhat
 import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.results.wordThatCaught
+import io.github.tieo.arbay.results.WATCH_INTERVALS
+import io.github.tieo.arbay.results.againstMiddle
+import io.github.tieo.arbay.results.copyLabel
+import io.github.tieo.arbay.results.importVatNote
+import io.github.tieo.arbay.results.newRule
+import io.github.tieo.arbay.results.offerFacts
+import io.github.tieo.arbay.results.readOffer
 import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -149,15 +160,15 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                         HiddenKind.BlockedWords -> QuietButton("Edit the words") { Router.replace(route.copy(panel = Panel.WORDS)) }
                         HiddenKind.PriceBand -> QuietButton("Widen it") {
                             state.setNarrowing(state.narrowing.copy(band = null))
-                            state.open.persist(app) { it.copy(minPrice = null, maxPrice = null) }
+                            state.open.persist(app.products) { it.copy(minPrice = null, maxPrice = null) }
                         }
                         HiddenKind.Condition -> QuietButton("Show every condition") {
                             state.setNarrowing(state.narrowing.copy(conditions = emptySet(), unstatedCondition = true))
-                            state.open.persist(app) { it.copy(condition = null, conditionUnstated = true) }
+                            state.open.persist(app.products) { it.copy(condition = null, conditionUnstated = true) }
                         }
                         HiddenKind.SaleType -> QuietButton("Show both") {
                             state.setNarrowing(state.narrowing.copy(saleTypes = emptySet(), unstatedSaleType = true))
-                            state.open.persist(app) { it.copy(saleTypes = null, saleTypeUnstated = true) }
+                            state.open.persist(app.products) { it.copy(saleTypes = null, saleTypeUnstated = true) }
                         }
                         HiddenKind.NotNew -> QuietButton("Show everything") { state.setNarrowing(state.narrowing.copy(newOnly = false)) }
                         is HiddenKind.Search -> if (kind.reason == io.github.tieo.arbay.model.DropReason.VEHICLE_CRITERIA) {
@@ -178,7 +189,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                             HiddenKind.BlockedWords -> wordThatCaught(listing, blocked)?.let { word ->
                                 IconButton(Glyph.Undo, "Unblock \"$word\"") {
                                     val next = vm.unblockTerm(word)
-                                    state.open.persist(app) { it.copy(excludeKeywords = next) }
+                                    state.open.persist(app.products) { it.copy(excludeKeywords = next) }
                                 }
                             }
                             else -> {}
@@ -215,7 +226,7 @@ private fun MarketsPanel(app: WebApp, route: Route.Results, state: ResultsState)
                 Chip(platform.displayName, picked) {
                     val next = if (picked) shown - platform else shown + platform
                     vm.showMarkets(next)
-                    state.open.persist(app) { it.copy(showOnlyMarkets = next) }
+                    state.open.persist(app.products) { it.copy(showOnlyMarkets = next) }
                 }
                 Span({ classes("market-count") }) { Text(if (status == null) "not asked" else "$kept") }
                 val note = status?.saidWhat(kept, hiddenByWords = kept == 0 && (sentByMarket[platform] ?: 0) > 0)
@@ -248,24 +259,24 @@ private fun WordsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
         H3 { Text("Keep out listings with") }
         WordList(blocked, onRemove = { word ->
             val next = vm.unblockTerm(word)
-            state.open.persist(app) { it.copy(excludeKeywords = next) }
+            state.open.persist(app.products) { it.copy(excludeKeywords = next) }
         }, onAdd = { word ->
             val next = vm.blockTerm(word)
-            state.open.persist(app) { it.copy(excludeKeywords = next) }
+            state.open.persist(app.products) { it.copy(excludeKeywords = next) }
         }, adding = "Block a word")
 
         H3 { Text("Also counts as this search") }
         WordList(view.aliases, onRemove = { word ->
-            state.open.persist(app) { it.copy(aliases = view.aliases - word) }
+            state.open.persist(app.products) { it.copy(aliases = view.aliases - word) }
         }, onAdd = { word ->
-            state.open.persist(app) { it.copy(aliases = (view.aliases + word).distinct()) }
+            state.open.persist(app.products) { it.copy(aliases = (view.aliases + word).distinct()) }
         }, adding = "Another name for it")
 
         H3 { Text("Ask in more words") }
         Switch("The markets' own other names for it", reach.otherWords) { on ->
             val next = reach.copy(otherWords = on)
             vm.setReach(next, state.markets)
-            state.open.persist(app) { it.copy(reach = next) }
+            state.open.persist(app.products) { it.copy(reach = next) }
         }
         if (otherWords.isNotEmpty()) {
             Div({ classes("chips") }) {
@@ -274,7 +285,7 @@ private fun WordsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
                     Span({ attr("title", term.why) }) {
                         Chip(term.term + (term.added?.let { " +$it" } ?: ""), on) {
                             vm.toggleWord(term.term, state.markets)
-                            state.open.persist(app) { q ->
+                            state.open.persist(app.products) { q ->
                                 val words = if (on) q.reach.extraTerms.filterNot { it.equals(term.term, ignoreCase = true) } else q.reach.extraTerms + term.term
                                 q.copy(reach = q.reach.copy(extraTerms = words))
                             }
@@ -333,7 +344,7 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         Switch("Look again on its own", auto.enabled) { on -> app.products.setAutoFetch(bookmark, auto.copy(enabled = on)) }
         if (auto.enabled) {
             Div({ classes("chips") }) {
-                listOf(30 to "30 min", 60 to "1 hour", 180 to "3 hours", 360 to "6 hours", 720 to "12 hours", 1440 to "a day").forEach { (minutes, label) ->
+                WATCH_INTERVALS.forEach { (minutes, label) ->
                     Chip("every $label", auto.intervalMinutes == minutes) {
                         app.products.setAutoFetch(bookmark, AutoFetchSettings(enabled = true, intervalMinutes = minutes))
                     }
@@ -365,12 +376,7 @@ private fun RuleForm(onAdd: (NotificationSubfilter) -> Unit) {
         classes("rule-form")
         addEventListener("submit") { event ->
             event.preventDefault()
-            onAdd(NotificationSubfilter(
-                id = "r" + (kotlin.js.Date.now().toLong().toString(36)),
-                maxPriceEur = max.toIntOrNull(),
-                condition = condition,
-                mustContainAnyOf = words.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-            ))
+            onAdd(newRule(max.toIntOrNull(), condition, words))
             max = ""; condition = null; words = ""
         }
     }) {
@@ -421,10 +427,9 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         fromItsPage = app.client.listingDetail(listing)
         reading = false
     }
-    val vehicle = fromItsPage?.vehicle?.let { page ->
-        listing.vehicle?.let { card -> card.copy(wheelbaseMm = card.wheelbaseMm ?: page.wheelbaseMm, verified = card.verified + page.verified) } ?: page
-    } ?: listing.vehicle
-    val description = fromItsPage?.description?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
+    val page = readOffer(listing, fromItsPage)
+    val vehicle = page.vehicle
+    val description = page.description
 
     Article({ classes("listing") }) {
         Div({ classes("panel-head") }) {
@@ -438,16 +443,9 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         Div({ classes("price-block") }) {
             Price(listing.comparablePrice, lowest = lowest, big = true)
             listing.oldPrice?.let { Span({ classes("old-price") }) { Text(it.format()) } }
-            state.summary.belowMiddle(listing.comparablePrice)?.takeIf { kotlin.math.abs(it) >= 0.05 }?.let { share ->
-                val pct = kotlin.math.round(kotlin.math.abs(share) * 100).toInt()
-                Span({ classes("muted") }) { Text(if (share > 0) "$pct% under the middle offer" else "$pct% over the middle offer") }
-            }
+            state.summary.againstMiddle(listing)?.let { Span({ classes("muted") }) { Text(it) } }
         }
-        listing.importVat(ImportRules.current)?.let { vat ->
-            P({ classes("muted", "small") }) {
-                Text("Includes ${ImportRules.current.importVatPercent}% import VAT of ${vat.format()}; ${listing.price.format()} on ${listing.platformId.displayName}.")
-            }
-        }
+        importVatNote(listing)?.let { P({ classes("muted", "small") }) { Text(it) } }
 
         Div({ classes("actions") }) {
             A(href = listing.url, attrs = { classes("primary", "link-button"); attr("target", "_blank"); attr("rel", "noopener noreferrer") }) {
@@ -456,7 +454,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             copies.forEach { copy ->
                 A(href = copy.url, attrs = { classes("quiet", "link-button"); attr("target", "_blank"); attr("rel", "noopener noreferrer") }) {
                     Icon(Glyph.External)
-                    Text("Also on ${copy.platformId.displayName}" + if (copy.comparablePrice != listing.comparablePrice) " · ${copy.comparablePrice.format()}" else "")
+                    Text(copyLabel(copy, listing))
                 }
             }
         }
@@ -464,18 +462,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
-            val place = listing.location ?: fromItsPage?.location
-            buildList {
-                listing.condition?.let { add(it.label) }
-                place?.let { loc -> listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country).joinToString(" ").takeIf { it.isNotBlank() }?.let(::add) }
-                listing.distanceKm?.let { add("${it.toInt()} km away") }
-                listing.listingDate?.let { add("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}") }
-                if (listing.saleType == SaleType.AUCTION) add(listing.bidCount?.let { "$it bids" } ?: "auction")
-                listing.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
-                if (listing.shipping?.free == true) add("free delivery")
-                if (listing.negotiable) add("negotiable")
-                listing.seller?.let { s -> add("sold by ${s.name}" + (s.rating?.let { " · $it★" } ?: "")) }
-            }.forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
+            offerFacts(listing, page.place).forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
         }
 
         vehicle?.let { v ->
