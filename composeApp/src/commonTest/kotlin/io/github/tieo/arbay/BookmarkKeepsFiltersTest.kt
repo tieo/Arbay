@@ -9,7 +9,6 @@ import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SortMode
-import io.github.tieo.arbay.ui.screen.bookmarkQuery
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

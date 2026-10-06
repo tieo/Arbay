@@ -35,6 +35,7 @@ plugins {
 include(":androidApp")
 include(":client")
 include(":composeApp")
+include(":webApp")
 include(":server")
 include(":shared")
 // The repository's own git hooks (.githooks) stop a commit or a push that would publish something
