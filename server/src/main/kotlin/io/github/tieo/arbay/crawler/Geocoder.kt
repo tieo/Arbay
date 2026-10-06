@@ -61,12 +61,24 @@ object Geocoder {
                 if (!organisation && c[1].isNotBlank() && c[2].isNotBlank()) {
                     placeRows.add(Place(country, c[1].trim(), c[2].trim(), lat, lon))
                 }
-                c[2].trim().lowercase().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
+                c[2].trim().lowercase().takeIf { it.isNotEmpty() }?.let { name ->
+                    (listOf(name) + listOfNotNull(bracketForm(name))).forEach { map.putIfAbsent("$country:$it", lat to lon) }
+                }
             }
         }
         log.info("Geocoder indexed {} postal/place keys across {} countries", map.size, COUNTRIES.size)
         return map to placeRows
     }
+
+    /**
+     * The official German short form of a place GeoNames writes out: "Mühldorf am Inn" is signed
+     * and typed "Mühldorf (Inn)", "Weil am Rhein" as "Weil (Rhein)". Dropping the river instead
+     * would land on whichever other town of that name comes first. Null when the name has no such
+     * part.
+     */
+    internal fun bracketForm(name: String): String? =
+        Regex("""^(.+?) (?:an der|an dem|am|an|in der|im|in|ob der|auf der|bei) (.+)$""")
+            .matchEntire(name)?.let { "${it.groupValues[1]} (${it.groupValues[2]})" }
 
     private fun ensureCountry(cc: String): String? {
         val f = File(dir, "$cc.txt")
