@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui.screen
 
+import io.github.tieo.arbay.results.label
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -450,45 +451,4 @@ private fun PriceField(label: String, value: Float, onEntered: (Float) -> Unit, 
             typing = focus.isFocused
         },
     )
-}
-
-/** What a condition is called on a chip and in a sentence. */
-internal val Condition.label: String
-    get() = when (this) {
-        Condition.NEW -> "New"
-        Condition.LIKE_NEW -> "Like new"
-        Condition.VERY_GOOD -> "Very good"
-        Condition.GOOD -> "Good"
-        Condition.ACCEPTABLE -> "Acceptable"
-        Condition.USED -> "Used"
-        Condition.REFURBISHED -> "Refurbished"
-        Condition.PARTS_ONLY -> "For parts"
-    }
-
-/**
- * Whether a listing is in one of the conditions being looked at.
- *
- * No condition picked is every condition. A listing whose market never said is its own answer
- * ("Not stated"), rather than being counted as used: a broken drive sold for parts and a working
- * one were both "not new", so a search could not be told to leave the broken ones out.
- */
-/** Whether a listing sold this way belongs on a screen narrowed to [wanted]. */
-internal fun saleTypeMatches(
-    wanted: Set<SaleType>,
-    unstated: Boolean,
-    saleType: SaleType?,
-): Boolean = when {
-    wanted.isEmpty() -> saleType != null || unstated
-    saleType == null -> unstated
-    else -> saleType in wanted
-}
-
-internal fun conditionMatches(
-    wanted: Set<Condition>,
-    unstated: Boolean,
-    condition: Condition?,
-): Boolean = when {
-    wanted.isEmpty() -> condition != null || unstated
-    condition == null -> unstated
-    else -> condition in wanted
 }

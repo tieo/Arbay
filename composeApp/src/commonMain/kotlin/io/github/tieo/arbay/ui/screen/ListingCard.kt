@@ -1,4 +1,8 @@
 package io.github.tieo.arbay.ui.screen
+import io.github.tieo.arbay.results.Spec
+import io.github.tieo.arbay.results.listingFoot
+import io.github.tieo.arbay.results.listingSpecs
+import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.grouped
 import io.github.tieo.arbay.monthYear
@@ -72,50 +76,6 @@ import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
-/** Human age of a listing from its posting date ("today", "3 days ago", …); null if in the future
- *  or the date is implausible. */
-private fun ageLabel(posted: Instant): String? {
-    val days = (Clock.System.now() - posted).inWholeDays
-    return when {
-        days < 0 -> null
-        days == 0L -> "today"
-        days == 1L -> "yesterday"
-        days < 7 -> "$days days ago"
-        days < 30 -> "${days / 7} wk ago"
-        days < 365 -> "${days / 30} mo ago"
-        else -> "${days / 365} yr ago"
-    }
-}
-
-/** The country a listing is sourced from, as ISO-2, for the cross-border origin badge. Prefers the
- *  listing's own location (multi-country platforms like AutoScout24 mix markets), else the platform's
- *  home country. Returns null for the home market (DE), which gets no badge, and for unknown origins. */
-
-/** The country a listing is sourced from, as ISO-2, for the cross-border origin badge. Prefers the
- *  listing's own location (multi-country platforms like AutoScout24 mix markets), else the platform's
- *  home country. Returns null for the home market (DE), which gets no badge, and for unknown origins. */
-private fun originCountry(listing: Listing): String? {
-    val iso = listing.location?.country?.let { normalizeCountry(it) } ?: listing.platformId.country
-    return iso?.uppercase()?.takeUnless { it == "DE" }
-}
-
-/** AutoScout24 single-letter codes and German/English country names → ISO-2. */
-
-/** Two-letter ISO country code → its flag emoji (regional-indicator pair). "DK" → 🇩🇰.
- *  Each letter maps to a code point above U+FFFF, so it's emitted as a UTF-16 surrogate pair. */
-internal fun flagEmoji(cc: String): String {
-    if (cc.length != 2) return ""
-    return buildString {
-        for (c in cc.uppercase()) {
-            if (c !in 'A'..'Z') return ""
-            val cp = 0x1F1E6 + (c - 'A')
-            val offset = cp - 0x10000
-            append((0xD800 + (offset shr 10)).toChar())
-            append((0xDC00 + (offset and 0x3FF)).toChar())
-        }
-    }
-}
-
 /**
  * One line of metadata: what the listing is, what it states, and how much it never stated.
  *
@@ -126,36 +86,10 @@ internal fun flagEmoji(cc: String): String {
 @Composable
 private fun MetaLine(
     source: String,
-    sold: Boolean,
-    condition: Condition?,
-    vehicle: VehicleInfo?,
+    facts: List<Spec>,
     unchecked: List<String>,
 ) {
-    val v = vehicle
-    val specs = buildList {
-        add(source to true)
-        if (sold) add("sold" to true)
-        condition?.let {
-            add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() }.replace("_", " ") to true)
-        }
-        if (v != null) {
-            v.firstRegYear?.let {
-                val ym = v.firstRegMonth?.let { month -> monthYear(month, it) } ?: it.toString()
-                add(ym to v.isVerified(VehicleField.FIRST_REG_YEAR))
-            }
-            v.mileageKm?.let { add("${grouped(it.toLong())} km" to v.isVerified(VehicleField.MILEAGE)) }
-            v.powerKw?.let { add("$it kW" to v.isVerified(VehicleField.POWER)) }
-            v.gearbox?.let {
-                add((if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") to
-                    v.isVerified(VehicleField.GEARBOX))
-            }
-            v.fuel?.takeIf { it != Fuel.OTHER }?.let {
-                add(it.name.lowercase().replaceFirstChar { c -> c.uppercase() } to v.isVerified(VehicleField.FUEL))
-            }
-            v.vanLength?.let { add(VanSize.lengthLabel(it) to v.isVerified(VehicleField.VAN_LENGTH)) }
-            v.vanHeight?.let { add(VanSize.roofLabel(it) to v.isVerified(VehicleField.VAN_HEIGHT)) }
-        }
-    }
+    val specs = listOf(Spec(source, true)) + facts
     var explaining by remember { mutableStateOf(false) }
     Spacer(Modifier.height(2.dp))
     // One line that never wraps: the specs shorten, the count stays. Left to wrap, a card ran to
@@ -167,7 +101,7 @@ private fun MetaLine(
     ) {
         if (specs.isNotEmpty()) {
             Text(
-                specs.joinToString(" · ") { (text, verified) -> if (verified) text else "~$text" },
+                specs.joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -369,29 +303,15 @@ internal fun ListingCard(
 
                 // Source, condition and specs on one line, in the same quiet type: the source is
                 // metadata like the rest of it, not a badge.
-                val origin = originCountry(listing)
                 MetaLine(
-                    source = (if (origin != null) "${listing.platformId.displayName} ${flagEmoji(origin)}"
-                    else listing.platformId.displayName) +
-                        elsewhere.map { it.platformId }.distinct().filter { it != listing.platformId }
-                            .joinToString("") { " + ${it.displayName}" },
-                    sold = listing.sold,
-                    condition = listing.condition?.takeIf { !listing.sold },
-                    vehicle = listing.vehicle,
+                    source = sourceLabel(listing, elsewhere),
+                    facts = listingSpecs(listing),
                     unchecked = carFilters?.uncheckedFor(listing.vehicle).orEmpty(),
                 )
 
                 // Where it is, how old it is, how well it fits: one line, because three lines of
                 // two words each is what turned a list of vans into a wall.
-                val foot = buildList {
-                    listing.location?.let { loc ->
-                        val place = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
-                        if (place.isNotBlank()) add(place)
-                    }
-                    listing.distanceKm?.let { add("${it.roundToInt()} km away") }
-                    listing.listingDate?.let { posted -> ageLabel(posted)?.let { add(it) } }
-                    listing.matchScore?.let { add("${(it * 100).roundToInt()}% match") }
-                }
+                val foot = listingFoot(listing)
                 if (foot.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
                     Text(

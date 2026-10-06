@@ -1,4 +1,4 @@
-package io.github.tieo.arbay.ui.screen
+package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.model.DropReason
 

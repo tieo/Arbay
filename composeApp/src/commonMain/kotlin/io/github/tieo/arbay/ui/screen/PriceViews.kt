@@ -1,4 +1,5 @@
 package io.github.tieo.arbay.ui.screen
+import io.github.tieo.arbay.results.flagEmoji
 import io.github.tieo.arbay.format
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -67,13 +68,6 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-
-/** Median of price amounts (cents, already in the display currency) as Money; null when empty. */
-internal fun medianMoney(prices: List<Long>, currency: Currency): Money? {
-    if (prices.isEmpty()) return null
-    val sorted = prices.sorted()
-    return Money(sorted[sorted.size / 2], currency)
-}
 
 @Composable
 internal fun PriceOverview(

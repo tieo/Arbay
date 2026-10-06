@@ -1,5 +1,14 @@
 package io.github.tieo.arbay.ui.screen
 
+import io.github.tieo.arbay.results.HiddenKind
+import io.github.tieo.arbay.results.Narrowing
+import io.github.tieo.arbay.results.conditionMatches
+import io.github.tieo.arbay.results.hiddenListings
+import io.github.tieo.arbay.results.medianMoney
+import io.github.tieo.arbay.results.narrow
+import io.github.tieo.arbay.results.saleTypeMatches
+import io.github.tieo.arbay.results.withBand
+import io.github.tieo.arbay.results.wordThatCaught
 import io.github.tieo.arbay.format
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -61,6 +70,8 @@ import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.SearchCountries
 import io.github.tieo.arbay.model.platformsIn
+import io.github.tieo.arbay.results.coveredMarkets
+import io.github.tieo.arbay.results.marketsToAsk
 import io.github.tieo.arbay.ReadPositionIfAllowed
 import io.github.tieo.arbay.rememberCoordDetector
 import io.github.tieo.arbay.model.*
@@ -91,23 +102,6 @@ private val DIM_LABELS = mapOf(
     "description" to "In description",
 )
 
-
-internal fun normalizeCountry(c: String): String? = when (c.trim().uppercase()) {
-    "D", "DE", "DEUTSCHLAND", "GERMANY" -> "DE"
-    "A", "AT", "ÖSTERREICH", "OESTERREICH", "AUSTRIA" -> "AT"
-    "CH", "SCHWEIZ", "SWITZERLAND", "SUISSE" -> "CH"
-    "F", "FR", "FRANKREICH", "FRANCE" -> "FR"
-    "I", "IT", "ITALIEN", "ITALY", "ITALIA" -> "IT"
-    "E", "ES", "SPANIEN", "SPAIN" -> "ES"
-    "NL", "NIEDERLANDE", "NETHERLANDS" -> "NL"
-    "B", "BE", "BELGIEN", "BELGIUM" -> "BE"
-    "L", "LU", "LUXEMBURG", "LUXEMBOURG" -> "LU"
-    "PL", "POLEN", "POLAND" -> "PL"
-    "CZ", "TSCHECHIEN", "CZECHIA" -> "CZ"
-    "DK", "DÄNEMARK", "DENMARK" -> "DK"
-    "SE", "SCHWEDEN", "SWEDEN" -> "SE"
-    else -> c.trim().takeIf { it.length == 2 && it.all { ch -> ch.isLetter() } }?.uppercase()
-}
 
 /** Which of this sheet's own sub-sheets is open and what the shared filters are set to — state
  *  that lives here, not in [ListingViewModel], so the debug dump would otherwise miss it. */
@@ -213,7 +207,6 @@ fun ListingsSheet(
     val priceHistory by listingViewModel.priceHistory.collectAsState()
     val soldLoadingState by listingViewModel.soldLoading.collectAsState()
 
-    val allActiveListings = remember(listings) { listings.filter { !it.sold } }
     // Merge live sold results with persisted history, deduplicate by id, most recent first
     val allSoldListings = remember(listings, priceHistory) {
         val seen = mutableSetOf<String>()
@@ -228,17 +221,6 @@ fun ListingsSheet(
     // still worked out in the old one.
     val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
 
-    // Price range slider bounds from ALL active listings, before filtering; uses converted prices.
-    // The true min and max — not a percentile trim. A trimmed bound looked like an active filter
-    // (a "from"/"to" narrower than what was actually there) while doing nothing, since a listing
-    // outside a slider bound that was never dragged still showed anyway; the number on screen and
-    // what was actually filterable just disagreed. The slider still only filters once it is
-    // actually moved inward from these true ends.
-    val allActivePrices = remember(allActiveListings, money) { allActiveListings.map { DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name) }.sorted() }
-    val priceMin = remember(allActivePrices) { (allActivePrices.firstOrNull() ?: 0L) / 100f }
-    val priceMax = remember(allActivePrices) {
-        ((allActivePrices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
-    }
     // What the reader has narrowed this screen to. It is read out of the saved search once, when
     // the screen opens on it, and is the reader's from then on.
     //
@@ -263,21 +245,25 @@ fun ListingsSheet(
     LaunchedEffect(openedSearch, savedFilters != null) {
         val saved = savedFilters
         if (seededFrom == openedSearch || saved == null) return@LaunchedEffect
-        val low = saved.minPrice?.amount?.div(100)?.toFloat()
-        val high = saved.maxPrice?.amount?.div(100)?.toFloat()
-        chosenBand = if (low == null && high == null) null
-            else (low ?: 0f)..(high ?: Float.MAX_VALUE)
-        conditions = saved.condition?.toSet() ?: emptySet()
-        unstatedCondition = saved.conditionUnstated
-        saleTypes = saved.saleTypes?.toSet() ?: emptySet()
-        unstatedSaleType = saved.saleTypeUnstated
+        val seeded = Narrowing.of(saved)
+        chosenBand = seeded.band
+        conditions = seeded.conditions
+        unstatedCondition = seeded.unstatedCondition
+        saleTypes = seeded.saleTypes
+        unstatedSaleType = seeded.unstatedSaleType
         seededFrom = openedSearch
     }
-    // What the slider shows: the reader's band held inside whatever the results actually hold.
-    val priceRange = chosenBand
-        ?.let { band -> band.start.coerceIn(priceMin, priceMax)..band.endInclusive.coerceIn(priceMin, priceMax) }
-        ?.takeIf { it.start <= it.endInclusive }
-        ?: priceMin..priceMax
+    // Show only what turned up since this search was last opened. Not persisted onto the bookmark:
+    // the backlog it names is gone the moment the search is opened, so a remembered "new only"
+    // would come back as a filter matching nothing.
+    var newOnly by remember(newListingIds) { mutableStateOf(false) }
+    // Everything below reads the narrowing through this one value (see [narrow]).
+    val narrowing = Narrowing(chosenBand, conditions, unstatedCondition, saleTypes, unstatedSaleType, newOnly)
+    val narrowed = remember(listings, narrowing, money, newListingIds) { narrow(listings, narrowing, newListingIds) }
+    val allActiveListings = narrowed.allActive
+    val priceMin = narrowed.priceMin
+    val priceMax = narrowed.priceMax
+    val priceRange = narrowed.priceRange
     var showFilters by remember { mutableStateOf(false) }
     var showPrice by remember { mutableStateOf(false) }
     var showMarkets by remember { mutableStateOf(false) }
@@ -341,155 +327,52 @@ fun ListingsSheet(
     // Saved as the price it happened to sit at, raising only the minimum also kept a maximum of
     // today's dearest listing, and for a car search that went to the markets as a price cap.
     fun persistPriceRange(band: ClosedFloatingPointRange<Float>) {
-        val min = band.start.takeIf { it > priceMin }?.toInt()
-        val max = band.endInclusive.takeIf { it < priceMax }?.toInt()
-        persistFilters { it.withPriceRangeEur(min, max) }
+        persistFilters { it.withBand(band, narrowed) }
     }
 
-    // Apply ALL filters (price + condition + blocked terms already applied by ViewModel)
-    val priceFiltered = priceRange.start > priceMin || priceRange.endInclusive < priceMax
-    // Bounds compare in whole currency units, and a thumb resting on the track's end means
-    // "unbounded". The slider carries a Float of major units while a price is exact Long minor
-    // units, so comparing cent-for-cent would shave a cent off a boundary and drop the very
-    // listing the user narrowed onto.
-    fun inPriceRange(amount: Long): Boolean {
-        val units = amount / 100.0
-        val minOk = priceRange.start <= priceMin || units >= floor(priceRange.start.toDouble())
-        val maxOk = priceRange.endInclusive >= priceMax || units <= ceil(priceRange.endInclusive.toDouble())
-        return minOk && maxOk
-    }
-
-    val activeListings = remember(allActiveListings, priceRange, money) {
-        if (!priceFiltered) allActiveListings
-        else allActiveListings.filter { inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name)) }
-    }
-    // Show only what turned up since this search was last opened. Not persisted onto the bookmark:
-    // the backlog it names is gone the moment the search is opened, so a remembered "new only"
-    // would come back as a filter matching nothing.
-    var newOnly by remember(newListingIds) { mutableStateOf(false) }
-    // How many of the fetched listings are in each condition, null keyed for the ones whose
-    // market never said. The chips are drawn from this, so a condition nothing is in is not
-    // offered and "for parts (3)" says how much of the screen it is.
-    val conditionCounts = remember(activeListings) {
-        activeListings.groupingBy { it.condition }.eachCount()
-    }
-    val saleTypeCounts = remember(activeListings) {
-        activeListings.groupingBy { it.saleType }.eachCount()
-    }
-    val displayedActiveListings = remember(
-        activeListings, conditions, unstatedCondition, saleTypes, unstatedSaleType, newOnly, newListingIds,
-    ) {
-        activeListings
-            .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
-            .filter { saleTypeMatches(saleTypes, unstatedSaleType, it.saleType) }
-            .filter { !newOnly || it.id in newListingIds }
-    }
+    val priceFiltered = narrowed.priceFiltered
+    fun inPriceRange(amount: Long): Boolean = narrowed.inPriceRange(amount)
+    val activeListings = narrowed.active
+    val conditionCounts = narrowed.conditionCounts
+    val saleTypeCounts = narrowed.saleTypeCounts
+    val displayedActiveListings = narrowed.displayed
 
     // Every way a listing can be missing from this screen, each with what took it and, where one
     // action puts it back, that action. Built here because this is where all of it is known: the
     // reader's own bands and words, the markets they unticked, and what the search removed.
-    val hiddenGroups: List<HiddenGroup> = run {
-        val banned = fetchedListings.filter { it.id in bannedIds }
-        // The words the reader blocked catch listings in two places: here, over what the markets
-        // sent back, and on the server, which never sends one on. One word, one group.
-        val blockedOnTheServer = droppedBySearch.filter { it.reason == DropReason.BLOCKED_WORD }
-        val byWord = fetchedListings.filter { it.id !in bannedIds && it !in marketBasis } +
-            blockedOnTheServer.map { it.listing }
-        val outOfBand = allActiveListings.filterNot {
-            !priceFiltered || inPriceRange(DisplayCurrency.convert(it.comparablePrice.amount, it.comparablePrice.currency.name))
-        }
-        val wrongCondition = activeListings.filterNot { conditionMatches(conditions, unstatedCondition, it.condition) }
-        val wrongSaleType = activeListings
-            .filter { conditionMatches(conditions, unstatedCondition, it.condition) }
-            .filterNot { saleTypeMatches(saleTypes, unstatedSaleType, it.saleType) }
-        val notNew = if (!newOnly) emptyList()
-            else activeListings.filter {
-                conditionMatches(conditions, unstatedCondition, it.condition) && it.id !in newListingIds
-            }
-        buildList {
-            if (banned.isNotEmpty()) add(HiddenGroup(
-                label = "you hid",
-                why = "Listings you sent away with the bin on their card.",
-                listings = banned,
-                undoLabel = "Put all back",
-                undo = { listingViewModel.unbanAll() },
-                restoreLabel = "Put back",
-                restore = { listingViewModel.unban(it) },
-            ))
-            if (byWord.isNotEmpty()) add(HiddenGroup(
-                label = "your blocked words",
-                why = "Carrying one of your blocked words: " + activeBlockedTerms.joinToString(", "),
-                listings = byWord,
-                undoLabel = "Edit the words",
-                undo = { showHidden = false; showFilters = true },
-                // The word that caught this one is the word to drop, and it is the one thing the
-                // reader is looking at when they disagree with it.
+    val hiddenGroups: List<HiddenGroup> = hiddenListings(
+        narrowed, narrowing, fetchedListings, marketBasis, bannedIds, activeBlockedTerms, droppedBySearch, newListingIds,
+    ).map { hidden ->
+        when (val kind = hidden.kind) {
+            HiddenKind.YouHid -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Put all back", undo = { listingViewModel.unbanAll() },
+                restoreLabel = "Put back", restore = { listingViewModel.unban(it) })
+            HiddenKind.BlockedWords -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Edit the words", undo = { showHidden = false; showFilters = true },
                 restoreLabel = "Unblock the word that caught it",
-                restore = { listing ->
-                    val text = "${listing.title} ${listing.description.orEmpty()}".lowercase()
-                    activeBlockedTerms.firstOrNull { text.contains(it.lowercase()) }?.let(unblockWord)
-                },
-            ))
-            if (outOfBand.isNotEmpty()) add(HiddenGroup(
-                label = "outside your price band",
-                why = "Priced outside the band this search is narrowed to.",
-                listings = outOfBand,
-                undoLabel = "Widen it",
-                undo = { showHidden = false; showFilters = true },
-            ))
-            if (wrongCondition.isNotEmpty()) add(HiddenGroup(
-                label = "the other condition",
-                why = "You are looking at " +
-                    (conditions.takeIf { it.isNotEmpty() }
-                        ?.sortedBy { it.ordinal }?.joinToString(", ") { it.label.lowercase() }
-                        ?: "only what states its condition") + ".",
-                listings = wrongCondition,
-                undoLabel = "Show both",
-                undo = {
+                restore = { listing -> wordThatCaught(listing, activeBlockedTerms)?.let(unblockWord) })
+            HiddenKind.PriceBand -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Widen it", undo = { showHidden = false; showFilters = true })
+            HiddenKind.Condition -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Show both", undo = {
                     conditions = emptySet()
                     unstatedCondition = true
                     persistFilters { it.copy(condition = null, conditionUnstated = true) }
-                },
-            ))
-            if (wrongSaleType.isNotEmpty()) add(HiddenGroup(
-                label = "sold the other way",
-                why = "You are looking at " +
-                    (saleTypes.takeIf { it.isNotEmpty() }
-                        ?.sortedBy { it.ordinal }?.joinToString(", ") { it.label.lowercase() }
-                        ?: "only what says how it is sold") + ".",
-                listings = wrongSaleType,
-                undoLabel = "Show both",
-                undo = {
+                })
+            HiddenKind.SaleType -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Show both", undo = {
                     saleTypes = emptySet()
                     unstatedSaleType = true
                     persistFilters { it.copy(saleTypes = null, saleTypeUnstated = true) }
-                },
-            ))
-            if (notNew.isNotEmpty()) add(HiddenGroup(
-                label = "not new since you last looked",
-                why = "You are looking at what this search found since you last opened it.",
-                listings = notNew,
-                undoLabel = "Show everything",
-                undo = { newOnly = false },
-            ))
-            // What the search itself removed, one group per reason it gave — and where one reason
-            // covers several things, one group per thing: "a vehicle criterion" is not an answer,
-            // "its mileage" is, so the criterion that took a listing is the heading it sits under.
-            droppedBySearch.filterNot { it.reason == DropReason.BLOCKED_WORD }
-                .groupBy { it.reason to it.detail }
-                .forEach { (key, entries) ->
-                    val (reason, detail) = key
-                    add(HiddenGroup(
-                        label = detail ?: reason.label,
-                        why = explainDropReason(reason) +
-                            (detail?.let { " Taken by: $it." } ?: ""),
-                        listings = entries.map { it.listing },
-                        undoLabel = if (reason == DropReason.VEHICLE_CRITERIA) "Edit the criteria" else null,
-                        undo = if (reason == DropReason.VEHICLE_CRITERIA && onEditFilters != null) {
-                            { showHidden = false; onEditFilters.invoke() }
-                        } else null,
-                    ))
-                }
+                })
+            HiddenKind.NotNew -> HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                undoLabel = "Show everything", undo = { newOnly = false })
+            is HiddenKind.Search -> {
+                val canEdit = kind.reason == DropReason.VEHICLE_CRITERIA && onEditFilters != null
+                HiddenGroup(hidden.label, hidden.why, hidden.listings,
+                    undoLabel = if (canEdit) "Edit the criteria" else null,
+                    undo = if (canEdit) ({ showHidden = false; onEditFilters?.invoke() }) else null)
+            }
         }
     }
 
@@ -622,26 +505,9 @@ fun ListingsSheet(
         (platforms ?: PlatformId.entries).any { it.name.startsWith("EBAY") }
     }
 
-    // The markets this search actually asks: the ones it is narrowed to, and every one it covers
-    // otherwise. Narrowing used to hide what had already been fetched, so a search kept for two
-    // German markets still crawled eleven — which costs the time of the slowest of them and earns
-    // the blocks of the ones nobody asked to see.
-    // Every market of this search's kind, whatever this crawl asked and whatever is ticked. The
-    // only thing that narrows the list itself is the kind of search: a vehicle search has no
-    // business offering Vinted. Which of them get asked is a separate question, answered below.
-    val coveredPlatforms: List<PlatformId> = remember(carFilters) {
-        MarketSets.platformsFor(if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL)
-    }
-    val platformsToAsk: List<PlatformId> = remember(platforms, coveredPlatforms, shownMarkets) {
-        // Every market this search covers, plus anything ticked by hand that it did not. Ticking
-        // is how a reader narrows what they are looking at; it is not an instruction to stop asking
-        // the rest, and reading it as one left a search that had been narrowed months ago asking
-        // two markets out of twenty-five.
-        val asked = platforms ?: MarketSets.platformsIn(
-            if (carFilters != null) MarketGroup.VEHICLES else MarketGroup.GENERAL,
-            SearchCountries.current.countries,
-        )
-        (asked + shownMarkets.filter { it in coveredPlatforms }).distinct()
+    // The markets this search asks; see [marketsToAsk].
+    val platformsToAsk: List<PlatformId> = remember(platforms, carFilters, shownMarkets) {
+        marketsToAsk(platforms, isCar = carFilters != null, shownMarkets = shownMarkets)
     }
 
     // Keyed on what defines the crawl, by value: a list rebuilt with the same contents is the same
@@ -1394,7 +1260,7 @@ fun ListingsSheet(
                 // Every market this search covers, whether or not it was asked this time. Asking
                 // only the ones it is kept for is right; dropping the rest off the picker is not,
                 // since ticking one is how they get asked again.
-                statuses = platformStatuses + coveredPlatforms
+                statuses = platformStatuses + coveredMarkets(isCar = carFilters != null)
                     .filter { covered -> platformStatuses.none { it.platformId == covered.name } }
                     .map {
                         PlatformStatus(

@@ -43,35 +43,8 @@ fun App() {
         // position where the app already has permission, the home town otherwise; the permission
         // prompt belongs to the nearest-first control, which is someone asking for it.
         ReadPositionIfAllowed { lat, lon -> DevicePosition.set(lat, lon) }
-        LaunchedEffect(Unit) {
-            if (DevicePosition.latitude == null) {
-                runCatching {
-                    client.getFreeItemProfile()?.location?.takeIf { it.isNotBlank() }?.let { home ->
-                        client.geocode(home)?.let { (lat, lon) -> DevicePosition.set(lat, lon) }
-                    }
-                }
-            }
-        }
-
-        // Load exchange rates + refresh the car taxonomy on startup
-        LaunchedEffect(Unit) {
-            try {
-                DisplayCurrency.rates = client.getExchangeRates()
-            } catch (_: Exception) {}
-            // What a listing from outside the buyer's VAT area really costs, so the app and the
-            // server's own notification filters use the same number.
-            try {
-                ImportRules.current = client.getImportSettings()
-            } catch (_: Exception) {}
-            // Which countries a search covers — the same setting the server crawls by, so the app
-            // and the background watch cover the same ground.
-            try {
-                SearchCountries.current = client.getMarketSettings()
-            } catch (_: Exception) {}
-            try {
-                CarTaxonomyStore.update(client.getCarTaxonomy())
-            } catch (_: Exception) {}
-        }
+        LaunchedEffect(Unit) { positionFromHomeTown(client) }
+        LaunchedEffect(Unit) { loadServerSettings(client) }
 
         BoxWithConstraints {
             val isDesktop = maxWidth > 700.dp

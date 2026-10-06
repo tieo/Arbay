@@ -1,5 +1,6 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.results.bookmarkQuery
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.MarketGroup

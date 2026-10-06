@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui.screen
 
+import io.github.tieo.arbay.results.detailSpecs
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.grouped
 import io.github.tieo.arbay.monthYear
@@ -209,40 +210,14 @@ fun ListingDetailSheet(
                 // Each row carries the field it came from, so a value the market stated and a value
                 // read out of its words are not written the same way: "Lang" in a title became a
                 // flat "Length L3" here, which is a guess about one maker's naming printed as fact.
-                fun MutableList<Triple<String, String, VehicleField?>>.spec(
-                    label: String,
-                    value: String,
-                    field: VehicleField? = null,
-                ) = add(Triple(label, value, field))
-                val specs = buildList {
-                    v.firstRegYear?.let {
-                        spec("First registered", v.firstRegMonth?.let { m -> monthYear(m, it) } ?: "$it", VehicleField.FIRST_REG_YEAR)
-                    }
-                    v.mileageKm?.let { spec("Mileage", "${grouped(it.toLong(), '.')} km", VehicleField.MILEAGE) }
-                    v.powerKw?.let { spec("Power", "$it kW · ${(it * 1.35962).toInt()} hp", VehicleField.POWER) }
-                    v.displacementCc?.let { spec("Engine", "$it cc", VehicleField.DISPLACEMENT) }
-                    v.fuel?.let { spec("Fuel", it.name.lowercase().replace('_', ' '), VehicleField.FUEL) }
-                    v.gearbox?.let { spec("Gearbox", it.name.lowercase(), VehicleField.GEARBOX) }
-                    v.drivetrain?.let { spec("Drive", it.name.lowercase().replace('_', ' '), VehicleField.DRIVETRAIN) }
-                    v.bodyType?.let { spec("Body", it.name.lowercase().replace('_', ' '), VehicleField.BODY_TYPE) }
-                    v.doors?.let { spec("Doors", "$it", VehicleField.DOORS) }
-                    v.seats?.let { spec("Seats", "$it", VehicleField.SEATS) }
-                    v.condition?.let { spec("Condition", it.name.lowercase().replace('_', ' '), VehicleField.CONDITION) }
-                    v.previousOwners?.let { spec("Previous owners", "$it") }
-                    v.color?.let { spec("Colour", it, VehicleField.COLOR) }
-                    v.emissionClassEuro?.let { spec("Emission class", "Euro $it", VehicleField.EMISSION) }
-                    v.emissionSticker?.let { spec("Sticker", "$it", VehicleField.EMISSION_STICKER) }
-                    v.inspectionUntil?.let { spec("Inspection until", it, VehicleField.INSPECTION) }
-                    v.upholstery?.let { spec("Upholstery", it, VehicleField.UPHOLSTERY) }
-                    v.vanLength?.let { spec("Length", VanSize.lengthLabel(it), VehicleField.VAN_LENGTH) }
-                    v.vanHeight?.let { spec("Roof", VanSize.roofLabel(it), VehicleField.VAN_HEIGHT) }
-                    v.wheelbaseMm?.let { spec("Wheelbase", "$it mm", VehicleField.WHEELBASE) }
-                }
+                val specs = detailSpecs(v)
                 if (specs.isNotEmpty()) {
                     Text("What the market says it is", style = MaterialTheme.typography.labelLarge)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        specs.forEach { (label, value, field) ->
-                            val stated = field == null || v.isVerified(field)
+                        specs.forEach { spec ->
+                            val label = spec.label
+                            val value = spec.value
+                            val stated = spec.stated(v)
                             Row(modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                     label,
