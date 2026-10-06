@@ -6,32 +6,44 @@ import androidx.compose.runtime.setValue
 import kotlinx.browser.window
 import org.w3c.dom.url.URLSearchParams
 
+/** Where a search on screen comes from: a saved search, words typed in, or the vehicle form. */
+sealed interface Source {
+    data class Saved(val id: String) : Source
+    data class Typed(val text: String) : Source
+    data class Vehicle(val text: String) : Source
+}
+
+/** What the right-hand pane shows beside a search's results, when it is not a listing. */
+enum class Panel(val slug: String) {
+    PRICES("prices"), HIDDEN("hidden"), MARKETS("markets"), WORDS("words"), ALERTS("alerts"), CRITERIA("criteria");
+
+    companion object {
+        fun of(slug: String?): Panel? = entries.firstOrNull { it.slug == slug }
+    }
+}
+
 /**
- * Where the reader is in the app, as an address of its own: a saved search, a search typed in, one
- * listing inside either. Every state worth going back to has a URL, so the browser's back and
- * forward, a bookmark and "open in new tab" all work the way they do on any web page.
+ * Where the reader is in the app, as an address of its own: every state worth coming back to has a
+ * URL, so the browser's back and forward, a bookmark and "open in new tab" work as on any web page.
  */
 sealed interface Route {
-    /** The listing open beside the results, where there is one. */
-    val listing: String? get() = null
-
     data object Home : Route
-    data class Saved(val id: String, override val listing: String? = null) : Route
-    data class Search(val text: String, override val listing: String? = null) : Route
+    data class Results(val source: Source, val listing: String? = null, val panel: Panel? = null) : Route
+    data object VehicleForm : Route
     data object FreeItems : Route
     data object Settings : Route
 
-    /** The same view with one listing open, or none. */
-    fun withListing(listingId: String?): Route = when (this) {
-        is Saved -> copy(listing = listingId)
-        is Search -> copy(listing = listingId)
-        else -> this
-    }
-
     fun path(): String = when (this) {
         Home -> "/"
-        is Saved -> "/saved/${enc(id)}" + (listing?.let { "/${enc(it)}" } ?: "")
-        is Search -> "/search/${enc(text)}" + (listing?.let { "/${enc(it)}" } ?: "")
+        is Results -> {
+            val base = when (source) {
+                is Source.Saved -> "/saved/${enc(source.id)}"
+                is Source.Typed -> "/search/${enc(source.text)}"
+                is Source.Vehicle -> "/vehicle/${enc(source.text)}"
+            }
+            base + (listing?.let { "/${enc(it)}" } ?: "") + (panel?.let { "?panel=${it.slug}" } ?: "")
+        }
+        VehicleForm -> "/vehicle"
         FreeItems -> "/free"
         Settings -> "/settings"
     }
@@ -39,10 +51,13 @@ sealed interface Route {
     companion object {
         fun parse(path: String, query: String = ""): Route {
             val parts = path.trim('/').split('/').filter { it.isNotEmpty() }.map { dec(it) }
+            val panel = Panel.of(URLSearchParams(query).get("panel"))
+            fun results(source: Source) = Results(source, parts.getOrNull(2), panel)
             return when (parts.firstOrNull()) {
-                null -> URLSearchParams(query).get("q")?.takeIf { it.isNotBlank() }?.let { Search(it) } ?: Home
-                "saved" -> parts.getOrNull(1)?.let { Saved(it, parts.getOrNull(2)) } ?: Home
-                "search" -> parts.getOrNull(1)?.let { Search(it, parts.getOrNull(2)) } ?: Home
+                null -> Home
+                "saved" -> parts.getOrNull(1)?.let { results(Source.Saved(it)) } ?: Home
+                "search" -> parts.getOrNull(1)?.let { results(Source.Typed(it)) } ?: Home
+                "vehicle" -> parts.getOrNull(1)?.let { results(Source.Vehicle(it)) } ?: VehicleForm
                 "free" -> FreeItems
                 "settings" -> Settings
                 else -> Home
@@ -51,11 +66,8 @@ sealed interface Route {
     }
 }
 
-private fun enc(value: String): String = encodeURIComponent(value)
-private fun dec(value: String): String = decodeURIComponent(value)
-
-private external fun encodeURIComponent(value: String): String
-private external fun decodeURIComponent(value: String): String
+private fun enc(value: String): String = js("encodeURIComponent")(value) as String
+private fun dec(value: String): String = js("decodeURIComponent")(value) as String
 
 /** The route on screen, kept in step with the address bar both ways. */
 object Router {
@@ -75,7 +87,7 @@ object Router {
         route = to
     }
 
-    /** Changes the current step in place: choosing another listing in the same results is not a
+    /** Changes the current step in place: picking another listing of the same results is not a
      *  place to come back to one by one. */
     fun replace(to: Route) {
         if (to == route) return

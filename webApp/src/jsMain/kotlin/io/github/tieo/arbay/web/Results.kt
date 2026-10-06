@@ -11,34 +11,40 @@ import androidx.compose.runtime.setValue
 import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.ImportRules
-import io.github.tieo.arbay.format
 import io.github.tieo.arbay.comparablePrice
+import io.github.tieo.arbay.design.LookChoice
+import io.github.tieo.arbay.design.OfferLayout
 import io.github.tieo.arbay.history.SearchHistoryStore
-import io.github.tieo.arbay.history.summary
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SearchReach
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.tidyTitle
+import io.github.tieo.arbay.results.Hidden
+import io.github.tieo.arbay.results.Narrowed
 import io.github.tieo.arbay.results.Narrowing
+import io.github.tieo.arbay.results.PriceSummary
 import io.github.tieo.arbay.results.ResultsView
+import io.github.tieo.arbay.results.bookmarkQuery
 import io.github.tieo.arbay.results.hiddenListings
 import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.listingFoot
 import io.github.tieo.arbay.results.listingSpecs
 import io.github.tieo.arbay.results.marketsToAsk
 import io.github.tieo.arbay.results.narrow
+import io.github.tieo.arbay.results.priceSummary
 import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.results.withBand
-import io.github.tieo.arbay.model.PlatformSearchStatus
+import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlinx.browser.document
-import kotlinx.browser.window
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.selected
+import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
@@ -49,7 +55,6 @@ import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Main
 import org.jetbrains.compose.web.dom.Option
 import org.jetbrains.compose.web.dom.P
-import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Select
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
@@ -59,97 +64,110 @@ import org.w3c.dom.HTMLTextAreaElement
 import org.w3c.dom.events.KeyboardEvent
 
 /**
- * One open search: what it is, where its filters are kept, and what it found before it was opened.
- * A saved search keeps its filters on the bookmark; any other search keeps them in history.
+ * One open search: what it asks, the bookmark behind it if it is saved, where its narrowing is kept
+ * (on the bookmark, else in history), and what it found before it was opened.
  */
-private class OpenSearch(
+class OpenSearch(
     val view: ResultsView,
     val bookmark: TrackedProduct?,
     val saved: SearchQuery?,
     val newListingIds: Set<String>,
+) {
+    /** Writes a change to this search where it is kept. Never starts a crawl. */
+    fun persist(app: WebApp, edit: (SearchQuery) -> SearchQuery) {
+        val base = saved ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category)
+        val next = edit(base)
+        if (bookmark != null) app.products.updateProduct(bookmark.copy(searchQuery = next))
+        else SearchHistoryStore.record(view.name, next)
+    }
+}
+
+/** Everything the results screen and its side panels read, worked out once per change. */
+class ResultsState(
+    val open: OpenSearch,
+    val narrowing: Narrowing,
+    val narrowed: Narrowed,
+    val summary: PriceSummary,
+    val elsewhere: Map<String, List<Listing>>,
+    val hidden: List<Hidden>,
+    val markets: List<io.github.tieo.arbay.model.PlatformId>,
+    val setNarrowing: (Narrowing) -> Unit,
 )
 
-/** The middle and right panes for a search: its results, and the listing chosen from them. */
+/** The middle and right panes of a search. */
 @Composable
-fun ResultsAndDetail(app: WebApp, route: Route) {
+fun ResultsScreen(app: WebApp, route: Route.Results) {
     val products by app.products.products.collectAsState()
     val status by app.products.status.collectAsState()
     val history by SearchHistoryStore.entries.collectAsState()
 
     // What a saved search found since it was last opened, read once as it opens: opening it is
     // what clears it.
-    val openedKey = when (route) {
-        is Route.Saved -> "saved:${route.id}"
-        is Route.Search -> "search:${route.text}"
-        else -> ""
-    }
-    var backlog by remember(openedKey) { mutableStateOf<Set<String>?>(null) }
-
-    val open: OpenSearch? = when (route) {
-        is Route.Saved -> products.firstOrNull { it.id == route.id }?.let { product ->
-            OpenSearch(ResultsView.of(product), product, product.searchQuery, backlog.orEmpty())
+    val source = route.source
+    var backlog by remember(source) { mutableStateOf<Set<String>?>(null) }
+    LaunchedEffect(source, status.isNotEmpty()) {
+        if (source is Source.Saved && backlog == null && status.isNotEmpty()) {
+            backlog = status[source.id]?.newListingIds.orEmpty().toSet()
+            app.products.markOpened(source.id)
         }
-        is Route.Search -> {
-            val bookmark = products.firstOrNull {
-                it.searchQuery.text.trim().equals(route.text.trim(), ignoreCase = true)
+        if (source is Source.Typed) SearchHistoryStore.recordOpen(source.text, source.text, null, null, MarketGroup.GENERAL)
+    }
+
+    val open: OpenSearch? = when (source) {
+        is Source.Saved -> products.firstOrNull { it.id == source.id }?.let {
+            OpenSearch(ResultsView.of(it), it, it.searchQuery, backlog.orEmpty())
+        }
+        is Source.Typed -> {
+            val bookmark = products.firstOrNull { p -> p.searchQuery.category == MarketGroup.GENERAL && p.searchQuery.text.equals(source.text, ignoreCase = true) }
+            val entry = history.firstOrNull { e -> e.searchQuery.category == MarketGroup.GENERAL && e.searchQuery.text.equals(source.text, ignoreCase = true) }
+            OpenSearch(ResultsView.of(source.text, source.text, null, MarketGroup.GENERAL), bookmark, bookmark?.searchQuery ?: entry?.searchQuery, emptySet())
+        }
+        is Source.Vehicle -> {
+            val bookmark = products.firstOrNull { p -> p.searchQuery.category == MarketGroup.VEHICLES && p.searchQuery.text.equals(source.text, ignoreCase = true) }
+            val entry = history.firstOrNull { e -> e.searchQuery.category == MarketGroup.VEHICLES && e.searchQuery.text.equals(source.text, ignoreCase = true) }
+            when {
+                bookmark != null -> OpenSearch(ResultsView.of(bookmark), bookmark, bookmark.searchQuery, emptySet())
+                entry != null -> OpenSearch(ResultsView.of(entry), null, entry.searchQuery, emptySet())
+                else -> null
             }
-            val entry = history.firstOrNull {
-                it.searchQuery.text.trim().equals(route.text.trim(), ignoreCase = true) &&
-                    it.searchQuery.category == MarketGroup.GENERAL
+        }
+    }
+
+    if (open == null) {
+        Main({ classes("results") }) {
+            Div({ classes("empty") }) {
+                Text(if (products.isEmpty() && source is Source.Saved) "Loading…" else "This search is not here any more.")
             }
-            OpenSearch(
-                ResultsView.of(route.text, route.text, platforms = null, category = MarketGroup.GENERAL),
-                bookmark, bookmark?.searchQuery ?: entry?.searchQuery, emptySet(),
-            )
         }
-        else -> null
+        Aside({ classes("inspector") }) {}
+        return
     }
-
-    LaunchedEffect(openedKey, status.isNotEmpty()) {
-        if (route is Route.Saved && backlog == null && status.isNotEmpty()) {
-            backlog = status[route.id]?.newListingIds.orEmpty().toSet()
-            app.products.markOpened(route.id)
-        }
-        if (route is Route.Search) {
-            SearchHistoryStore.recordOpen(route.text, route.text, null, null, MarketGroup.GENERAL)
-        }
-    }
-
-    Main({ classes("results") }) {
-        if (open == null) {
-            Div({ classes("empty") }) { Text(if (products.isEmpty()) "Loading saved searches…" else "This saved search is gone.") }
-        } else {
-            ResultsList(app, route, open)
-        }
-    }
-    Section({ classes("detail") }) {
-        DetailPane(app, route)
-    }
+    ResultsPanes(app, route, open)
 }
 
 @Composable
-private fun ResultsList(app: WebApp, route: Route, open: OpenSearch) {
+private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
     val vm = app.listings
     val view = open.view
     val listings by vm.listings.collectAsState()
     val elsewhere by vm.elsewhere.collectAsState()
     val fetched by vm.fetched.collectAsState()
-    val marketBasis by vm.marketBasis.collectAsState()
-    val dropped by vm.droppedBySearch.collectAsState()
-    val banned by vm.bannedIds.collectAsState()
-    val blocked by vm.blockedTerms.collectAsState()
     val loading by vm.loading.collectAsState()
     val statuses by vm.platformStatuses.collectAsState()
     val total by vm.totalPlatforms.collectAsState()
     val completed by vm.completedPlatforms.collectAsState()
     val sortMode by vm.sortMode.collectAsState()
     val shownMarkets by vm.shownMarkets.collectAsState()
+    val priceHistory by vm.priceHistory.collectAsState()
+    val banned by vm.bannedIds.collectAsState()
+    val blocked by vm.blockedTerms.collectAsState()
+    val marketBasis by vm.marketBasis.collectAsState()
+    val dropped by vm.droppedBySearch.collectAsState()
 
-    // The search's own settings go into the view model as it opens, the way the phone's results
-    // screen hands them over.
+    // The search's own settings go into the view model as it opens.
     val savedBlocked = open.saved?.excludeKeywords.orEmpty()
-    LaunchedEffect(view.query, savedBlocked) { vm.setBlockedTerms(savedBlocked) }
-    LaunchedEffect(view.query, open.saved != null) {
+    LaunchedEffect(view.query, view.category) {
+        vm.setBlockedTerms(savedBlocked)
         open.saved?.let {
             vm.showMarkets(it.showOnlyMarkets)
             vm.showCountries(it.showOnlyCountries)
@@ -162,9 +180,9 @@ private fun ResultsList(app: WebApp, route: Route, open: OpenSearch) {
         if (lat != null && lon != null) vm.setLocation(lat, lon)
     }
 
-    val isCar = view.isCar
-    val markets = remember(view.platforms, isCar, shownMarkets) { marketsToAsk(view.platforms, isCar, shownMarkets) }
-    val crawlKey = listOf(view.query, view.filters, view.aliases, markets.map { it.name }, open.saved?.location, open.saved?.radiusKm).toString()
+    // Asked again only when what defines the crawl changes, compared by value.
+    val markets = remember(view.platforms, view.isCar, shownMarkets) { marketsToAsk(view.platforms, view.isCar, shownMarkets) }
+    val crawlKey = listOf(view.query, view.filters, view.aliases, markets.map { it.name }, open.saved?.location, open.saved?.radiusKm, open.saved?.reach).toString()
     LaunchedEffect(crawlKey) {
         vm.search(
             view.query, markets, view.filters, excludeKeywords = savedBlocked, aliases = view.aliases,
@@ -174,224 +192,264 @@ private fun ResultsList(app: WebApp, route: Route, open: OpenSearch) {
         )
     }
 
-    // The reader's narrowing, read out of the saved search once per search opened and theirs from
-    // then on, so writing a choice back never re-seeds the others.
-    val openedSearch = "${view.name}|${view.query}"
-    var narrowing by remember(openedSearch) { mutableStateOf<Narrowing?>(null) }
-    if (narrowing == null && (open.saved != null || route is Route.Search)) narrowing = Narrowing.of(open.saved)
+    // The reader's narrowing: read out of the search once as it opens, theirs from then on.
+    var narrowing by remember(view.name, view.query, view.category) { mutableStateOf<Narrowing?>(null) }
+    if (narrowing == null) narrowing = Narrowing.of(open.saved)
     val current = narrowing ?: Narrowing()
     val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
     val narrowed = remember(listings, current, money, open.newListingIds) { narrow(listings, current, open.newListingIds) }
+    val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
     val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped) {
         hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds)
     }
+    val state = ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets) { narrowing = it }
 
-    fun persist(edit: (SearchQuery) -> SearchQuery) {
-        val base = open.saved ?: SearchQuery(text = view.query, category = view.category)
-        val next = edit(base)
-        val bookmark = open.bookmark
-        if (bookmark != null) app.products.updateProduct(bookmark.copy(searchQuery = next))
-        else SearchHistoryStore.record(view.name, next)
+    val shown = narrowed.displayed
+    val selected = route.listing
+    KeyboardWalk(route, shown.map { it.id })
+
+    Main({ classes("results") }) {
+        Header({ classes("results-head") }) {
+            Div({ classes("title-row") }) {
+                Div({ classes("title-text") }) {
+                    H1 { Text(view.name) }
+                    val where = listOfNotNull(
+                        view.query.takeIf { !it.equals(view.name, ignoreCase = true) },
+                        open.saved?.location?.let { place -> "near $place" + (open.saved.radiusKm?.takeIf { it > 0 }?.let { " · $it km" } ?: "") },
+                    )
+                    if (where.isNotEmpty()) P({ classes("subtitle") }) { Text(where.joinToString(" · ")) }
+                }
+                if (view.isCar) {
+                    IconButton(Glyph.Car, "Vehicle criteria", pressed = route.panel == Panel.CRITERIA) { togglePanel(route, Panel.CRITERIA) }
+                }
+                val bookmark = open.bookmark
+                if (bookmark != null) {
+                    IconButton(Glyph.Bell, "Watching and alerts", pressed = route.panel == Panel.ALERTS) { togglePanel(route, Panel.ALERTS) }
+                }
+                IconButton(Glyph.Refresh, "Ask the markets again") { vm.refresh(markets) }
+                QuietButton(if (bookmark != null) "Saved" else "Save", Glyph.Bookmark, pressed = bookmark != null) {
+                    if (bookmark != null) app.products.deleteProduct(bookmark.id)
+                    else app.products.createProduct(
+                        view.name.ifBlank { view.query },
+                        bookmarkQuery(
+                            onScreen = open.saved ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category),
+                            text = view.query, asked = markets, category = view.category, carFilters = view.filters,
+                            blockedWords = blocked, aliases = view.aliases,
+                        ),
+                    )
+                }
+            }
+
+            MarketsLine(route, loading, total, completed, statuses)
+            PriceStrip(route, summary)
+            Toolbar(app, route, state, sortMode, blocked.size, hidden.sumOf { it.listings.size })
+        }
+
+        val photos = LookChoice.layout == OfferLayout.PHOTOS
+        Div({ classes(if (photos) "tiles" else "rows") }) {
+            if (shown.isEmpty()) {
+                Div({ classes("empty") }) {
+                    Text(
+                        when {
+                            loading -> "Waiting for the first market to answer…"
+                            fetched.isEmpty() -> "No market had one."
+                            else -> "Your narrowing hides all ${narrowed.allActive.size} of them."
+                        },
+                    )
+                }
+            }
+            shown.forEach { listing ->
+                val copies = elsewhere[listing.id].orEmpty()
+                val to = route.copy(listing = listing.id, panel = null)
+                val lowest = listing.id in summary.cheapestIds
+                val hide = { (listOf(listing) + copies).forEach(vm::ban) }
+                if (photos) OfferTile(listing, copies, listing.id == selected, lowest, to, hide)
+                else OfferRow(listing, copies, listing.id == selected, lowest, to, hide)
+            }
+        }
     }
 
-    val selected = route.listing
-    val shown = narrowed.displayed
-    // Up and down (or j and k) walk the list the way they do in a mail client; the listing shown on
-    // the right follows.
-    DisposableEffect(shown.map { it.id }, selected) {
+    Aside({ classes("inspector") }) {
+        when {
+            route.panel != null -> PanelView(app, route, route.panel, state)
+            selected != null -> DetailPane(app, route, selected, state)
+            else -> PricesPanel(app, route, state)
+        }
+    }
+}
+
+/** Opens a side panel, or closes it when it is the one open. */
+fun togglePanel(route: Route.Results, panel: Panel) {
+    Router.replace(if (route.panel == panel) route.copy(panel = null) else route.copy(panel = panel, listing = null))
+}
+
+/** Up and down (or j and k) walk the offers the way they walk a mail client's inbox; Escape closes
+ *  whatever the right pane shows. */
+@Composable
+private fun KeyboardWalk(route: Route.Results, ids: List<String>) {
+    DisposableEffect(ids, route) {
         val handler: (org.w3c.dom.events.Event) -> Unit = handler@{ event ->
             val key = event as KeyboardEvent
             val target = document.activeElement
             if (target is HTMLInputElement || target is HTMLSelectElement || target is HTMLTextAreaElement) return@handler
-            val step = when (key.key) {
-                "ArrowDown", "j" -> 1
-                "ArrowUp", "k" -> -1
-                else -> return@handler
+            if (key.key == "Escape" && (route.listing != null || route.panel != null)) {
+                Router.replace(route.copy(listing = null, panel = null))
+                return@handler
             }
-            if (shown.isEmpty()) return@handler
+            val step = when (key.key) { "ArrowDown", "j" -> 1; "ArrowUp", "k" -> -1; else -> return@handler }
+            if (ids.isEmpty()) return@handler
             key.preventDefault()
-            val at = shown.indexOfFirst { it.id == selected }
-            val next = shown[(if (at < 0) 0 else at + step).coerceIn(0, shown.lastIndex)]
-            Router.replace(route.withListing(next.id))
-            // Focus moves with it, so the ring a click left on another row does not mark a second one.
-            val row = document.getElementById("row-${next.id}")?.querySelector("a")
-            row?.asDynamic()?.focus(js("({ preventScroll: true })"))
-            row?.asDynamic()?.scrollIntoView(js("({ block: 'nearest' })"))
+            val at = ids.indexOf(route.listing)
+            val next = ids[(if (at < 0) 0 else at + step).coerceIn(0, ids.lastIndex)]
+            Router.replace(route.copy(listing = next, panel = null))
+            val card = document.getElementById("offer-$next")
+            card?.querySelector("a")?.asDynamic()?.focus(js("({ preventScroll: true })"))
+            card?.asDynamic()?.scrollIntoView(js("({ block: 'nearest' })"))
         }
         document.addEventListener("keydown", handler)
         onDispose { document.removeEventListener("keydown", handler) }
     }
+}
 
-    Header({ classes("results-head") }) {
-        Div({ classes("title-row") }) {
-            H1 { Text(view.name) }
-            val bookmark = open.bookmark
-            Button(attrs = {
-                classes("ghost")
-                attr("aria-pressed", (bookmark != null).toString())
-                onClick {
-                    if (bookmark != null) app.products.deleteProduct(bookmark.id)
-                    else app.products.createProduct(view.name, open.saved ?: SearchQuery(
-                        text = view.query, category = view.category, platforms = markets,
-                    ))
-                }
-            }) { Text(if (bookmark != null) "Saved" else "Save search") }
-        }
-        P({ classes("status") }) {
+/** How the asking is going, in one line; a market that wants something from the reader says so. */
+@Composable
+private fun MarketsLine(route: Route.Results, loading: Boolean, total: Int, completed: Int, statuses: List<PlatformStatus>) {
+    val captcha = statuses.count { it.status == PlatformSearchStatus.CAPTCHA && it.captchaUrl != null }
+    val failed = statuses.count {
+        it.status in setOf(PlatformSearchStatus.ERROR, PlatformSearchStatus.TIMEOUT, PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED, PlatformSearchStatus.CAPTCHA)
+    }
+    Button(attrs = {
+        classes(*listOfNotNull("markets-line", "attention".takeIf { captcha > 0 }, "on".takeIf { route.panel == Panel.MARKETS }).toTypedArray())
+        onClick { togglePanel(route, Panel.MARKETS) }
+    }) {
+        Icon(Glyph.Store, 16)
+        Span {
             Text(
                 when {
-                    loading && total > 0 -> "Asking the markets: $completed of $total have answered · ${shown.size} so far"
-                    loading -> "Asking the markets…"
-                    else -> "${shown.size} offers across ${shown.map { it.platformId }.distinct().size} markets"
-                },
+                    loading && total > 0 -> "$completed of $total markets have answered"
+                    loading -> "Asking the markets"
+                    else -> "${statuses.count { it.status == PlatformSearchStatus.DONE }} of ${statuses.size} markets answered"
+                } + (if (failed > 0 && !loading) " · $failed could not be asked" else "") +
+                    (if (captcha > 0) " · $captcha waiting for a captcha" else ""),
             )
-            val failed = statuses.count { it.status !in setOf(PlatformSearchStatus.DONE, PlatformSearchStatus.SEARCHING, PlatformSearchStatus.PENDING) }
-            if (!loading && failed > 0) Span({ classes("muted") }) { Text(" · $failed could not be asked") }
         }
-        FilterBar(narrowed, current, sortMode,
-            onNarrow = { next -> narrowing = next },
-            onSort = { mode -> vm.setSortMode(mode); persist { it.copy(sort = mode) } },
-            onBand = { band -> narrowing = current.copy(band = band); persist { it.withBand(band, narrowed) } },
-            onConditions = { set, unstated ->
-                narrowing = current.copy(conditions = set, unstatedCondition = unstated)
-                persist { it.copy(condition = set.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
-            },
-            onSaleTypes = { set, unstated ->
-                narrowing = current.copy(saleTypes = set, unstatedSaleType = unstated)
-                persist { it.copy(saleTypes = set.toList().takeIf { l -> l.isNotEmpty() }, saleTypeUnstated = unstated) }
-            },
-            newCount = narrowed.allActive.count { it.id in open.newListingIds },
-        )
-        val hiddenCount = hidden.sumOf { it.listings.size }
-        if (hiddenCount > 0) {
-            P({ classes("hidden-line") }) {
-                Text("Not shown: $hiddenCount · " + hidden.maxBy { it.listings.size }.label)
+        if (loading && total > 0) {
+            Span({ classes("progress") }) {
+                Span({ classes("progress-fill"); style { property("width", "${completed * 100 / total}%") } }) {}
             }
-        }
-    }
-
-    Div({ classes("rows") }) {
-        if (shown.isEmpty() && !loading) {
-            Div({ classes("empty") }) {
-                Text(if (fetched.isEmpty()) "No market had one." else "Your filters hide all ${narrowed.allActive.size} of them.")
-            }
-        }
-        shown.forEach { listing ->
-            val copies = elsewhere[listing.id].orEmpty()
-            ListingRow(
-                listing, copies, active = listing.id == selected,
-                to = route.withListing(listing.id),
-                onHide = { (listOf(listing) + copies).forEach(vm::ban) },
-            )
         }
     }
 }
 
+/** Is this a good price: the cheapest, the middle, the sold middle, and the spread drawn small. */
 @Composable
-private fun ListingRow(listing: Listing, copies: List<Listing>, active: Boolean, to: Route, onHide: () -> Unit) {
-    Div({
-        id("row-${listing.id}")
-        classes(*listOfNotNull("row", "active".takeIf { active }).toTypedArray())
+private fun PriceStrip(route: Route.Results, summary: PriceSummary) {
+    if (summary.count == 0) return
+    Button(attrs = {
+        classes(*listOfNotNull("price-strip", "on".takeIf { route.panel == Panel.PRICES }).toTypedArray())
+        attr("aria-label", "The price picture")
+        onClick { togglePanel(route, Panel.PRICES) }
     }) {
-        RouteLink(to, classes = listOf("row-link"), replace = true) {
-            val image = listing.imageUrls.firstOrNull { it.isNotBlank() }
-            if (image != null) {
-                Img(src = image, alt = "") {
-                    classes("thumb")
-                    attr("loading", "lazy")
-                    attr("referrerpolicy", "no-referrer")
-                }
-            } else {
-                Div({ classes("thumb") }) {}
-            }
-            Div({ classes("row-text") }) {
-                Span({ classes("row-title") }) { Text(listing.title.tidyTitle()) }
-                Span({ classes("row-meta") }) {
-                    Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
-                }
-                listingFoot(listing).takeIf { it.isNotEmpty() }?.let { foot ->
-                    Span({ classes("row-foot") }) { Text(foot.joinToString(" · ")) }
-                }
-            }
-            Div({ classes("row-price") }) {
-                Span({ classes("price") }) { Text(listing.comparablePrice.format()) }
-                listing.oldPrice?.let { Span({ classes("old-price") }) { Text(it.format()) } }
+        Div({ classes("figure") }) {
+            Span({ classes("figure-label") }) { Text("Cheapest") }
+            summary.cheapest?.let { Price(it, lowest = true) }
+        }
+        Div({ classes("figure") }) {
+            Span({ classes("figure-label") }) { Text("Middle of ${summary.count}") }
+            summary.middle?.let { Price(it) }
+        }
+        summary.sold?.let { sold ->
+            Div({ classes("figure") }) {
+                Span({ classes("figure-label") }) { Text("Sold, middle of ${sold.count}") }
+                Price(sold.middle)
             }
         }
-        Button(attrs = {
-            classes("icon", "hide")
-            attr("title", "Hide this listing")
-            attr("aria-label", "Hide this listing")
-            onClick { onHide() }
-        }) { Text("✕") }
+        Spread(summary)
+    }
+}
+
+/** The spread of prices as small bars, cheapest at the left; the cheapest bar stands apart. */
+@Composable
+fun Spread(summary: PriceSummary, tall: Boolean = false) {
+    val peak = (summary.spread.maxOrNull() ?: 0).coerceAtLeast(1)
+    Div({ classes(*listOfNotNull("spread", "tall".takeIf { tall }).toTypedArray()); attr("aria-hidden", "true") }) {
+        summary.spread.forEachIndexed { index, count ->
+            Span({
+                classes(*listOfNotNull("bar", "lowest".takeIf { index == 0 && count > 0 }).toTypedArray())
+                style { property("height", "${if (count == 0) 2 else 8 + count * 92 / peak}%") }
+            }) {}
+        }
     }
 }
 
 @Composable
-private fun FilterBar(
-    narrowed: io.github.tieo.arbay.results.Narrowed,
-    narrowing: Narrowing,
-    sortMode: SortMode,
-    onNarrow: (Narrowing) -> Unit,
-    onSort: (SortMode) -> Unit,
-    onBand: (ClosedFloatingPointRange<Float>) -> Unit,
-    onConditions: (Set<Condition>, Boolean) -> Unit,
-    onSaleTypes: (Set<SaleType>, Boolean) -> Unit,
-    newCount: Int,
-) {
-    Div({ classes("filters") }) {
+private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sortMode: SortMode, blockedCount: Int, hiddenCount: Int) {
+    val narrowed = state.narrowed
+    val narrowing = state.narrowing
+    Div({ classes("toolbar") }) {
         Select({
             classes("control")
             attr("aria-label", "Order")
-            onChange { event -> event.value?.let { v -> onSort(SortMode.valueOf(v)) } }
+            onChange { event ->
+                event.value?.let { v ->
+                    val mode = SortMode.valueOf(v)
+                    if (mode == SortMode.NEAREST && DevicePosition.latitude == null) {
+                        readPosition { lat, lon -> DevicePosition.set(lat, lon); app.listings.setLocation(lat, lon) }
+                    }
+                    app.listings.setSortMode(mode)
+                    state.open.persist(app) { it.copy(sort = mode) }
+                }
+            }
         }) {
-            SortMode.entries.forEach { mode ->
-                Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) }
-            }
+            SortMode.entries.forEach { mode -> Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) } }
         }
 
-        // The band in whole display units; an empty end is no bound.
         Label(attrs = { classes("band") }) {
-            Text(DisplayCurrency.current)
-            BandInput(narrowed.priceRange.start, narrowed.priceMin, "from") { low ->
-                onBand((low ?: narrowed.priceMin)..narrowed.priceRange.endInclusive)
+            BandInput(narrowed.priceRange.start, narrowed.priceMin, "Lowest price") { low ->
+                val band = (low ?: narrowed.priceMin)..narrowed.priceRange.endInclusive
+                state.setNarrowing(narrowing.copy(band = band))
+                state.open.persist(app) { it.withBand(band, narrowed) }
             }
-            Text("–")
-            BandInput(narrowed.priceRange.endInclusive, narrowed.priceMax, "to") { high ->
-                onBand(narrowed.priceRange.start..(high ?: narrowed.priceMax))
+            Span({ classes("muted") }) { Text("–") }
+            BandInput(narrowed.priceRange.endInclusive, narrowed.priceMax, "Highest price") { high ->
+                val band = narrowed.priceRange.start..(high ?: narrowed.priceMax)
+                state.setNarrowing(narrowing.copy(band = band))
+                state.open.persist(app) { it.withBand(band, narrowed) }
             }
+            Span({ classes("muted") }) { Text(DisplayCurrency.current) }
         }
 
-        // One chip per condition the results hold, each on or off by itself; none ticked is every
-        // condition. "Not stated" is its own answer, for listings whose market never said.
+        fun setConditions(next: Set<Condition>, unstated: Boolean) {
+            state.setNarrowing(narrowing.copy(conditions = next, unstatedCondition = unstated))
+            state.open.persist(app) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
+        }
         Condition.entries.filter { (narrowed.conditionCounts[it] ?: 0) > 0 }.forEach { value ->
-            Chip("${value.label} (${narrowed.conditionCounts[value]})", value in narrowing.conditions) {
-                val next = if (value in narrowing.conditions) narrowing.conditions - value else narrowing.conditions + value
-                onConditions(next, narrowing.unstatedCondition)
+            Chip("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) {
+                setConditions(if (value in narrowing.conditions) narrowing.conditions - value else narrowing.conditions + value, narrowing.unstatedCondition)
             }
         }
-        narrowed.conditionCounts[null]?.takeIf { it > 0 && narrowed.conditionCounts.size > 1 }?.let { count ->
-            Chip("Not stated ($count)", narrowing.unstatedCondition) {
-                onConditions(narrowing.conditions, !narrowing.unstatedCondition)
-            }
+        // "Not stated" only matters once a condition is picked: until then every listing shows.
+        narrowed.conditionCounts[null]?.takeIf { it > 0 && narrowing.conditions.isNotEmpty() }?.let { count ->
+            Chip("Not stated $count", narrowing.unstatedCondition) { setConditions(narrowing.conditions, !narrowing.unstatedCondition) }
         }
-        // Offered only where the results hold both kinds: a screen of shop listings has no auction
-        // to take out.
         if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1) {
             SaleType.entries.filter { (narrowed.saleTypeCounts[it] ?: 0) > 0 }.forEach { value ->
-                Chip("${value.label} (${narrowed.saleTypeCounts[value]})", value in narrowing.saleTypes) {
+                Chip("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) {
                     val next = if (value in narrowing.saleTypes) narrowing.saleTypes - value else narrowing.saleTypes + value
-                    onSaleTypes(next, narrowing.unstatedSaleType)
-                }
-            }
-            narrowed.saleTypeCounts[null]?.takeIf { it > 0 }?.let { count ->
-                Chip("Not stated ($count)", narrowing.unstatedSaleType) {
-                    onSaleTypes(narrowing.saleTypes, !narrowing.unstatedSaleType)
+                    state.setNarrowing(narrowing.copy(saleTypes = next))
+                    state.open.persist(app) { it.copy(saleTypes = next.toList().takeIf { l -> l.isNotEmpty() }) }
                 }
             }
         }
-        if (newCount > 0) {
-            Chip("New ($newCount)", narrowing.newOnly) { onNarrow(narrowing.copy(newOnly = !narrowing.newOnly)) }
+        val newCount = narrowed.allActive.count { it.id in state.open.newListingIds }
+        if (newCount > 0) Chip("New $newCount", narrowing.newOnly) { state.setNarrowing(narrowing.copy(newOnly = !narrowing.newOnly)) }
+
+        Span({ classes("toolbar-gap") }) {}
+        QuietButton(if (blockedCount > 0) "Words · $blockedCount" else "Words", Glyph.Words, pressed = route.panel == Panel.WORDS) { togglePanel(route, Panel.WORDS) }
+        if (hiddenCount > 0) QuietButton("$hiddenCount not shown", Glyph.EyeOff, pressed = route.panel == Panel.HIDDEN) { togglePanel(route, Panel.HIDDEN) }
+        Div({ classes("segmented") }) {
+            IconButton(Glyph.Rows, "Rows", pressed = LookChoice.layout == OfferLayout.ROWS) { LookChoice.choose(OfferLayout.ROWS) }
+            IconButton(Glyph.Photos, "Photos", pressed = LookChoice.layout == OfferLayout.PHOTOS) { LookChoice.choose(OfferLayout.PHOTOS) }
         }
     }
 }
@@ -400,7 +458,7 @@ private fun FilterBar(
 private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (Float?) -> Unit) {
     Input(InputType.Number) {
         classes("control", "band-input")
-        attr("aria-label", "Price $label")
+        attr("aria-label", label)
         attr("placeholder", trackEnd.toInt().toString())
         value(if (value == trackEnd) "" else value.toInt().toString())
         onChange { event -> onCommit(event.value?.toFloat()) }
@@ -408,38 +466,57 @@ private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (F
 }
 
 @Composable
-private fun Chip(text: String, on: Boolean, onToggle: () -> Unit) {
-    Button(attrs = {
-        classes(*listOfNotNull("chip", "on".takeIf { on }).toTypedArray())
-        attr("aria-pressed", on.toString())
-        onClick { onToggle() }
-    }) { Text(text) }
-}
-
-/** Before a search is open: the searches run lately, newest first, each a link back to it. */
-@Composable
-fun Welcome(app: WebApp) {
-    val history by SearchHistoryStore.entries.collectAsState()
-    Main({ classes("results") }) {
-        val recent = history.filter { it.searchQuery.category == MarketGroup.GENERAL }
-        Header({ classes("results-head") }) { H1 { Text("Recent searches") } }
-        Div({ classes("rows") }) {
-            if (recent.isEmpty()) Div({ classes("empty") }) { Text("None yet in this browser.") }
-            recent.forEach { entry ->
-                RouteLink(Route.Search(entry.searchQuery.text), classes = listOf("recent")) {
-                    Span({ classes("row-title") }) { Text(entry.name) }
-                    Span({ classes("row-meta") }) { Text(entry.summary()) }
+private fun OfferRow(listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, onHide: () -> Unit) {
+    Div({
+        id("offer-${listing.id}")
+        classes(*listOfNotNull("offer-row", "active".takeIf { active }).toTypedArray())
+    }) {
+        RouteLink(to, classes = listOf("offer-link"), replace = true) {
+            Thumb(listing, "thumb")
+            Div({ classes("offer-text") }) {
+                Span({ classes("offer-title") }) { Text(listing.title.tidyTitle()) }
+                Span({ classes("offer-meta") }) {
+                    Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
                 }
+                listingFoot(listing).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
+            }
+            Div({ classes("offer-price") }) {
+                Price(listing.comparablePrice, lowest = lowest)
+                if (listing.saleType == SaleType.AUCTION) Span({ classes("muted", "small") }) { Text(listing.bidCount?.let { "$it bids" } ?: "auction") }
             }
         }
+        Div({ classes("offer-actions") }) { IconButton(Glyph.EyeOff, "Hide this offer") { onHide() } }
     }
-    Section({ classes("detail") }) {}
 }
 
 @Composable
-fun NotYet(name: String) {
-    Main({ classes("results") }) {
-        Div({ classes("empty") }) { Text(name) }
+private fun OfferTile(listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, onHide: () -> Unit) {
+    Div({
+        id("offer-${listing.id}")
+        classes(*listOfNotNull("offer-tile", "active".takeIf { active }).toTypedArray())
+    }) {
+        RouteLink(to, classes = listOf("offer-link"), replace = true) {
+            Thumb(listing, "tile-photo")
+            Div({ classes("tile-text") }) {
+                Price(listing.comparablePrice, lowest = lowest)
+                Span({ classes("offer-title") }) { Text(listing.title.tidyTitle()) }
+                Span({ classes("offer-meta") }) { Text(sourceLabel(listing, copies)) }
+            }
+        }
+        Div({ classes("offer-actions") }) { IconButton(Glyph.EyeOff, "Hide this offer") { onHide() } }
     }
-    Section({ classes("detail") }) {}
+}
+
+@Composable
+fun Thumb(listing: Listing, className: String) {
+    val image = listing.imageUrls.firstOrNull { it.isNotBlank() }
+    if (image != null) {
+        Img(src = image, alt = "") {
+            classes(className)
+            attr("loading", "lazy")
+            attr("referrerpolicy", "no-referrer")
+        }
+    } else {
+        Div({ classes(className, "no-photo") }) { Icon(Glyph.Tag, 22) }
+    }
 }

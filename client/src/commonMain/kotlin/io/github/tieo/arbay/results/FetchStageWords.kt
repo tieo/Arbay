@@ -1,4 +1,4 @@
-package io.github.tieo.arbay.ui.screen
+package io.github.tieo.arbay.results
 
 /**
  * What a market is being asked with, in words rather than in the name of the code doing it.
