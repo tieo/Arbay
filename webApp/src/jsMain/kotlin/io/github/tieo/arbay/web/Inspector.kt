@@ -34,6 +34,16 @@ import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.saidWhat
 import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.results.wordThatCaught
+import io.github.tieo.arbay.results.blockWord
+import io.github.tieo.arbay.results.clearBand
+import io.github.tieo.arbay.results.setAliases
+import io.github.tieo.arbay.results.setOtherWords
+import io.github.tieo.arbay.results.showBothSaleTypes
+import io.github.tieo.arbay.results.showEveryCondition
+import io.github.tieo.arbay.results.toggleMarket
+import io.github.tieo.arbay.results.toggleNewOnly
+import io.github.tieo.arbay.results.toggleSuggestedWord
+import io.github.tieo.arbay.results.unblockWord
 import io.github.tieo.arbay.results.WATCH_INTERVALS
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
@@ -158,19 +168,10 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                     when (val kind = group.kind) {
                         HiddenKind.YouHid -> QuietButton("Put all back") { vm.unbanAll() }
                         HiddenKind.BlockedWords -> QuietButton("Edit the words") { Router.replace(route.copy(panel = Panel.WORDS)) }
-                        HiddenKind.PriceBand -> QuietButton("Widen it") {
-                            state.setNarrowing(state.narrowing.copy(band = null))
-                            state.open.persist(app.products) { it.copy(minPrice = null, maxPrice = null) }
-                        }
-                        HiddenKind.Condition -> QuietButton("Show every condition") {
-                            state.setNarrowing(state.narrowing.copy(conditions = emptySet(), unstatedCondition = true))
-                            state.open.persist(app.products) { it.copy(condition = null, conditionUnstated = true) }
-                        }
-                        HiddenKind.SaleType -> QuietButton("Show both") {
-                            state.setNarrowing(state.narrowing.copy(saleTypes = emptySet(), unstatedSaleType = true))
-                            state.open.persist(app.products) { it.copy(saleTypes = null, saleTypeUnstated = true) }
-                        }
-                        HiddenKind.NotNew -> QuietButton("Show everything") { state.setNarrowing(state.narrowing.copy(newOnly = false)) }
+                        HiddenKind.PriceBand -> QuietButton("Widen it") { state.clearBand(app.products) }
+                        HiddenKind.Condition -> QuietButton("Show every condition") { state.showEveryCondition(app.products) }
+                        HiddenKind.SaleType -> QuietButton("Show both") { state.showBothSaleTypes(app.products) }
+                        HiddenKind.NotNew -> QuietButton("Show everything") { state.toggleNewOnly() }
                         is HiddenKind.Search -> if (kind.reason == io.github.tieo.arbay.model.DropReason.VEHICLE_CRITERIA) {
                             QuietButton("Edit the criteria") { Router.replace(route.copy(panel = Panel.CRITERIA)) }
                         }
@@ -187,10 +188,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                         when (group.kind) {
                             HiddenKind.YouHid -> IconButton(Glyph.Undo, "Put back") { vm.unban(listing) }
                             HiddenKind.BlockedWords -> wordThatCaught(listing, blocked)?.let { word ->
-                                IconButton(Glyph.Undo, "Unblock \"$word\"") {
-                                    val next = vm.unblockTerm(word)
-                                    state.open.persist(app.products) { it.copy(excludeKeywords = next) }
-                                }
+                                IconButton(Glyph.Undo, "Unblock \"$word\"") { state.unblockWord(app.products, vm, word) }
                             }
                             else -> {}
                         }
@@ -223,11 +221,7 @@ private fun MarketsPanel(app: WebApp, route: Route.Results, state: ResultsState)
             val kept = keptByMarket[platform] ?: 0
             val picked = platform in shown
             Div({ classes(*listOfNotNull("market-row", "problem".takeIf { status?.isProblem() == true }).toTypedArray()) }) {
-                Chip(platform.displayName, picked) {
-                    val next = if (picked) shown - platform else shown + platform
-                    vm.showMarkets(next)
-                    state.open.persist(app.products) { it.copy(showOnlyMarkets = next) }
-                }
+                Chip(platform.displayName, picked) { state.toggleMarket(app.products, vm, platform) }
                 Span({ classes("market-count") }) { Text(if (status == null) "not asked" else "$kept") }
                 val note = status?.saidWhat(kept, hiddenByWords = kept == 0 && (sentByMarket[platform] ?: 0) > 0)
                 note?.let { Span({ classes("muted", "small") }) { Text(it) } }
@@ -257,39 +251,19 @@ private fun WordsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
         PanelHead(route, "Words")
 
         H3 { Text("Keep out listings with") }
-        WordList(blocked, onRemove = { word ->
-            val next = vm.unblockTerm(word)
-            state.open.persist(app.products) { it.copy(excludeKeywords = next) }
-        }, onAdd = { word ->
-            val next = vm.blockTerm(word)
-            state.open.persist(app.products) { it.copy(excludeKeywords = next) }
-        }, adding = "Block a word")
+        WordList(blocked, onRemove = { state.unblockWord(app.products, vm, it) }, onAdd = { state.blockWord(app.products, vm, it) }, adding = "Block a word")
 
         H3 { Text("Also counts as this search") }
-        WordList(view.aliases, onRemove = { word ->
-            state.open.persist(app.products) { it.copy(aliases = view.aliases - word) }
-        }, onAdd = { word ->
-            state.open.persist(app.products) { it.copy(aliases = (view.aliases + word).distinct()) }
-        }, adding = "Another name for it")
+        WordList(view.aliases, onRemove = { state.setAliases(app.products, view.aliases - it) }, onAdd = { state.setAliases(app.products, view.aliases + it) }, adding = "Another name for it")
 
         H3 { Text("Ask in more words") }
-        Switch("The markets' own other names for it", reach.otherWords) { on ->
-            val next = reach.copy(otherWords = on)
-            vm.setReach(next, state.markets)
-            state.open.persist(app.products) { it.copy(reach = next) }
-        }
+        Switch("The markets' own other names for it", reach.otherWords) { state.setOtherWords(app.products, vm, it) }
         if (otherWords.isNotEmpty()) {
             Div({ classes("chips") }) {
                 otherWords.forEach { term ->
                     val on = picked.any { it.equals(term.term, ignoreCase = true) }
                     Span({ attr("title", term.why) }) {
-                        Chip(term.term + (term.added?.let { " +$it" } ?: ""), on) {
-                            vm.toggleWord(term.term, state.markets)
-                            state.open.persist(app.products) { q ->
-                                val words = if (on) q.reach.extraTerms.filterNot { it.equals(term.term, ignoreCase = true) } else q.reach.extraTerms + term.term
-                                q.copy(reach = q.reach.copy(extraTerms = words))
-                            }
-                        }
+                        Chip(term.term + (term.added?.let { " +$it" } ?: ""), on) { state.toggleSuggestedWord(app.products, vm, term.term) }
                     }
                 }
             }

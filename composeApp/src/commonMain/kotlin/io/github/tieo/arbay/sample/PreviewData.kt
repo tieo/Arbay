@@ -96,7 +96,7 @@ object PreviewData {
             platformId = it.name,
             platformName = it.displayName,
             status = PlatformSearchStatus.PENDING,
-            fetchStage = "not asked — tick to ask it",
+            fetchStage = "not asked, tick to ask it",
         )
     }
 
@@ -111,43 +111,6 @@ object PreviewData {
             drivetrain = Drivetrain.FWD, bodyType = BodyType.VAN, doors = 4, seats = 3,
             previousOwners = 2, color = "Weiß", emissionClassEuro = 6, inspectionUntil = "2027-03",
             upholstery = "Stoff", vanLength = 3, vanHeight = 2,
-        ),
-    )
-
-    /** Every way a listing can be missing from the results, for the one view that shows them. */
-    val hiddenGroups: List<io.github.tieo.arbay.ui.screen.HiddenGroup> = listOf(
-        io.github.tieo.arbay.ui.screen.HiddenGroup(
-            label = "you hid",
-            why = "Listings you sent away with the bin on their card.",
-            listings = active.take(2),
-            undoLabel = "Put all back",
-            undo = {},
-            restoreLabel = "Put back",
-            restore = {},
-        ),
-        io.github.tieo.arbay.ui.screen.HiddenGroup(
-            label = "your blocked words",
-            why = "Carrying one of your blocked words: defekt, bastler",
-            listings = active.drop(2).take(3),
-            undoLabel = "Edit the words",
-            undo = {},
-        ),
-        io.github.tieo.arbay.ui.screen.HiddenGroup(
-            label = "outside your price band",
-            why = "Priced outside the band this search is narrowed to.",
-            listings = active.drop(5).take(4),
-            undoLabel = "Widen it",
-            undo = {},
-        ),
-        io.github.tieo.arbay.ui.screen.HiddenGroup(
-            label = "consumable",
-            why = "The title reads as something the thing uses up — paper, bags, filters.",
-            listings = droppedBySearch.filter { it.reason == DropReason.CONSUMABLE }.map { it.listing },
-        ),
-        io.github.tieo.arbay.ui.screen.HiddenGroup(
-            label = "off target",
-            why = "The title carries too few of the words searched for.",
-            listings = droppedBySearch.filter { it.reason == DropReason.OFF_TARGET }.map { it.listing },
         ),
     )
 
@@ -258,52 +221,6 @@ object PreviewData {
         location = "Rottweil",
         radiusKm = 30,
     )
-
-    /** Markets as the filters list shows them, from the sample listings. Distances are
-     *  what a search from southern Germany would measure, so the rendered list is in the
-     *  order someone there would see. */
-    private val nearestByMarket = mapOf(
-        PlatformId.KLEINANZEIGEN to 34.0,
-        PlatformId.EBAY_DE to 61.0,
-        PlatformId.RICARDO to 148.0,
-        PlatformId.WILLHABEN to 310.0,
-        PlatformId.SUBITO to 402.0,
-        PlatformId.EBAY_IT to 455.0,
-        PlatformId.MARKTPLAATS to 520.0,
-        PlatformId.TWEEDEHANDS to 545.0,
-        PlatformId.EBAY_ES to 1180.0,
-    )
-
-    val marketChoices: List<io.github.tieo.arbay.ui.screen.MarketChoice> =
-        active.groupBy { it.platformId }.map { (platform, items) ->
-            io.github.tieo.arbay.ui.screen.MarketChoice(
-                platform = platform,
-                name = platform.displayName,
-                country = io.github.tieo.arbay.model.MarketSets.countryOf(platform),
-                count = items.size,
-                nearestKm = nearestByMarket[platform],
-            )
-        }
-
-    /** The same markets plus the ones that were asked and had nothing to give, which is what the
-     *  picker shows after a search where mobile.de and Kleinanzeigen came back empty. */
-    val marketChoicesWithEmpties: List<io.github.tieo.arbay.ui.screen.MarketChoice> =
-        marketChoices + listOf(
-            io.github.tieo.arbay.ui.screen.MarketChoice(
-                platform = PlatformId.MOBILE_DE,
-                name = PlatformId.MOBILE_DE.displayName,
-                country = io.github.tieo.arbay.model.MarketSets.countryOf(PlatformId.MOBILE_DE),
-                count = 0,
-                emptyBecause = "nothing there",
-            ),
-            io.github.tieo.arbay.ui.screen.MarketChoice(
-                platform = PlatformId.AUTOSCOUT24,
-                name = PlatformId.AUTOSCOUT24.displayName,
-                country = io.github.tieo.arbay.model.MarketSets.countryOf(PlatformId.AUTOSCOUT24),
-                count = 0,
-                emptyBecause = "blocked",
-            ),
-        )
 
     // ── The states a search can be in ────────────────────────────────────────
     //

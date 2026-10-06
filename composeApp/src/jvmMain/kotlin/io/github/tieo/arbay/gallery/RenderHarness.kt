@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import io.github.tieo.arbay.ui.LocalPreloadedImages
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import io.github.tieo.arbay.ui.theme.ArbayTheme
+import io.github.tieo.arbay.ui.ArbayTheme
 import org.jetbrains.skia.Image
 import java.io.File
 

@@ -157,3 +157,105 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     }
     return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets) { narrowing = it }
 }
+
+// ── What the reader can change about an open search ────────────────────────
+//
+// Each change narrows the screen at once and is written where the search is kept, so the same
+// search opens narrowed the same way next time, on any device. None of them asks the markets again.
+
+fun ResultsState.setBand(products: ProductViewModel, band: ClosedFloatingPointRange<Float>) {
+    setNarrowing(narrowing.copy(band = band))
+    open.persist(products) { it.withBand(band, narrowed) }
+}
+
+fun ResultsState.clearBand(products: ProductViewModel) {
+    setNarrowing(narrowing.copy(band = null))
+    open.persist(products) { it.copy(minPrice = null, maxPrice = null) }
+}
+
+fun ResultsState.toggleCondition(products: ProductViewModel, value: io.github.tieo.arbay.model.Condition) {
+    val next = if (value in narrowing.conditions) narrowing.conditions - value else narrowing.conditions + value
+    setConditions(products, next, narrowing.unstatedCondition)
+}
+
+fun ResultsState.toggleUnstatedCondition(products: ProductViewModel) =
+    setConditions(products, narrowing.conditions, !narrowing.unstatedCondition)
+
+fun ResultsState.showEveryCondition(products: ProductViewModel) = setConditions(products, emptySet(), true)
+
+private fun ResultsState.setConditions(products: ProductViewModel, next: Set<io.github.tieo.arbay.model.Condition>, unstated: Boolean) {
+    setNarrowing(narrowing.copy(conditions = next, unstatedCondition = unstated))
+    open.persist(products) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
+}
+
+fun ResultsState.toggleSaleType(products: ProductViewModel, value: io.github.tieo.arbay.model.SaleType) {
+    val next = if (value in narrowing.saleTypes) narrowing.saleTypes - value else narrowing.saleTypes + value
+    setNarrowing(narrowing.copy(saleTypes = next))
+    open.persist(products) { it.copy(saleTypes = next.toList().takeIf { l -> l.isNotEmpty() }) }
+}
+
+fun ResultsState.showBothSaleTypes(products: ProductViewModel) {
+    setNarrowing(narrowing.copy(saleTypes = emptySet(), unstatedSaleType = true))
+    open.persist(products) { it.copy(saleTypes = null, saleTypeUnstated = true) }
+}
+
+/** "New" is about this opening only, so it is never written down. */
+fun ResultsState.toggleNewOnly() = setNarrowing(narrowing.copy(newOnly = !narrowing.newOnly))
+
+/** How many of the offers on screen arrived since the search was last opened. */
+val ResultsState.newCount: Int get() = narrowed.allActive.count { it.id in open.newListingIds }
+
+fun ResultsState.setSort(products: ProductViewModel, listings: ListingViewModel, mode: io.github.tieo.arbay.model.SortMode) {
+    listings.setSortMode(mode)
+    open.persist(products) { it.copy(sort = mode) }
+}
+
+fun ResultsState.blockWord(products: ProductViewModel, listings: ListingViewModel, word: String) {
+    val next = listings.blockTerm(word)
+    open.persist(products) { it.copy(excludeKeywords = next) }
+}
+
+fun ResultsState.unblockWord(products: ProductViewModel, listings: ListingViewModel, word: String) {
+    val next = listings.unblockTerm(word)
+    open.persist(products) { it.copy(excludeKeywords = next) }
+}
+
+fun ResultsState.setAliases(products: ProductViewModel, aliases: List<String>) =
+    open.persist(products) { it.copy(aliases = aliases.distinct()) }
+
+fun ResultsState.setOtherWords(products: ProductViewModel, listings: ListingViewModel, on: Boolean) {
+    val next = listings.searchReach.value.copy(otherWords = on)
+    listings.setReach(next, markets)
+    open.persist(products) { it.copy(reach = next) }
+}
+
+fun ResultsState.toggleSuggestedWord(products: ProductViewModel, listings: ListingViewModel, term: String) {
+    val on = listings.pickedWords.value.any { it.equals(term, ignoreCase = true) }
+    listings.toggleWord(term, markets)
+    open.persist(products) { q ->
+        val words = if (on) q.reach.extraTerms.filterNot { it.equals(term, ignoreCase = true) } else q.reach.extraTerms + term
+        q.copy(reach = q.reach.copy(extraTerms = words))
+    }
+}
+
+fun ResultsState.toggleMarket(products: ProductViewModel, listings: ListingViewModel, platform: PlatformId) {
+    val shown = listings.shownMarkets.value
+    val next = if (platform in shown) shown - platform else shown + platform
+    listings.showMarkets(next)
+    open.persist(products) { it.copy(showOnlyMarkets = next) }
+}
+
+/** Saves the search as it stands on screen, or forgets the saved one. */
+fun ResultsState.toggleSaved(products: ProductViewModel, listings: ListingViewModel) {
+    val bookmark = open.bookmark
+    if (bookmark != null) { products.deleteProduct(bookmark.id); return }
+    val view = open.view
+    products.createProduct(
+        view.name.ifBlank { view.query },
+        bookmarkQuery(
+            onScreen = open.saved ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category),
+            text = view.query, asked = markets, category = view.category, carFilters = view.filters,
+            blockedWords = listings.blockedTerms.value, aliases = view.aliases,
+        ),
+    )
+}

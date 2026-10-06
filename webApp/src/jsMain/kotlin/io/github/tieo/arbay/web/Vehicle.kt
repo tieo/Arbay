@@ -19,6 +19,10 @@ import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.results.VehicleSearch
+import io.github.tieo.arbay.results.applyCriteria
+import io.github.tieo.arbay.results.FORM_BODIES
+import io.github.tieo.arbay.results.FORM_FUELS
+import io.github.tieo.arbay.results.vehicleWord
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.Aside
@@ -78,10 +82,7 @@ fun CriteriaPanel(app: WebApp, route: Route.Results, state: ResultsState) {
             IconButton(Glyph.Close, "Close") { Router.replace(route.copy(panel = null)) }
         }
         VehicleForm(VehicleSearch.of(saved), "Apply") { search ->
-            val bookmark = state.open.bookmark
-            if (bookmark != null) app.products.updateProduct(bookmark.copy(name = search.name, searchQuery = search.applyTo(bookmark.searchQuery)))
-            else search.record()
-            Router.replace(Route.Results(if (bookmark != null) Source.Saved(bookmark.id) else Source.Vehicle(search.query)))
+            Router.replace(Route.Results(state.open.applyCriteria(app.products, search)))
         }
     }
 }
@@ -146,16 +147,16 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
             }
             Div({ classes("chips") }) {
                 Span({ classes("chips-label") }) { Text("Fuel") }
-                listOf(Fuel.DIESEL, Fuel.PETROL, Fuel.ELECTRIC, Fuel.HYBRID_PETROL, Fuel.PLUGIN_HYBRID, Fuel.LPG).forEach { fuel ->
-                    Chip(words(fuel.name), fuel in filters.fuels) {
+                FORM_FUELS.forEach { fuel ->
+                    Chip(vehicleWord(fuel.name), fuel in filters.fuels) {
                         filters = filters.copy(fuels = if (fuel in filters.fuels) filters.fuels - fuel else filters.fuels + fuel)
                     }
                 }
             }
             Div({ classes("chips") }) {
                 Span({ classes("chips-label") }) { Text("Body") }
-                BodyType.entries.filter { it != BodyType.OTHER }.forEach { body ->
-                    Chip(words(body.name), body in filters.bodyTypes) {
+                FORM_BODIES.forEach { body ->
+                    Chip(vehicleWord(body.name), body in filters.bodyTypes) {
                         filters = filters.copy(bodyTypes = if (body in filters.bodyTypes) filters.bodyTypes - body else filters.bodyTypes + body)
                     }
                 }
@@ -236,11 +237,4 @@ private fun NumberField(label: String, value: Int?, onChange: (Int?) -> Unit) {
             onInput { onChange(it.value?.toInt()) }
         }
     }
-}
-
-/** An enum name as words: PLUGIN_HYBRID reads "Plug-in hybrid", SUV stays SUV. */
-private fun words(name: String): String = when (name) {
-    "SUV", "LPG", "CNG" -> name
-    "PLUGIN_HYBRID" -> "Plug-in hybrid"
-    else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
 }

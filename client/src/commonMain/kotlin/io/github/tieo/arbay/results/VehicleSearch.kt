@@ -2,7 +2,9 @@ package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.CarTaxonomyStore
 import io.github.tieo.arbay.history.SearchHistoryStore
+import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.MarketGroup
@@ -11,6 +13,8 @@ import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.model.withCarFilters
+import io.github.tieo.arbay.navigation.Source
+import io.github.tieo.arbay.viewmodel.ProductViewModel
 
 /**
  * A vehicle search as the form describes it: a make and a model (either may be left open), the
@@ -64,4 +68,32 @@ data class VehicleSearch(
         /** Every make the picker offers, as the taxonomy has them. */
         val makes: List<CarMakeNode> get() = CarTaxonomyStore.taxonomy.makes
     }
+}
+
+/**
+ * Applies [search] to the open vehicle search: a saved one is rewritten where it is kept, an unsaved
+ * one runs again as a search of its own. Returns where the results now are.
+ */
+fun OpenSearch.applyCriteria(products: ProductViewModel, search: VehicleSearch): Source {
+    val bookmark = bookmark
+    return if (bookmark != null) {
+        products.updateProduct(bookmark.copy(name = search.name, searchQuery = search.applyTo(bookmark.searchQuery)))
+        Source.Saved(bookmark.id)
+    } else {
+        search.record()
+        Source.Vehicle(search.query)
+    }
+}
+
+/** The fuels the form offers, the ones a used-vehicle buyer asks for. */
+val FORM_FUELS: List<Fuel> = listOf(Fuel.DIESEL, Fuel.PETROL, Fuel.ELECTRIC, Fuel.HYBRID_PETROL, Fuel.PLUGIN_HYBRID, Fuel.LPG)
+
+/** The body types the form offers: every one but the catch-all. */
+val FORM_BODIES: List<BodyType> = BodyType.entries.filter { it != BodyType.OTHER }
+
+/** An enum name as words: PLUGIN_HYBRID reads "Plug-in hybrid", SUV stays SUV. */
+fun vehicleWord(name: String): String = when (name) {
+    "SUV", "LPG", "CNG" -> name
+    "PLUGIN_HYBRID" -> "Plug-in hybrid"
+    else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
 }

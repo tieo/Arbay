@@ -1,452 +1,118 @@
 package io.github.tieo.arbay.gallery
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.design.Look
+import io.github.tieo.arbay.design.LookChoice
+import io.github.tieo.arbay.design.Looks
+import io.github.tieo.arbay.design.OfferLayout
 import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.Money
-import io.github.tieo.arbay.ui.screen.*
+import io.github.tieo.arbay.navigation.Panel
+import io.github.tieo.arbay.navigation.Route
+import io.github.tieo.arbay.navigation.Source
+import io.github.tieo.arbay.results.rememberOpenSearch
+import io.github.tieo.arbay.results.rememberResultsState
+import io.github.tieo.arbay.sample.PreviewData
+import io.github.tieo.arbay.ui.ArbayApp
+import io.github.tieo.arbay.ui.LocalNavigator
+import io.github.tieo.arbay.ui.Navigator
+import io.github.tieo.arbay.ui.PanelBody
+import io.github.tieo.arbay.ui.Session
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
+import io.github.tieo.arbay.viewmodel.PlatformStatus
 import io.github.tieo.arbay.viewmodel.ProductViewModel
-import io.github.tieo.arbay.sample.PreviewData
 import java.io.File
 
-/** A gallery of the app's result-view building blocks rendered with sample data, so the design can
- *  be reviewed as a set of PNGs and iterated against the UI rules. Each view is rendered light+dark. */
-// The wide render is looked at beside the upright one, in half a window, so what
-// matters is not how many pixels it has but how few logical ones: text keeps its
-// size relative to the frame only if the frame is narrow. Density buys sharpness,
-// not legibility, since both are scaled to the same width in the end.
-private val TABLET_W = 860
-private val TABLET_H = 1150
-/** One picture to draw: its name, its size in dp, and how many pixels per dp. */
-private data class Render(
-    val suffix: String,
-    val width: Int,
-    val height: Int,
-    val dark: Boolean,
-    val scale: Float,
-)
+/**
+ * Every phone screen drawn off-screen with sample data, one PNG per screen, state, look and
+ * brightness, so the design can be looked at without a device.
+ */
+private const val PHONE_W = 390
+private const val PHONE_H = 844
 
-private val CARD_H = 585
-private val PHONE_W = 390
-private val PHONE_H = 1600
+private data class Scene(val name: String, val content: @Composable () -> Unit)
 
-/** Every top-level view rendered inline (the sheets normally wrap in a Dialog, which an off-screen
- *  scene cannot capture; LocalRenderInline makes them paint in place). */
-private fun inline(content: @Composable () -> Unit): @Composable () -> Unit = {
-    androidx.compose.runtime.CompositionLocalProvider(io.github.tieo.arbay.ui.LocalRenderInline provides true, content = content)
-}
-
-/** A screen in one of the states it can be in. The state's name becomes part of the file name, so
- *  the model reads as a list rather than a lookup table. */
-private data class Scene(
-    val view: String,
-    val state: String,
-    // How much of the screen to draw. A view whose states differ below a chart needs
-    // more of itself in the frame than one whose states differ at the top.
-    val tall: Boolean = false,
-    val content: @Composable () -> Unit,
-)
-
-private fun scene(view: String, state: String, tall: Boolean = false, content: @Composable () -> Unit) =
-    Scene(view, state, tall, content)
-
-private val money = { cents: Long -> Money(cents, Currency.EUR) }
-
-private val SCENES: List<Scene> = buildList {
-    // ── Home ──────────────────────────────────────────────────────────────────
-    add(scene("home", "as-it-is") {
-        Home(saved = PreviewData.saved, status = PreviewData.savedStatus, profile = PreviewData.freeItemProfile)
-    })
-    add(scene("home", "loading") { Home(loading = true) })
-    add(scene("home", "empty") { Home() })
-    add(scene("home", "failed") { Home(error = "Could not reach the server at localhost:8090") })
-
-    // ── Search ────────────────────────────────────────────────────────────────
-    add(scene("search", "as-it-is") { Search() })
-    add(scene("search", "no-history") { Search(history = emptyList()) })
-    add(scene("search", "every-country") { Search(countries = emptyList()) })
-
-    // ── Results ───────────────────────────────────────────────────────────────
-    add(scene("results", "as-it-is") { Results(PreviewData.active + PreviewData.sold, PreviewData.marketAnswers) })
-    add(scene("results", "loading") {
-        Results(emptyList(), PreviewData.stillAsking, loading = true, total = 6, completed = 4)
-    })
-    add(scene("results", "with-a-backlog") {
-        Results(PreviewData.active, PreviewData.marketAnswers, newIds = PreviewData.newListingIds)
-    })
-    add(scene("results", "what-the-watch-found") {
-        val found = PreviewData.active.filter { it.id in PreviewData.newListingIds }
-        Results(found, emptyList(), stored = found)
-    })
-    add(scene("results", "an-auction-among-the-prices") {
-        Results(PreviewData.withAuction, PreviewData.marketAnswers)
-    })
-    add(scene("results", "one-offer-on-two-markets") {
-        Results(PreviewData.onTwoMarkets, PreviewData.marketAnswers)
-    })
-    add(scene("results", "empty") { Results(emptyList(), PreviewData.nobodyHadAnything) })
-    add(scene("results", "failed") { Results(emptyList(), PreviewData.everyoneFailed) })
-    add(scene("results", "some-markets-failed") {
-        Results(PreviewData.active.take(4), PreviewData.marketAnswers)
-    })
-    add(scene("results", "a-market-offers-its-captcha") {
-        Results(PreviewData.active.take(3), PreviewData.captchaHeld)
-    })
-    add(scene("results", "nearest-first-with-nowhere-to-measure-from") {
-        Results(PreviewData.active, PreviewData.marketAnswers, sort = io.github.tieo.arbay.model.SortMode.NEAREST)
-    })
-    add(scene("results", "edit-a-vehicle-search-term") {
-        Results(PreviewData.active, PreviewData.marketAnswers, openEditor = true, car = true)
-    })
-    add(scene("results", "other-words-to-add") {
-        Results(
-            PreviewData.active, PreviewData.marketAnswers,
-            otherWords = PreviewData.otherWords, picked = listOf("parkettschleifer"),
-        )
-    })
-    add(scene("other-words", "every-word-the-markets-printed") {
-        io.github.tieo.arbay.ui.screen.OtherWordsSheet(
-            words = PreviewData.otherWords,
-            picked = listOf("parkettschleifer"),
-            searchQuery = "parkettschleifmaschine",
-            onToggle = {},
-            onDismiss = {},
-        )
-    })
-    add(scene("listing", "everything-the-market-says", tall = true) {
-        io.github.tieo.arbay.ui.screen.ListingDetailSheet(
-            listing = PreviewData.fullyDescribed,
-            onDismiss = {},
-        )
-    })
-    add(scene("listing", "also-on-another-market", tall = true) {
-        val (lead, copy) = PreviewData.onTwoMarkets.let { it.first() to it.last() }
-        io.github.tieo.arbay.ui.screen.ListingDetailSheet(listing = lead, elsewhere = listOf(copy), onDismiss = {})
-    })
-    add(scene("hidden", "everything-not-on-the-screen") {
-        io.github.tieo.arbay.ui.screen.HiddenSheet(
-            groups = PreviewData.hiddenGroups,
-            searchQuery = "parkettschleifmaschine",
-            onDismiss = {},
-        )
-    })
-    add(scene("results", "what-the-search-removed") {
-        Results(PreviewData.active, PreviewData.marketAnswers, dropped = PreviewData.droppedBySearch)
-    })
-    add(scene("results", "the-filters-admit-none") {
-        Results(PreviewData.active, PreviewData.allAnswered, blocked = PreviewData.active.map { it.title })
-    })
-
-    // ── Filters ───────────────────────────────────────────────────────────────
-    add(scene("filters", "as-it-is") { Filters() })
-    add(scene("filters", "nothing-to-narrow") {
-        Filters(markets = emptyList(), blocked = emptyList(), active = 0, priceMax = 120f)
-    })
-
-    // ── Markets ───────────────────────────────────────────────────────────────
-    add(scene("markets", "as-it-is") { Markets(PreviewData.marketAnswers) })
-    add(scene("markets", "loading") { Markets(PreviewData.stillAsking) })
-    add(scene("markets", "one-asked-the-rest-listed", tall = true) {
-        Markets(PreviewData.marketAnswers.take(2) + PreviewData.notAsked)
-    })
-    add(scene("markets", "asked-in-their-own-language", tall = true) {
-        Markets(
-            PreviewData.marketAnswers,
-            reach = io.github.tieo.arbay.model.SearchReach(
-                otherLanguages = true,
-                termByLanguage = mapOf("it" to "levigatrice per parquet"),
-            ),
-            suggestions = io.github.tieo.arbay.model.TermSuggestions(
-                text = "parkettschleifmaschine",
-                suggestions = mapOf(
-                    "it" to "levigatrice per parquet",
-                    "nl" to "parketschuurmachine",
-                    "es" to "lijadora de parquet",
-                ),
-                unavailable = listOf("fr"),
-            ),
-        )
-    })
-    add(scene("markets", "empty") { Markets(PreviewData.nobodyHadAnything) })
-    add(scene("markets", "failed") { Markets(PreviewData.everyoneFailed) })
-    add(scene("markets", "cooling-down") { Markets(PreviewData.everyoneFailed.take(3)) })
-    // Several markets picked at once, which is what the picking is for: every other market has to
-    // stay on the list, or a second one could never be picked.
-    add(scene("markets", "several-picked", tall = true) {
-        Markets(
-            PreviewData.marketAnswers,
-            shownMarkets = setOf(
-                io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
-                io.github.tieo.arbay.model.PlatformId.RICARDO,
-            ),
-            shownCountries = setOf("AT"),
-        )
-    })
-
-    // ── Price ─────────────────────────────────────────────────────────────────
-    add(scene("price", "as-it-is", tall = true) { Price() })
-    add(scene("price", "loading", tall = true) { Price(soldLoading = true, sold = emptyList()) })
-    add(scene("price", "empty", tall = true) { Price(sold = emptyList(), soldPossible = true) })
-    add(scene("price", "failed", tall = true) { Price(sold = emptyList(), soldPossible = false) })
-
-    // ── Vehicle search ────────────────────────────────────────────────────────
-    add(scene("car-search", "as-it-is") { VehicleSearch() })
-
-    // ── Free items ────────────────────────────────────────────────────────────
-    add(scene("free-items", "as-it-is") { FreeItems(profile = PreviewData.freeItemProfile, items = PreviewData.active.take(3)) })
-    add(scene("free-items", "loading") { FreeItems(profile = PreviewData.freeItemProfile, loading = true) })
-    add(scene("free-items", "empty") { FreeItems(profile = PreviewData.freeItemProfile) })
-    add(scene("free-items", "failed") {
-        FreeItems(profile = PreviewData.freeItemProfile, error = "Could not reach the server")
-    })
-
-    // ── Settings ──────────────────────────────────────────────────────────────
-    add(scene("settings", "as-it-is") { Settings() })
-}
-
-// ── The screens, each taking the state it is being drawn in ──────────────────
-
-@Composable
-private fun Home(
-    saved: List<io.github.tieo.arbay.model.TrackedProduct> = emptyList(),
-    status: List<io.github.tieo.arbay.model.SavedSearchStatus> = emptyList(),
-    profile: io.github.tieo.arbay.model.FreeItemProfile? = null,
+private fun session(
+    listings: List<Listing> = PreviewData.active,
+    statuses: List<PlatformStatus> = PreviewData.marketAnswers,
     loading: Boolean = false,
-    error: String? = null,
-) = inline {
-    io.github.tieo.arbay.ui.screen.MainScreen(
-        productViewModel = ProductViewModel(
-            saved = saved, savedStatus = status, sampleLoading = loading, sampleError = error,
-            rendersASample = true,
-        ),
-        listingViewModel = ListingViewModel(),
-        freeItemViewModel = FreeItemViewModel(sampleProfile = profile),
-        client = ArbayClient(),
-    )
-}()
-
-@Composable
-private fun Search(
-    history: List<io.github.tieo.arbay.history.SearchHistoryEntry> = PreviewData.searchHistory,
-    countries: List<String> = listOf("DE", "AT", "CH"),
-) = inline {
-    io.github.tieo.arbay.ui.screen.DiscoverySheet(
-        onDismiss = {}, onProductSelected = {}, onCustomSearch = {},
-        onLiveSearch = {}, onFreeItems = {}, onCarSearch = {},
-        history = history,
-        countries = countries,
-    )
-}()
-
-@Composable
-private fun Results(
-    listings: List<Listing>,
-    statuses: List<io.github.tieo.arbay.viewmodel.PlatformStatus>,
-    loading: Boolean = false,
-    total: Int = 0,
-    completed: Int = 0,
-    blocked: List<String> = emptyList(),
     newIds: Set<String> = emptySet(),
-    stored: List<Listing>? = null,
-    dropped: List<io.github.tieo.arbay.model.DroppedListing> = emptyList(),
-    otherWords: List<io.github.tieo.arbay.model.SuggestedTerm> = emptyList(),
-    picked: List<String> = emptyList(),
-    sort: io.github.tieo.arbay.model.SortMode? = null,
-    openEditor: Boolean = false,
-    car: Boolean = false,
-) = inline {
-    io.github.tieo.arbay.ui.screen.ListingsSheet(
-        productName = "Parkettschleifmaschine",
-        searchQuery = "parkettschleifmaschine",
-        listingViewModel = ListingViewModel(
-            sample = listings,
-            sampleStatuses = statuses,
-            sampleLoading = loading,
-            sampleTotal = total,
-            sampleCompleted = completed,
-            sampleBlocked = blocked,
-            sampleDropped = dropped,
-            sampleOtherWords = otherWords,
-            samplePicked = picked,
-        ),
-        platforms = PreviewData.active.map { it.platformId }.distinct(),
-        savedFilters = sort?.let {
-            io.github.tieo.arbay.model.SearchQuery(
-                text = "parkettschleifmaschine", category = io.github.tieo.arbay.model.MarketGroup.GENERAL, sort = it,
-            )
-        },
-        blockedTerms = blocked,
-        newListingIds = newIds,
-        storedListings = stored,
-        isBookmarked = true,
-        onToggleBookmark = {},
-        onEditQuery = if (openEditor) ({ _: String -> }) else null,
-        onEditFilters = if (car) ({ }) else null,
-        openTermEditor = openEditor,
-        onDismiss = {},
-    )
-}()
+) = Session(
+    client = ArbayClient(),
+    products = ProductViewModel(saved = PreviewData.saved, savedStatus = PreviewData.savedStatus, rendersASample = true),
+    listings = ListingViewModel(sample = listings, sampleStatuses = statuses, sampleLoading = loading),
+    freeItems = FreeItemViewModel(sampleProfile = PreviewData.freeItemProfile, sampleItems = PreviewData.active),
+)
 
+/** The app as it stands at [route], with whatever steps lie under it. */
 @Composable
-private fun Filters(
-    markets: List<io.github.tieo.arbay.ui.screen.MarketChoice> = PreviewData.marketChoices,
-    blocked: List<String> = listOf("defekt", "bastler"),
-    active: Int = 3,
-    priceMax: Float = 1400f,
-    shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
-    shownCountries: Set<String> = emptySet(),
-) = inline {
-    io.github.tieo.arbay.ui.screen.FiltersSheet(
-        priceMin = 120f, priceMax = priceMax, priceRange = 200f..900f,
-        onPriceRange = {}, onPriceCommitted = {},
-        conditions = if (active > 0) setOf(io.github.tieo.arbay.model.Condition.USED) else emptySet(),
-        onConditions = {}, unstatedCondition = true, onUnstatedCondition = {},
-        conditionCounts = if (markets.isEmpty()) emptyMap() else mapOf(
-            io.github.tieo.arbay.model.Condition.NEW to 3,
-            io.github.tieo.arbay.model.Condition.USED to 9,
-            io.github.tieo.arbay.model.Condition.PARTS_ONLY to 2,
-            null to 4,
-        ),
-        saleTypes = emptySet(), onSaleTypes = {}, unstatedSaleType = true, onUnstatedSaleType = {},
-        saleTypeCounts = if (markets.isEmpty()) emptyMap() else mapOf(
-            io.github.tieo.arbay.model.SaleType.FIXED_PRICE to 12,
-            io.github.tieo.arbay.model.SaleType.AUCTION to 6,
-        ),
-        sort = io.github.tieo.arbay.model.SortMode.PRICE_ASC, onSort = {},
-        markets = markets,
-        shownMarkets = shownMarkets, shownCountries = shownCountries, onOpenMarkets = {},
-        blockedTerms = blocked, onUnblock = {}, onBlock = {},
-        activeCount = active, onClearAll = {},
-        hasCarCriteria = false, onEditCarCriteria = null,
-        onDismiss = {},
-    )
-}()
+private fun At(vararg steps: Route, s: Session = session()) {
+    val nav = remember { Navigator(steps.first()).also { n -> steps.drop(1).forEach(n::go) } }
+    ArbayApp(s, nav)
+}
 
-@Composable
-private fun Markets(
-    statuses: List<io.github.tieo.arbay.viewmodel.PlatformStatus>,
-    shownMarkets: Set<io.github.tieo.arbay.model.PlatformId> = emptySet(),
-    shownCountries: Set<String> = emptySet(),
-    reach: io.github.tieo.arbay.model.SearchReach = io.github.tieo.arbay.model.SearchReach(),
-    suggestions: io.github.tieo.arbay.model.TermSuggestions? = null,
-) = inline {
-    io.github.tieo.arbay.ui.screen.MarketsSheet(
-        reach = reach,
-        suggestions = suggestions,
-        statuses = statuses,
-        offers = PreviewData.active.groupBy { it.platformId }.mapValues { it.value.size },
-        capabilities = PreviewData.marketAbilities,
-        shownMarkets = shownMarkets, onShowMarkets = {},
-        shownCountries = shownCountries, onShowCountries = {},
-        onDismiss = {},
-    )
-}()
+private val saved = Source.Saved(PreviewData.saved.first().id)
 
+/** A panel's content as it reads inside its sheet. */
 @Composable
-private fun Price(
-    sold: List<Listing> = PreviewData.sold,
-    soldLoading: Boolean = false,
-    soldPossible: Boolean = true,
-) = inline {
-    val newer = PreviewData.active.filter { it.condition?.name == "NEW" }
-    val used = PreviewData.active.filter { it.condition?.name != "NEW" }
-    io.github.tieo.arbay.ui.screen.PriceSheet(
-        minPrice = money(25000), medianPrice = money(72000), maxPrice = money(120000),
-        minNewPrice = money(89800), medianNewPrice = money(95000), newCount = newer.size,
-        minUsedPrice = money(25000), medianUsedPrice = money(65000), usedCount = used.size,
-        conditionFilter = null, onConditionFilterChange = {},
-        newListings = newer, usedListings = used,
-        soldListings = sold,
-        medianSoldPrice = if (sold.isEmpty()) null else money(61000),
-        soldLoading = soldLoading, onSearchSold = {}, soldPossible = soldPossible,
-        onDismiss = {},
-    )
-}()
+private fun PanelScene(panel: Panel, s: Session = session()) {
+    val route = Route.Results(saved, panel = panel)
+    CompositionLocalProvider(LocalNavigator provides remember { Navigator(route) }) {
+        val open = rememberOpenSearch(saved, s.products) ?: return@CompositionLocalProvider
+        val state = rememberResultsState(s.listings, open)
+        Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.padding(top = 24.dp)) { PanelBody(s, route, panel, state) }
+        }
+    }
+}
 
-@Composable
-private fun VehicleSearch() = inline {
-    io.github.tieo.arbay.ui.screen.CarSearchSheet(onDismiss = {}, onSearch = { _, _, _, _, _, _, _, _ -> })
-}()
-
-@Composable
-private fun FreeItems(
-    profile: io.github.tieo.arbay.model.FreeItemProfile? = null,
-    items: List<Listing> = emptyList(),
-    loading: Boolean = false,
-    error: String? = null,
-) = inline {
-    io.github.tieo.arbay.ui.screen.FreeItemsSheet(
-        viewModel = FreeItemViewModel(
-            sampleProfile = profile, sampleItems = items, sampleLoading = loading, sampleError = error,
-            rendersASample = true,
-        ),
-        onDismiss = {},
-    )
-}()
-
-@Composable
-private fun Settings() = inline {
-    io.github.tieo.arbay.ui.screen.SettingsSheet(client = ArbayClient(), onDismiss = {})
-}()
+private val SCENES: List<Scene> = listOf(
+    Scene("home") { At(Route.Home) },
+    Scene("results") { At(Route.Home, Route.Results(saved)) },
+    Scene("results-loading") { At(Route.Home, Route.Results(saved), s = session(PreviewData.active.take(3), PreviewData.stillAsking, loading = true)) },
+    Scene("results-empty") { At(Route.Home, Route.Results(saved), s = session(emptyList(), PreviewData.nobodyHadAnything)) },
+    Scene("results-captcha") { At(Route.Home, Route.Results(saved), s = session(PreviewData.active.take(3), PreviewData.captchaHeld)) },
+    Scene("offer") { At(Route.Home, Route.Results(saved), Route.Results(saved, listing = PreviewData.active[1].id)) },
+    Scene("vehicle") { At(Route.Home, Route.VehicleForm) },
+    Scene("free") { At(Route.FreeItems) },
+    Scene("settings") { At(Route.Settings) },
+    Scene("panel-prices") { PanelScene(Panel.PRICES) },
+    Scene("panel-markets") { PanelScene(Panel.MARKETS) },
+    Scene("panel-words") { PanelScene(Panel.WORDS) },
+    Scene("panel-hidden") { PanelScene(Panel.HIDDEN) },
+    Scene("panel-alerts") { PanelScene(Panel.ALERTS) },
+)
 
 fun main() {
     val outDir = File(System.getProperty("gallery.out") ?: "build/gallery")
-    // A change to one screen does not need the other eight redrawn, and the
-    // model shows a phone and a wide window, so dark is drawn only when asked.
     val only = System.getProperty("gallery.only")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
-    val sizes = (System.getProperty("gallery.sizes") ?: "phone,wide,card").split(",").map { it.trim() }.toSet()
     val themes = (System.getProperty("gallery.themes") ?: "light,dark").split(",").map { it.trim() }.toSet()
+    val looks = (System.getProperty("gallery.looks") ?: "receipt").split(",").map { Looks.byId(it.trim()) }
+    val layouts = (System.getProperty("gallery.layouts") ?: "rows").split(",").map { OfferLayout.valueOf(it.trim().uppercase()) }
     val started = System.currentTimeMillis()
-
-    val wanted = SCENES.filter { only == null || it.view in only || "${it.view}-${it.state}" in only }
-    if (wanted.isEmpty()) {
-        println("no scene matches ${only?.joinToString(",")}; views: ${SCENES.map { it.view }.distinct().joinToString(",")}")
-        return
-    }
-
     var drawn = 0
-    for (scene in wanted) {
-        // The screen as it is keeps the plain name; a state carries its own, so
-        // results-empty-phone.png says what it is without a table to look it up in.
-        val stem = if (scene.state == "as-it-is") scene.view else "${scene.view}-${scene.state}"
-        // Both shapes in both themes, with the theme in the name: a book read in
-        // the dark that falls back to whichever render does not say "light" ends
-        // up showing some screens light and some dark.
-        val jobs = buildList {
-            for (theme in listOf("light", "dark")) {
-                if (theme !in themes) continue
-                val dark = theme == "dark"
-                val tall = if (scene.tall) (PHONE_H * 1.7f).toInt() else PHONE_H
-                if ("phone" in sizes) add(Render("phone-$theme", PHONE_W, tall, dark, 2f))
-                if ("wide" in sizes) {
-                    add(Render("wide-$theme", TABLET_W, if (scene.tall) (TABLET_H * 1.5f).toInt() else TABLET_H, dark, 1.5f))
-                }
-                // Only the screen itself needs a card; the index shows views, not states.
-                if ("card" in sizes && scene.state == "as-it-is") {
-                    add(Render("card-$theme", PHONE_W, CARD_H, dark, 2f))
-                }
-            }
-        }
-        for (job in jobs) {
+    for (scene in SCENES.filter { only == null || it.name in only || only.any { o -> it.name.startsWith(o) } }) {
+        for (look: Look in looks) for (layout in layouts) for (theme in listOf("light", "dark")) {
+            if (theme !in themes) continue
+            LookChoice.choose(look)
+            LookChoice.choose(layout)
+            val name = listOfNotNull(scene.name, look.id, layout.name.lowercase().takeIf { layouts.size > 1 }, theme).joinToString("-")
             runCatching {
-                renderToPng(
-                    "$stem-${job.suffix}", job.width, job.height,
-                    dark = job.dark, outDir = outDir, scale = job.scale, content = scene.content,
-                )
+                renderToPng(name, PHONE_W, PHONE_H, dark = theme == "dark", outDir = outDir, scale = 2f) { Box(Modifier.fillMaxSize()) { scene.content() } }
                 drawn++
-            }.onFailure { println("FAILED $stem-${job.suffix}: ${it.message}") }
+            }.onFailure { println("FAILED $name: ${it.message}"); it.printStackTrace() }
         }
     }
-    println("$drawn renders of ${wanted.size} scenes in ${(System.currentTimeMillis() - started) / 1000.0}s")
-    println("gallery written to ${outDir.absolutePath}")
+    println("$drawn renders in ${(System.currentTimeMillis() - started) / 1000.0}s, written to ${outDir.absolutePath}")
 }

@@ -16,7 +16,7 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
     DropReason.ACCESSORY ->
         "The title reads as a part or add-on made for the thing rather than the thing itself."
     DropReason.CONSUMABLE ->
-        "The title reads as something the thing uses up — paper, bags, filters."
+        "The title reads as something the thing uses up: paper, bags, filters."
     DropReason.WANTED_AD ->
         "The title reads as someone asking to buy one, or as a job ad."
     DropReason.RENTAL ->
@@ -32,6 +32,6 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
     DropReason.BLOCKED_WORD ->
         "Carries a word you blocked for this search. Drop the word in Filters to see these again."
     DropReason.IMPLAUSIBLE_PRICE ->
-        "The price read off the page is not a price — digits from several fields run together."
+        "The price read off the page is not a price: digits from several fields run together."
     null -> ""
 }

@@ -4,6 +4,16 @@ import io.github.tieo.arbay.results.OpenSearch
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.rememberOpenSearch
 import io.github.tieo.arbay.results.rememberResultsState
+import io.github.tieo.arbay.results.askingSummary
+import io.github.tieo.arbay.results.captchaCount
+import io.github.tieo.arbay.results.newCount
+import io.github.tieo.arbay.results.setBand
+import io.github.tieo.arbay.results.setSort
+import io.github.tieo.arbay.results.toggleCondition
+import io.github.tieo.arbay.results.toggleNewOnly
+import io.github.tieo.arbay.results.toggleSaleType
+import io.github.tieo.arbay.results.toggleSaved
+import io.github.tieo.arbay.results.toggleUnstatedCondition
 import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
@@ -137,15 +147,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 }
                 IconButton(Glyph.Refresh, "Ask the markets again") { vm.refresh(markets) }
                 QuietButton(if (bookmark != null) "Saved" else "Save", Glyph.Bookmark, pressed = bookmark != null) {
-                    if (bookmark != null) app.products.deleteProduct(bookmark.id)
-                    else app.products.createProduct(
-                        view.name.ifBlank { view.query },
-                        bookmarkQuery(
-                            onScreen = open.saved ?: SearchHistoryStore.baseQuery(view.query, view.platforms, view.filters, view.category),
-                            text = view.query, asked = markets, category = view.category, carFilters = view.filters,
-                            blockedWords = blocked, aliases = view.aliases,
-                        ),
-                    )
+                    state.toggleSaved(app.products, vm)
                 }
             }
 
@@ -224,24 +226,14 @@ private fun KeyboardWalk(route: Route.Results, ids: List<String>) {
 /** How the asking is going, in one line; a market that wants something from the reader says so. */
 @Composable
 private fun MarketsLine(route: Route.Results, loading: Boolean, total: Int, completed: Int, statuses: List<PlatformStatus>) {
-    val captcha = statuses.count { it.status == PlatformSearchStatus.CAPTCHA && it.captchaUrl != null }
-    val failed = statuses.count {
-        it.status in setOf(PlatformSearchStatus.ERROR, PlatformSearchStatus.TIMEOUT, PlatformSearchStatus.BLOCKED, PlatformSearchStatus.IP_BLOCKED, PlatformSearchStatus.CAPTCHA)
-    }
+    val captcha = statuses.captchaCount()
     Button(attrs = {
         classes(*listOfNotNull("markets-line", "attention".takeIf { captcha > 0 }, "on".takeIf { route.panel == Panel.MARKETS }).toTypedArray())
         onClick { togglePanel(route, Panel.MARKETS) }
     }) {
         Icon(Glyph.Store, 16)
         Span {
-            Text(
-                when {
-                    loading && total > 0 -> "$completed of $total markets have answered"
-                    loading -> "Asking the markets"
-                    else -> "${statuses.count { it.status == PlatformSearchStatus.DONE }} of ${statuses.size} markets answered"
-                } + (if (failed > 0 && !loading) " · $failed could not be asked" else "") +
-                    (if (captcha > 0) " · $captcha waiting for a captcha" else ""),
-            )
+            Text(askingSummary(loading, total, completed, statuses))
         }
         if (loading && total > 0) {
             Span({ classes("progress") }) {
@@ -306,8 +298,7 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
                     if (mode == SortMode.NEAREST && DevicePosition.latitude == null) {
                         readPosition { lat, lon -> DevicePosition.set(lat, lon); app.listings.setLocation(lat, lon) }
                     }
-                    app.listings.setSortMode(mode)
-                    state.open.persist(app.products) { it.copy(sort = mode) }
+                    state.setSort(app.products, app.listings, mode)
                 }
             }
         }) {
@@ -316,43 +307,28 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
 
         Label(attrs = { classes("band") }) {
             BandInput(narrowed.priceRange.start, narrowed.priceMin, "Lowest price") { low ->
-                val band = (low ?: narrowed.priceMin)..narrowed.priceRange.endInclusive
-                state.setNarrowing(narrowing.copy(band = band))
-                state.open.persist(app.products) { it.withBand(band, narrowed) }
+                state.setBand(app.products, (low ?: narrowed.priceMin)..narrowed.priceRange.endInclusive)
             }
             Span({ classes("muted") }) { Text("–") }
             BandInput(narrowed.priceRange.endInclusive, narrowed.priceMax, "Highest price") { high ->
-                val band = narrowed.priceRange.start..(high ?: narrowed.priceMax)
-                state.setNarrowing(narrowing.copy(band = band))
-                state.open.persist(app.products) { it.withBand(band, narrowed) }
+                state.setBand(app.products, narrowed.priceRange.start..(high ?: narrowed.priceMax))
             }
             Span({ classes("muted") }) { Text(DisplayCurrency.current) }
         }
 
-        fun setConditions(next: Set<Condition>, unstated: Boolean) {
-            state.setNarrowing(narrowing.copy(conditions = next, unstatedCondition = unstated))
-            state.open.persist(app.products) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
-        }
         Condition.entries.filter { (narrowed.conditionCounts[it] ?: 0) > 0 }.forEach { value ->
-            Chip("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) {
-                setConditions(if (value in narrowing.conditions) narrowing.conditions - value else narrowing.conditions + value, narrowing.unstatedCondition)
-            }
+            Chip("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) { state.toggleCondition(app.products, value) }
         }
         // "Not stated" only matters once a condition is picked: until then every listing shows.
         narrowed.conditionCounts[null]?.takeIf { it > 0 && narrowing.conditions.isNotEmpty() }?.let { count ->
-            Chip("Not stated $count", narrowing.unstatedCondition) { setConditions(narrowing.conditions, !narrowing.unstatedCondition) }
+            Chip("Not stated $count", narrowing.unstatedCondition) { state.toggleUnstatedCondition(app.products) }
         }
         if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1) {
             SaleType.entries.filter { (narrowed.saleTypeCounts[it] ?: 0) > 0 }.forEach { value ->
-                Chip("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) {
-                    val next = if (value in narrowing.saleTypes) narrowing.saleTypes - value else narrowing.saleTypes + value
-                    state.setNarrowing(narrowing.copy(saleTypes = next))
-                    state.open.persist(app.products) { it.copy(saleTypes = next.toList().takeIf { l -> l.isNotEmpty() }) }
-                }
+                Chip("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) { state.toggleSaleType(app.products, value) }
             }
         }
-        val newCount = narrowed.allActive.count { it.id in state.open.newListingIds }
-        if (newCount > 0) Chip("New $newCount", narrowing.newOnly) { state.setNarrowing(narrowing.copy(newOnly = !narrowing.newOnly)) }
+        if (state.newCount > 0) Chip("New ${state.newCount}", narrowing.newOnly) { state.toggleNewOnly() }
 
         Span({ classes("toolbar-gap") }) {}
         QuietButton(if (blockedCount > 0) "Words · $blockedCount" else "Words", Glyph.Words, pressed = route.panel == Panel.WORDS) { togglePanel(route, Panel.WORDS) }
