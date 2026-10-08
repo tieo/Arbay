@@ -97,7 +97,7 @@ object Chat {
 
     suspend fun beginSignIn(): SignInStep = step(ChatBrowser.call("signin")).also { signingIn = it.step != SignInAsk.DONE }
 
-    suspend fun signInStep(): SignInStep = step(ChatBrowser.call("signin_state"))
+    suspend fun signInStep(): SignInStep = step(ChatBrowser.call("signin_state")).also(::finishedIfDone)
 
     /** Types [input]'s value into what the page asks for, or clicks its point; nothing is kept. */
     suspend fun signInWith(input: SignInInput): SignInStep {
@@ -106,7 +106,15 @@ object Chat {
             input.text != null || input.key != null -> ChatBrowser.call("signin_keys", 60_000, "text" to input.text, "key" to input.key)
             else -> ChatBrowser.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
         }
-        return step(answer).also { if (it.step == SignInAsk.DONE) { signingIn = false; Live.changed(LiveKind.CHAT) } }
+        return step(answer).also(::finishedIfDone)
+    }
+
+    /** A page that has moved on to the signed-in site, by any device's input or by itself, ends the sign-in. */
+    private fun finishedIfDone(step: SignInStep) {
+        if (step.step == SignInAsk.DONE && signingIn) {
+            signingIn = false
+            Live.changed(LiveKind.CHAT)
+        }
     }
 
     suspend fun cancelSignIn(): ChatAccount {
