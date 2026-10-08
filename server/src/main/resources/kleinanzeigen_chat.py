@@ -25,6 +25,7 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "signin_state"}                            -> {"ok": true, "step": "email"|"password"|"code"|"other"|"done", "error": .., "picture": <jpeg base64>, "width": .., "height": ..}
   {"op": "signin_fill", "value": ".."}              -> types into the field the page asks for and submits; answers like signin_state
   {"op": "signin_click", "x": .., "y": ..}          -> clicks the page at a point of its picture; answers like signin_state
+  {"op": "signin_keys", "text": "..", "key": ".."}  -> types text, or presses one named key (X keysym), as the user did; answers like signin_state
   {"op": "signin_done"}                             -> leaves the login page
   {"op": "conversations", "page": 0, "size": 30}    -> {"ok": true, "data": <gateway payload>}
   {"op": "conversation", "id": ".."}                -> {"ok": true, "data": <gateway payload>}
@@ -323,13 +324,20 @@ class Chat:
 
     async def signin_state(self) -> dict:
         """What the login page asks for now, read from its visible fields through the DOM."""
-        if await self.host() == "www.kleinanzeigen.de":
+        url = await self.url()
+        if urlparse(url).hostname == "www.kleinanzeigen.de":
             self.signing = False
             self.token = None
             status = await self.status()
             if status.get("signedIn"):
                 return {"ok": True, "step": "done"}
             self.signing = True
+            if "login-error" in url:
+                # The site's own page for a sign-in it could not finish; the page says no more than that.
+                shot = await self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80))
+                width, height = await self.viewport()
+                return {"ok": True, "step": "other", "error": f"Kleinanzeigen could not finish the sign-in ({urlparse(url).path.strip('/')}). Start again.",
+                        "picture": shot, "width": width, "height": height}
         step = "other"
         for name, selector in self.STEP_FIELDS.items():
             if await self.visible(selector):
@@ -346,16 +354,9 @@ class Chat:
                 text = (element.text_all or "").strip()
                 if "gesperrt" in text.lower():
                     errors.append(text)
-        # The page's own buttons, so the app can offer them as buttons rather than a picture to click.
-        actions = []
-        for element, position in await self.visible("main button, form button, main [role=button], input[type=submit]"):
-            label = (element.text_all or element.attrs.get("value") or "").strip()
-            if label and len(label) <= 40 and all(a["label"] != label for a in actions):
-                actions.append({"label": label, "x": position.left + position.width / 2, "y": position.top + position.height / 2})
         shot = await self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80))
         width, height = await self.viewport()
-        return {"ok": True, "step": step, "error": " ".join(errors) or None, "picture": shot, "width": width, "height": height,
-                "actions": actions[:6]}
+        return {"ok": True, "step": step, "error": " ".join(errors) or None, "picture": shot, "width": width, "height": height}
 
     async def signin_fill(self, value: str) -> dict:
         state = await self.signin_state()
@@ -394,7 +395,21 @@ class Chat:
         """A tap on the page's picture, made with the display's mouse at the same point."""
         ox, oy = await self.calibrate()
         await self.hand.click(ox + x, oy + y)
-        await asyncio.sleep(3)
+        await asyncio.sleep(0.8)
+        return await self.signin_state()
+
+    # The keys the apps pass through by name, as X keysyms.
+    KEYS = {"Return", "BackSpace", "Tab", "ISO_Left_Tab", "Escape", "Delete", "Left", "Right", "Up", "Down", "Home", "End", "space"}
+
+    async def signin_keys(self, text: str | None, key: str | None) -> dict:
+        """What the user typed on the page's picture, typed into the page as they typed it."""
+        if text:
+            await self.hand.type(text, fast=True)
+        if key:
+            if key not in self.KEYS:
+                raise RuntimeError(f"no key {key}")
+            await self.hand.key(key)
+        await asyncio.sleep(0.4 if not key == "Return" else 1.2)
         return await self.signin_state()
 
     async def signin_done(self) -> dict:
@@ -489,6 +504,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.signin_state()
     if op == "signin_fill":
         return await chat.signin_fill(req["value"])
+    if op == "signin_keys":
+        return await chat.signin_keys(req.get("text"), req.get("key"))
     if op == "signin_click":
         return await chat.signin_click(float(req["x"]), float(req["y"]))
     if op == "conversations":

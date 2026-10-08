@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 
 /**
@@ -215,19 +217,30 @@ class ChatViewModel(
     /** Tap the page at a point of its picture, in the page's own pixels. */
     fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y)) }
 
+    /** Characters typed on the page's picture, passed on as typed. */
+    fun signInType(text: String) = signInStep { client.chatSignInInput(SignInInput(text = text)) }
+
+    /** One named key pressed on the page's picture: Return, BackSpace, Tab... */
+    fun signInKey(key: String) = signInStep { client.chatSignInInput(SignInInput(key = key)) }
+
     fun cancelSignIn() = viewModelScope.launch {
         signInFollower?.cancel()
         _signIn.value = null
         attempt { _account.value = client.cancelChatSignIn() }
     }
 
+    /** One input at a time and in the order given, so keys reach the page as they were typed. */
+    private val signInInputs = Mutex()
+
     private fun signInStep(call: suspend () -> SignInStep) = viewModelScope.launch {
-        _signInBusy.value = true
-        attempt {
-            show(call())
-            followSignIn()
+        signInInputs.withLock {
+            _signInBusy.value = true
+            attempt {
+                show(call())
+                followSignIn()
+            }
+            _signInBusy.value = false
         }
-        _signInBusy.value = false
     }
 
     private fun show(step: SignInStep) {
@@ -246,7 +259,8 @@ class ChatViewModel(
         signInFollower = viewModelScope.launch {
             if (_signIn.value == null) attempt { show(client.chatSignInStep()) }
             while (isActive && _signIn.value != null) {
-                delay(4_000)
+                // Often enough that the picture reads as the page itself.
+                delay(1_500)
                 if (_signInBusy.value) continue
                 attempt { show(client.chatSignInStep()) }
             }

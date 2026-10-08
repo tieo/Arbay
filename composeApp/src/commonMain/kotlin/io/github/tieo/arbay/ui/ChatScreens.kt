@@ -68,6 +68,8 @@ import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInStep
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -262,7 +264,7 @@ fun AccountPanel(session: Session) {
         Text("Kleinanzeigen", style = MaterialTheme.typography.titleMedium)
         val step = signIn
         when {
-            step != null -> SignInSteps(step, busy, onValue = chat::signInWith, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
+            step != null -> SignInSteps(step, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
             a == null -> Muted("Asking the server")
             a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
             else -> {
@@ -278,33 +280,9 @@ fun AccountPanel(session: Session) {
  * its picture, which takes taps for anything else it shows.
  */
 @Composable
-private fun SignInSteps(step: SignInStep, busy: Boolean, onValue: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
-    var value by remember(step.step) { mutableStateOf("") }
-    val label = when (step.step) {
-        SignInAsk.EMAIL -> "E-mail"
-        SignInAsk.PASSWORD -> "Password"
-        SignInAsk.CODE -> "Code"
-        else -> null
-    }
+private fun SignInSteps(step: SignInStep, onType: (String) -> Unit, onKey: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
     step.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-    if (label != null) {
-        OutlinedTextField(
-            value, { value = it }, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true, enabled = !busy,
-            visualTransformation = if (step.step == SignInAsk.PASSWORD) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = when (step.step) { SignInAsk.EMAIL -> KeyboardType.Email; SignInAsk.PASSWORD -> KeyboardType.Password; else -> KeyboardType.Number },
-            ),
-        )
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (label != null) Button(enabled = !busy && value.isNotBlank(), onClick = { onValue(value) }) { Text(if (busy) "Waiting for Kleinanzeigen" else "Continue") }
-        // With no field to fill, the page's own buttons are the way on.
-        if (label == null) step.actions.forEachIndexed { i, action ->
-            if (i == 0) Button(enabled = !busy, onClick = { onTap(action.x, action.y) }) { Text(action.label) }
-            else OutlinedButton(enabled = !busy, onClick = { onTap(action.x, action.y) }) { Text(action.label) }
-        }
-        TextButton(onClick = onCancel) { Text("Cancel") }
-    }
+    TextButton(onClick = onCancel) { Text("Cancel") }
     step.picture?.let { picture ->
         var size by remember { mutableStateOf(IntSize.Zero) }
         AsyncImage(
@@ -312,12 +290,32 @@ private fun SignInSteps(step: SignInStep, busy: Boolean, onValue: (String) -> Un
             contentDescription = "The Kleinanzeigen sign-in page",
             modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).border(1.dp, arbay.line, MaterialTheme.shapes.small)
                 .onSizeChanged { size = it }
-                .pointerInput(step) {
+                .pointerInput(step.width, step.height) {
                     detectTapGestures { at ->
                         if (size.width > 0 && step.width > 0) onTap(at.x.toDouble() * step.width / size.width, at.y.toDouble() * step.height / size.height)
                     }
                 },
             contentScale = ContentScale.FillWidth,
+        )
+        // The phone's keyboard, typing into the page: what is added goes in as typed, what is taken
+        // away as that many backspaces, and the keyboard's own Enter as Enter.
+        var mirror by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = mirror,
+            onValueChange = { next ->
+                when {
+                    next.startsWith(mirror) -> next.removePrefix(mirror).takeIf { it.isNotEmpty() }?.let(onType)
+                    mirror.startsWith(next) -> repeat(mirror.length - next.length) { onKey("BackSpace") }
+                    else -> { repeat(mirror.length) { onKey("BackSpace") }; if (next.isNotEmpty()) onType(next) }
+                }
+                mirror = next
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Type on the page") },
+            singleLine = true,
+            visualTransformation = if (step.step == SignInAsk.PASSWORD) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = { onKey("Return"); mirror = "" }),
         )
     }
 }

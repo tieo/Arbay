@@ -14,7 +14,6 @@ import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SendRequest
-import io.github.tieo.arbay.model.SignInAction
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.model.SignInStep
@@ -34,7 +33,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -103,8 +101,11 @@ object Chat {
 
     /** Types [input]'s value into what the page asks for, or clicks its point; nothing is kept. */
     suspend fun signInWith(input: SignInInput): SignInStep {
-        val answer = if (input.value != null) ChatBrowser.call("signin_fill", 60_000, "value" to input.value)
-        else ChatBrowser.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
+        val answer = when {
+            input.value != null -> ChatBrowser.call("signin_fill", 60_000, "value" to input.value)
+            input.text != null || input.key != null -> ChatBrowser.call("signin_keys", 60_000, "text" to input.text, "key" to input.key)
+            else -> ChatBrowser.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
+        }
         return step(answer).also { if (it.step == SignInAsk.DONE) { signingIn = false; Live.changed(LiveKind.CHAT) } }
     }
 
@@ -120,14 +121,6 @@ object Chat {
         picture = o["picture"]?.str(),
         width = (o["width"] as? JsonPrimitive)?.intOrNull ?: 0,
         height = (o["height"] as? JsonPrimitive)?.intOrNull ?: 0,
-        actions = (o["actions"] as? JsonArray).orEmpty().mapNotNull { a ->
-            val obj = a as? JsonObject ?: return@mapNotNull null
-            SignInAction(
-                label = obj["label"]?.str() ?: return@mapNotNull null,
-                x = (obj["x"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
-                y = (obj["y"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
-            )
-        },
     )
 
     // --- reading ---

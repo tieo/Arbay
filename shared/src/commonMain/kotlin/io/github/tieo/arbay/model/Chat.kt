@@ -24,8 +24,8 @@ data class ChatAccount(
 
 /**
  * Where signing in to the market stands, as the app shows it: what the login page asks for, what it
- * said went wrong, and a picture of the page for anything else it shows (a captcha, a choice), which
- * the user answers by tapping the picture.
+ * said went wrong, and a picture of the page, which the user works as the page itself: clicks and
+ * keys on it pass through to the page as they are.
  */
 @Serializable
 data class SignInStep(
@@ -35,18 +35,21 @@ data class SignInStep(
     val picture: String? = null,
     val width: Int = 0,
     val height: Int = 0,
-    /** The buttons the page shows, such as "Code senden", each pressed at its point of the page. */
-    val actions: List<SignInAction> = emptyList(),
 )
-
-@Serializable
-data class SignInAction(val label: String, val x: Double, val y: Double)
 
 @Serializable
 enum class SignInAsk { EMAIL, PASSWORD, CODE, OTHER, DONE }
 
 @Serializable
-data class SignInInput(val value: String? = null, val x: Double? = null, val y: Double? = null)
+data class SignInInput(
+    val value: String? = null,
+    val x: Double? = null,
+    val y: Double? = null,
+    /** Characters the user typed on the page's picture. */
+    val text: String? = null,
+    /** One key the user pressed on it, by its X name: Return, BackSpace, Tab, Left... */
+    val key: String? = null,
+)
 
 @Serializable
 data class Conversation(

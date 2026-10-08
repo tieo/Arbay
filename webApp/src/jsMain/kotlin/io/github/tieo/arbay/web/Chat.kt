@@ -207,54 +207,64 @@ fun AccountSection(app: WebApp) {
 }
 
 /**
- * The market's login page as it stands: a field for what it asks (e-mail, password, a code), and
- * its picture, which takes clicks for anything else it shows.
+ * The market's login page, live: its picture, refreshed while signing in, takes the user's clicks
+ * and keys and passes them to the page as they are, so the user signs in on the page itself.
  */
 @Composable
 private fun SignInSteps(app: WebApp, step: SignInStep, busy: Boolean) {
     val chat = app.chat
-    var value by remember(step.step) { mutableStateOf("") }
-    val label = when (step.step) {
-        SignInAsk.EMAIL -> "E-mail"
-        SignInAsk.PASSWORD -> "Password"
-        SignInAsk.CODE -> "Code"
-        else -> null
-    }
     step.error?.let { P({ classes("sign-in-error") }) { Text(it) } }
-    Form(attrs = {
-        classes("inline-form")
-        addEventListener("submit") { it.preventDefault(); if (value.isNotBlank() && !busy) chat.signInWith(value) }
-    }) {
-        if (label != null) {
-            Input(if (step.step == SignInAsk.PASSWORD) InputType.Password else if (step.step == SignInAsk.EMAIL) InputType.Email else InputType.Text) {
-                classes("control"); placeholder(label); attr("aria-label", label); attr("autofocus", "")
-                if (step.step == SignInAsk.CODE) attr("autocomplete", "one-time-code")
-                if (busy) attr("disabled", "")
-                value(value); onInput { value = it.value }
-            }
-            PrimaryButton(if (busy) "Waiting for Kleinanzeigen" else "Continue", enabled = !busy && value.isNotBlank()) {}
-        } else {
-            // With no field to fill, the page's own buttons are the way on.
-            step.actions.forEachIndexed { i, action ->
-                if (i == 0) PrimaryButton(action.label, enabled = !busy) { chat.signInTap(action.x, action.y) }
-                else QuietButton(action.label) { if (!busy) chat.signInTap(action.x, action.y) }
-            }
-        }
+    Div({ classes("inline-form") }) {
         QuietButton("Cancel") { chat.cancelSignIn() }
     }
     step.picture?.let { picture ->
-        Img(src = "data:image/jpeg;base64,$picture", alt = "The Kleinanzeigen sign-in page") {
-            classes("sign-in-page")
-            addEventListener("click") { e ->
-                val img = e.target as org.w3c.dom.HTMLImageElement
-                val m = e as org.w3c.dom.events.MouseEvent
-                if (img.clientWidth > 0 && step.width > 0) {
-                    chat.signInTap(m.offsetX * step.width / img.clientWidth, m.offsetY * step.height / img.clientHeight)
+        // Typed characters go out together after a short pause, the keys that are no character one by one.
+        var typed by remember { mutableStateOf("") }
+        var flush by remember { mutableStateOf<Int?>(null) }
+        Div({
+            classes("sign-in-live")
+            attr("tabindex", "0")
+            attr("aria-label", "The Kleinanzeigen sign-in page; click and type on it")
+            onKeyDown { k ->
+                if (k.ctrlKey || k.metaKey || k.altKey) return@onKeyDown
+                val name = if (k.key == "Tab" && k.shiftKey) "ISO_Left_Tab" else X_KEYS[k.key]
+                when {
+                    k.key.length == 1 -> {
+                        typed += k.key
+                        flush?.let { kotlinx.browser.window.clearTimeout(it) }
+                        flush = kotlinx.browser.window.setTimeout({ val t = typed; typed = ""; flush = null; chat.signInType(t) }, 250)
+                    }
+                    name != null -> {
+                        flush?.let { kotlinx.browser.window.clearTimeout(it) }
+                        val t = typed; typed = ""; flush = null
+                        if (t.isNotEmpty()) chat.signInType(t)
+                        chat.signInKey(name)
+                    }
+                    else -> return@onKeyDown
+                }
+                k.preventDefault()
+            }
+        }) {
+            Img(src = "data:image/jpeg;base64,$picture", alt = "The Kleinanzeigen sign-in page") {
+                classes("sign-in-page")
+                attr("draggable", "false")
+                onClick { m ->
+                    val img = m.target as org.w3c.dom.HTMLImageElement
+                    (img.parentElement as? org.w3c.dom.HTMLElement)?.focus()
+                    if (img.clientWidth > 0 && step.width > 0) {
+                        chat.signInTap(m.offsetX * step.width / img.clientWidth, m.offsetY * step.height / img.clientHeight)
+                    }
                 }
             }
         }
     }
 }
+
+/** Browser key names and the X key each stands for on the page. */
+private val X_KEYS = mapOf(
+    "Enter" to "Return", "Backspace" to "BackSpace", "Tab" to "Tab", "Escape" to "Escape", "Delete" to "Delete",
+    "ArrowLeft" to "Left", "ArrowRight" to "Right", "ArrowUp" to "Up", "ArrowDown" to "Down", "Home" to "Home", "End" to "End",
+)
 
 /** The tick that picks an offer to write to; shown on hover, and always once anything is picked. */
 @Composable
