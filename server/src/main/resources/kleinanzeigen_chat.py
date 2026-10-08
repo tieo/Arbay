@@ -31,7 +31,8 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "conversation", "id": ".."}                -> {"ok": true, "data": <gateway payload>}
   {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true}
   {"op": "read", "id": ".."}                        -> {"ok": true}
-  {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": ".."|null, "requests": [...]}
+  {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
+  {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
 Failures answer {"ok": false, "error": "..", "signedOut": bool}.
 
 Requires: zendriver, google-chrome-stable, xdotool, a display in DISPLAY (Xvfb, started by the server).
@@ -456,52 +457,99 @@ class Chat:
         await self.gateway(f"/messagebox/api/users/{uid}/conversations/read?ids={cid}", "POST")
         return {"ok": True}
 
-    async def contact(self, ad_id: str, text: str) -> dict:
-        """The first message about an ad, written into the ad page's own contact form.
+    # The ad page's message dialog: opened by its "Nachricht senden" button, sent by its own button.
+    CONTACT_OPENERS = "#viewad-contact-button, #viewad-contact-button-login, #viewad-contact-bottom button, #viewad-contact-box button"
+    CONTACT_FIELD = "#viewad-contact-modal-form textarea[name='message'], #viewad-contact-form textarea[name='message']"
+    CONTACT_SEND = "#viewad-contact-modal-form button[type='submit'], #viewad-contact-form button[type='submit']"
 
-        The request the form sends is recorded and returned, so the call can be read off the
-        live site rather than guessed."""
+    async def open_contact(self, ad_id: str) -> tuple:
+        """The ad page with its message field showing, as a person gets there; the field, or None."""
+        await self.tab.get(f"{ROOT}/s-anzeige/{ad_id}")
+        await asyncio.sleep(random.uniform(2.5, 4))
+        # What the page sends and what it gets back, so a send can be read off the site itself.
+        await self.tab.evaluate("""
+            window.__arbaySent = [];
+            const keep = (entry) => { window.__arbaySent.push(entry); return entry; };
+            const of = window.fetch;
+            window.fetch = async (...a) => {
+                const e = keep({url: String(a[0]), method: (a[1]||{}).method||'GET', status: null, answer: null});
+                const r = await of(...a);
+                e.status = r.status;
+                r.clone().text().then(t => { e.answer = t.slice(0, 300); }).catch(() => {});
+                return r;
+            };
+            const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.open = function(m, u) { this.__a = {method: m, url: String(u), status: null, answer: null}; return oo.apply(this, arguments); };
+            XMLHttpRequest.prototype.send = function(b) {
+                if (this.__a) { const e = keep(this.__a); this.addEventListener('loadend', () => { e.status = this.status; e.answer = String(this.responseText || '').slice(0, 300); }); }
+                return os.apply(this, arguments);
+            };
+            true
+        """)
+        await self.accept_cookies()
+        fields = await self.visible(self.CONTACT_FIELD)
+        if not fields:
+            openers = [(e, p) for e, p in await self.visible(self.CONTACT_OPENERS) if "nachricht" in (e.text_all or "").lower()]
+            if openers:
+                await self.press(*openers[0])
+                for _ in range(10):
+                    await asyncio.sleep(0.5)
+                    fields = await self.visible(self.CONTACT_FIELD)
+                    if fields:
+                        break
+        return fields[0] if fields else None
+
+    async def page_detail(self) -> dict:
+        """What a failed step leaves to look at: the page as a picture and as HTML, and what it sent."""
+        detail = {"url": await self.url()}
+        try:
+            detail["picture"] = await within("screenshot", self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=70)))
+            detail["html"] = await within("page html", self.tab.evaluate("document.documentElement.outerHTML"))
+            detail["requests"] = json.loads(await within("requests", self.tab.evaluate("JSON.stringify(window.__arbaySent || [])")))
+        except Exception as e:
+            detail["unreadable"] = str(e)
+        return detail
+
+    async def contact_preview(self, ad_id: str) -> dict:
+        """Everything up to the message, nothing typed or sent: does the ad page show its message field?"""
+        await self.session()
+        field = await self.open_contact(ad_id)
+        sends = await self.visible(self.CONTACT_SEND)
+        detail = await self.page_detail()
+        await self.tab.get(ROOT + "/")
+        return {"ok": True, "field": field is not None, "send": [ (e.text_all or "").strip() for e, _ in sends ],
+                "picture": detail.get("picture"), "url": detail.get("url")}
+
+    async def contact(self, ad_id: str, text: str) -> dict:
+        """The first message about an ad, written into the ad page's own message dialog and sent with
+        its own button. A failure answers with the page and what it sent, for an error snapshot."""
         _, uid = await self.session()
         existing = await self.find_conversation(uid, ad_id)
         if existing:
             await self.reply(existing, text)
             return {"ok": True, "conversationId": existing, "requests": []}
-        await self.tab.get(f"{ROOT}/s-anzeige/{ad_id}")
-        await asyncio.sleep(3)
-        await self.tab.evaluate("""
-            window.__arbaySent = [];
-            const of = window.fetch;
-            window.fetch = async (...a) => { window.__arbaySent.push({url: String(a[0]), method: (a[1]||{}).method||'GET', body: String((a[1]||{}).body||'').slice(0, 500)}); return of(...a); };
-            const oo = XMLHttpRequest.prototype.open, os = XMLHttpRequest.prototype.send;
-            XMLHttpRequest.prototype.open = function(m, u) { this.__a = {method: m, url: String(u)}; return oo.apply(this, arguments); };
-            XMLHttpRequest.prototype.send = function(b) { if (this.__a) window.__arbaySent.push({...this.__a, body: String(b||'').slice(0, 500)}); return os.apply(this, arguments); };
-            true
-        """)
-        await self.accept_cookies()
-        await self.tab.select("textarea[name='message'], #viewad-contact-form textarea, form textarea", timeout=15)
-        fields = await self.visible("textarea[name='message'], #viewad-contact-form textarea, form textarea")
-        if not fields:
-            raise RuntimeError("the ad page shows no message field")
-        await self.press(*fields[0])
+        field = await self.open_contact(ad_id)
+        if field is None:
+            return {"ok": False, "signedOut": False, "error": "the ad page shows no message field", "detail": await self.page_detail()}
+        await self.press(*field)
         await asyncio.sleep(random.uniform(0.4, 0.9))
         await self.hand.type(text, fast=True)
         await asyncio.sleep(random.uniform(0.8, 1.6))
-        buttons = await self.visible("#viewad-contact-form button[type='submit'], form button[type='submit']")
-        if not buttons:
-            raise RuntimeError("the ad page shows no send button")
-        await self.press(*buttons[0])
-        await asyncio.sleep(4)
-        sent = json.loads(await self.tab.evaluate("JSON.stringify(window.__arbaySent || [])"))
+        sends = await self.visible(self.CONTACT_SEND)
+        if not sends:
+            return {"ok": False, "signedOut": False, "error": "the message dialog shows no send button", "detail": await self.page_detail()}
+        await self.press(*sends[0])
         cid = None
-        for _ in range(5):
+        for _ in range(8):
+            await asyncio.sleep(2)
             cid = await self.find_conversation(uid, ad_id)
             if cid:
                 break
-            await asyncio.sleep(2)
+        detail = await self.page_detail()
         await self.tab.get(ROOT + "/")
         if not cid:
-            raise RuntimeError("the contact form was sent but no conversation about the ad appeared")
-        return {"ok": True, "conversationId": cid, "requests": sent}
+            return {"ok": False, "signedOut": False, "error": "the message was sent but no conversation about the ad appeared", "detail": detail}
+        return {"ok": True, "conversationId": cid, "requests": detail.get("requests", [])}
 
     async def find_conversation(self, uid: int, ad_id: str) -> str | None:
         data = await self.gateway(f"/messagebox/api/users/{uid}/conversations?page=0&size=50")
@@ -535,6 +583,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.reply(req["id"], req["text"])
     if op == "read":
         return await chat.read(req["id"])
+    if op == "contact_preview":
+        return await chat.contact_preview(str(req["adId"]))
     if op == "contact":
         return await chat.contact(str(req["adId"]), req["text"])
     return {"ok": False, "error": f"unknown op {op}"}

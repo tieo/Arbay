@@ -198,6 +198,7 @@ object Chat {
             ChatBrowser.call("contact", 120_000, "adId" to adId, "text" to due.text)
         }
         result.getOrNull()?.get("requests")?.let { log.info("Contact form for {} sent: {}", due.listingId, it) }
+        (result.exceptionOrNull() as? ChatBrowser.ChatFailure)?.detail?.let { keepFailedPage(due, it, result.exceptionOrNull() as Exception) }
         synchronized(outbox) {
             val i = outbox.indexOfFirst { it.id == due.id }
             if (i >= 0) outbox[i] = result.fold(
@@ -207,6 +208,23 @@ object Chat {
             persistOutbox()
         }
     }
+
+    /** The ad page a message failed on, with what it sent, as an error snapshot to read afterwards. */
+    private fun keepFailedPage(due: OutgoingMessage, detail: JsonObject, error: Exception) {
+        val requests = detail["requests"]?.toString().orEmpty()
+        io.github.tieo.arbay.crawler.ErrorSnapshotStore.capture(
+            platform = "KLEINANZEIGEN_CHAT",
+            query = due.listingId,
+            error = RuntimeException("${error.message}; the page sent: $requests"),
+            errorType = io.github.tieo.arbay.crawler.ErrorType.PARSE_ERROR,
+            url = detail["url"]?.str(),
+            fetchStage = "contact",
+            html = detail["html"]?.str(),
+        )
+    }
+
+    /** Opens an ad's message dialog without typing or sending, to see that it is there. */
+    suspend fun contactPreview(adId: String): JsonObject = ChatBrowser.call("contact_preview", 90_000, "adId" to adId)
 
     /** Old finished entries go; what is waiting or failed stays until it's dealt with. */
     private fun trimOutbox() {

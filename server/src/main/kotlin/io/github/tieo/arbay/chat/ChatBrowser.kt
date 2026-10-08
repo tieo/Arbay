@@ -41,7 +41,8 @@ object ChatBrowser {
     private var input: BufferedWriter? = null
     private var output: BufferedReader? = null
 
-    class ChatFailure(message: String, val signedOut: Boolean) : RuntimeException(message)
+    /** A request the sidecar answered as failed; [detail] is the page it failed on, when it sent one. */
+    class ChatFailure(message: String, val signedOut: Boolean, val detail: JsonObject? = null) : RuntimeException(message)
 
     /** Ask the sidecar for [op] and wait at most [timeoutMs] for its answer. */
     suspend fun call(op: String, timeoutMs: Long = 60_000, vararg args: Pair<String, Any?>): JsonObject = lock.withLock {
@@ -72,6 +73,7 @@ object ChatBrowser {
             throw ChatFailure(
                 answer["error"]?.jsonPrimitive?.contentOrNull ?: "failed",
                 signedOut = answer["signedOut"]?.jsonPrimitive?.booleanOrNull == true,
+                detail = answer["detail"] as? JsonObject,
             )
         }
         answer

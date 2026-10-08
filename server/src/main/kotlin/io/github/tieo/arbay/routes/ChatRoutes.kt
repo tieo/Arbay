@@ -56,6 +56,11 @@ fun Route.chatRoutes() {
 
         get("/review") { call.chat { call.respond(Chat.review()) } }
         get("/settings") { call.respond(Chat.settings()) }
+        // The message dialog of one ad, opened and looked at; nothing is typed or sent.
+        get("/contact-preview") {
+            val adId = call.queryParameters["adId"]?.takeIf { it.all(Char::isDigit) } ?: throw BadRequestException("adId")
+            call.chat { call.respond(Chat.contactPreview(adId)) }
+        }
         get("/costs") { call.respond(io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()) }
         put("/settings") { call.respond(Chat.updateSettings(call.receive<ChatSettings>())) }
     }
