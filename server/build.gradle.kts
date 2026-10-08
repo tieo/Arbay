@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.ktor.serializationJson)
     implementation(libs.ktor.clientCioJvm)
     implementation(libs.ktor.clientContentNegotiationJvm)
+    implementation(libs.mcp.kotlin.server)
     implementation(libs.jsoup)
     // Jsoup marks its API with these but leaves them out of its own dependencies; without them
     // Kotlin cannot read which of its returns may be null.
@@ -40,6 +41,7 @@ dependencies {
     implementation(libs.kotlinx.datetime)
     testImplementation(libs.ktor.serverTestHost)
     testImplementation(libs.ktor.clientMock)
+    testImplementation(libs.mcp.kotlin.client)
     testImplementation(libs.kotlin.testJunit)
 }
 
