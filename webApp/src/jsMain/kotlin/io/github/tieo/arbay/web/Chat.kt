@@ -203,7 +203,7 @@ fun AccountSection(app: WebApp) {
         a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
         else -> {
             a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
-            Div({ classes("actions") }) { PrimaryButton(if (busy) "Opening the sign-in" else "Sign in", enabled = !busy) { chat.beginSignIn() } }
+            Div({ classes("actions") }) { if (busy) Busy() else PrimaryButton("Sign in") { chat.beginSignIn() } }
         }
     }
 }

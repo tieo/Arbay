@@ -270,7 +270,7 @@ fun AccountPanel(session: Session) {
             a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
             else -> {
                 a.problem?.let { Muted(it) }
-                Button(enabled = !busy, onClick = { chat.beginSignIn() }) { Text(if (busy) "Opening the sign-in" else "Sign in") }
+                if (busy) Busy() else Button(onClick = { chat.beginSignIn() }) { Text("Sign in") }
             }
         }
     }

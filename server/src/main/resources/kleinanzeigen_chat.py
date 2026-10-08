@@ -42,6 +42,7 @@ import math
 import os
 import random
 import sys
+import time
 from urllib.parse import urlparse
 
 import zendriver as zd
@@ -53,6 +54,12 @@ ROOT = "https://www.kleinanzeigen.de"
 GATEWAY = "https://gateway.kleinanzeigen.de"
 LOGIN_URL = ROOT + "/m-einloggen.html"
 LOGIN_HOST = "login.kleinanzeigen.de"
+
+
+def log(line: str) -> None:
+    """One line to the server's log of this browser, with the time, for finding what is slow."""
+    sys.stderr.write(f"{time.strftime('%H:%M:%S')} {line}\n")
+    sys.stderr.flush()
 
 
 class SignedOut(Exception):
@@ -205,11 +212,13 @@ class Chat:
                 return JSON.stringify({status: r.status, headers: h, text: await r.text()});
             })()
         """ % (json.dumps(url), json.dumps(method), json.dumps(headers or {}), json.dumps(body))
+        started = time.monotonic()
         try:
             raw = await self.tab.evaluate(script, await_promise=True)
         except Exception as e:
             # A fetch that cannot leave the page says nothing about why; where the page is does.
             raise RuntimeError(f"fetch {url} failed on {await self.where()}: {str(e).splitlines()[0] if str(e) else type(e).__name__}")
+        log(f"fetch {method} {url} {time.monotonic() - started:.1f}s")
         return json.loads(raw)
 
     async def where(self) -> str:
@@ -532,6 +541,8 @@ async def main() -> None:
         line = await reader.readline()
         if not line:
             break
+        req: dict = {}
+        started = time.monotonic()
         try:
             req = json.loads(line)
             # A page call that never returns would hold every request after it.
@@ -543,6 +554,7 @@ async def main() -> None:
             answer = {"ok": False, "signedOut": True, "error": str(e)}
         except Exception as e:
             answer = {"ok": False, "signedOut": False, "error": f"{type(e).__name__}: {e}"}
+        log(f"{req.get('op')} {time.monotonic() - started:.1f}s ok={answer.get('ok')}")
         print(json.dumps(answer), flush=True)
     await chat.browser.stop()
 
