@@ -69,7 +69,9 @@ fun InboxScreen(app: WebApp, route: Route) {
     val openId = (route as? Route.Conversation)?.id
     val onTheirWay = outbox.filter { it.state == OutgoingState.WAITING || it.state == OutgoingState.SENDING || it.state == OutgoingState.FAILED }
 
-    Main({ classes("results") }) {
+    // Signed out there is nothing for the side pane, and the sign-in page gets its room.
+    val signedOut = account?.signedIn != true
+    Main({ classes(*listOfNotNull("results", "wide".takeIf { signedOut }).toTypedArray()) }) {
         Header({ classes("results-head") }) { Div({ classes("title-row") }) { Div({ classes("title-text") }) { H1 { Text("Messages") } } } }
         if (account?.signedIn != true) Div({ classes("panel") }) { AccountSection(app) }
         error?.let { P({ classes("muted", "small", "inbox-error") }) { Text(it) } }
@@ -96,7 +98,7 @@ fun InboxScreen(app: WebApp, route: Route) {
             conversations.forEach { c -> ConversationRow(c, c.id == openId) }
         }
     }
-    Aside({ classes("inspector") }) {
+    if (!signedOut) Aside({ classes("inspector") }) {
         if (openId != null) ConversationPane(app, openId)
         else Div({ classes("empty") }) { Text(if (conversations.isEmpty()) "" else "${conversations.sumOf { it.unread }} unread") }
     }
@@ -224,6 +226,8 @@ private fun SignInSteps(app: WebApp, step: SignInStep, busy: Boolean) {
         Div({
             classes("sign-in-live")
             attr("tabindex", "0")
+            // Typing goes to the page from the start, as on the page itself.
+            ref { it.focus(); onDispose { } }
             attr("aria-label", "The Kleinanzeigen sign-in page; click and type on it")
             onKeyDown { k ->
                 if (k.ctrlKey || k.metaKey || k.altKey) return@onKeyDown

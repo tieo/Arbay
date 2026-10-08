@@ -679,7 +679,8 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .review-answer { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 6px 12px; text-decoration: none; border-left: 2px solid var(--line); margin: 4px 0; }
 .review-answer:hover { border-left-color: var(--accent); }
 .sign-in-page { display: block; width: 100%; border: 1px solid var(--line); border-radius: var(--radius-small); cursor: text; user-select: none; }
-.sign-in-live { outline: none; }
+.sign-in-live { outline: none; max-width: 1264px; }
+.results.wide { grid-column: 2 / 4; }
 .sign-in-live:focus .sign-in-page { border-color: var(--accent); }
 .sign-in-error { color: var(--danger); }
 
