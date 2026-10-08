@@ -363,7 +363,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val drafts = (args["messages"] as? JsonArray).orEmpty().map { it as JsonObject }.map { m ->
                 val id = m["listing_id"]!!.jsonPrimitive.content
                 SendRequest.Draft(
-                    id, seen[id]?.title?.tidyTitle() ?: id, m["text"]!!.jsonPrimitive.content,
+                    // Offers from before a restart are not among this session's searches; the archive has every one.
+                    id, (seen[id] ?: io.github.tieo.arbay.repo.ListingArchive.get(id))?.title?.tidyTitle() ?: id, m["text"]!!.jsonPrimitive.content,
                     blockIds = (m["text_ids"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content },
                     price = m["price"]?.jsonPrimitive?.intOrNull,
                 )
