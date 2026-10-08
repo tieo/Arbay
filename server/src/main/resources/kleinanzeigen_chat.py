@@ -78,10 +78,15 @@ class SignedOut(Exception):
 
 
 class Hand:
-    """The mouse and keyboard of the browser's X display, moved the way a person moves them."""
+    """The mouse and keyboard of the browser's X display, moved the way a person moves them.
+
+    Characters the X keyboard layout lacks (ä, ü, ß, €) xdotool types by remapping a spare key on
+    the fly, and typed at speed some of them are lost. Those go in through the browser's own text
+    input ([insert]), the way an input method puts in a character, still as trusted input."""
 
     def __init__(self) -> None:
         self.x, self.y = 640.0, 450.0
+        self.insert = None
 
     @staticmethod
     async def xdo(*args: str) -> None:
@@ -120,8 +125,10 @@ class Hand:
             # "type" takes every argument after it as text, so each key is a call of its own.
             if ch == "\n":
                 await self.xdo("key", "Return")
-            else:
+            elif ch.isascii() or self.insert is None:
                 await self.xdo("type", "--delay", "0", "--", ch)
+            else:
+                await self.insert(ch)
             await asyncio.sleep(random.uniform(low, high))
 
     async def key(self, *names: str) -> None:
@@ -136,6 +143,7 @@ class Chat:
         self.user_id = None
         self.signing = False
         self.hand = Hand()
+        self.hand.insert = lambda ch: self.tab.send(cdp.input_.insert_text(text=ch))
         # Where the page's top left corner sits on the display, measured once on the site's own page.
         self.origin: tuple[float, float] | None = None
 
