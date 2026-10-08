@@ -5,6 +5,7 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.design.LookChoice
 import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.loadBannedIds
+import io.github.tieo.arbay.loadDeviceSettings
 import io.github.tieo.arbay.saveBannedIds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * connect after the move hands over what it had.
  */
 object SharedState {
+    /** The device settings that, once chosen, are the user's look rather than a fresh default. */
+    private val LOOK_SETTINGS = setOf("look", "brightness", "offerLayout", "currency")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var client: ArbayClient? = null
 
@@ -55,9 +58,14 @@ object SharedState {
 
     private suspend fun pull(c: ArbayClient) {
         val server = try { c.getState() } catch (e: CancellationException) { throw e } catch (_: Exception) { return }
-        server["searchHistory"]?.let { SearchHistoryStore.adopt(it) } ?: put("searchHistory", SearchHistoryStore.asJson())
-        server["hiddenOffers"]?.let { HiddenOffers.adopt(it) } ?: put("hiddenOffers", HiddenOffers.asJson())
-        server["look"]?.let(::adoptLook) ?: put("look", lookAsJson())
+        // Only what this device actually holds is handed over: a device that has never been used
+        // would otherwise hand over its empty defaults, and every other device would take them.
+        server["searchHistory"]?.let { SearchHistoryStore.adopt(it) }
+            ?: SearchHistoryStore.entries.value.takeIf { it.isNotEmpty() }?.let { put("searchHistory", SearchHistoryStore.asJson()) }
+        server["hiddenOffers"]?.let { HiddenOffers.adopt(it) }
+            ?: HiddenOffers.ids.value.takeIf { it.isNotEmpty() }?.let { put("hiddenOffers", HiddenOffers.asJson()) }
+        server["look"]?.let(::adoptLook)
+            ?: loadDeviceSettings().keys.takeIf { keys -> LOOK_SETTINGS.any { it in keys } }?.let { put("look", lookAsJson()) }
     }
 
     fun lookAsJson(): JsonObject = JsonObject(
