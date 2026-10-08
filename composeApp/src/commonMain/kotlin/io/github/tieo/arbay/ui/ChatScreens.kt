@@ -346,7 +346,7 @@ fun WritePanel(session: Session, route: Route.Results, state: ResultsState) {
             session.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
         }
     }
-    val lines = planSend(listings, limit, text, edits, picked, pageShipping)
+    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
@@ -359,6 +359,10 @@ fun WritePanel(session: Session, route: Route.Results, state: ResultsState) {
         Modifier.fillMaxWidth(), label = { Text("Most you pay, everything included") }, suffix = { Text("€") },
         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
     )
+    Choices {
+        Choice("Delivered to my door", settings.toDoor) { chat.setToDoor(true) }
+        Choice("To a parcel shop", !settings.toDoor) { chat.setToDoor(false) }
+    }
     if (settings.templates.isNotEmpty()) {
         Choices {
             settings.templates.forEach { t ->

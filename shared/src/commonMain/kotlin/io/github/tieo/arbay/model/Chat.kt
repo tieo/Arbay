@@ -149,7 +149,32 @@ data class ReviewAnswer(
 data class ChatSettings(
     val templates: List<MessageTemplate> = emptyList(),
     val allInBySearch: Map<String, Double> = emptyMap(),
+    /** Delivery to the user's own address rather than to a parcel shop. */
+    val toDoor: Boolean = true,
 )
+
+/**
+ * What delivery costs the buyer on [platform], given the [shipping] the ad states; null when it ships
+ * without saying for how much. Pickup only and free shipping cost nothing.
+ *
+ * Kleinanzeigen's cheap Hermes prices (0.99 € Päckchen, 1.99 € S-Paket, "Versand ab 0,99 €" on an ad)
+ * are parcel shop to parcel shop; delivered to the door, the one fixed price in Kleinanzeigen's own
+ * list is DHL Paket 2 kg at 6.19 € (gateway shipping-options). So to the door a Kleinanzeigen ad's
+ * shipping counts as at least that, also when the ad states none.
+ */
+fun shippingCostEur(platform: PlatformId, shipping: Shipping?, toDoor: Boolean): Double? {
+    if (shipping != null && (shipping.free || (!shipping.available && shipping.pickup))) return 0.0
+    val stated = shipping?.cost?.takeIf { it.currency == Currency.EUR }?.amount?.div(100.0)
+    if (platform == PlatformId.KLEINANZEIGEN && toDoor) return maxOf(stated ?: 0.0, KLEINANZEIGEN_DOOR_DELIVERY_EUR)
+    return stated ?: if (shipping == null) 0.0 else null
+}
+
+/** Whether [shippingCostEur] priced door delivery the ad itself does not state. */
+fun doorDeliveryAssumed(platform: PlatformId, shipping: Shipping?, toDoor: Boolean): Boolean =
+    platform == PlatformId.KLEINANZEIGEN && toDoor && shipping?.cost == null &&
+        !(shipping != null && (shipping.free || (!shipping.available && shipping.pickup)))
+
+const val KLEINANZEIGEN_DOOR_DELIVERY_EUR = 6.19
 
 /**
  * What to offer a seller so that everything the buyer pays stays within [allInEur].

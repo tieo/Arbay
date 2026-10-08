@@ -340,7 +340,7 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
             app.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
         }
     }
-    val lines = planSend(listings, limit, text, edits, picked, pageShipping)
+    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
@@ -363,6 +363,10 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
                 }
                 Span({ classes("unit") }) { Text("€") }
             }
+        }
+        Div({ classes("chips") }) {
+            Chip("Delivered to my door", settings.toDoor) { chat.setToDoor(true) }
+            Chip("To a parcel shop", !settings.toDoor) { chat.setToDoor(false) }
         }
         if (settings.templates.isNotEmpty()) Div({ classes("chips") }) {
             settings.templates.forEach { t ->

@@ -175,6 +175,9 @@ class ChatViewModel(
         s.copy(templates = if (s.templates.any { it.id == template.id }) s.templates.map { if (it.id == template.id) template else it } else s.templates + template)
     }
 
+    /** Delivery to the door or to a parcel shop, for working out what shipping costs. */
+    fun setToDoor(toDoor: Boolean) = updateSettings { it.copy(toDoor = toDoor) }
+
     fun deleteTemplate(id: String) = updateSettings { s -> s.copy(templates = s.templates.filterNot { it.id == id }) }
 
     fun newTemplateId(): String = "t${Clock.System.now().toEpochMilliseconds()}"

@@ -15,6 +15,8 @@ import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.fillIn
+import io.github.tieo.arbay.model.doorDeliveryAssumed
+import io.github.tieo.arbay.model.shippingCostEur
 import io.github.tieo.arbay.model.directPrice
 import io.github.tieo.arbay.model.offerWithin
 import io.github.tieo.arbay.model.tidyTitle
@@ -325,16 +327,25 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val allIn = args.num("all_in_eur")
             // Each ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
             val pageShipping = args.strs("listing_ids").mapNotNull { seen[it] }.associate { l -> l.id to pageShipping(l) }
+            val toDoor = getJson<ChatSettings>("/api/chat/settings").toDoor
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = seen[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
                 val shipping = pageShipping[id] ?: l.shipping
-                val shippingEur = shipping?.cost?.amount?.div(100.0) ?: 0.0
-                val price = allIn?.let { offerWithin(it, shippingEur, l.platformId.buyerProtection) }
+                val shippingEur = shippingCostEur(l.platformId, shipping, toDoor)
+                val pickupOnly = shipping != null && !shipping.available && shipping.pickup
+                val protection = if (pickupOnly) null else l.platformId.buyerProtection
+                val price = allIn?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
                     ?.let { p -> (l.price.amount / 100).toInt().takeIf { it > 0 }?.let { minOf(p, it) } ?: p }
-                val note = if (allIn != null && shipping?.cost == null) " (shipping not stated, price is before shipping)" else ""
-                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), shipping?.cost?.let { "%.2f €".format(it.amount / 100.0) },
-                    price?.let { directPrice(it, shippingEur, l.platformId.buyerProtection) })
+                val note = when {
+                    allIn == null -> ""
+                    pickupOnly -> " (pickup, paid in person)"
+                    shippingEur == null -> " (shipping not stated, price is before shipping)"
+                    doorDeliveryAssumed(l.platformId, shipping, toDoor) -> " (no shipping stated, priced delivered to the door)"
+                    else -> " (shipping %.2f €)".format(shippingEur)
+                }
+                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), shippingEur?.takeIf { it > 0 }?.let { "%.2f €".format(it) },
+                    price?.let { directPrice(it, shippingEur ?: 0.0, protection) })
             }
         }
 
