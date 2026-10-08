@@ -137,7 +137,7 @@ private fun PricesPanel(session: Session, route: Route.Results, state: ResultsSt
             Figure("Middle sold price", sold.middle.format(), Modifier.weight(1f))
             Figure("Sales", "${sold.count}", Modifier.weight(1f))
         }
-        soldLoading -> Muted("Asking the markets that publish sales")
+        soldLoading -> Busy()
         else -> OutlinedButton(onClick = { session.listings.searchSold() }) { Text("Ask what it sold for") }
     }
     val cheapest = state.shown.filter { it.id in s.cheapestIds }

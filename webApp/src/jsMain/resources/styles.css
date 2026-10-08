@@ -700,3 +700,7 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .note.full { white-space: normal; }
 .note.avoid { color: var(--danger); }
 .note-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-small); }
+
+/* Something on its way: a small turning ring in the muted text colour. */
+.busy { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--muted, currentColor); border-radius: 50%; animation: busy-turn 0.8s linear infinite; }
+@keyframes busy-turn { to { transform: rotate(360deg); } }

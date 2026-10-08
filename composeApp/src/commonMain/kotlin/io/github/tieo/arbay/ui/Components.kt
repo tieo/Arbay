@@ -198,6 +198,12 @@ fun Panel(modifier: Modifier = Modifier, highlighted: Boolean = false, content: 
 }
 
 /** Where a screen has nothing to show, saying why in a sentence. */
+/** Something on its way. */
+@Composable
+fun Busy(modifier: Modifier = Modifier) {
+    androidx.compose.material3.CircularProgressIndicator(modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
 @Composable
 fun Nothing(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Column(modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -97,7 +97,7 @@ fun ResultsScreen(app: WebApp, route: Route.Results) {
     if (open == null) {
         Main({ classes("results") }) {
             Div({ classes("empty") }) {
-                Text(if (products.isEmpty() && source is Source.Saved) "Loading…" else "This search is not here any more.")
+                if (products.isEmpty() && source is Source.Saved) Busy() else Text("This search is not here any more.")
             }
         }
         Aside({ classes("inspector") }) {}

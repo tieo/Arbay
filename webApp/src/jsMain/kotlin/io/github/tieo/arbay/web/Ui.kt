@@ -76,6 +76,11 @@ fun IconButton(glyph: Glyph, label: String, pressed: Boolean? = null, onClick: (
 
 /** The one thing a screen is for, drawn as such. */
 @Composable
+fun Busy() {
+    Span({ classes("busy"); attr("role", "progressbar"); attr("aria-label", "Loading") })
+}
+
+@Composable
 fun PrimaryButton(text: String, glyph: Glyph? = null, enabled: Boolean = true, onClick: () -> Unit) {
     Button(attrs = {
         classes("primary")

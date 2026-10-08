@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -43,7 +45,8 @@ object ChatBrowser {
 
     /** Ask the sidecar for [op] and wait at most [timeoutMs] for its answer. */
     suspend fun call(op: String, timeoutMs: Long = 60_000, vararg args: Pair<String, Any?>): JsonObject = lock.withLock {
-        val request = JsonObject(mapOf("op" to JsonPrimitive(op)) + args.associate { (k, v) ->
+        // The sidecar gives up a little before this side does, and answers that it did.
+        val request = JsonObject(mapOf("op" to JsonPrimitive(op), "timeout" to JsonPrimitive(timeoutMs / 1000.0 - 5)) + args.associate { (k, v) ->
             k to when (v) {
                 null -> JsonPrimitive(null as String?)
                 is Number -> JsonPrimitive(v)
@@ -52,7 +55,13 @@ object ChatBrowser {
             }
         })
         val answer = try {
-            withTimeout(timeoutMs) { withContext(Dispatchers.IO) { exchange(request.toString()) } }
+            withContext(Dispatchers.IO) {
+                coroutineScope {
+                    // A blocked read cannot be cancelled; ending the sidecar ends the read.
+                    val watchdog = launch { delay(timeoutMs); process?.let(::killTree) }
+                    try { exchange(request.toString()) } finally { watchdog.cancel() }
+                }
+            }
         } catch (e: Exception) {
             // A sidecar that missed its answer is out of step with the requests; start over.
             log.warn("Chat browser did not answer {}: {}", op, e.message)

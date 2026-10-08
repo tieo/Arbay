@@ -228,7 +228,8 @@ fun ConversationScreen(session: Session, id: String) {
             contentPadding = PaddingValues(arbay.pad), verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             error?.let { item { Muted(it) } }
-            if (c == null || c.messages.isEmpty()) item { Nothing(if (c == null) "Loading" else "Nothing said yet.") }
+            if (c == null) item { Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) { Busy() } }
+            else if (c.messages.isEmpty()) item { Nothing("Nothing said yet.") }
             items(c?.messages.orEmpty(), key = { it.id }) { Bubble(it) }
         }
     }
@@ -265,7 +266,7 @@ fun AccountPanel(session: Session) {
         val step = signIn
         when {
             step != null -> SignInSteps(step, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
-            a == null -> Muted("Asking the server")
+            a == null -> Busy()
             a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
             else -> {
                 a.problem?.let { Muted(it) }

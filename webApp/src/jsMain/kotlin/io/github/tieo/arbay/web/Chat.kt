@@ -159,7 +159,7 @@ private fun ConversationPane(app: WebApp, id: String) {
             IconButton(Glyph.Close, "Close") { Router.replace(Route.Inbox) }
         }
         Div({ classes("bubbles") }) {
-            if (c == null) P({ classes("muted") }) { Text("Loading") }
+            if (c == null) Busy()
             c?.messages?.forEach { Bubble(it) }
         }
         Div({ classes("reply") }) {
@@ -197,7 +197,7 @@ fun AccountSection(app: WebApp) {
     H3 { Text("Kleinanzeigen") }
     when {
         step != null -> SignInSteps(app, step, busy)
-        a == null -> P({ classes("muted") }) { Text("Asking the server") }
+        a == null -> Busy()
         a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
         else -> {
             a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }

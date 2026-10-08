@@ -534,7 +534,10 @@ async def main() -> None:
             break
         try:
             req = json.loads(line)
-            answer = await handle(chat, req)
+            # A page call that never returns would hold every request after it.
+            answer = await asyncio.wait_for(handle(chat, req), timeout=float(req.get("timeout") or 50))
+        except asyncio.TimeoutError:
+            answer = {"ok": False, "signedOut": False, "error": f"{req.get('op')} took too long"}
         except SignedOut as e:
             chat.token = None
             answer = {"ok": False, "signedOut": True, "error": str(e)}

@@ -91,7 +91,7 @@ fun HomeScreen(session: Session) {
                 )
                 when {
                     error != null && products.isEmpty() -> Muted("The server did not answer: $error")
-                    loading && products.isEmpty() -> Muted("Loading your saved searches")
+                    loading && products.isEmpty() -> Busy()
                     products.isEmpty() -> Muted("Save a search from its results to have it here, and watched if you like.")
                 }
             }
