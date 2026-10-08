@@ -190,7 +190,10 @@ fun hiddenListings(
     newListingIds: Set<String>,
 ): List<Hidden> = buildList {
     val banned = fetched.filter { it.id in bannedIds }
-    val byWord = fetched.filter { it.id !in bannedIds && it !in marketBasis } +
+    // By id: the list the words leave carries copies with their distance filled in, which are not
+    // equal to the listings as fetched, and every one of them read as blocked.
+    val leftByWords = marketBasis.mapTo(HashSet()) { it.id }
+    val byWord = fetched.filter { it.id !in bannedIds && it.id !in leftByWords }.distinctBy { it.id } +
         droppedBySearch.filter { it.reason == DropReason.BLOCKED_WORD }.map { it.listing }
     val outOfBand = if (!narrowed.priceFiltered) emptyList()
         else narrowed.allActive.filterNot { narrowed.inPriceRange(it.displayAmount()) }

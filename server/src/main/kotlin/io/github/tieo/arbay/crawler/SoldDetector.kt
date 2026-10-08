@@ -19,7 +19,10 @@ object SoldDetector {
 
     private val log = LoggerFactory.getLogger(SoldDetector::class.java)
 
-    // Regex patterns indicating a listing is no longer available
+    // Words that mark a listing as gone when they stand in its title, where a seller puts them to say
+    // so ("VERKAUFT", "Reserviert"). In a description the same words are ordinary prose: German
+    // sellers write "wird verkauft, da ich gewechselt habe" in the ad for a phone that is for sale,
+    // and every Kleinanzeigen listing flagged sold in one 180-listing search for a phone was such an ad.
     private val SOLD_PATTERNS = listOf(
         // German
         Regex("\\bverkauft\\b", RegexOption.IGNORE_CASE),
@@ -45,6 +48,18 @@ object SoldDetector {
         // French (Vinted DE)
         Regex("\\bvendu\\b", RegexOption.IGNORE_CASE),
         Regex("\\br[eé]serv[eé]\\b", RegexOption.IGNORE_CASE),
+    )
+
+    // What a description says when the thing is gone: the word together with that it already
+    // happened, never the word alone.
+    private val DESCRIPTION_SOLD_PATTERNS = listOf(
+        Regex("\\b(?:bereits|schon|ist|wurde|leider)\\s+(?:verkauft|reserviert|vergeben|weg)\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bnicht\\s+mehr\\s+(?:verf[uü]gbar|zu\\s+haben|da)\\b", RegexOption.IGNORE_CASE),
+        Regex("\\b(?:al\\s+)?verkocht\\b(?=\\s*[.!]|\\s*$)", RegexOption.IGNORE_CASE),
+        Regex("\\bnie\\s+meer\\s+beschikbaar\\b", RegexOption.IGNORE_CASE),
+        Regex("\\b(?:already|has\\s+been|is)\\s+sold\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bno\\s+longer\\s+available\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bd[eé]j[aà]\\s+vendu\\b", RegexOption.IGNORE_CASE),
     )
 
     // Patterns in titles that indicate "SOLD" prefix/suffix markers sellers commonly add
@@ -99,12 +114,12 @@ object SoldDetector {
 
     private fun withoutSalesCounts(text: String) = QUANTITY_SOLD.replace(text, " ")
 
-    private fun isSoldByRules(title: String, description: String): Boolean {
+    internal fun isSoldByRules(title: String, description: String): Boolean {
         val cleanTitle = withoutSalesCounts(title)
         val cleanDescription = withoutSalesCounts(description)
         if (TITLE_SOLD_MARKERS.any { it.containsMatchIn(cleanTitle) }) return true
         if (SOLD_PATTERNS.any { it.containsMatchIn(cleanTitle) }) return true
-        if (SOLD_PATTERNS.any { it.containsMatchIn(cleanDescription) }) return true
+        if (DESCRIPTION_SOLD_PATTERNS.any { it.containsMatchIn(cleanDescription) }) return true
         return false
     }
 
