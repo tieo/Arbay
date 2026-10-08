@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.fillIn
+import io.github.tieo.arbay.model.directPrice
 import io.github.tieo.arbay.model.offerWithin
 import io.github.tieo.arbay.model.tidyTitle
 
@@ -64,7 +65,8 @@ fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits
             else -> null
         }
         val own = edits[listing.id]
-        SendLine(listing, price, note, own ?: fillIn(template, price, title, shippingText), edited = own != null, blockIds = blockIds)
+        val direct = price?.let { directPrice(it, shippingEur ?: 0.0, if (pickupOnly) null else listing.platformId.buyerProtection) }
+        SendLine(listing, price, note, own ?: fillIn(template, price, title, shippingText, direct), edited = own != null, blockIds = blockIds)
     }
 
 /** The lines that can go, as the server takes them. */
@@ -76,7 +78,7 @@ fun List<SendLine>.toRequest(searchId: String?, allInEur: Double?): SendRequest 
 )
 
 /** Whether a line still has a fill-in nobody could complete, which would reach the seller as "{preis}". */
-val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis(\+\d+)?|titel|versand)}""").containsMatchIn(text)
+val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis(\+\d+|_direkt)?|titel|versand)}""").containsMatchIn(text)
 
 private fun formatEuro(eur: Double): String {
     val cents = kotlin.math.round(eur * 100).toLong()

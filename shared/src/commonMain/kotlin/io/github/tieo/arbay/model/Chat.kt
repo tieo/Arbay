@@ -165,6 +165,14 @@ fun offerWithin(allInEur: Double, shippingEur: Double, protection: BuyerProtecti
     return floor(price).toInt().coerceAtLeast(0)
 }
 
+/**
+ * What [price] costs the buyer in all through the market's protection: the price, the fee and the
+ * shipping the ad states. Offered as the price for paying the seller directly, it hands the seller
+ * what the protection would have cost, so the buyer pays the same either way. Rounded down.
+ */
+fun directPrice(price: Int, shippingEur: Double, protection: BuyerProtection?): Int =
+    floor(price + shippingEur + (protection?.let { it.fixedEur + price * it.share } ?: 0.0)).toInt()
+
 /** A market's buyer protection, as the buyer pays for it. */
 data class BuyerProtection(val fixedEur: Double, val share: Double)
 
@@ -180,14 +188,16 @@ val PlatformId.canMessage: Boolean get() = this == PlatformId.KLEINANZEIGEN
 /** The fill-ins a text can use, and what each stands for. */
 val TEMPLATE_FILL_INS: List<Pair<String, String>> = listOf(
     "{preis}" to "the price to offer",
+    "{preis_direkt}" to "the same total paid directly, without buyer protection: the price plus the fee and stated shipping, all to the seller",
     "{preis+20}" to "the price to offer plus 20 € (any amount)",
     "{titel}" to "the ad's title",
     "{versand}" to "shipping as the ad states it",
 )
 
 /** [text] with its fill-ins completed for one listing. */
-fun fillIn(text: String, price: Int?, title: String, shipping: String?): String =
-    text.replace(Regex("""\{preis\+(\d+)}""")) { m -> price?.let { (it + m.groupValues[1].toInt()).toString() } ?: m.value }
+fun fillIn(text: String, price: Int?, title: String, shipping: String?, directPrice: Int? = null): String =
+    text.replace("{preis_direkt}", directPrice?.toString() ?: "{preis_direkt}")
+        .replace(Regex("""\{preis\+(\d+)}""")) { m -> price?.let { (it + m.groupValues[1].toInt()).toString() } ?: m.value }
         .replace("{preis}", price?.toString() ?: "{preis}")
         .replace("{titel}", title)
         .replace("{versand}", shipping ?: "{versand}")
