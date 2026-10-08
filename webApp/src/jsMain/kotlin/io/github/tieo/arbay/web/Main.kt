@@ -10,6 +10,7 @@ import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.loadServerSettings
 import io.github.tieo.arbay.positionFromHomeTown
+import io.github.tieo.arbay.state.SharedState
 import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
@@ -46,6 +47,7 @@ fun ArbayWeb() {
     LaunchedEffect(Unit) { loadServerSettings(app.client) }
     LaunchedEffect(Unit) { app.products.loadProducts() }
     LaunchedEffect(Unit) { app.chat.watch() }
+    LaunchedEffect(Unit) { SharedState.follow(app.client) }
     LaunchedEffect(Unit) {
         // The browser's own position where the site may already read it, never asking from here;
         // the home town otherwise.

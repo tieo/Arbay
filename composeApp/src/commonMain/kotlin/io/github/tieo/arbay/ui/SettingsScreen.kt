@@ -42,7 +42,6 @@ import io.github.tieo.arbay.design.Look
 import io.github.tieo.arbay.design.LookChoice
 import io.github.tieo.arbay.design.Looks
 import io.github.tieo.arbay.design.OfferLayout
-import io.github.tieo.arbay.loadDeviceSettings
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.MarketSettings
@@ -50,7 +49,6 @@ import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.results.flagEmoji
-import io.github.tieo.arbay.saveDeviceSettings
 import io.github.tieo.arbay.schedulePolling
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -79,8 +77,7 @@ fun SettingsScreen(session: Session) {
             Choices {
                 listOf("EUR", "USD", "GBP", "CHF").forEach { c ->
                     Choice(c, DisplayCurrency.current == c) {
-                        DisplayCurrency.current = c
-                        runCatching { saveDeviceSettings(loadDeviceSettings() + ("currency" to c)) }
+                        DisplayCurrency.choose(c)
                     }
                 }
             }

@@ -23,8 +23,8 @@ expect fun saveBannedIds(ids: Set<String>)
 expect fun loadSearchHistory(): String
 expect fun saveSearchHistory(json: String)
 
-/** Settings that belong to this device rather than to the server it talks to: which server that is,
- *  and which currency to show prices in. Kept here so a choice made in Settings survives a restart. */
+/** Settings that belong to this device: which server it talks to, and its own copy of the shared
+ *  look and currency for drawing the first screen (see state/SharedState.kt). */
 expect fun loadDeviceSettings(): Map<String, String>
 expect fun saveDeviceSettings(settings: Map<String, String>)
 
@@ -69,6 +69,21 @@ object DisplayCurrency {
     // start. Held as plain fields, a screen kept showing amounts worked out from the old ones and
     // relabelled them with the new symbol.
     var current: String by mutableStateOf(loadDeviceSettings()["currency"] ?: "EUR")
+        private set
+
+    /** Show prices in [currency] from now on, on every device. */
+    fun choose(currency: String) {
+        current = currency
+        io.github.tieo.arbay.state.SharedState.put("look", io.github.tieo.arbay.state.SharedState.lookAsJson())
+        runCatching { saveDeviceSettings(loadDeviceSettings() + ("currency" to currency)) }
+    }
+
+    /** What the server holds, taken over without sending it back. */
+    fun adopt(currency: String) {
+        if (currency == current) return
+        current = currency
+        runCatching { saveDeviceSettings(loadDeviceSettings() + ("currency" to currency)) }
+    }
     // Overwritten at startup by the server's live rates; until then, the shared approximations
     // both sides use, so a price does not depend on which side worked it out.
     var rates: Map<String, Double> by mutableStateOf(FALLBACK_RATES_PER_EUR)

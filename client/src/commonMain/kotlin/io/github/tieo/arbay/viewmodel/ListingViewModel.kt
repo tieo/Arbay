@@ -6,9 +6,8 @@ import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.DisplayCurrency
-import io.github.tieo.arbay.loadBannedIds
+import io.github.tieo.arbay.state.HiddenOffers
 import io.github.tieo.arbay.model.*
-import io.github.tieo.arbay.saveBannedIds
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,8 +114,7 @@ class ListingViewModel(
     private val _completedPlatforms = MutableStateFlow(sampleCompleted)
     val completedPlatforms: StateFlow<Int> = _completedPlatforms
 
-    private val _bannedIds = MutableStateFlow<Set<String>>(loadBannedIds())
-    val bannedIds: StateFlow<Set<String>> = _bannedIds
+    val bannedIds: StateFlow<Set<String>> = HiddenOffers.ids
 
     private val _priceHistory = MutableStateFlow<List<Listing>>(emptyList())
     val priceHistory: StateFlow<List<Listing>> = _priceHistory
@@ -206,7 +204,7 @@ class ListingViewModel(
         // their own, and every one of those skipped the sort. Nearest-first then showed a van 489
         // km away third in a list that was otherwise ordered by distance, because that one listing
         // had arrived after the last sort.
-        combine(_allListings, _bannedIds, _blockedTerms, _sortMode) { all, banned, blocked, _ ->
+        combine(_allListings, bannedIds, _blockedTerms, _sortMode) { all, banned, blocked, _ ->
             sortListings(all.filter { kept(it, banned, blocked) })
         }.stateIn(
             viewModelScope,
@@ -347,29 +345,24 @@ class ListingViewModel(
 
     /** Put one listing back. */
     fun unban(listing: Listing) {
-        val updated = _bannedIds.value - listing.id
-        _bannedIds.value = updated
-        storeBanned(updated)
+        storeBanned(HiddenOffers.ids.value - listing.id)
     }
 
     /** Put back everything sent away by hand on this device. The bin is one tap and its listings
      *  went somewhere nobody could look; this is the way back. */
     fun unbanAll() {
-        _bannedIds.value = emptySet()
         storeBanned(emptySet())
     }
 
     fun ban(listing: Listing) {
-        val updated = _bannedIds.value + listing.id
-        _bannedIds.value = updated
-        storeBanned(updated)
+        storeBanned(HiddenOffers.ids.value + listing.id)
     }
 
     // The change holds on screen either way; one the device could not store is undone by the next
     // start, and that is worth saying now rather than finding out then.
     private fun storeBanned(ids: Set<String>) {
         try {
-            saveBannedIds(ids)
+            HiddenOffers.set(ids)
         } catch (e: Exception) {
             _error.value = "This device could not store that change: ${e.message}"
         }

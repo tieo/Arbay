@@ -9,6 +9,7 @@ import io.github.tieo.arbay.debug.DebugRegistry
 import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.debug.debugSnapshotJson
 import io.github.tieo.arbay.history.SearchHistoryStore
+import io.github.tieo.arbay.state.SharedState
 import io.github.tieo.arbay.ui.ArbayApp
 import io.github.tieo.arbay.ui.ArbayTheme
 import io.github.tieo.arbay.ui.Session
@@ -47,6 +48,7 @@ fun App() {
         LaunchedEffect(Unit) { loadServerSettings(client) }
         LaunchedEffect(Unit) { session.products.loadProducts() }
         LaunchedEffect(Unit) { session.chat.watch() }
+        LaunchedEffect(Unit) { SharedState.follow(client) }
 
         ArbayApp(session)
     }

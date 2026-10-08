@@ -204,6 +204,16 @@ class ArbayClient(
         client.delete("$baseUrl/api/auctions/reminders/${listingId.encodeURLPathPart()}")
     }
 
+    /** The user's state that every device shares, by name. */
+    suspend fun getState(): Map<String, kotlinx.serialization.json.JsonElement> = client.get("$baseUrl/api/state").body()
+
+    suspend fun putState(key: String, value: kotlinx.serialization.json.JsonElement) {
+        client.put("$baseUrl/api/state/${key.encodeURLPathPart()}") {
+            contentType(ContentType.Application.Json)
+            setBody(value)
+        }
+    }
+
     // ── Talking to sellers through the user's own Kleinanzeigen account ──
 
     suspend fun chatAccount(): ChatAccount = client.get("$baseUrl/api/chat/account").body()

@@ -25,6 +25,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import io.github.tieo.arbay.state.SharedState
 
 /**
  * A search that was run, with whatever it was last narrowed to.
@@ -80,9 +83,9 @@ private fun grouped(value: Int): String {
 /**
  * Every search that has been run, most recent first, with whatever it was last narrowed to.
  *
- * Device-local only — never sent to the server, never shared between devices. A search's filters
- * live somewhere the moment it is opened: on the bookmark if it is saved, in here otherwise, so
- * narrowing an unsaved search is not lost the instant its results sheet closes.
+ * Shared by every device through the server (see state/SharedState.kt); the device keeps a copy to
+ * start with. A search's filters live somewhere the moment it is opened: on the bookmark if it is
+ * saved, in here otherwise, so narrowing an unsaved search is not lost the instant it closes.
  */
 object SearchHistoryStore {
     private const val MAX_ENTRIES = 30
@@ -163,7 +166,20 @@ object SearchHistoryStore {
     }
 
     private fun persist() {
+        SharedState.put("searchHistory", asJson())
         try { saveSearchHistory(json.encodeToString(_entries.value)) } catch (_: Exception) {}
+    }
+
+    fun asJson(): JsonElement = json.encodeToJsonElement(_entries.value)
+
+    /** What the server holds, taken over without sending it back. */
+    internal fun adopt(value: JsonElement) {
+        val entries = runCatching {
+            json.decodeFromJsonElement<List<SearchHistoryEntry>>(SearchQueryMigration.migrateList(value as JsonArray))
+        }.getOrNull() ?: return
+        if (entries == _entries.value) return
+        _entries.value = entries
+        try { saveSearchHistory(json.encodeToString(entries)) } catch (_: Exception) {}
     }
 
     private fun load(): List<SearchHistoryEntry> = try {

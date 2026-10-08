@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.tieo.arbay.loadDeviceSettings
 import io.github.tieo.arbay.saveDeviceSettings
+import io.github.tieo.arbay.state.SharedState
 
 /**
  * How Arbay looks, defined once for every app that draws it: the phone builds its theme from these
@@ -109,8 +110,8 @@ enum class Brightness(val label: String) { SYSTEM("Follow the device"), LIGHT("L
 /** How a list of offers is laid out: rows to read and compare, or photos to look at. */
 enum class OfferLayout(val label: String) { ROWS("Rows"), PHOTOS("Photos") }
 
-/** The look this device uses, kept with the device's other choices. Observable, so changing it in
- *  Settings redraws every screen at once. */
+/** The look the app uses on every device, kept on the server (see SharedState). Observable, so
+ *  changing it in Settings redraws every screen at once. */
 object LookChoice {
     var look: Look by mutableStateOf(Looks.byId(loadDeviceSettings()["look"]))
         private set
@@ -127,5 +128,16 @@ object LookChoice {
     fun choose(brightness: Brightness) { this.brightness = brightness; remember("brightness", brightness.name) }
     fun choose(layout: OfferLayout) { this.layout = layout; remember("offerLayout", layout.name) }
 
-    private fun remember(key: String, value: String) = saveDeviceSettings(loadDeviceSettings() + (key to value))
+    /** What the server holds, taken over without sending it back. */
+    fun adopt(look: String?, brightness: String?, layout: String?) {
+        look?.let { this.look = Looks.byId(it) }
+        brightness?.let { runCatching { Brightness.valueOf(it) }.getOrNull() }?.let { this.brightness = it }
+        layout?.let { runCatching { OfferLayout.valueOf(it) }.getOrNull() }?.let { this.layout = it }
+        runCatching { saveDeviceSettings(loadDeviceSettings() + mapOf("look" to this.look.id, "brightness" to this.brightness.name, "offerLayout" to this.layout.name)) }
+    }
+
+    private fun remember(key: String, value: String) {
+        SharedState.put("look", SharedState.lookAsJson())
+        runCatching { saveDeviceSettings(loadDeviceSettings() + (key to value)) }
+    }
 }

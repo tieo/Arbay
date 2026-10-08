@@ -15,7 +15,6 @@ import io.github.tieo.arbay.design.Look
 import io.github.tieo.arbay.design.LookChoice
 import io.github.tieo.arbay.design.Looks
 import io.github.tieo.arbay.design.OfferLayout
-import io.github.tieo.arbay.loadDeviceSettings
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.MarketSettings
@@ -23,7 +22,6 @@ import io.github.tieo.arbay.model.NotificationSettings
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.platformsIn
 import io.github.tieo.arbay.results.flagEmoji
-import io.github.tieo.arbay.saveDeviceSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.web.attributes.InputType
@@ -140,8 +138,7 @@ private fun CurrencySection() {
         Div({ classes("chips") }) {
             listOf("EUR", "USD", "GBP", "CHF").forEach { currency ->
                 Chip(currency, DisplayCurrency.current == currency) {
-                    DisplayCurrency.current = currency
-                    runCatching { saveDeviceSettings(loadDeviceSettings() + ("currency" to currency)) }
+                    DisplayCurrency.choose(currency)
                 }
             }
         }
