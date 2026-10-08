@@ -46,8 +46,20 @@ data class SameOffer(val listings: List<Listing>) {
                 while (parent[c] != r) { val next = parent[c]; parent[c] = r; c = next }
                 return r
             }
-            fun join(i: Int, j: Int) { parent[root(j)] = root(i) }
             val facts = listings.map { Facts.of(it) }
+            // Two groups become one only if nothing in the one keeps apart from anything in the
+            // other: a copy with no place and another currency matched a Munich and a Vienna phone
+            // alike, and joining pair by pair folded the two through it.
+            val groupOf = IntArray(listings.size) { it }.map { mutableListOf(it) }.toMutableList()
+            fun join(i: Int, j: Int) {
+                val a = root(i)
+                val b = root(j)
+                if (a == b) return
+                if (groupOf[a].any { x -> groupOf[b].any { y -> apart(facts[x], facts[y]) || contradicts(listings[x].vehicle, listings[y].vehicle) } }) return
+                parent[b] = a
+                groupOf[a].addAll(groupOf[b])
+                groupOf[b].clear()
+            }
             listings.indices
                 .groupBy { listings[it].title.lowercase().filter { c -> c.isLetterOrDigit() } }
                 .forEach { (key, indices) ->

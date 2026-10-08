@@ -121,4 +121,16 @@ class SameOfferTest {
         val ottweiler = listing("o", PlatformId.KLEINANZEIGEN, "Google Pixel 9 Pro XL 256 GB", 400, "66564")
         assertEquals(2, SameOffer.group(listOf(vinted, ottweiler)).size)
     }
+
+    @Test
+    fun `a copy matching two sellers does not fold them together`() {
+        val munich = listing("m", PlatformId.KLEINANZEIGEN, "Google Pixel 9 Pro XL 256GB", 450, "81925")
+        val ricardo = Listing(
+            id = "r", platformId = PlatformId.RICARDO, externalId = "r", url = "https://example.invalid/r",
+            title = "Google Pixel 9 Pro XL 256GB", price = Money(42000, Currency.CHF), scrapedAt = Instant.fromEpochSeconds(0),
+        )
+        val vienna = listing("w", PlatformId.WILLHABEN, "Google Pixel 9 Pro XL 256GB", 450, null, city = "Wien")
+        val offers = SameOffer.group(listOf(munich, ricardo, vienna))
+        assertEquals(listOf(false), listOf(offers.any { o -> o.listings.map { it.id }.containsAll(listOf("m", "w")) }))
+    }
 }
