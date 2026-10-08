@@ -687,7 +687,7 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .chip-hide {
     display: inline-flex; align-items: center; padding: 0 7px; cursor: pointer;
     border: 1px solid var(--line); border-left: 0; background: var(--surface); color: var(--muted);
-    border-radius: 0 999px 999px 0;
+    border-radius: 0 var(--radius-small) var(--radius-small) 0;
 }
 .chip-hide:hover { color: var(--text); }
 .chip-hide.on { color: var(--danger); }
