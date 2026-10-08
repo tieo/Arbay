@@ -35,7 +35,12 @@ data class SignInStep(
     val picture: String? = null,
     val width: Int = 0,
     val height: Int = 0,
+    /** The buttons the page shows, such as "Code senden", each pressed at its point of the page. */
+    val actions: List<SignInAction> = emptyList(),
 )
+
+@Serializable
+data class SignInAction(val label: String, val x: Double, val y: Double)
 
 @Serializable
 enum class SignInAsk { EMAIL, PASSWORD, CODE, OTHER, DONE }

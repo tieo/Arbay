@@ -233,6 +233,12 @@ private fun SignInSteps(app: WebApp, step: SignInStep, busy: Boolean) {
                 value(value); onInput { value = it.value }
             }
             PrimaryButton(if (busy) "Waiting for Kleinanzeigen" else "Continue", enabled = !busy && value.isNotBlank()) {}
+        } else {
+            // With no field to fill, the page's own buttons are the way on.
+            step.actions.forEachIndexed { i, action ->
+                if (i == 0) PrimaryButton(action.label, enabled = !busy) { chat.signInTap(action.x, action.y) }
+                else QuietButton(action.label) { if (!busy) chat.signInTap(action.x, action.y) }
+            }
         }
         QuietButton("Cancel") { chat.cancelSignIn() }
     }

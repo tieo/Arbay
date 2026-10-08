@@ -14,6 +14,7 @@ import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.SignInAction
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.model.SignInStep
@@ -33,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -118,6 +120,14 @@ object Chat {
         picture = o["picture"]?.str(),
         width = (o["width"] as? JsonPrimitive)?.intOrNull ?: 0,
         height = (o["height"] as? JsonPrimitive)?.intOrNull ?: 0,
+        actions = (o["actions"] as? JsonArray).orEmpty().mapNotNull { a ->
+            val obj = a as? JsonObject ?: return@mapNotNull null
+            SignInAction(
+                label = obj["label"]?.str() ?: return@mapNotNull null,
+                x = (obj["x"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
+                y = (obj["y"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null,
+            )
+        },
     )
 
     // --- reading ---

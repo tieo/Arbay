@@ -346,9 +346,16 @@ class Chat:
                 text = (element.text_all or "").strip()
                 if "gesperrt" in text.lower():
                     errors.append(text)
+        # The page's own buttons, so the app can offer them as buttons rather than a picture to click.
+        actions = []
+        for element, position in await self.visible("main button, form button, main [role=button], input[type=submit]"):
+            label = (element.text_all or element.attrs.get("value") or "").strip()
+            if label and len(label) <= 40 and all(a["label"] != label for a in actions):
+                actions.append({"label": label, "x": position.left + position.width / 2, "y": position.top + position.height / 2})
         shot = await self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80))
         width, height = await self.viewport()
-        return {"ok": True, "step": step, "error": " ".join(errors) or None, "picture": shot, "width": width, "height": height}
+        return {"ok": True, "step": step, "error": " ".join(errors) or None, "picture": shot, "width": width, "height": height,
+                "actions": actions[:6]}
 
     async def signin_fill(self, value: str) -> dict:
         state = await self.signin_state()

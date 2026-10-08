@@ -298,6 +298,11 @@ private fun SignInSteps(step: SignInStep, busy: Boolean, onValue: (String) -> Un
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (label != null) Button(enabled = !busy && value.isNotBlank(), onClick = { onValue(value) }) { Text(if (busy) "Waiting for Kleinanzeigen" else "Continue") }
+        // With no field to fill, the page's own buttons are the way on.
+        if (label == null) step.actions.forEachIndexed { i, action ->
+            if (i == 0) Button(enabled = !busy, onClick = { onTap(action.x, action.y) }) { Text(action.label) }
+            else OutlinedButton(enabled = !busy, onClick = { onTap(action.x, action.y) }) { Text(action.label) }
+        }
         TextButton(onClick = onCancel) { Text("Cancel") }
     }
     step.picture?.let { picture ->
