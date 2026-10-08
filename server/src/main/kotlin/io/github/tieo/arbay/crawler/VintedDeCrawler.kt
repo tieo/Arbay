@@ -31,7 +31,7 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
         return parseSearchResults(html)
     }
 
-    private fun parseSearchResults(html: String): List<Listing> {
+    internal fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
@@ -66,10 +66,10 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
             val imageUrl = item.selectFirst("[data-testid*=--image--img]")?.attr("src")
                 ?: item.selectFirst("img")?.attr("src")
 
-            // Vinted mandatory fees baked into price: buyer protection 5% (min €0.70) + service fee €0.70
-            val buyerProtection = maxOf(price.amount * 5 / 100, 70L)
-            val serviceFee = 70L
-            val priceWithFees = Money(price.amount + buyerProtection + serviceFee, price.currency)
+            // What the buyer pays: the card's own total with Vinted's fee ("11,20 € inklusive
+            // Vinted-Gebühr"), the price the seller asks beside it.
+            val priceWithFees = item.selectFirst("[data-testid=total-combined-price]")?.text()
+                ?.let { Money.parseAtMarket(it, price.currency) } ?: price
 
             Listing(
                 id = "${platformId.name}:$externalId",
@@ -78,7 +78,7 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
                 url = url,
                 title = title,
                 price = priceWithFees,
-                oldPrice = price, // show original price as reference
+                oldPrice = price.takeIf { it != priceWithFees },
                 condition = condition,
                 imageUrls = listOfNotNull(imageUrl),
                 // Shipping varies by weight — not known from search results

@@ -49,3 +49,17 @@ class VintedTitleTest {
         )
     }
 }
+
+/** The price a Vinted card states the buyer pays, fee included, from a saved search page. */
+class VintedPriceTest {
+    private val listings = VintedDeCrawler(offlineClient())
+        .parseSearchResults(javaClass.getResource("/fixtures/vinted_search_2026.html")!!.readText())
+
+    @Test
+    fun `the card's own total is the price and the seller's price stays beside it`() {
+        val first = listings.first()
+        assertEquals(io.github.tieo.arbay.model.Money(41545), first.price)
+        assertEquals(io.github.tieo.arbay.model.Money(39500), first.oldPrice)
+        assert(listings.all { it.price.amount > (it.oldPrice?.amount ?: 0) })
+    }
+}
