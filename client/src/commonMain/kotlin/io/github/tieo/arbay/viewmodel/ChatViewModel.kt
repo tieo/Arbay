@@ -3,6 +3,7 @@ package io.github.tieo.arbay.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.api.ArbayClient
+import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.Conversation
@@ -33,6 +34,7 @@ class ChatViewModel(
     sampleConversations: List<Conversation> = emptyList(),
     sampleOutbox: List<OutgoingMessage> = emptyList(),
     sampleSettings: ChatSettings? = null,
+    sampleReview: List<BlockReview> = emptyList(),
 ) : ViewModel() {
     private val rendersASample = sampleAccount != null
 
@@ -50,6 +52,15 @@ class ChatViewModel(
 
     private val _settings = MutableStateFlow(sampleSettings ?: ChatSettings())
     val settings: StateFlow<ChatSettings> = _settings.asStateFlow()
+
+    private val _review = MutableStateFlow(sampleReview)
+    /** How sellers answered each of the user's text blocks. */
+    val review: StateFlow<List<BlockReview>> = _review.asStateFlow()
+
+    fun loadReview() {
+        if (rendersASample) return
+        viewModelScope.launch { attempt { _review.value = client.textReview() } }
+    }
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()

@@ -28,7 +28,9 @@ import io.github.tieo.arbay.ui.LocalNavigator
 import io.github.tieo.arbay.ui.Navigator
 import io.github.tieo.arbay.ui.PanelBody
 import io.github.tieo.arbay.ui.Session
+import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
+import io.github.tieo.arbay.model.ReviewAnswer
 import io.github.tieo.arbay.model.ChatMessage
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.Conversation
@@ -78,6 +80,12 @@ private fun chat(signedIn: Boolean = true, picked: Set<String> = emptySet()) = C
     ),
     sampleOutbox = listOf(OutgoingMessage("o1", "KLEINANZEIGEN:7", PreviewData.active[6].title, "Hallo", NOW + 70.seconds)),
     sampleSettings = ChatSettings(templates = listOf(SAMPLE_TEXT), allInBySearch = mapOf(PreviewData.saved.first().id to 450.0)),
+    sampleReview = listOf(
+        BlockReview(
+            SAMPLE_TEXT.id, SAMPLE_TEXT.name, sent = 6, answered = 4, middleMinutesToAnswer = 95,
+            answers = listOf(ReviewAnswer("c1", PreviewData.active[0].title, NOW - 2.hours, 425, "Ja, ist noch da. Foto kommt gleich.", NOW - 25.minutes)),
+        ),
+    ),
 ).also { vm -> picked.forEach(vm::toggleSelected) }
 
 private fun session(

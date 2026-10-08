@@ -62,6 +62,10 @@ data class OutgoingMessage(
     val state: OutgoingState = OutgoingState.WAITING,
     val conversationId: String? = null,
     val error: String? = null,
+    /** Which of the user's text blocks the message was made of, for seeing later how each does. */
+    val blockIds: List<String> = emptyList(),
+    /** The price the message offered, when it offered one. */
+    val price: Int? = null,
 )
 
 @Serializable
@@ -76,12 +80,48 @@ data class SendRequest(
     val allInEur: Double? = null,
 ) {
     @Serializable
-    data class Draft(val listingId: String, val title: String, val text: String)
+    data class Draft(
+        val listingId: String,
+        val title: String,
+        val text: String,
+        val blockIds: List<String> = emptyList(),
+        val price: Int? = null,
+    )
 }
 
-/** A text the user wrote, with fill-ins Arbay completes per listing. */
+/**
+ * A block of text the user wrote, with fill-ins Arbay completes per listing. A message is one or
+ * more blocks in the order picked (a greeting, the offer, the Käuferschutz paragraph), so each block
+ * can be judged and changed on its own.
+ */
 @Serializable
 data class MessageTemplate(val id: String, val name: String, val text: String)
+
+/** [blocks] as one message, in the order given. */
+fun composeBlocks(blocks: List<MessageTemplate>): String = blocks.joinToString("\n\n") { it.text.trim() }
+
+/** How sellers answered the messages one text block went out in. */
+@Serializable
+data class BlockReview(
+    val blockId: String,
+    val name: String,
+    val sent: Int,
+    val answered: Int,
+    /** The middle time sellers took to answer, in minutes, over those who did. */
+    val middleMinutesToAnswer: Long? = null,
+    val answers: List<ReviewAnswer> = emptyList(),
+)
+
+/** One message sent and what came back to it first. */
+@Serializable
+data class ReviewAnswer(
+    val conversationId: String,
+    val title: String,
+    val sentAt: Instant,
+    val price: Int? = null,
+    val answer: String? = null,
+    val answeredAt: Instant? = null,
+)
 
 /** The user's texts, and the all-in limit last used per saved search. */
 @Serializable

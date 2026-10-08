@@ -1,7 +1,9 @@
 package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
+import io.github.tieo.arbay.model.ReviewAnswer
 import io.github.tieo.arbay.model.ChatMessage
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.Conversation
@@ -15,6 +17,7 @@ import io.github.tieo.arbay.repo.writeTextAtomically
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -127,7 +130,7 @@ object Chat {
         var at = (outbox.filter { it.state == OutgoingState.WAITING }.maxOfOrNull { it.sendAt } ?: now).let { if (it < now) now else it }
         val queued = request.messages.mapIndexed { index, draft ->
             if (index > 0 || at > now) at += Random.nextInt(30, 91).seconds
-            OutgoingMessage(UUID.randomUUID().toString(), draft.listingId, draft.title, draft.text, at)
+            OutgoingMessage(UUID.randomUUID().toString(), draft.listingId, draft.title, draft.text, at, blockIds = draft.blockIds, price = draft.price)
         }
         outbox += queued
         trimOutbox()
@@ -182,6 +185,44 @@ object Chat {
 
     private fun persistOutbox() = runCatching { outboxFile.writeTextAtomically(json.encodeToString(outbox.toList())) }
         .onFailure { log.error("Could not save the outbox: {}", it.message) }
+
+    // --- how the user's text blocks do ---
+
+    /** Conversations already read for the review, so it does not read every one again each time. */
+    private val reviewed = java.util.concurrent.ConcurrentHashMap<String, Pair<Instant, Conversation>>()
+
+    /**
+     * For every text block, how many messages it went out in and how sellers answered: the first
+     * thing the seller wrote after each message, and how long that took.
+     */
+    suspend fun review(): List<BlockReview> {
+        val sent = outbox().filter { it.state == OutgoingState.SENT && it.conversationId != null && it.blockIds.isNotEmpty() }
+        val answers = sent.associate { m ->
+            val c = readForReview(m.conversationId!!)
+            val first = c?.messages?.firstOrNull { !it.mine && (it.at ?: Instant.DISTANT_PAST) > m.sendAt }
+            m.id to ReviewAnswer(m.conversationId!!, m.title, m.sendAt, m.price, first?.text?.ifBlank { if (first.attachments.isNotEmpty()) "(a photo)" else null }, first?.at)
+        }
+        val names = settings.templates.associate { it.id to it.name }
+        return sent.flatMap { m -> m.blockIds.map { it to m } }.groupBy({ it.first }, { it.second }).map { (blockId, messages) ->
+            val got = messages.mapNotNull { answers[it.id] }
+            val waits = got.mapNotNull { a -> a.answeredAt?.let { (it - a.sentAt).inWholeMinutes } }.sorted()
+            BlockReview(
+                blockId = blockId,
+                name = names[blockId] ?: "A text since deleted",
+                sent = messages.size,
+                answered = got.count { it.answer != null },
+                middleMinutesToAnswer = waits.getOrNull(waits.size / 2),
+                answers = got.sortedByDescending { it.sentAt },
+            )
+        }.sortedByDescending { it.sent }
+    }
+
+    private suspend fun readForReview(id: String): Conversation? {
+        reviewed[id]?.let { (at, c) -> if (Clock.System.now() - at < 10.minutes) return c }
+        val c = runCatching { conversation(id) }.getOrNull() ?: return reviewed[id]?.second
+        reviewed[id] = Clock.System.now() to c
+        return c
+    }
 
     // --- the user's texts ---
 

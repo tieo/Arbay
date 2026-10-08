@@ -676,3 +676,5 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 }
 .text-entry .offer-meta { max-width: 100%; }
 .template-editor { display: flex; flex-direction: column; gap: 6px; }
+.review-answer { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 6px 12px; text-decoration: none; border-left: 2px solid var(--line); margin: 4px 0; }
+.review-answer:hover { border-left-color: var(--accent); }

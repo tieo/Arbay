@@ -250,6 +250,8 @@ class ArbayClient(
         client.delete("$baseUrl/api/chat/outbox/${id.encodeURLPathPart()}")
     }
 
+    suspend fun textReview(): List<BlockReview> = client.get("$baseUrl/api/chat/review").body()
+
     suspend fun chatSettings(): ChatSettings = client.get("$baseUrl/api/chat/settings").body()
 
     suspend fun updateChatSettings(settings: ChatSettings): ChatSettings =

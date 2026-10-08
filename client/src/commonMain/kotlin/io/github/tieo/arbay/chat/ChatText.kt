@@ -34,3 +34,16 @@ fun outgoingLabel(m: OutgoingMessage): String = when (m.state) {
 /** The market's own page for a Kleinanzeigen ad, from Arbay's listing id. */
 fun kleinanzeigenAdUrl(listingId: String): String? =
     listingId.substringAfter("KLEINANZEIGEN:", "").takeIf { it.isNotEmpty() }?.let { "https://www.kleinanzeigen.de/s-anzeige/$it" }
+
+/** How one text block did, in a line: how often it went out, how often it got an answer, how fast. */
+fun reviewLine(r: io.github.tieo.arbay.model.BlockReview): String = listOfNotNull(
+    if (r.sent == 1) "sent once" else "sent ${r.sent} times",
+    "${r.answered} answered" + if (r.sent > 0) " (${r.answered * 100 / r.sent} %)" else "",
+    r.middleMinutesToAnswer?.let { "usually within ${duration(it)}" },
+).joinToString(" · ")
+
+private fun duration(minutes: Long): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes < 48 * 60 -> "${(minutes + 30) / 60} h"
+    else -> "${(minutes + 12 * 60) / (24 * 60)} days"
+}

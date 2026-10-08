@@ -9,6 +9,7 @@ import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
+import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.offerWithin
 import io.github.tieo.arbay.model.tidyTitle
@@ -229,15 +230,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
-            "draft_messages", "Fill one of the user's texts for each offer, with the price that keeps everything within the all-in limit. Sends nothing.",
+            "draft_messages", "Put the user's text blocks together, in the order given, for each offer, filled in with the price that keeps everything within the all-in limit. Sends nothing.",
             props = {
                 stringArray("listing_ids", "Offer ids from search", required = true)
-                string("text_id", "Which of the user's texts", required = true)
+                stringArray("text_ids", "Which of the user's text blocks, in order", required = true)
                 number("all_in_eur", "Most the user pays, shipping and buyer protection included")
             },
         ) { args ->
-            val template = getJson<ChatSettings>("/api/chat/settings").templates.firstOrNull { it.id == args.str("text_id") }
-                ?: return@tool "No such text."
+            val all = getJson<ChatSettings>("/api/chat/settings").templates
+            val blocks = args.strs("text_ids").map { id -> all.firstOrNull { it.id == id } ?: return@tool "No text block $id." }
+            val text = composeBlocks(blocks)
             val allIn = args.num("all_in_eur")
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = seen[id] ?: return@joinToString "$id: unknown offer; search first."
@@ -246,7 +248,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 val shippingEur = shipping?.cost?.amount?.div(100.0) ?: 0.0
                 val price = allIn?.let { offerWithin(it, shippingEur, l.platformId.buyerProtection) }
                 val note = if (allIn != null && shipping?.cost == null) " (shipping not stated, price is before shipping)" else ""
-                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(template.text, price, l.title.tidyTitle(), shipping?.cost?.let { "%.2f €".format(it.amount / 100.0) })
+                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), shipping?.cost?.let { "%.2f €".format(it.amount / 100.0) })
             }
         }
 
@@ -263,6 +265,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                         putJsonObject("properties") {
                             putJsonObject("listing_id") { put("type", "string") }
                             putJsonObject("text") { put("type", "string") }
+                            putJsonObject("text_ids") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "The text blocks the message was made of") }
+                            putJsonObject("price") { put("type", "integer"); put("description", "The price the message offers") }
                         }
                         putJsonArray("required") { add(JsonPrimitive("listing_id")); add(JsonPrimitive("text")) }
                     }
@@ -274,7 +278,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ) { args ->
             val drafts = (args["messages"] as? JsonArray).orEmpty().map { it as JsonObject }.map { m ->
                 val id = m["listing_id"]!!.jsonPrimitive.content
-                SendRequest.Draft(id, seen[id]?.title?.tidyTitle() ?: id, m["text"]!!.jsonPrimitive.content)
+                SendRequest.Draft(
+                    id, seen[id]?.title?.tidyTitle() ?: id, m["text"]!!.jsonPrimitive.content,
+                    blockIds = (m["text_ids"] as? JsonArray).orEmpty().map { it.jsonPrimitive.content },
+                    price = m["price"]?.jsonPrimitive?.intOrNull,
+                )
             }
             val r = http.post("$base/api/chat/outbox") {
                 contentType(ContentType.Application.Json)

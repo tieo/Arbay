@@ -15,12 +15,15 @@ import io.github.tieo.arbay.chat.outgoingLabel
 import io.github.tieo.arbay.chat.planSend
 import io.github.tieo.arbay.chat.sellerMark
 import io.github.tieo.arbay.chat.toRequest
+import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatMessage
+import io.github.tieo.arbay.chat.reviewLine
 import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
+import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Panel
@@ -58,7 +61,8 @@ fun InboxScreen(app: WebApp, route: Route) {
     val conversations by chat.conversations.collectAsState()
     val outbox by chat.outbox.collectAsState()
     val error by chat.error.collectAsState()
-    LaunchedEffect(Unit) { chat.watch(); chat.refresh() }
+    val review by chat.review.collectAsState()
+    LaunchedEffect(Unit) { chat.watch(); chat.refresh(); chat.loadReview() }
     val openId = (route as? Route.Conversation)?.id
     val onTheirWay = outbox.filter { it.state == OutgoingState.WAITING || it.state == OutgoingState.SENDING || it.state == OutgoingState.FAILED }
 
@@ -80,6 +84,10 @@ fun InboxScreen(app: WebApp, route: Route) {
                 }
             }
         }
+        if (review.isNotEmpty()) Div({ classes("outbox") }) {
+            H3({ classes("group-title") }) { Text("How your texts do") }
+            review.forEach { ReviewEntry(it) }
+        }
         Div({ classes("rows") }) {
             if (account?.signedIn == true && conversations.isEmpty()) Div({ classes("empty") }) { Text("No conversations yet.") }
             conversations.forEach { c -> ConversationRow(c, c.id == openId) }
@@ -88,6 +96,24 @@ fun InboxScreen(app: WebApp, route: Route) {
     Aside({ classes("inspector") }) {
         if (openId != null) ConversationPane(app, openId)
         else Div({ classes("empty") }) { Text(if (conversations.isEmpty()) "" else "${conversations.sumOf { it.unread }} unread") }
+    }
+}
+
+/** One text block: how it did, and opened, what each seller answered to it. */
+@Composable
+private fun ReviewEntry(r: BlockReview) {
+    var open by remember { mutableStateOf(false) }
+    Div({ classes("review") }) {
+        Button(attrs = { attr("type", "button"); classes("text-entry"); attr("aria-expanded", open.toString()); onClick { open = !open } }) {
+            Span({ classes("offer-title") }) { Text(r.name) }
+            Span({ classes("offer-meta") }) { Text(reviewLine(r)) }
+        }
+        if (open) r.answers.forEach { a ->
+            RouteLink(Route.Conversation(a.conversationId), classes = listOf("review-answer")) {
+                Span({ classes("offer-meta") }) { Text(listOfNotNull(a.title, a.price?.let { "offered $it €" }).joinToString(" · ")) }
+                Span { Text(a.answer ?: "No answer yet") }
+            }
+        }
     }
 }
 
@@ -257,11 +283,13 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
     var allIn by remember(searchId, settings.allInBySearch[searchId ?: ""]) {
         mutableStateOf(searchId?.let { settings.allInBySearch[it] }?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() } ?: "")
     }
-    var text by remember(settings.templates.isEmpty()) { mutableStateOf(settings.templates.firstOrNull()?.text ?: "") }
+    var picked by remember { mutableStateOf(listOf<String>()) }
+    var text by remember { mutableStateOf("") }
+    val composed = composeBlocks(picked.mapNotNull { id -> settings.templates.firstOrNull { it.id == id } })
     val edits = remember { mutableStateMapOf<String, String>() }
     var openLine by remember { mutableStateOf<String?>(null) }
     val limit = allIn.replace(',', '.').toDoubleOrNull()
-    val lines = planSend(listings, limit, text, edits)
+    val lines = planSend(listings, limit, text, edits, picked)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
@@ -286,14 +314,21 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
             }
         }
         if (settings.templates.isNotEmpty()) Div({ classes("chips") }) {
-            settings.templates.forEach { t -> Chip(t.name, text == t.text) { text = t.text; edits.clear() } }
+            settings.templates.forEach { t ->
+                val place = picked.indexOf(t.id)
+                Chip(if (place >= 0) "${place + 1} ${t.name}" else t.name, place >= 0) {
+                    picked = if (place >= 0) picked - t.id else picked + t.id
+                    text = composeBlocks(picked.mapNotNull { id -> settings.templates.firstOrNull { it.id == id } })
+                    edits.clear()
+                }
+            }
         }
         Label(attrs = { classes("field") }) {
             Span({ classes("field-label") }) { Text("Your message") }
             TextArea(text) { classes("control"); attr("rows", "6"); onInput { text = it.value } }
         }
         Div({ classes("chips") }) { TEMPLATE_FILL_INS.forEach { (token, means) -> FillInChip(token, means, token in text) { text += token } } }
-        if (text.isNotBlank() && settings.templates.none { it.text == text }) KeepText(app, text)
+        if (text.isNotBlank() && text != composed) KeepText(app, text)
 
         Div({ classes("seller-lines") }) {
             lines.forEach { line ->

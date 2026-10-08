@@ -50,6 +50,7 @@ fun Route.chatRoutes() {
             call.respond(HttpStatusCode.OK, mapOf("cancelled" to Chat.cancel(id)))
         }
 
+        get("/review") { call.chat { call.respond(Chat.review()) } }
         get("/settings") { call.respond(Chat.settings()) }
         put("/settings") { call.respond(Chat.updateSettings(call.receive<ChatSettings>())) }
     }

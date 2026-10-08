@@ -45,7 +45,7 @@ class ArbayMcpTest {
         val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
 
         val tools = mcp.listTools().tools.map { it.name }
-        for (expected in listOf("search", "list_saved_searches", "send_messages", "draft_messages", "reply", "set_look")) {
+        for (expected in listOf("search", "list_saved_searches", "send_messages", "draft_messages", "reply", "set_look", "list_texts")) {
             assertContains(tools, expected)
         }
 

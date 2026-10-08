@@ -57,11 +57,14 @@ import io.github.tieo.arbay.chat.kleinanzeigenAdUrl
 import io.github.tieo.arbay.chat.outgoingLabel
 import io.github.tieo.arbay.chat.planSend
 import io.github.tieo.arbay.chat.toRequest
+import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatMessage
+import io.github.tieo.arbay.chat.reviewLine
 import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
+import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
@@ -79,7 +82,8 @@ fun InboxScreen(session: Session) {
     val conversations by chat.conversations.collectAsState()
     val outbox by chat.outbox.collectAsState()
     val error by chat.error.collectAsState()
-    LaunchedEffect(Unit) { chat.watch(); chat.refresh() }
+    val review by chat.review.collectAsState()
+    LaunchedEffect(Unit) { chat.watch(); chat.refresh(); chat.loadReview() }
     val onTheirWay = outbox.filter { it.state == OutgoingState.WAITING || it.state == OutgoingState.SENDING || it.state == OutgoingState.FAILED }
 
     Scaffold(
@@ -107,10 +111,32 @@ fun InboxScreen(session: Session) {
                 }
                 item { HorizontalDivider(color = arbay.line) }
             }
+            if (review.isNotEmpty()) {
+                item { SectionTitle("How your texts do", Modifier.padding(horizontal = arbay.pad, vertical = 8.dp)) }
+                items(review, key = { "review:" + it.blockId }) { ReviewRow(it) }
+                item { HorizontalDivider(color = arbay.line) }
+            }
             if (account?.signedIn == true && conversations.isEmpty()) item { Nothing("No conversations yet.") }
             items(conversations, key = { it.id }) { c ->
                 ConversationRow(c) { nav.go(Route.Conversation(c.id)) }
                 HorizontalDivider(Modifier.padding(start = arbay.pad), color = arbay.line)
+            }
+        }
+    }
+}
+
+/** One text block: how it did, and opened, what each seller answered to it. */
+@Composable
+private fun ReviewRow(r: BlockReview) {
+    val nav = LocalNavigator.current
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = arbay.pad, vertical = 6.dp)) {
+        Text(r.name, style = MaterialTheme.typography.bodyMedium)
+        Muted(reviewLine(r))
+        if (open) r.answers.forEach { a ->
+            Column(Modifier.fillMaxWidth().clickable { nav.go(Route.Conversation(a.conversationId)) }.padding(top = 8.dp)) {
+                Muted(listOfNotNull(a.title, a.price?.let { "offered $it €" }).joinToString(" · "), maxLines = 1)
+                Text(a.answer ?: "No answer yet", style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -255,11 +281,13 @@ fun WritePanel(session: Session, route: Route.Results, state: ResultsState) {
     val listings = remember(selected, fetched) { fetched.filter { it.id in selected } }
 
     var allIn by remember(searchId) { mutableStateOf(searchId?.let { settings.allInBySearch[it] }?.let { formatAmount(it) } ?: "") }
-    var text by remember { mutableStateOf(settings.templates.firstOrNull()?.text ?: "") }
+    var picked by remember { mutableStateOf(listOf<String>()) }
+    var text by remember { mutableStateOf("") }
+    val composed = composeBlocks(picked.mapNotNull { id -> settings.templates.firstOrNull { it.id == id } })
     val edits = remember { mutableStateMapOf<String, String>() }
     var openLine by remember { mutableStateOf<String?>(null) }
     val limit = allIn.replace(',', '.').toDoubleOrNull()
-    val lines = planSend(listings, limit, text, edits)
+    val lines = planSend(listings, limit, text, edits, picked)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
@@ -274,14 +302,21 @@ fun WritePanel(session: Session, route: Route.Results, state: ResultsState) {
     )
     if (settings.templates.isNotEmpty()) {
         Choices {
-            settings.templates.forEach { t -> Choice(t.name, text == t.text) { text = t.text; edits.clear() } }
+            settings.templates.forEach { t ->
+                val place = picked.indexOf(t.id)
+                Choice(if (place >= 0) "${place + 1} ${t.name}" else t.name, place >= 0) {
+                    picked = if (place >= 0) picked - t.id else picked + t.id
+                    text = composeBlocks(picked.mapNotNull { id -> settings.templates.firstOrNull { it.id == id } })
+                    edits.clear()
+                }
+            }
         }
     }
     OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), label = { Text("Your message") }, minLines = 4)
     Choices {
         TEMPLATE_FILL_INS.forEach { (token, _) -> Choice(token, token in text) { text += token } }
     }
-    if (text.isNotBlank() && settings.templates.none { it.text == text }) {
+    if (text.isNotBlank() && text != composed) {
         var naming by remember { mutableStateOf(false) }
         var name by remember { mutableStateOf("") }
         if (!naming) TextButton(onClick = { naming = true }) { Text("Keep this text") }
@@ -313,7 +348,11 @@ fun WritePanel(session: Session, route: Route.Results, state: ResultsState) {
 @Composable
 private fun SellerLine(line: SendLine, open: Boolean, onToggle: () -> Unit, onEdit: (String) -> Unit, onReset: () -> Unit, onDrop: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().clickable(enabled = line.unreachable == null, onClick = onToggle).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().clickable(enabled = line.unreachable == null, onClick = onToggle).padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Column(Modifier.weight(1f)) {
                 Text(line.listing.title.tidyTitle(), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val foot = line.unreachable ?: listOfNotNull(if (line.edited) "your own wording" else null, line.note).joinToString(" · ")

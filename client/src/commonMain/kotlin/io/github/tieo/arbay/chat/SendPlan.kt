@@ -21,6 +21,8 @@ data class SendLine(
     val edited: Boolean,
     /** Why this seller can't be written to, when they can't. */
     val unreachable: String? = null,
+    /** The text blocks the message was made of. */
+    val blockIds: List<String> = emptyList(),
 )
 
 /**
@@ -31,7 +33,7 @@ data class SendLine(
  * in person, so nothing comes off. An ad that ships without saying for how much gets the price
  * before shipping and says so, rather than a guessed shipping cost.
  */
-fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits: Map<String, String>): List<SendLine> =
+fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits: Map<String, String>, blockIds: List<String> = emptyList()): List<SendLine> =
     listings.map { listing ->
         val title = listing.title.tidyTitle()
         if (!listing.platformId.canMessage) {
@@ -59,13 +61,13 @@ fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits
             else -> null
         }
         val own = edits[listing.id]
-        SendLine(listing, price, note, own ?: fillIn(template, price, title, shippingText), edited = own != null)
+        SendLine(listing, price, note, own ?: fillIn(template, price, title, shippingText), edited = own != null, blockIds = blockIds)
     }
 
 /** The lines that can go, as the server takes them. */
 fun List<SendLine>.toRequest(searchId: String?, allInEur: Double?): SendRequest = SendRequest(
     messages = filter { it.unreachable == null && it.text.isNotBlank() }
-        .map { SendRequest.Draft(it.listing.id, it.listing.title.tidyTitle(), it.text) },
+        .map { SendRequest.Draft(it.listing.id, it.listing.title.tidyTitle(), it.text, it.blockIds, it.price) },
     searchId = searchId,
     allInEur = allInEur,
 )
