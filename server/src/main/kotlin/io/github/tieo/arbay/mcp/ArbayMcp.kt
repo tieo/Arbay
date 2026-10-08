@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MessageTemplate
+import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.buyerProtection
@@ -199,12 +200,26 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
-            "change_saved_search", "Rename a saved search or change the words it searches for.",
-            props = { string("id", "Saved search id", required = true); string("name", "New name"); string("words", "New words") },
+            "change_saved_search",
+            "Change a saved search: its name, its words, other words the same thing is sold under (asked of the markets too), and the price band it shows. Opens it on the user's screens.",
+            props = {
+                string("id", "Saved search id", required = true); string("name", "New name"); string("words", "New words")
+                stringArray("other_words", "Other words for the same thing, each searched as well, e.g. \"256GB\" next to \"256 GB\"; replaces the list")
+                number("min_price_eur", "Show nothing cheaper (0 clears)"); number("max_price_eur", "Show nothing dearer (0 clears)")
+            },
         ) { args ->
             val id = args.str("id")!!
             val p = getJson<TrackedProduct>("/api/products/${id.encodeURLPathPart()}")
-            val next = p.copy(name = args.str("name") ?: p.name, searchQuery = p.searchQuery.copy(text = args.str("words") ?: p.searchQuery.text))
+            fun band(key: String, now: Money?) = args.num(key)?.let { if (it <= 0) null else Money((it * 100).toLong()) } ?: now
+            val next = p.copy(
+                name = args.str("name") ?: p.name,
+                searchQuery = p.searchQuery.copy(
+                    text = args.str("words") ?: p.searchQuery.text,
+                    aliases = if ("other_words" in args) args.strs("other_words") else p.searchQuery.aliases,
+                    minPrice = band("min_price_eur", p.searchQuery.minPrice),
+                    maxPrice = band("max_price_eur", p.searchQuery.maxPrice),
+                ),
+            )
             val r = http.put("$base/api/products/${id.encodeURLPathPart()}") { contentType(ContentType.Application.Json); setBody(json.encodeToString(TrackedProduct.serializer(), next)) }
             if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
             Live.show("/saved/${id.encodeURLPathPart()}")
