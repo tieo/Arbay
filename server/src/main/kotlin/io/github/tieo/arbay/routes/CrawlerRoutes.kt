@@ -469,9 +469,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 ?: throw BadRequestException("Missing or unknown platform")
             val id = call.queryParameters["id"] ?: url
             // A Kleinanzeigen page read before shipping was read from it is read again, once.
+            // Door delivery comes from Kleinanzeigen's current price list, so it is added on the way out.
+            suspend fun ListingDetail.priced() =
+                if (platform == PlatformId.KLEINANZEIGEN) copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(shipping)) else this
             io.github.tieo.arbay.crawler.DetailCache.get(id)
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
-                ?.let { return@get call.respond(it) }
+                ?.let { return@get call.respond(it.priced()) }
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(
@@ -483,7 +486,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 call.respond(HttpStatusCode.NoContent)
             } else {
                 io.github.tieo.arbay.crawler.DetailCache.put(id, detail)
-                call.respond(detail)
+                call.respond(detail.priced())
             }
         }
 

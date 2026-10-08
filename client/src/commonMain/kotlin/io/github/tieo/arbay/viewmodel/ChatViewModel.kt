@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
+import io.github.tieo.arbay.model.ChatCosts
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.model.MessageTemplate
@@ -38,6 +39,7 @@ class ChatViewModel(
     sampleOutbox: List<OutgoingMessage> = emptyList(),
     sampleSettings: ChatSettings? = null,
     sampleReview: List<BlockReview> = emptyList(),
+    sampleCosts: ChatCosts? = null,
 ) : ViewModel() {
     private val rendersASample = sampleAccount != null
 
@@ -55,6 +57,10 @@ class ChatViewModel(
 
     private val _settings = MutableStateFlow(sampleSettings ?: ChatSettings())
     val settings: StateFlow<ChatSettings> = _settings.asStateFlow()
+
+    private val _costs = MutableStateFlow(sampleCosts)
+    /** What buying through the market costs on top of the price, as the server read it from the market. */
+    val costs: StateFlow<ChatCosts?> = _costs.asStateFlow()
 
     private val _review = MutableStateFlow(sampleReview)
     /** How sellers answered each of the user's text blocks. */
@@ -116,7 +122,10 @@ class ChatViewModel(
         }
     }
 
-    private fun refreshSettings() = viewModelScope.launch { attempt { _settings.value = client.chatSettings() } }
+    private fun refreshSettings() = viewModelScope.launch {
+        attempt { _settings.value = client.chatSettings() }
+        attempt { _costs.value = client.chatCosts() }
+    }
 
     fun openConversation(id: String) {
         _open.update { if (it?.id == id) it else _conversations.value.firstOrNull { c -> c.id == id } }

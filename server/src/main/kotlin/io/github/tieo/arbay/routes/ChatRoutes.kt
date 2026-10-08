@@ -56,6 +56,7 @@ fun Route.chatRoutes() {
 
         get("/review") { call.chat { call.respond(Chat.review()) } }
         get("/settings") { call.respond(Chat.settings()) }
+        get("/costs") { call.respond(io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()) }
         put("/settings") { call.respond(Chat.updateSettings(call.receive<ChatSettings>())) }
     }
 }

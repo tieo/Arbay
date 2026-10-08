@@ -80,6 +80,8 @@ private fun chat(signedIn: Boolean = true, picked: Set<String> = emptySet()) = C
     ),
     sampleOutbox = listOf(OutgoingMessage("o1", "KLEINANZEIGEN:7", PreviewData.active[6].title, "Hallo", NOW + 70.seconds)),
     sampleSettings = ChatSettings(templates = listOf(SAMPLE_TEXT), allInBySearch = mapOf(PreviewData.saved.first().id to 450.0)),
+    // Read from fixtures/kleinanzeigen_help_sicher_bezahlen.json, the same values the server parses there.
+    sampleCosts = io.github.tieo.arbay.model.ChatCosts(protection = io.github.tieo.arbay.model.BuyerProtection(fixedEur = 0.50, share = 0.045)),
     sampleReview = listOf(
         BlockReview(
             SAMPLE_TEXT.id, SAMPLE_TEXT.name, sent = 6, answered = 4, middleMinutesToAnswer = 95,

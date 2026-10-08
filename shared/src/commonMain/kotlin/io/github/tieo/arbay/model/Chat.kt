@@ -154,27 +154,26 @@ data class ChatSettings(
 )
 
 /**
- * What delivery costs the buyer on [platform], given the [shipping] the ad states; null when it ships
- * without saying for how much. Pickup only and free shipping cost nothing.
- *
- * Kleinanzeigen's cheap Hermes prices (0.99 € Päckchen, 1.99 € S-Paket, "Versand ab 0,99 €" on an ad)
- * are parcel shop to parcel shop; delivered to the door, the one fixed price in Kleinanzeigen's own
- * list is DHL Paket 2 kg at 6.19 € (gateway shipping-options). So to the door a Kleinanzeigen ad's
- * shipping counts as at least that, also when the ad states none.
+ * What delivery costs the buyer, given the [shipping] an ad states; null when it ships without
+ * saying for how much. Pickup only and free shipping cost nothing, and an ad that says nothing
+ * about shipping is taken at its price alone. To the door, a parcel shop price counts as the
+ * door delivery the market's price list puts beside it ([Shipping.doorCost]).
  */
-fun shippingCostEur(platform: PlatformId, shipping: Shipping?, toDoor: Boolean): Double? {
-    if (shipping != null && (shipping.free || (!shipping.available && shipping.pickup))) return 0.0
-    val stated = shipping?.cost?.takeIf { it.currency == Currency.EUR }?.amount?.div(100.0)
-    if (platform == PlatformId.KLEINANZEIGEN && toDoor) return maxOf(stated ?: 0.0, KLEINANZEIGEN_DOOR_DELIVERY_EUR)
-    return stated ?: if (shipping == null) 0.0 else null
+fun shippingCostEur(shipping: Shipping?, toDoor: Boolean): Double? {
+    shipping ?: return 0.0
+    if (shipping.free || (!shipping.available && shipping.pickup)) return 0.0
+    val cost = (if (toDoor) shipping.doorCost ?: shipping.cost else shipping.cost) ?: return null
+    return cost.takeIf { it.currency == Currency.EUR }?.amount?.div(100.0)
 }
 
-/** Whether [shippingCostEur] priced door delivery the ad itself does not state. */
-fun doorDeliveryAssumed(platform: PlatformId, shipping: Shipping?, toDoor: Boolean): Boolean =
-    platform == PlatformId.KLEINANZEIGEN && toDoor && shipping?.cost == null &&
-        !(shipping != null && (shipping.free || (!shipping.available && shipping.pickup)))
+/** The door delivery [shippingCostEur] counts instead of the ad's parcel shop price, in words; null when none. */
+fun doorDeliveryUsed(shipping: Shipping?, toDoor: Boolean): String? {
+    if (!toDoor || shipping == null || shipping.free || (!shipping.available && shipping.pickup)) return null
+    val door = shipping.doorCost ?: return null
+    return "${shipping.doorBy ?: "delivery"} to the door, ${formatEuroCents(door.amount)} instead of ${shipping.cost?.let { formatEuroCents(it.amount) } ?: "?"} to a parcel shop"
+}
 
-const val KLEINANZEIGEN_DOOR_DELIVERY_EUR = 6.19
+private fun formatEuroCents(cents: Long): String = "${cents / 100},${(cents % 100).toString().padStart(2, '0')} €"
 
 /**
  * What to offer a seller so that everything the buyer pays stays within [allInEur].
@@ -198,14 +197,45 @@ fun offerWithin(allInEur: Double, shippingEur: Double, protection: BuyerProtecti
 fun directPrice(price: Int, shippingEur: Double, protection: BuyerProtection?): Int =
     floor(price + shippingEur + (protection?.let { it.fixedEur + price * it.share } ?: 0.0)).toInt()
 
-/** A market's buyer protection, as the buyer pays for it. */
+/** A market's buyer protection, as the buyer pays for it: a fixed part and a share of the price. */
+@Serializable
 data class BuyerProtection(val fixedEur: Double, val share: Double)
 
-val PlatformId.buyerProtection: BuyerProtection?
-    get() = when (this) {
-        PlatformId.KLEINANZEIGEN -> BuyerProtection(fixedEur = 0.50, share = 0.045)
-        else -> null
+/** What buying through Kleinanzeigen costs on top of the price, as the server last read it from Kleinanzeigen. */
+@Serializable
+data class ChatCosts(
+    /** The "Sicher bezahlen" fee; null when it could not be read. */
+    val protection: BuyerProtection? = null,
+    val protectionReadAt: Instant? = null,
+)
+
+/** One seller's offer: the price to name, the same total paid directly, and what to tell the user about it. */
+data class Offer(val price: Int?, val direct: Int?, val shippingEur: Double?, val note: String?)
+
+/**
+ * What to offer for a listing so that all the buyer pays stays within [allInEur]: shipping as
+ * [shippingCostEur] prices it and the market's protection fee from [costs] where the item is
+ * shipped. Never more than the seller asks ([askingEur]). Without a readable fee no price is named.
+ */
+fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEur: Double?, toDoor: Boolean, costs: ChatCosts?): Offer {
+    val pickupOnly = shipping != null && !shipping.available && shipping.pickup
+    val shippingEur = shippingCostEur(shipping, toDoor)
+    val protected = !pickupOnly && platform.canMessage
+    val protection = if (protected) costs?.protection else null
+    if (allInEur != null && protected && protection == null) {
+        return Offer(null, null, shippingEur, "the Sicher bezahlen fee could not be read from Kleinanzeigen")
     }
+    val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
+        ?.let { if (askingEur != null && askingEur > 0) minOf(it, askingEur) else it }
+    val note = when {
+        allInEur == null -> null
+        pickupOnly -> "pickup, paid in person"
+        shippingEur == null -> "before shipping, the ad gives no cost"
+        shipping == null -> "the ad says nothing about shipping"
+        else -> doorDeliveryUsed(shipping, toDoor)
+    }
+    return Offer(price, price?.let { directPrice(it, shippingEur ?: 0.0, protection) }, shippingEur, note)
+}
 
 /** The markets whose sellers Arbay can write to. */
 val PlatformId.canMessage: Boolean get() = this == PlatformId.KLEINANZEIGEN

@@ -4,13 +4,10 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.Shipping
-import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.fillIn
-import io.github.tieo.arbay.model.doorDeliveryAssumed
-import io.github.tieo.arbay.model.shippingCostEur
-import io.github.tieo.arbay.model.directPrice
-import io.github.tieo.arbay.model.offerWithin
+import io.github.tieo.arbay.model.offerFor
+import io.github.tieo.arbay.model.ChatCosts
 import io.github.tieo.arbay.model.tidyTitle
 
 /** One seller in the send window: what they will be offered and read. */
@@ -32,10 +29,7 @@ data class SendLine(
 /**
  * Each selected listing with its own price and message.
  *
- * The price is [allInEur] minus what else the buyer pays on that listing: shipping as
- * [shippingCostEur] prices it, and the market's protection fee where the item is shipped. An ad that
- * is pickup only is paid in person, so nothing comes off. An ad that ships without saying for how
- * much, where no delivery price applies, gets the price before shipping and says so.
+ * The price is [allInEur] minus what else the buyer pays on that listing, as [offerFor] works it out.
  */
 fun planSend(
     listings: List<Listing>,
@@ -46,6 +40,8 @@ fun planSend(
     /** Shipping as each ad's own page states it, which beats the card's "ships". */
     pageShipping: Map<String, Shipping> = emptyMap(),
     toDoor: Boolean = true,
+    /** The fee as the server last read it from the market. */
+    costs: ChatCosts? = null,
 ): List<SendLine> =
     listings.map { listing ->
         val title = listing.title.tidyTitle()
@@ -53,28 +49,14 @@ fun planSend(
             return@map SendLine(listing, null, null, "", edited = false, unreachable = "Only Kleinanzeigen sellers can be written to from Arbay")
         }
         val shipping = pageShipping[listing.id] ?: listing.shipping
-        val pickupOnly = shipping != null && !shipping.available && shipping.pickup
-        val shippingEur = shippingCostEur(listing.platformId, shipping, toDoor)
-        // Never more than the seller asks: an ad already under the limit is offered at its own price.
         val asking = listing.price.takeIf { it.currency == Currency.EUR }?.amount?.div(100)?.toInt()
-        val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, if (pickupOnly) null else listing.platformId.buyerProtection) }
-            ?.let { if (asking != null && asking > 0) minOf(it, asking) else it }
-        val note = when {
-            allInEur == null -> null
-            pickupOnly -> "pickup, paid in person"
-            shippingEur == null -> "before shipping, the ad gives no cost"
-            doorDeliveryAssumed(listing.platformId, shipping, toDoor) -> "the ad states no shipping; priced delivered to the door"
-            shipping == null -> "the ad says nothing about shipping"
-            else -> null
-        }
+        val offer = offerFor(listing.platformId, asking, shipping, allInEur, toDoor, costs)
         val shippingText = when {
             shipping?.free == true -> "kostenlos"
-            shippingEur != null && shippingEur > 0 -> formatEuro(shippingEur)
-            else -> null
+            else -> offer.shippingEur?.takeIf { it > 0 }?.let { formatEuro(it) }
         }
         val own = edits[listing.id]
-        val direct = price?.let { directPrice(it, shippingEur ?: 0.0, if (pickupOnly) null else listing.platformId.buyerProtection) }
-        SendLine(listing, price, note, own ?: fillIn(template, price, title, shippingText, direct), edited = own != null, blockIds = blockIds)
+        SendLine(listing, offer.price, offer.note, own ?: fillIn(template, offer.price, title, shippingText, offer.direct), edited = own != null, blockIds = blockIds)
     }
 
 /** The lines that can go, as the server takes them. */

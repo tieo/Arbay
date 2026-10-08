@@ -286,6 +286,7 @@ class ArbayClient(
     suspend fun textReview(): List<BlockReview> = client.get("$baseUrl/api/chat/review").body()
 
     suspend fun chatSettings(): ChatSettings = client.get("$baseUrl/api/chat/settings").body()
+    suspend fun chatCosts(): io.github.tieo.arbay.model.ChatCosts = client.get("$baseUrl/api/chat/costs").body()
 
     suspend fun updateChatSettings(settings: ChatSettings): ChatSettings =
         client.put("$baseUrl/api/chat/settings") {

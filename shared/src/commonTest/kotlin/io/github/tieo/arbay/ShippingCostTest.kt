@@ -1,58 +1,64 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.model.BuyerProtection
+import io.github.tieo.arbay.model.ChatCosts
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Shipping
-import io.github.tieo.arbay.model.directPrice
-import io.github.tieo.arbay.model.doorDeliveryAssumed
-import io.github.tieo.arbay.model.offerWithin
+import io.github.tieo.arbay.model.doorDeliveryUsed
+import io.github.tieo.arbay.model.offerFor
 import io.github.tieo.arbay.model.shippingCostEur
-import io.github.tieo.arbay.model.buyerProtection
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
+/** The rule only; the prices come from the market and are made up here. */
 class ShippingCostTest {
     private val ka = PlatformId.KLEINANZEIGEN
-    private val hermesFrom = Shipping(cost = Money.cents(99))
+    private val parcelShop = Shipping(cost = Money.cents(99), doorCost = Money.cents(495), doorBy = "Hermes Päckchen")
+    private val fee = ChatCosts(protection = BuyerProtection(fixedEur = 0.5, share = 0.045))
 
     @Test
-    fun parcelShopPriceCountsAsDoorDeliveryOnKleinanzeigen() {
-        assertEquals(6.19, shippingCostEur(ka, hermesFrom, toDoor = true))
-        assertEquals(0.99, shippingCostEur(ka, hermesFrom, toDoor = false))
+    fun doorDeliveryReplacesTheParcelShopPrice() {
+        assertEquals(4.95, shippingCostEur(parcelShop, toDoor = true))
+        assertEquals(0.99, shippingCostEur(parcelShop, toDoor = false))
+        assertEquals("Hermes Päckchen to the door, 4,95 € instead of 0,99 € to a parcel shop", doorDeliveryUsed(parcelShop, toDoor = true))
     }
 
     @Test
-    fun dearerStatedShippingStands() {
-        assertEquals(8.5, shippingCostEur(ka, Shipping(cost = Money.cents(850)), toDoor = true))
+    fun aPriceWithoutDoorDeliveryStands() {
+        assertEquals(8.5, shippingCostEur(Shipping(cost = Money.cents(850)), toDoor = true))
+        assertNull(doorDeliveryUsed(Shipping(cost = Money.cents(850)), toDoor = true))
     }
 
     @Test
-    fun unstatedShippingIsPricedToTheDoor() {
-        assertEquals(6.19, shippingCostEur(ka, null, toDoor = true))
-        assertTrue(doorDeliveryAssumed(ka, null, toDoor = true))
-        assertFalse(doorDeliveryAssumed(ka, hermesFrom, toDoor = true))
+    fun pickupAndFreeCostNothingAndUnknownStaysUnknown() {
+        assertEquals(0.0, shippingCostEur(Shipping(pickup = true, available = false), toDoor = true))
+        assertEquals(0.0, shippingCostEur(Shipping(free = true), toDoor = true))
+        assertNull(shippingCostEur(Shipping(), toDoor = true))
+        assertEquals(0.0, shippingCostEur(null, toDoor = true))
     }
 
     @Test
-    fun pickupAndFreeCostNothing() {
-        assertEquals(0.0, shippingCostEur(ka, Shipping(pickup = true, available = false), toDoor = true))
-        assertEquals(0.0, shippingCostEur(ka, Shipping(free = true), toDoor = true))
+    fun offerStaysWithinTheLimitAndNeverAboveTheAskingPrice() {
+        val offer = offerFor(ka, 600, parcelShop, 450.0, toDoor = true, fee)
+        // 450 - 4.95 - 0.50 = 444.55, / 1.045 = 425.4
+        assertEquals(425, offer.price)
+        assertEquals(449, offer.direct)
+        assertEquals(400, offerFor(ka, 400, parcelShop, 450.0, toDoor = true, fee).price)
     }
 
     @Test
-    fun otherMarketsKeepWhatTheAdStates() {
-        assertNull(shippingCostEur(PlatformId.EBAY_DE, Shipping(), toDoor = true))
-        assertEquals(0.0, shippingCostEur(PlatformId.EBAY_DE, null, toDoor = true))
+    fun noPriceWithoutTheFee() {
+        val offer = offerFor(ka, 600, parcelShop, 450.0, toDoor = true, ChatCosts())
+        assertNull(offer.price)
+        assertEquals("the Sicher bezahlen fee could not be read from Kleinanzeigen", offer.note)
     }
 
     @Test
-    fun fourHundredFiftyAllInToTheDoor() {
-        val shipping = shippingCostEur(ka, hermesFrom, toDoor = true)!!
-        val offer = offerWithin(450.0, shipping, ka.buyerProtection)
-        assertEquals(424, offer)
-        assertEquals(449, directPrice(offer, shipping, ka.buyerProtection))
+    fun pickupIsPaidInPersonWithoutFee() {
+        val offer = offerFor(ka, 600, Shipping(pickup = true, available = false), 450.0, toDoor = true, ChatCosts())
+        assertEquals(450, offer.price)
+        assertEquals("pickup, paid in person", offer.note)
     }
 }

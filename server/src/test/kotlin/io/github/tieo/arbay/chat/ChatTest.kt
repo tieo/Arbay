@@ -1,7 +1,6 @@
 package io.github.tieo.arbay.chat
 
-import io.github.tieo.arbay.model.PlatformId
-import io.github.tieo.arbay.model.buyerProtection
+import io.github.tieo.arbay.crawler.KleinanzeigenCosts
 import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.directPrice
 import io.github.tieo.arbay.model.offerWithin
@@ -12,10 +11,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
 class ChatTest {
+    /** The fee as Kleinanzeigen's help article states it in the saved fixture. */
+    private val protection = KleinanzeigenCosts.parseProtection(javaClass.getResource("/fixtures/kleinanzeigen_help_sicher_bezahlen.json")!!.readText())
 
     @Test
     fun offerKeepsPriceShippingAndFeeWithinTheLimit() {
-        val protection = PlatformId.KLEINANZEIGEN.buyerProtection
         val offer = offerWithin(450.0, 4.99, protection)
         assertEquals(425, offer)
         // What the buyer pays at that price stays at or under the limit, and one euro more goes over.
@@ -36,7 +36,6 @@ class ChatTest {
 
     @Test
     fun theDirectPriceIsWhatTheProtectedOneCostsInAll() {
-        val protection = PlatformId.KLEINANZEIGEN.buyerProtection
         // 430 € through Sicher bezahlen costs 430 + 0.50 + 19.35 = 449.85 €.
         assertEquals(449, directPrice(430, 0.0, protection))
         assertEquals(418, directPrice(400, 0.0, protection))

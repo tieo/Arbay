@@ -11,14 +11,10 @@ import io.github.tieo.arbay.model.OfferNote
 import io.github.tieo.arbay.model.Verdict
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
-import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.fillIn
-import io.github.tieo.arbay.model.doorDeliveryAssumed
-import io.github.tieo.arbay.model.shippingCostEur
-import io.github.tieo.arbay.model.directPrice
-import io.github.tieo.arbay.model.offerWithin
+import io.github.tieo.arbay.model.offerFor
 import io.github.tieo.arbay.model.tidyTitle
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
@@ -328,24 +324,15 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // Each ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
             val pageShipping = args.strs("listing_ids").mapNotNull { seen[it] }.associate { l -> l.id to pageShipping(l) }
             val toDoor = getJson<ChatSettings>("/api/chat/settings").toDoor
+            val costs = io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = seen[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
                 val shipping = pageShipping[id] ?: l.shipping
-                val shippingEur = shippingCostEur(l.platformId, shipping, toDoor)
-                val pickupOnly = shipping != null && !shipping.available && shipping.pickup
-                val protection = if (pickupOnly) null else l.platformId.buyerProtection
-                val price = allIn?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
-                    ?.let { p -> (l.price.amount / 100).toInt().takeIf { it > 0 }?.let { minOf(p, it) } ?: p }
-                val note = when {
-                    allIn == null -> ""
-                    pickupOnly -> " (pickup, paid in person)"
-                    shippingEur == null -> " (shipping not stated, price is before shipping)"
-                    doorDeliveryAssumed(l.platformId, shipping, toDoor) -> " (no shipping stated, priced delivered to the door)"
-                    else -> " (shipping %.2f €)".format(shippingEur)
-                }
-                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), shippingEur?.takeIf { it > 0 }?.let { "%.2f €".format(it) },
-                    price?.let { directPrice(it, shippingEur ?: 0.0, protection) })
+                val offer = offerFor(l.platformId, (l.price.amount / 100).toInt().takeIf { l.price.currency == io.github.tieo.arbay.model.Currency.EUR }, shipping, allIn, toDoor, costs)
+                val price = offer.price
+                val note = offer.note?.let { " ($it)" } ?: offer.shippingEur?.takeIf { it > 0 }?.let { " (shipping %.2f €)".format(it) } ?: ""
+                "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), offer.shippingEur?.takeIf { it > 0 }?.let { "%.2f €".format(it) }, offer.direct)
             }
         }
 

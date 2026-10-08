@@ -340,7 +340,8 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
             app.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
         }
     }
-    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor)
+    val costs by chat.costs.collectAsState()
+    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor, costs)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
