@@ -49,10 +49,14 @@ class Chat:
         self.tab = None
         self.token = None
         self.user_id = None
+        self.signing = False
 
     async def start(self) -> None:
         os.makedirs(PROFILE, exist_ok=True)
-        kwargs = {"headless": False, "user_data_dir": PROFILE}
+        # The window fills the display the user signs in on, and a restart (the server's, which
+        # ends Chrome abruptly) leaves no restore prompt over the page.
+        kwargs = {"headless": False, "user_data_dir": PROFILE,
+                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
@@ -69,12 +73,39 @@ class Chat:
                 return JSON.stringify({status: r.status, headers: h, text: await r.text()});
             })()
         """ % (json.dumps(url), json.dumps(method), json.dumps(headers or {}), json.dumps(body))
-        raw = await self.tab.evaluate(script, await_promise=True)
+        try:
+            raw = await self.tab.evaluate(script, await_promise=True)
+        except Exception as e:
+            # A fetch that cannot leave the page says nothing about why; where the page is does.
+            raise RuntimeError(f"fetch {url} failed on {await self.where()}: {str(e).splitlines()[0] if str(e) else type(e).__name__}")
         return json.loads(raw)
+
+    async def where(self) -> str:
+        try:
+            return await self.tab.evaluate("location.href + ' (' + document.title + ')'")
+        except Exception as e:
+            return f"an unreadable page ({type(e).__name__})"
+
+    async def on_site(self) -> None:
+        """Bring the page back to the main site, whose fetches carry the session.
+
+        Signed out, the site sends every page to its login host, where a fetch to the main site is
+        cross-origin and fails; that is the signed-out state, not an error. While the user is signing
+        in, the page is theirs and is left where it is."""
+        here = await self.tab.evaluate("location.host")
+        if here == "www.kleinanzeigen.de":
+            return
+        if self.signing:
+            raise SignedOut("signing in")
+        await self.tab.get(ROOT + "/m-nachrichten.html")
+        await asyncio.sleep(3)
+        if await self.tab.evaluate("location.host") != "www.kleinanzeigen.de":
+            raise SignedOut("the site sends the browser to its login page")
 
     async def session(self) -> tuple[str, int]:
         if self.token and self.user_id:
             return self.token, self.user_id
+        await self.on_site()
         r = await self.fetch(ROOT + "/m-access-token.json")
         token = r["headers"].get("authorization")
         if r["status"] != 200 or not token:
@@ -108,6 +139,9 @@ class Chat:
             _, user_id = await self.session()
         except SignedOut:
             return {"ok": True, "signedIn": False}
+        except Exception as e:
+            sys.stderr.write(f"status: {e}\n")
+            return {"ok": True, "signedIn": False, "problem": str(e)}
         name = None
         try:
             v = await self.fetch(ROOT + "/messagebox-api/view")
@@ -119,6 +153,7 @@ class Chat:
 
     async def signin(self) -> dict:
         self.token = None
+        self.signing = True
         await self.tab.get(LOGIN_URL)
         captcha_gate.start_viewer(os.environ.get("DISPLAY", ":97"))
         return {"ok": True}
@@ -126,6 +161,7 @@ class Chat:
     async def signin_done(self) -> dict:
         captcha_gate.stop_viewer()
         self.token = None
+        self.signing = False
         await self.tab.get(ROOT + "/m-nachrichten.html")
         await asyncio.sleep(2)
         return await self.status()

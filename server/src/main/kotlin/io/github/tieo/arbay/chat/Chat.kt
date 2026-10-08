@@ -81,6 +81,7 @@ object Chat {
             signedIn = s["signedIn"]?.bool() == true,
             name = s["name"]?.str(),
             signingIn = signingIn,
+            problem = s["problem"]?.str(),
         )
     } catch (e: ChatBrowser.ChatFailure) {
         ChatAccount(signingIn = signingIn, problem = e.message)
