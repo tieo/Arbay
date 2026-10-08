@@ -62,6 +62,16 @@ def log(line: str) -> None:
     sys.stderr.flush()
 
 
+async def within(what: str, call, seconds: float = 8):
+    """[call] with a time limit of its own: a page call whose answer is lost while the page changes
+    would otherwise wait for good, and every request after it with it."""
+    try:
+        return await asyncio.wait_for(call, timeout=seconds)
+    except asyncio.TimeoutError:
+        log(f"{what} gave no answer within {seconds:.0f}s")
+        raise RuntimeError(f"the page did not answer ({what})")
+
+
 class SignedOut(Exception):
     pass
 
@@ -146,7 +156,7 @@ class Chat:
         # While a link takes the page to another site, the browser is briefly between two pages.
         for attempt in range(20):
             try:
-                index, entries = await self.tab.send(cdp.page.get_navigation_history())
+                index, entries = await within("navigation history", self.tab.send(cdp.page.get_navigation_history()))
                 return entries[index].url if entries else ""
             except Exception:
                 if attempt == 19:
@@ -158,7 +168,7 @@ class Chat:
         return urlparse(await self.url()).hostname or ""
 
     async def viewport(self) -> tuple[int, int]:
-        metrics = await self.tab.send(cdp.page.get_layout_metrics())
+        metrics = await within("layout metrics", self.tab.send(cdp.page.get_layout_metrics()))
         visual = metrics[4] if len(metrics) > 4 and metrics[4] is not None else metrics[1]
         return int(visual.client_width), int(visual.client_height)
 
@@ -182,9 +192,9 @@ class Chat:
     async def visible(self, selector: str) -> list:
         """Elements matching [selector] that take up room on the page, read through the DOM."""
         shown = []
-        for element in await self.tab.query_selector_all(selector):
+        for element in await within(f"query {selector[:30]}", self.tab.query_selector_all(selector)):
             try:
-                position = await element.get_position()
+                position = await within("element position", element.get_position(), 4)
             except Exception:
                 position = None
             if position and position.width > 0 and position.height > 0:
@@ -193,7 +203,7 @@ class Chat:
 
     async def press(self, element, position=None) -> None:
         """Click [element] with the display's mouse, somewhere inside it rather than its exact centre."""
-        await self.tab.send(cdp.dom.scroll_into_view_if_needed(backend_node_id=element.backend_node_id))
+        await within("scroll into view", self.tab.send(cdp.dom.scroll_into_view_if_needed(backend_node_id=element.backend_node_id)))
         await asyncio.sleep(random.uniform(0.2, 0.5))
         position = await element.get_position() or position
         ox, oy = await self.calibrate()
@@ -343,7 +353,7 @@ class Chat:
             self.signing = True
             if "login-error" in url:
                 # The site's own page for a sign-in it could not finish; the page says no more than that.
-                shot = await self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80))
+                shot = await within("screenshot", self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80)))
                 width, height = await self.viewport()
                 return {"ok": True, "step": "other", "error": f"Kleinanzeigen could not finish the sign-in ({urlparse(url).path.strip('/')}). Start again.",
                         "picture": shot, "width": width, "height": height}
@@ -363,7 +373,7 @@ class Chat:
                 text = (element.text_all or "").strip()
                 if "gesperrt" in text.lower():
                     errors.append(text)
-        shot = await self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80))
+        shot = await within("screenshot", self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80)))
         width, height = await self.viewport()
         return {"ok": True, "step": step, "error": " ".join(errors) or None, "picture": shot, "width": width, "height": height}
 
