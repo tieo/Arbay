@@ -100,6 +100,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
                 integer("limit", "How many offers to list (default 40)")
                 number("max_price_eur", "Leave out offers above this landed price")
+                number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
             },
         ) { args ->
             val saved = args.str("saved_search_id")?.let { getJson<TrackedProduct>("/api/products/${it.encodeURLPathPart()}") }
@@ -128,9 +129,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             }
             val hidden = hiddenOffers()
             val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
+            val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
             val shown = listings.distinctBy { it.id }
                 .filter { it.id !in hidden }
                 .filter { max == null || it.effectivePrice.amount / 100.0 <= max }
+                .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
                 .sortedBy { it.effectivePrice.amount }
                 .take(args.int("limit") ?: 40)
             shown.forEach { seen[it.id] = it }

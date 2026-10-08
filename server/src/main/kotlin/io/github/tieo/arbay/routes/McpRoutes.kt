@@ -13,6 +13,10 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
 import io.modelcontextprotocol.kotlin.sdk.server.StreamableHttpServerTransport
+import io.modelcontextprotocol.kotlin.sdk.types.McpJson
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.install
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import java.util.concurrent.ConcurrentHashMap
 
 private const val SESSION_HEADER = "mcp-session-id"
@@ -27,6 +31,9 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     val transports = ConcurrentHashMap<String, StreamableHttpServerTransport>()
 
     route("/mcp") {
+        // JSON-RPC as the MCP SDK writes it: Arbay's own JSON settings drop the "jsonrpc" field
+        // and add nulls, and strict clients refuse the reply.
+        install(ContentNegotiation) { json(McpJson) }
         sse {
             val id = call.request.header(SESSION_HEADER)
             val transport = id?.let { transports[it] } ?: return@sse call.respond(HttpStatusCode.NotFound, "No such session")

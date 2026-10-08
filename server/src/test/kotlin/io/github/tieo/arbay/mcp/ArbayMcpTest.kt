@@ -12,6 +12,16 @@ import io.ktor.server.sse.SSE
 import io.ktor.server.testing.testApplication
 import io.modelcontextprotocol.kotlin.sdk.client.mcpStreamableHttp
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.test.assertEquals
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertNotEquals
@@ -47,5 +57,23 @@ class ArbayMcpTest {
         val recent = mcp.callTool(name = "recent_searches", arguments = emptyMap())
         assertNotEquals(true, recent.isError, (recent.content.single() as TextContent).text)
         mcp.close()
+    }
+
+    @Test
+    fun repliesAreJsonRpcAsStrictClientsReadThem() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        routing { mcpRoutes("", client) }
+        val reply = client.post("/mcp") {
+            header("Accept", "application/json, text/event-stream")
+            contentType(ContentType.Application.Json)
+            setBody("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}""")
+        }
+        val body = Json.parseToJsonElement(reply.bodyAsText()).jsonObject
+        assertEquals("2.0", body["jsonrpc"]?.jsonPrimitive?.content, reply.bodyAsText())
+        assertTrue("error" !in body, reply.bodyAsText())
     }
 }
