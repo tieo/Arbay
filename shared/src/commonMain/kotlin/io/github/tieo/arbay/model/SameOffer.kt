@@ -23,7 +23,12 @@ data class SameOffer(val listings: List<Listing>) {
          *
          * Two listings are copies when their titles are the same, letter for letter and long
          * enough to mean something: the same seller lists one item on every eBay locale, and in
-         * one measured search 106 of 400 results were repeats of 42 titles. Listings on different
+         * one measured search 106 of 400 results were repeats of 42 titles. A title alone is not
+         * enough where both copies say where they are and the places differ, or both ask a price in
+         * one currency and the prices differ: private sellers of one phone model title their ads
+         * alike ("Google Pixel 9 Pro XL 256GB" from Vienna, Munich and Worringen were folded into one
+         * offer, hiding the cheapest), while one seller's copies keep one place and one price.
+         * Listings on different
          * markets are copies as well when they ask the same price in the same currency, are in the
          * same place, and say the same thing: their titles share most of their words, or both
          * state the same first registration and mileage. Any vehicle fact both state and disagree
@@ -51,7 +56,7 @@ data class SameOffer(val listings: List<Listing>) {
                     for (a in indices.indices) for (b in a + 1 until indices.size) {
                         val i = indices[a]
                         val j = indices[b]
-                        if (!contradicts(listings[i].vehicle, listings[j].vehicle)) join(i, j)
+                        if (!contradicts(listings[i].vehicle, listings[j].vehicle) && !apart(facts[i], facts[j])) join(i, j)
                     }
                 }
             // Only listings asking the same price can be copies by the second rule, so candidates
@@ -71,6 +76,19 @@ data class SameOffer(val listings: List<Listing>) {
                     val cheapest = copies.minBy(price)
                     SameOffer(listOf(cheapest) + copies.filter { it !== cheapest })
                 }
+        }
+
+        /**
+         * Two listings that both say where they are and disagree, or ask different prices in one
+         * currency. eBay's own sites are the exception to the price: one seller's item shows on each
+         * locale at a price of that locale's own (120 € on eBay.de, 95 € on eBay.it, measured).
+         */
+        private fun apart(a: Facts, b: Facts): Boolean {
+            if (a.place != null && b.place != null && a.place != b.place) return true
+            val pa = a.listing.price
+            val pb = b.listing.price
+            val bothEbay = a.listing.platformId.name.startsWith("EBAY_") && b.listing.platformId.name.startsWith("EBAY_")
+            return !bothEbay && pa.currency == pb.currency && pa.amount != pb.amount
         }
     }
 

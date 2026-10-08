@@ -106,4 +106,19 @@ class SameOfferTest {
         val b = listing("b", PlatformId.EBAY_IT, "VW Crafter", 95, null)
         assertEquals(2, SameOffer.group(listOf(a, b)).size)
     }
+
+    @Test
+    fun `one phone model titled alike by sellers in different places is several offers`() {
+        val vienna = listing("w", PlatformId.WILLHABEN, "Google Pixel 9 Pro XL 256GB", 450, null, city = "Wien")
+        val munich = listing("m", PlatformId.KLEINANZEIGEN, "Google Pixel 9 Pro XL 256GB", 450, "81925")
+        val worringen = listing("k", PlatformId.KLEINANZEIGEN, "Google Pixel 9 Pro XL 256GB", 450, "50769")
+        assertEquals(3, SameOffer.group(listOf(vienna, munich, worringen)).size)
+    }
+
+    @Test
+    fun `alike titles at different prices without a place are several offers`() {
+        val vinted = listing("v", PlatformId.VINTED_DE, "Google Pixel 9 Pro XL 256 GB", 630, null)
+        val ottweiler = listing("o", PlatformId.KLEINANZEIGEN, "Google Pixel 9 Pro XL 256 GB", 400, "66564")
+        assertEquals(2, SameOffer.group(listOf(vinted, ottweiler)).size)
+    }
 }
