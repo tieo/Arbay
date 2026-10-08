@@ -15,6 +15,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -52,6 +53,7 @@ object ChatBrowser {
                 null -> JsonPrimitive(null as String?)
                 is Number -> JsonPrimitive(v)
                 is Boolean -> JsonPrimitive(v)
+                is JsonElement -> v
                 else -> JsonPrimitive(v.toString())
             }
         })

@@ -7,6 +7,7 @@ import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
+import io.github.tieo.arbay.signin.SignInProxy
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -26,6 +27,22 @@ fun Route.chatRoutes() {
         get("/signin") { call.chat { call.respond(Chat.signInStep()) } }
         post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>())) } }
         post("/signin/cancel") { call.respond(Chat.cancelSignIn()) }
+        // Signing in on the site's own pages, shown inside the app through the proxy. The session cookie
+        // is only sent to the proxy's paths, so the browser holds an id and nothing of the site's.
+        post("/signin/proxy") {
+            val id = Chat.beginProxySignIn()
+            call.response.cookies.append(Cookie(
+                name = SignInProxy.COOKIE_NAME,
+                value = id,
+                encoding = CookieEncoding.RAW,
+                path = SignInProxy.COOKIE_PATH,
+                // Behind the TLS terminator the request arrives as plain http; the terminator says what the browser used.
+                secure = call.request.headers["X-Forwarded-Proto"].equals("https", ignoreCase = true),
+                httpOnly = true,
+                extensions = mapOf("SameSite" to "Strict"),
+            ))
+            call.respond(Chat.proxyAccount())
+        }
 
         get("/conversations") { call.chat { call.respond(Chat.conversations()) } }
         get("/conversations/{id}") {

@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Synthetic: written in the shape of an Auth0 Universal Login identifier step, not saved from the live site. -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://login.kleinanzeigen.de; frame-ancestors 'none'">
+<link rel="stylesheet" href="/static/css/ulp.css" integrity="sha384-AAAA">
+<link rel="icon" href="https://login.kleinanzeigen.de/favicon.ico">
+<script src="https://login.kleinanzeigen.de/static/js/identifier.js" integrity="sha384-BBBB" defer></script>
+<style>
+  .banner { background-image: url('/static/img/bg.png'); }
+  @import "https://login.kleinanzeigen.de/static/css/theme.css";
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Anmelden</h1>
+  <form method="post" action="/u/login/identifier?state=s1" id="identifier-form">
+    <input type="email" name="username" id="username" autocomplete="username" required>
+    <button type="submit" name="action" value="default">Weiter</button>
+  </form>
+  <img src="/static/img/logo.svg" srcset="/static/img/logo@2x.png 2x, https://login.kleinanzeigen.de/static/img/logo@3x.png 3x" alt="">
+  <a href="https://www.kleinanzeigen.de/m-einloggen-hilfe.html">Hilfe</a>
+  <a href="https://themen.kleinanzeigen.de/datenschutz">Datenschutz</a>
+</main>
+<script>
+  window.__ulp = { assetBase: "https://login.kleinanzeigen.de/static/", redirect: "https:\/\/www.kleinanzeigen.de\/m-einloggen-callback.html" };
+</script>
+</body>
+</html>

@@ -256,6 +256,9 @@ class ArbayClient(
 
     suspend fun cancelChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/signin/cancel").body()
 
+    /** Starts signing in on the site's own pages, shown through the server's proxy; the account says where. */
+    suspend fun beginChatProxySignIn(): ChatAccount = client.post("$baseUrl/api/chat/signin/proxy").body()
+
     suspend fun conversations(): List<Conversation> = client.get("$baseUrl/api/chat/conversations").body()
 
     suspend fun conversation(id: String): Conversation =

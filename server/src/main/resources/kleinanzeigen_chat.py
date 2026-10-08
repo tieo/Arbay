@@ -27,6 +27,7 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "signin_click", "x": .., "y": ..}          -> clicks the page at a point of its picture; answers like signin_state
   {"op": "signin_keys", "text": "..", "key": ".."}  -> types text, or presses one named key (X keysym), as the user did; answers like signin_state
   {"op": "signin_done"}                             -> leaves the login page
+  {"op": "set_cookies", "cookies": [..]}           -> sets the site's cookies a proxied sign-in left, reloads the home page; answers like status
   {"op": "conversations", "page": 0, "size": 30}    -> {"ok": true, "data": <gateway payload>}
   {"op": "conversation", "id": ".."}                -> {"ok": true, "data": <gateway payload>}
   {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true}
@@ -447,6 +448,22 @@ class Chat:
         await asyncio.sleep(2)
         return await self.status()
 
+    async def set_cookies(self, cookies: list) -> dict:
+        """The site's cookies from a sign-in made through Arbay's proxy, set in this browser so it is signed in too."""
+        params = []
+        for c in cookies:
+            param = cdp.network.CookieParam(name=c["name"], value=c["value"], domain=c["domain"], path=c.get("path") or "/",
+                                            secure=bool(c.get("secure")), http_only=bool(c.get("httpOnly")))
+            if c.get("expires") is not None:
+                param.expires = cdp.network.TimeSinceEpoch(float(c["expires"]))
+            params.append(param)
+        await within("set cookies", self.tab.send(cdp.network.set_cookies(params)))
+        self.signing = False
+        self.token = None
+        await self.tab.get(ROOT + "/")
+        await asyncio.sleep(3)
+        return await self.status()
+
     async def conversations(self, page: int, size: int) -> dict:
         _, uid = await self.session()
         return {"ok": True, "data": await self.gateway(f"/messagebox/api/users/{uid}/conversations?page={page}&size={size}")}
@@ -581,6 +598,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.signin_fill(req["value"])
     if op == "signin_keys":
         return await chat.signin_keys(req.get("text"), req.get("key"))
+    if op == "set_cookies":
+        return await chat.set_cookies(req.get("cookies") or [])
     if op == "signin_click":
         return await chat.signin_click(float(req["x"]), float(req["y"]))
     if op == "conversations":

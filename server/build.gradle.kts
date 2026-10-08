@@ -69,6 +69,17 @@ tasks.register<Test>("probes") {
     filter { includeTestsMatching("*Probe") }
     testLogging { showStandardStreams = true }
 }
+// The server with the sign-in proxy pointed at a local stand-in for the site, for checking the web app's
+// sign-in in a browser. Its data directory is a build directory, so no real account data is touched.
+tasks.register<JavaExec>("signInStandIn") {
+    group = "verification"
+    description = "Run the server with the sign-in proxy pointed at a stand-in for the site"
+    dependsOn("compressWebApp")
+    mainClass.set("io.github.tieo.arbay.signin.SignInStandInKt")
+    classpath = sourceSets["test"].runtimeClasspath + files(layout.buildDirectory.dir("webapp"))
+    systemProperty("arbay.dataDir", layout.buildDirectory.dir("signin-stand-in-data").get().asFile.absolutePath)
+    systemProperty("java.awt.headless", "true")
+}
 // Prints every market's declared capabilities as JSON, which the model site renders its market
 // objects from. Run: ./gradlew :server:dumpCapabilities -q
 tasks.register<JavaExec>("dumpCapabilities") {

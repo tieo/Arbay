@@ -118,7 +118,7 @@ class ChatViewModel(
                 val account = client.chatAccount()
                 _account.value = account
                 // A sign-in going on in Arbay's browser shows here too, at the step it has reached.
-                if (account.signingIn && _signIn.value == null) followSignIn()
+                if (account.signingIn && account.proxySignIn == null && _signIn.value == null) followSignIn()
                 _outbox.value = client.outbox()
                 if (account.signedIn) _conversations.value = client.conversations()
             }
@@ -210,6 +210,12 @@ class ChatViewModel(
     val signInBusy: StateFlow<Boolean> = _signInBusy.asStateFlow()
 
     fun beginSignIn() = signInStep { client.beginChatSignIn() }
+
+    /** Starts the sign-in on the site's own pages; the account then carries the page to show, until it is signed in. */
+    fun beginProxySignIn() {
+        if (rendersASample) return
+        viewModelScope.launch { attempt { _account.value = client.beginChatProxySignIn() } }
+    }
 
     /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */
     fun signInWith(value: String) = signInStep { client.chatSignInInput(SignInInput(value = value)) }

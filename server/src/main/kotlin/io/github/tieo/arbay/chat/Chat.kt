@@ -19,6 +19,9 @@ import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.model.SignInStep
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
+import io.github.tieo.arbay.signin.ProxyCookie
+import io.github.tieo.arbay.signin.SignInHosts
+import io.github.tieo.arbay.signin.SignInProxy
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -36,7 +39,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -63,6 +68,9 @@ object Chat {
     private var settings: ChatSettings
     @Volatile private var signingIn = false
 
+    /** Sign-ins on the site's own pages, shown through the proxy; their cookies go to the sidecar when done. */
+    val signInProxy = SignInProxy(handOver = ::handOverCookies)
+
     init {
         outboxFile.readStore(log) { json.decodeFromString<List<OutgoingMessage>>(it) }?.let { stored ->
             // One that was being sent when the server stopped may or may not have gone out; it is
@@ -83,16 +91,35 @@ object Chat {
 
     // --- account ---
 
-    suspend fun account(): ChatAccount = try {
-        val s = ChatBrowser.call("status")
-        ChatAccount(
-            signedIn = s["signedIn"]?.bool() == true,
-            name = s["name"]?.str(),
-            signingIn = signingIn,
-            problem = s["problem"]?.str(),
-        )
-    } catch (e: ChatBrowser.ChatFailure) {
-        ChatAccount(signingIn = signingIn, problem = e.message)
+    suspend fun account(): ChatAccount {
+        val proxying = signInProxy.isActive()
+        val proxyPath = if (proxying) SignInHosts.START else null
+        return try {
+            val s = ChatBrowser.call("status")
+            ChatAccount(
+                signedIn = s["signedIn"]?.bool() == true,
+                name = s["name"]?.str(),
+                signingIn = signingIn || proxying,
+                problem = s["problem"]?.str(),
+                proxySignIn = proxyPath,
+            )
+        } catch (e: ChatBrowser.ChatFailure) {
+            ChatAccount(signingIn = signingIn || proxying, problem = e.message, proxySignIn = proxyPath)
+        }
+    }
+
+    /** Starts a sign-in on the site's own pages through the proxy; returns the id the browser's cookie carries. */
+    fun beginProxySignIn(): String = signInProxy.begin()
+
+    /** The account while a sign-in through the proxy goes on: the browser shows the page it starts at. */
+    fun proxyAccount(): ChatAccount = ChatAccount(signingIn = true, proxySignIn = SignInHosts.START)
+
+    /** Gives the cookies of a proxied sign-in to the sidecar's browser; true when that browser is then signed in. */
+    private suspend fun handOverCookies(cookies: List<ProxyCookie>): Boolean {
+        val answer = ChatBrowser.call("set_cookies", 60_000, "cookies" to JsonArray(cookies.map { it.toJson() }))
+        val signedIn = answer["signedIn"]?.bool() == true
+        if (signedIn) Live.changed(LiveKind.CHAT)
+        return signedIn
     }
 
     suspend fun beginSignIn(): SignInStep = step(ChatBrowser.call("signin")).also { signingIn = it.step != SignInAsk.DONE }
@@ -118,8 +145,10 @@ object Chat {
     }
 
     suspend fun cancelSignIn(): ChatAccount {
+        val proxied = signInProxy.end()
         signingIn = false
-        ChatBrowser.call("signin_done")
+        // A sign-in through the proxy has no page open in the sidecar's browser to leave.
+        if (!proxied) ChatBrowser.call("signin_done")
         return account()
     }
 
@@ -292,6 +321,16 @@ private val FIRST_TEXT = MessageTemplate(
     "ausweis", "Ausweis",
     "Falls ohne Käuferschutz, hätte ich gerne ein Foto mit dem Produkt und dem Ausweis, gerne alles andere außer dem Namen mit zwei Blättern Papier abdecken. Wurde leider in der Vergangenheit Betrugsopfer.",
 )
+
+private fun ProxyCookie.toJson(): JsonObject = buildJsonObject {
+    put("name", name)
+    put("value", value)
+    put("domain", if (hostOnly) domain else ".$domain")
+    put("path", path)
+    put("secure", secure)
+    put("httpOnly", httpOnly)
+    expires?.let { put("expires", it.toEpochMilliseconds() / 1000.0) }
+}
 
 private fun JsonElement.str(): String? = (this as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 private fun JsonElement.bool(): Boolean? = (this as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()

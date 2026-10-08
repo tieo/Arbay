@@ -23,8 +23,6 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
-import io.github.tieo.arbay.model.SignInAsk
-import io.github.tieo.arbay.model.SignInStep
 import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.canMessage
@@ -43,6 +41,7 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
+import org.jetbrains.compose.web.dom.Iframe
 import org.jetbrains.compose.web.dom.Header
 import org.jetbrains.compose.web.dom.Img
 import org.jetbrains.compose.web.dom.Input
@@ -191,84 +190,36 @@ private fun Bubble(m: ChatMessage) {
 fun AccountSection(app: WebApp) {
     val chat = app.chat
     val account by chat.account.collectAsState()
-    val signIn by chat.signIn.collectAsState()
-    val busy by chat.signInBusy.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     val a = account
-    val step = signIn
     H3 { Text("Kleinanzeigen") }
+    val proxy = a?.proxySignIn?.takeIf { !a.signedIn }
     when {
-        step != null -> SignInSteps(app, step, busy)
+        proxy != null -> SignInFrame(app, proxy)
         a == null -> Busy()
         a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
         else -> {
             a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
-            Div({ classes("actions") }) { if (busy) Busy() else PrimaryButton("Sign in") { chat.beginSignIn() } }
+            Div({ classes("actions") }) { PrimaryButton("Sign in") { chat.beginProxySignIn() } }
         }
     }
 }
 
 /**
- * The market's login page, live: its picture, refreshed while signing in, takes the user's clicks
- * and keys and passes them to the page as they are, so the user signs in on the page itself.
+ * The market's own sign-in page, shown inside Arbay. Its requests go through the server, which keeps
+ * the site's cookies, so the account never reaches this browser; the frame goes once the account is signed in.
  */
 @Composable
-private fun SignInSteps(app: WebApp, step: SignInStep, busy: Boolean) {
-    val chat = app.chat
-    step.error?.let { P({ classes("sign-in-error") }) { Text(it) } }
+private fun SignInFrame(app: WebApp, src: String) {
     Div({ classes("inline-form") }) {
-        QuietButton("Cancel") { chat.cancelSignIn() }
+        QuietButton("Cancel") { app.chat.cancelSignIn() }
     }
-    step.picture?.let { picture ->
-        // Typed characters go out together after a short pause, the keys that are no character one by one.
-        var typed by remember { mutableStateOf("") }
-        var flush by remember { mutableStateOf<Int?>(null) }
-        Div({
-            classes("sign-in-live")
-            attr("tabindex", "0")
-            // Typing goes to the page from the start, as on the page itself.
-            ref { it.focus(); onDispose { } }
-            attr("aria-label", "The Kleinanzeigen sign-in page; click and type on it")
-            onKeyDown { k ->
-                if (k.ctrlKey || k.metaKey || k.altKey) return@onKeyDown
-                val name = if (k.key == "Tab" && k.shiftKey) "ISO_Left_Tab" else X_KEYS[k.key]
-                when {
-                    k.key.length == 1 -> {
-                        typed += k.key
-                        flush?.let { kotlinx.browser.window.clearTimeout(it) }
-                        flush = kotlinx.browser.window.setTimeout({ val t = typed; typed = ""; flush = null; chat.signInType(t) }, 250)
-                    }
-                    name != null -> {
-                        flush?.let { kotlinx.browser.window.clearTimeout(it) }
-                        val t = typed; typed = ""; flush = null
-                        if (t.isNotEmpty()) chat.signInType(t)
-                        chat.signInKey(name)
-                    }
-                    else -> return@onKeyDown
-                }
-                k.preventDefault()
-            }
-        }) {
-            Img(src = "data:image/jpeg;base64,$picture", alt = "The Kleinanzeigen sign-in page") {
-                classes("sign-in-page")
-                attr("draggable", "false")
-                onClick { m ->
-                    val img = m.target as org.w3c.dom.HTMLImageElement
-                    (img.parentElement as? org.w3c.dom.HTMLElement)?.focus()
-                    if (img.clientWidth > 0 && step.width > 0) {
-                        chat.signInTap(m.offsetX * step.width / img.clientWidth, m.offsetY * step.height / img.clientHeight)
-                    }
-                }
-            }
-        }
-    }
+    Iframe(attrs = {
+        classes("sign-in-frame")
+        attr("src", src)
+        attr("title", "The Kleinanzeigen sign-in page")
+    })
 }
-
-/** Browser key names and the X key each stands for on the page. */
-private val X_KEYS = mapOf(
-    "Enter" to "Return", "Backspace" to "BackSpace", "Tab" to "Tab", "Escape" to "Escape", "Delete" to "Delete",
-    "ArrowLeft" to "Left", "ArrowRight" to "Right", "ArrowUp" to "Up", "ArrowDown" to "Down", "Home" to "Home", "End" to "End",
-)
 
 /** The tick that picks an offer to write to; shown on hover, and always once anything is picked. */
 @Composable
