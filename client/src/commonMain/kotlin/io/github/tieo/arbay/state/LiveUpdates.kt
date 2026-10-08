@@ -10,9 +10,10 @@ import kotlinx.coroutines.delay
  * Hold the server's line of changes open for as long as the app runs, and hand each one to
  * [onEvent]: a saved search renamed by an assistant, a look chosen on the phone, a reply that came
  * in. A dropped line is opened again after a short wait, and on reopening everything is reloaded
- * once, since what changed in between was not told.
+ * once, since what changed in between was not told. Events are handled one after the other, so a
+ * place shown right after a change opens on the changed version rather than the one before.
  */
-suspend fun followLive(client: ArbayClient, onEvent: (LiveEvent) -> Unit) {
+suspend fun followLive(client: ArbayClient, onEvent: suspend (LiveEvent) -> Unit) {
     var first = true
     while (true) {
         try {

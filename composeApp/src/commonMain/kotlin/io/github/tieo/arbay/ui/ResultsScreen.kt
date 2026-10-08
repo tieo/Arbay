@@ -138,6 +138,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
     val total by vm.totalPlatforms.collectAsState()
     val completed by vm.completedPlatforms.collectAsState()
     val fetched by vm.fetched.collectAsState()
+    val notSearched by vm.notSearched.collectAsState()
     val view = state.open.view
     val bookmark = state.open.bookmark
     val shown = state.shown
@@ -219,6 +220,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
                 Nothing(
                     when {
                         loading -> "Waiting for the first market to answer"
+                        notSearched != null -> notSearched!!
                         fetched.isEmpty() -> "No market had one."
                         else -> "Your narrowing hides all ${state.narrowed.allActive.size} of them."
                     },

@@ -54,7 +54,7 @@ fun ArbayWeb() {
     LaunchedEffect(Unit) {
         followLive(app.client) { event ->
             when (event.kind) {
-                LiveKind.SAVED_SEARCHES -> app.products.loadProducts()
+                LiveKind.SAVED_SEARCHES -> app.products.reloadProducts()
                 LiveKind.STATE -> SharedState.refresh()
                 LiveKind.CHAT -> { app.chat.refresh(); app.chat.loadReview() }
                 LiveKind.SHOW -> event.path?.let { path ->

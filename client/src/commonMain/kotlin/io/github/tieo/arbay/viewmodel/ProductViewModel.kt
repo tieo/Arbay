@@ -43,21 +43,25 @@ class ProductViewModel(
 
     fun loadProducts() {
         if (rendersASample) return
-        viewModelScope.launch {
-            _loading.value = true
-            _error.value = null
-            try {
-                _products.value = client.getProducts()
-                _status.value = try {
-                    client.getSavedSearchStatus().associateBy { it.productId }
-                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
-                    emptyMap()
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
-                _error.value = e.message
+        viewModelScope.launch { reloadProducts() }
+    }
+
+    /** [loadProducts], returning once the saved searches are in hand. */
+    suspend fun reloadProducts() {
+        if (rendersASample) return
+        _loading.value = true
+        _error.value = null
+        try {
+            _products.value = client.getProducts()
+            _status.value = try {
+                client.getSavedSearchStatus().associateBy { it.productId }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+                emptyMap()
             }
-            _loading.value = false
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            _error.value = e.message
         }
+        _loading.value = false
     }
 
     /**

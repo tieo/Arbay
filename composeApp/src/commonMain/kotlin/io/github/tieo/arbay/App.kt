@@ -58,7 +58,7 @@ fun App() {
         LaunchedEffect(Unit) {
             followLive(client) { event ->
                 when (event.kind) {
-                    LiveKind.SAVED_SEARCHES -> session.products.loadProducts()
+                    LiveKind.SAVED_SEARCHES -> session.products.reloadProducts()
                     LiveKind.STATE -> SharedState.refresh()
                     LiveKind.CHAT -> { session.chat.refresh(); session.chat.loadReview() }
                     LiveKind.SHOW -> event.path?.let { path ->

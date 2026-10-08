@@ -119,6 +119,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
     val blocked by vm.blockedTerms.collectAsState()
     val marketBasis by vm.marketBasis.collectAsState()
     val dropped by vm.droppedBySearch.collectAsState()
+    val notSearched by vm.notSearched.collectAsState()
 
     val state = rememberResultsState(vm, open)
     val narrowed = state.narrowed
@@ -170,6 +171,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                     Text(
                         when {
                             loading -> "Waiting for the first market to answer…"
+                            notSearched != null -> notSearched!!
                             fetched.isEmpty() -> "No market had one."
                             else -> "Your narrowing hides all ${narrowed.allActive.size} of them."
                         },
