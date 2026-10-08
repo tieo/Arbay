@@ -610,3 +610,69 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
     .saved-name { max-width: 140px; }
     .inspector { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* Picking offers to write to: a tick at the row's left edge, shown on hover and kept while picking. */
+.pick {
+    position: absolute; left: -4px; top: 50%; transform: translateY(-50%); z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--surface); box-shadow: var(--shadow);
+    opacity: 0; transition: opacity 0.1s; cursor: pointer;
+}
+.pick input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+.offer-row:hover .pick, .offer-tile:hover .pick, .pick.on, .pick.picking, .pick:focus-within { opacity: 1; }
+.offer-tile .pick { left: 8px; top: 8px; transform: none; }
+.pick-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: var(--radius); background: var(--selected);
+}
+.pick-bar > span:first-child { flex: 1; font-weight: 600; }
+.seller-mark { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 0.82em; }
+
+/* Changing a saved search in place. */
+.change-search { display: grid; grid-template-columns: 2fr 1fr auto; gap: var(--gap); align-items: end; }
+
+/* The send window. */
+.write .with-unit { display: flex; align-items: center; gap: 6px; }
+.write .with-unit .control { flex: 1; }
+.write .unit { color: var(--muted); }
+.fill-in { font-family: var(--mono); font-size: 12px; }
+.inline-form { display: flex; gap: 6px; }
+.inline-form .control { flex: 1; }
+.seller-lines { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.seller-line { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.seller-line-head { display: flex; align-items: center; gap: 8px; }
+.seller-line-toggle {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+}
+.seller-line-toggle .offer-title, .seller-line-toggle .offer-meta { max-width: 100%; }
+.seller-line.unreachable .offer-title { color: var(--muted); }
+.seller-line .price { font-weight: 600; }
+
+/* Messages. */
+.outbox { padding: 0 var(--pad); display: flex; flex-direction: column; }
+.outgoing { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.offer-meta.problem { color: var(--danger, #c0392b); white-space: normal; }
+.offer-foot.unread { color: var(--text); font-weight: 500; }
+.inbox-error { padding: 0 var(--pad); }
+.conversation { display: flex; flex-direction: column; height: 100%; }
+.conversation .panel-head { padding: var(--pad); border-bottom: 1px solid var(--line); }
+.conversation .panel-head h2 { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubbles { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: var(--pad); }
+.bubble { max-width: 80%; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 14px; }
+.bubble.mine { align-self: flex-end; background: var(--selected); }
+.bubble.theirs { align-self: flex-start; background: var(--raised); }
+.bubble p { white-space: pre-wrap; line-height: 1.45; }
+.bubble-photo { max-width: 220px; border-radius: var(--radius-small); }
+.bubble-offer { font-weight: 600; }
+.reply { display: flex; gap: 8px; align-items: flex-end; padding: var(--pad); border-top: 1px solid var(--line); }
+.reply .control { flex: 1; min-height: 44px; }
+
+/* The user's texts in Settings. */
+.text-entry {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer;
+}
+.text-entry .offer-meta { max-width: 100%; }
+.template-editor { display: flex; flex-direction: column; gap: 6px; }

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.plugins
 
+import io.github.tieo.arbay.chat.Chat
 import io.github.tieo.arbay.crawler.SavedSearchMonitor
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
@@ -7,6 +8,7 @@ import io.github.tieo.arbay.routes.archiveRoutes
 import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.auctionReminderRoutes
+import io.github.tieo.arbay.routes.chatRoutes
 import io.github.tieo.arbay.routes.importSettingsRoutes
 import io.github.tieo.arbay.routes.listingRoutes
 import io.github.tieo.arbay.routes.marketRoutes
@@ -25,6 +27,7 @@ fun Application.configureRouting() {
     // opted into per search, not turned on for every bookmark by one server-wide flag.
     val savedSearches = SavedSearchMonitor(productRepo, listingRepo)
     savedSearches.start()
+    Chat.start()
 
     routing {
         productRoutes(productRepo, savedSearches)
@@ -36,6 +39,7 @@ fun Application.configureRouting() {
         archiveRoutes()
         importSettingsRoutes()
         auctionReminderRoutes()
+        chatRoutes()
         placeRoutes()
         webAppRoutes()
     }

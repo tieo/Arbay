@@ -87,6 +87,7 @@ fun PanelView(app: WebApp, route: Route.Results, panel: Panel, state: ResultsSta
         Panel.WORDS -> WordsPanel(app, route, state)
         Panel.ALERTS -> AlertsPanel(app, route, state)
         Panel.CRITERIA -> CriteriaPanel(app, route, state)
+        Panel.WRITE -> WritePanel(app, route, state)
     }
 }
 
@@ -431,6 +432,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
                     Text(copyLabel(copy, listing))
                 }
             }
+            if (!isArchived) SellerAction(app, route, listing)
         }
 
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)

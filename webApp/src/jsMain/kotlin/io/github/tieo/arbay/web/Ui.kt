@@ -40,6 +40,9 @@ enum class Glyph(val svg: String) {
     Undo("""<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>"""),
     Pin("""<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>"""),
     Clock("""<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>"""),
+    Chat("""<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>"""),
+    Send("""<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/>"""),
+    Pencil("""<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>"""),
     Chart("""<path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M12 10v8"/><path d="M17 6v12"/>"""),
 }
 

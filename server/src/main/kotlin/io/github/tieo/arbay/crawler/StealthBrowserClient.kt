@@ -26,11 +26,11 @@ object StealthBrowserClient {
     const val CTRL_PREFIX = "ARBAY_CTRL:"
 
     /** All sidecar scripts extracted together into one directory so they can import each other —
-     *  mobilede_fetch.py and stealth_fetch.py both import captcha_gate.py for the interactive
-     *  captcha solve. */
-    private val scriptDir: File by lazy {
+     *  mobilede_fetch.py, stealth_fetch.py and kleinanzeigen_chat.py all import captcha_gate.py to
+     *  show their browser over noVNC. */
+    internal val scriptDir: File by lazy {
         val dir = File(System.getProperty("java.io.tmpdir"), "arbay-stealth").apply { mkdirs() }
-        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py")) {
+        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "kleinanzeigen_chat.py")) {
             val res = StealthBrowserClient::class.java.getResourceAsStream("/$name")
                 ?: error("$name not found in classpath")
             File(dir, name).outputStream().use { res.copyTo(it) }

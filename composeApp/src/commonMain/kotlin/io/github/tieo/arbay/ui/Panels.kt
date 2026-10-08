@@ -80,7 +80,7 @@ fun PanelSheet(session: Session, route: Route.Results, panel: Panel, state: Resu
     val nav = LocalNavigator.current
     ModalBottomSheet(
         onDismissRequest = { nav.back() },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = panel == Panel.CRITERIA || panel == Panel.HIDDEN),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = panel == Panel.CRITERIA || panel == Panel.HIDDEN || panel == Panel.WRITE),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         PanelBody(session, route, panel, state, Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding())
@@ -101,6 +101,7 @@ fun PanelBody(session: Session, route: Route.Results, panel: Panel, state: Resul
             Panel.WORDS -> WordsPanel(session, state)
             Panel.ALERTS -> AlertsPanel(session, state)
             Panel.CRITERIA -> CriteriaPanel(session, state)
+            Panel.WRITE -> WritePanel(session, route, state)
         }
     }
 }

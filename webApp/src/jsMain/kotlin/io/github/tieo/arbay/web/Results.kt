@@ -56,6 +56,8 @@ import io.github.tieo.arbay.results.marketsToAsk
 import io.github.tieo.arbay.results.narrow
 import io.github.tieo.arbay.results.priceSummary
 import io.github.tieo.arbay.results.sourceLabel
+import io.github.tieo.arbay.results.changeSavedSearch
+import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.results.withBand
 import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlinx.browser.document
@@ -126,6 +128,8 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
     val shown = narrowed.displayed
     val selected = route.listing
     KeyboardWalk(route, shown.map { it.id })
+    var changing by remember(open.bookmark?.id) { mutableStateOf(false) }
+    val picking = app.chat.selected.collectAsState().value.isNotEmpty()
 
     Main({ classes("results") }) {
         Header({ classes("results-head") }) {
@@ -138,6 +142,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                     )
                     if (where.isNotEmpty()) P({ classes("subtitle") }) { Text(where.joinToString(" · ")) }
                 }
+                if (open.bookmark != null) IconButton(Glyph.Pencil, "Change the name or the words", pressed = changing) { changing = !changing }
                 if (view.isCar) {
                     IconButton(Glyph.Car, "Vehicle criteria", pressed = route.panel == Panel.CRITERIA) { togglePanel(route, Panel.CRITERIA) }
                 }
@@ -151,9 +156,11 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 }
             }
 
+            if (changing) ChangeSearch(open, view.name) { name, term -> state.changeSavedSearch(app.products, name, term); changing = false }
             MarketsLine(route, loading, total, completed, statuses)
             PriceStrip(route, summary)
             Toolbar(app, route, state, sortMode, blocked.size, hidden.sumOf { it.listings.size })
+            PickBar(app, route)
         }
 
         val photos = LookChoice.layout == OfferLayout.PHOTOS
@@ -174,8 +181,8 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 val to = route.copy(listing = listing.id, panel = null)
                 val lowest = listing.id in summary.cheapestIds
                 val hide = { (listOf(listing) + copies).forEach(vm::ban) }
-                if (photos) OfferTile(listing, copies, listing.id == selected, lowest, to, hide)
-                else OfferRow(listing, copies, listing.id == selected, lowest, to, hide)
+                if (photos) OfferTile(app, listing, copies, listing.id == selected, lowest, to, picking, hide)
+                else OfferRow(app, listing, copies, listing.id == selected, lowest, to, picking, hide)
             }
         }
     }
@@ -352,11 +359,12 @@ private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (F
 }
 
 @Composable
-private fun OfferRow(listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, onHide: () -> Unit) {
+private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-row", "active".takeIf { active }).toTypedArray())
     }) {
+        PickBox(app, listing, picking)
         RouteLink(to, classes = listOf("offer-link"), replace = true) {
             Thumb(listing, "thumb")
             Div({ classes("offer-text") }) {
@@ -365,6 +373,7 @@ private fun OfferRow(listing: Listing, copies: List<Listing>, active: Boolean, l
                     Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
                 }
                 listingFoot(listing).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
+                SellerMarkLine(app, listing)
             }
             Div({ classes("offer-price") }) {
                 Price(listing.comparablePrice, lowest = lowest)
@@ -376,20 +385,43 @@ private fun OfferRow(listing: Listing, copies: List<Listing>, active: Boolean, l
 }
 
 @Composable
-private fun OfferTile(listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, onHide: () -> Unit) {
+private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-tile", "active".takeIf { active }).toTypedArray())
     }) {
+        PickBox(app, listing, picking)
         RouteLink(to, classes = listOf("offer-link"), replace = true) {
             Thumb(listing, "tile-photo")
             Div({ classes("tile-text") }) {
                 Price(listing.comparablePrice, lowest = lowest)
                 Span({ classes("offer-title") }) { Text(listing.title.tidyTitle()) }
                 Span({ classes("offer-meta") }) { Text(sourceLabel(listing, copies)) }
+                SellerMarkLine(app, listing)
             }
         }
         Div({ classes("offer-actions") }) { IconButton(Glyph.EyeOff, "Hide this offer") { onHide() } }
+    }
+}
+
+/** A saved search's name and the words it asks the markets for, changed in place. */
+@Composable
+private fun ChangeSearch(open: OpenSearch, name: String, onSave: (String, String) -> Unit) {
+    var newName by remember { mutableStateOf(name) }
+    var term by remember { mutableStateOf(open.saved?.text ?: open.view.query) }
+    Form(attrs = {
+        classes("change-search")
+        addEventListener("submit") { it.preventDefault(); if (term.isNotBlank()) onSave(newName, term) }
+    }) {
+        Label(attrs = { classes("field") }) {
+            Span({ classes("field-label") }) { Text("Searched for") }
+            Input(InputType.Text) { classes("control"); value(term); onInput { term = it.value }; attr("autofocus", "") }
+        }
+        Label(attrs = { classes("field") }) {
+            Span({ classes("field-label") }) { Text("Name") }
+            Input(InputType.Text) { classes("control"); value(newName); onInput { newName = it.value } }
+        }
+        PrimaryButton("Search again", Glyph.Search, enabled = term.isNotBlank()) {}
     }
 }
 

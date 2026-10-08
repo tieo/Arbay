@@ -204,6 +204,50 @@ class ArbayClient(
         client.delete("$baseUrl/api/auctions/reminders/${listingId.encodeURLPathPart()}")
     }
 
+    // ── Talking to sellers through the user's own Kleinanzeigen account ──
+
+    suspend fun chatAccount(): ChatAccount = client.get("$baseUrl/api/chat/account").body()
+
+    suspend fun beginChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/account/signin").body()
+
+    suspend fun endChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/account/signin/done").body()
+
+    suspend fun conversations(): List<Conversation> = client.get("$baseUrl/api/chat/conversations").body()
+
+    suspend fun conversation(id: String): Conversation =
+        client.get("$baseUrl/api/chat/conversations/${id.encodeURLPathPart()}").body()
+
+    suspend fun markConversationRead(id: String) {
+        client.post("$baseUrl/api/chat/conversations/${id.encodeURLPathPart()}/read")
+    }
+
+    suspend fun reply(id: String, text: String) {
+        client.post("$baseUrl/api/chat/conversations/${id.encodeURLPathPart()}/reply") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("text" to text))
+        }
+    }
+
+    suspend fun outbox(): List<OutgoingMessage> = client.get("$baseUrl/api/chat/outbox").body()
+
+    suspend fun send(request: SendRequest): List<OutgoingMessage> =
+        client.post("$baseUrl/api/chat/outbox") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+
+    suspend fun cancelOutgoing(id: String) {
+        client.delete("$baseUrl/api/chat/outbox/${id.encodeURLPathPart()}")
+    }
+
+    suspend fun chatSettings(): ChatSettings = client.get("$baseUrl/api/chat/settings").body()
+
+    suspend fun updateChatSettings(settings: ChatSettings): ChatSettings =
+        client.put("$baseUrl/api/chat/settings") {
+            contentType(ContentType.Application.Json)
+            setBody(settings)
+        }.body()
+
     /** Where a place is, for measuring listings against a home town. Null when the server's index
      *  does not know it. */
     suspend fun geocode(place: String): Pair<Double, Double>? {

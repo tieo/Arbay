@@ -87,6 +87,8 @@ fun SettingsScreen(session: Session) {
         }
         ServerAddress(session)
         SectionTitle("The server, for every device", Modifier.padding(top = 8.dp))
+        AccountPanel(session)
+        TextsPanel(session)
         ServerSettings(session)
     }
 }

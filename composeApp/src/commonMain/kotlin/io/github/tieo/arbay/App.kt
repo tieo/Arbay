@@ -12,6 +12,7 @@ import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.ui.ArbayApp
 import io.github.tieo.arbay.ui.ArbayTheme
 import io.github.tieo.arbay.ui.Session
+import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
@@ -26,6 +27,7 @@ fun App() {
             products = viewModel { ProductViewModel(client) },
             listings = viewModel { ListingViewModel(client) },
             freeItems = viewModel { FreeItemViewModel(client) },
+            chat = viewModel { ChatViewModel(client) },
         )
 
         // The debug dump (see debug/DebugRegistry.kt): the view models live for the whole session,
@@ -44,6 +46,7 @@ fun App() {
         LaunchedEffect(Unit) { positionFromHomeTown(client) }
         LaunchedEffect(Unit) { loadServerSettings(client) }
         LaunchedEffect(Unit) { session.products.loadProducts() }
+        LaunchedEffect(Unit) { session.chat.watch() }
 
         ArbayApp(session)
     }

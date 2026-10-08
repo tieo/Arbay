@@ -57,6 +57,11 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
+import io.github.tieo.arbay.chat.sellerMark
+import io.github.tieo.arbay.model.canMessage
+import io.github.tieo.arbay.navigation.Panel
+import io.github.tieo.arbay.navigation.Route
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import io.github.tieo.arbay.results.detailSpecs
 import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.offerFacts
@@ -135,6 +140,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 copies.forEach { copy ->
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
+                if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
 
                 if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(session, listing)
 
@@ -196,6 +202,30 @@ private fun Photos(listing: Listing) {
 
 /** An auction runs out whether or not the app is open, so the useful thing is to be told a chosen
  *  stretch before it does, while a bid can still be made. */
+/** The conversation with this offer's seller, or the way to start one. */
+@Composable
+private fun SellerButton(session: Session, listing: Listing) {
+    val nav = LocalNavigator.current
+    val conversations by session.chat.conversations.collectAsState()
+    val outbox by session.chat.outbox.collectAsState()
+    val conversation = conversations.firstOrNull { it.listingId == listing.id && it.buying }
+    val mark = sellerMark(conversation, outbox.lastOrNull { it.listingId == listing.id })
+    OutlinedButton(
+        onClick = {
+            if (conversation != null) nav.go(Route.Conversation(conversation.id))
+            else (nav.current as? Route.Results)?.let { here ->
+                if (listing.id !in session.chat.selected.value) session.chat.toggleSelected(listing.id)
+                nav.go(here.copy(listing = null, panel = Panel.WRITE))
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(18.dp)); HGap()
+        Text(if (conversation != null) "Conversation" + (conversation.partner?.let { " with $it" } ?: "") else "Write to the seller")
+    }
+    mark?.let { Muted(it) }
+}
+
 @Composable
 private fun AuctionReminder(session: Session, listing: Listing) {
     var lead by remember(listing.id) { mutableStateOf<Int?>(null) }

@@ -28,7 +28,19 @@ import io.github.tieo.arbay.ui.LocalNavigator
 import io.github.tieo.arbay.ui.Navigator
 import io.github.tieo.arbay.ui.PanelBody
 import io.github.tieo.arbay.ui.Session
+import io.github.tieo.arbay.model.ChatAccount
+import io.github.tieo.arbay.model.ChatMessage
+import io.github.tieo.arbay.model.ChatSettings
+import io.github.tieo.arbay.model.Conversation
+import io.github.tieo.arbay.model.MessageTemplate
+import io.github.tieo.arbay.model.OutgoingMessage
+import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.PlatformStatus
 import io.github.tieo.arbay.viewmodel.ProductViewModel
@@ -43,16 +55,43 @@ private const val PHONE_H = 844
 
 private data class Scene(val name: String, val content: @Composable () -> Unit)
 
+private val NOW = Clock.System.now()
+
+/** The user's own text, as they wrote it, standing in for whatever texts they keep. */
+private val SAMPLE_TEXT = MessageTemplate(
+    "id", "Ausweis",
+    "Falls ohne Käuferschutz, hätte ich gerne ein Foto mit dem Produkt und dem Ausweis, gerne alles andere außer dem Namen mit zwei Blättern Papier abdecken. Wurde leider in der Vergangenheit Betrugsopfer.",
+)
+
+private fun chat(signedIn: Boolean = true, picked: Set<String> = emptySet()) = ChatViewModel(
+    sampleAccount = ChatAccount(signedIn = signedIn, name = if (signedIn) "Max" else null),
+    sampleConversations = listOf(
+        Conversation(
+            "c1", listingId = "KLEINANZEIGEN:1", adTitle = PreviewData.active[0].title, adImage = PreviewData.active[0].imageUrls.first(),
+            partner = "Erika", unread = 1, lastAt = NOW - 25.minutes, lastText = "Ja, ist noch da. Foto kommt gleich.",
+            messages = listOf(
+                ChatMessage("m1", mine = true, text = "Hallo, ist die Maschine noch zu haben?", at = NOW - 2.hours),
+                ChatMessage("m2", mine = false, text = "Ja, ist noch da. Foto kommt gleich.", at = NOW - 25.minutes),
+            ),
+        ),
+        Conversation("c2", adTitle = "Bosch Akkuschrauber", partner = "Jonas", buying = false, lastAt = NOW - 3.days, lastText = "Danke, hat alles geklappt"),
+    ),
+    sampleOutbox = listOf(OutgoingMessage("o1", "KLEINANZEIGEN:7", PreviewData.active[6].title, "Hallo", NOW + 70.seconds)),
+    sampleSettings = ChatSettings(templates = listOf(SAMPLE_TEXT), allInBySearch = mapOf(PreviewData.saved.first().id to 450.0)),
+).also { vm -> picked.forEach(vm::toggleSelected) }
+
 private fun session(
     listings: List<Listing> = PreviewData.active,
     statuses: List<PlatformStatus> = PreviewData.marketAnswers,
     loading: Boolean = false,
     newIds: Set<String> = emptySet(),
+    chat: ChatViewModel = chat(),
 ) = Session(
     client = ArbayClient(),
     products = ProductViewModel(saved = PreviewData.saved, savedStatus = PreviewData.savedStatus, rendersASample = true),
     listings = ListingViewModel(sample = listings, sampleStatuses = statuses, sampleLoading = loading),
     freeItems = FreeItemViewModel(sampleProfile = PreviewData.freeItemProfile, sampleItems = PreviewData.active),
+    chat = chat,
 )
 
 /** The app as it stands at [route], with whatever steps lie under it. */
@@ -92,6 +131,11 @@ private val SCENES: List<Scene> = listOf(
     Scene("panel-words") { PanelScene(Panel.WORDS) },
     Scene("panel-hidden") { PanelScene(Panel.HIDDEN) },
     Scene("panel-alerts") { PanelScene(Panel.ALERTS) },
+    Scene("picking") { At(Route.Home, Route.Results(saved), s = session(chat = chat(picked = setOf("KLEINANZEIGEN:1", "KLEINANZEIGEN:7")))) },
+    Scene("panel-write") { PanelScene(Panel.WRITE, session(chat = chat(picked = setOf("KLEINANZEIGEN:1", "KLEINANZEIGEN:7", "EBAY_DE:2")))) },
+    Scene("inbox") { At(Route.Inbox) },
+    Scene("inbox-signedout") { At(Route.Inbox, s = session(chat = chat(signedIn = false))) },
+    Scene("conversation") { At(Route.Inbox, Route.Conversation("c1")) },
 )
 
 fun main() {

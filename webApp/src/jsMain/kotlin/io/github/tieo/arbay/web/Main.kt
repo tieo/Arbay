@@ -10,6 +10,7 @@ import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.loadServerSettings
 import io.github.tieo.arbay.positionFromHomeTown
+import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
@@ -30,6 +31,7 @@ class WebApp {
     val products = ProductViewModel(client)
     val listings = ListingViewModel(client)
     val freeItems = FreeItemViewModel(client)
+    val chat = ChatViewModel(client)
 }
 
 /**
@@ -43,6 +45,7 @@ fun ArbayWeb() {
     ApplyLook()
     LaunchedEffect(Unit) { loadServerSettings(app.client) }
     LaunchedEffect(Unit) { app.products.loadProducts() }
+    LaunchedEffect(Unit) { app.chat.watch() }
     LaunchedEffect(Unit) {
         // The browser's own position where the site may already read it, never asking from here;
         // the home town otherwise.
@@ -58,6 +61,7 @@ fun ArbayWeb() {
             Route.VehicleForm -> VehicleScreen(app)
             Route.FreeItems -> FreeItemsScreen(app)
             Route.Settings -> SettingsScreen(app)
+            Route.Inbox, is Route.Conversation -> InboxScreen(app, route)
         }
     }
 }

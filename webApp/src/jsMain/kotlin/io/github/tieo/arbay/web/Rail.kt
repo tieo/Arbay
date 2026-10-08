@@ -34,6 +34,7 @@ fun Rail(app: WebApp, route: Route) {
     val products by app.products.products.collectAsState()
     val status by app.products.status.collectAsState()
     val freeMatches by app.freeItems.newMatches.collectAsState()
+    val conversations by app.chat.conversations.collectAsState()
     val openSaved = ((route as? Route.Results)?.source as? Source.Saved)?.id
 
     Nav({ classes("rail") }) {
@@ -67,6 +68,11 @@ fun Rail(app: WebApp, route: Route) {
         }
 
         Div({ classes("rail-foot") }) {
+            RouteLink(Route.Inbox, classes = listOfNotNull("rail-link", "active".takeIf { route == Route.Inbox || route is Route.Conversation })) {
+                Icon(Glyph.Chat)
+                Text("Messages")
+                conversations.sumOf { it.unread }.takeIf { it > 0 }?.let { Span({ classes("count") }) { Text("$it") } }
+            }
             RouteLink(Route.FreeItems, classes = listOfNotNull("rail-link", "active".takeIf { route == Route.FreeItems })) {
                 Icon(Glyph.Gift)
                 Text("Free Items")

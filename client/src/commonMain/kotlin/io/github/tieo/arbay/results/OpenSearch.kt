@@ -259,3 +259,13 @@ fun ResultsState.toggleSaved(products: ProductViewModel, listings: ListingViewMo
         ),
     )
 }
+
+/**
+ * Rename a saved search and change the words it asks the markets for; new words ask the markets
+ * again. A name left empty takes the words.
+ */
+fun ResultsState.changeSavedSearch(products: ProductViewModel, name: String, term: String) {
+    val bookmark = open.bookmark ?: return
+    val words = term.trim().ifEmpty { return }
+    products.updateProduct(bookmark.copy(name = name.trim().ifEmpty { words }, searchQuery = bookmark.searchQuery.copy(text = words)))
+}

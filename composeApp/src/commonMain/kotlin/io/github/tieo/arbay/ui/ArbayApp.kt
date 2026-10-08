@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.BadgedBox
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
+import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
@@ -38,18 +40,20 @@ class Session(
     val products: ProductViewModel,
     val listings: ListingViewModel,
     val freeItems: FreeItemViewModel,
+    val chat: ChatViewModel,
 )
 
 private data class Place(val route: Route, val label: String, val icon: ImageVector)
 
 private val PLACES = listOf(
     Place(Route.Home, "Searches", Icons.Outlined.Home),
+    Place(Route.Inbox, "Messages", Icons.Outlined.ChatBubbleOutline),
     Place(Route.FreeItems, "Free items", Icons.Outlined.CardGiftcard),
     Place(Route.Settings, "Settings", Icons.Outlined.Settings),
 )
 
 /**
- * The phone app: three places at the bottom (searches, free items, settings), and everything
+ * The phone app: four places at the bottom (searches, messages, free items, settings), and everything
  * opened from them on top, one step at a time, with back walking the steps.
  *
  * The phone is where new finds are checked and notifications land; comparing side by side is the
@@ -58,6 +62,7 @@ private val PLACES = listOf(
 @Composable
 fun ArbayApp(session: Session, navigator: Navigator = remember { Navigator() }) {
     val freeMatches by session.freeItems.newMatches.collectAsState()
+    val conversations by session.chat.conversations.collectAsState()
     val route = navigator.current
     val holder = rememberSaveableStateHolder()
     // Composed only while there is a step to go back to: a handler that is merely switched off
@@ -83,6 +88,8 @@ fun ArbayApp(session: Session, navigator: Navigator = remember { Navigator() }) 
                             Route.VehicleForm -> VehicleScreen(session)
                             Route.FreeItems -> FreeItemsScreen(session)
                             Route.Settings -> SettingsScreen(session)
+                            Route.Inbox -> InboxScreen(session)
+                            is Route.Conversation -> ConversationScreen(session, route.id)
                         }
                     }
                 }
@@ -94,7 +101,11 @@ fun ArbayApp(session: Session, navigator: Navigator = remember { Navigator() }) 
                                 selected = route == place.route,
                                 onClick = { navigator.top(place.route) },
                                 icon = {
-                                    val count = if (place.route == Route.FreeItems) freeMatches.size else 0
+                                    val count = when (place.route) {
+                                        Route.FreeItems -> freeMatches.size
+                                        Route.Inbox -> conversations.sumOf { it.unread }
+                                        else -> 0
+                                    }
                                     if (count > 0) BadgedBox(badge = { Badge { Text("$count") } }) { Icon(place.icon, null) }
                                     else Icon(place.icon, null)
                                 },

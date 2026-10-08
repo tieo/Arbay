@@ -12,7 +12,10 @@ sealed interface Source {
 
 /** A closer look at an open search, beside its results in a window or over them on a phone. */
 enum class Panel(val slug: String) {
-    PRICES("prices"), HIDDEN("hidden"), MARKETS("markets"), WORDS("words"), ALERTS("alerts"), CRITERIA("criteria");
+    PRICES("prices"), HIDDEN("hidden"), MARKETS("markets"), WORDS("words"), ALERTS("alerts"), CRITERIA("criteria"),
+
+    /** The send window for the offers picked in the results. */
+    WRITE("write");
 
     companion object {
         fun of(slug: String?): Panel? = entries.firstOrNull { it.slug == slug }
@@ -30,6 +33,8 @@ sealed interface Route {
     data object VehicleForm : Route
     data object FreeItems : Route
     data object Settings : Route
+    data object Inbox : Route
+    data class Conversation(val id: String) : Route
 
     fun path(): String = when (this) {
         Home -> "/"
@@ -44,6 +49,8 @@ sealed interface Route {
         VehicleForm -> "/vehicle"
         FreeItems -> "/free"
         Settings -> "/settings"
+        Inbox -> "/inbox"
+        is Conversation -> "/inbox/${id.encodeURLPathPart()}"
     }
 
     companion object {
@@ -58,6 +65,7 @@ sealed interface Route {
                 "vehicle" -> parts.getOrNull(1)?.let { results(Source.Vehicle(it)) } ?: VehicleForm
                 "free" -> FreeItems
                 "settings" -> Settings
+                "inbox" -> parts.getOrNull(1)?.let { Conversation(it) } ?: Inbox
                 else -> Home
             }
         }

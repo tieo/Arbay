@@ -21,7 +21,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.Button
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.Color
+import io.github.tieo.arbay.chat.sellerMark
+import io.github.tieo.arbay.results.changeSavedSearch
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.MoreVert
@@ -116,7 +128,7 @@ fun ResultsScreen(session: Session, route: Route.Results) {
     route.panel?.let { panel -> PanelSheet(session, route, panel, state) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ResultsList(session: Session, route: Route.Results, state: ResultsState) {
     val nav = LocalNavigator.current
@@ -131,13 +143,32 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
     val shown = state.shown
     val photos = LookChoice.layout == OfferLayout.PHOTOS
     var menu by remember { mutableStateOf(false) }
+    var changing by remember { mutableStateOf(false) }
+    val chat = session.chat
+    val selected by chat.selected.collectAsState()
+    val conversations by chat.conversations.collectAsState()
+    val outbox by chat.outbox.collectAsState()
+    val picking = selected.isNotEmpty()
     fun panel(p: Panel) = nav.go(route.copy(panel = p, listing = null))
-    fun offer(l: Listing) = nav.go(route.copy(listing = l.id, panel = null))
+    fun offer(l: Listing) = if (picking) chat.toggleSelected(l.id) else nav.go(route.copy(listing = l.id, panel = null))
+    fun pick(l: Listing) = chat.toggleSelected(l.id)
+    fun mark(l: Listing) = sellerMark(conversations.firstOrNull { it.listingId == l.id && it.buying }, outbox.lastOrNull { it.listingId == l.id })
+    // Picking belongs to this search; leaving it lets the picks go.
+    DisposableEffect(Unit) { onDispose { chat.clearSelection() } }
+    if (changing) ChangeSearchDialog(view.name, state.open.saved?.text ?: view.query, onDismiss = { changing = false }) { name, term ->
+        changing = false
+        state.changeSavedSearch(session.products, name, term)
+    }
+    if (picking && route.listing == null && route.panel == null) OnBack { chat.clearSelection() }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            if (picking) TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                navigationIcon = { IconButton(onClick = { chat.clearSelection() }) { Icon(Icons.Outlined.Close, "Stop picking") } },
+                title = { Text("${selected.size} picked") },
+            ) else TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = { IconButton(onClick = { nav.back() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 title = {
@@ -155,6 +186,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
                     }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (bookmark != null) DropdownMenuItem(text = { Text("Change name or words") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; changing = true })
                         if (bookmark != null) DropdownMenuItem(text = { Text("Watching and alerts") }, leadingIcon = { Icon(Icons.Outlined.Notifications, null) }, onClick = { menu = false; panel(Panel.ALERTS) })
                         if (view.isCar) DropdownMenuItem(text = { Text("Vehicle criteria") }, leadingIcon = { Icon(Icons.Outlined.DirectionsCar, null) }, onClick = { menu = false; panel(Panel.CRITERIA) })
                         DropdownMenuItem(text = { Text("Markets") }, leadingIcon = { Icon(Icons.Outlined.Storefront, null) }, onClick = { menu = false; panel(Panel.MARKETS) })
@@ -168,6 +200,13 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
                     }
                 },
             )
+        },
+        bottomBar = {
+            if (picking) Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding().padding(horizontal = arbay.pad, vertical = 10.dp)) {
+                Button(onClick = { panel(Panel.WRITE) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (selected.size == 1) "Write to the seller" else "Write to ${selected.size} sellers")
+                }
+            }
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -188,13 +227,13 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
             if (photos) {
                 items(shown.chunked(2), key = { it.first().id }) { pair ->
                     Row(Modifier.padding(horizontal = arbay.pad, vertical = arbay.gap / 2), horizontalArrangement = Arrangement.spacedBy(arbay.gap)) {
-                        pair.forEach { l -> OfferTile(l, state, Modifier.weight(1f)) { offer(l) } }
+                        pair.forEach { l -> OfferTile(l, state, Modifier.weight(1f), l.id in selected, mark(l), onLongClick = { pick(l) }) { offer(l) } }
                         if (pair.size == 1) Box(Modifier.weight(1f))
                     }
                 }
             } else {
                 items(shown, key = { it.id }) { l ->
-                    OfferRow(l, state) { offer(l) }
+                    OfferRow(l, state, l.id in selected, mark(l), onLongClick = { pick(l) }) { offer(l) }
                     HorizontalDivider(Modifier.padding(start = arbay.pad), color = arbay.line)
                 }
             }
@@ -323,21 +362,29 @@ private fun BandDialog(state: ResultsState, onDismiss: () -> Unit, onApply: (Clo
 }
 
 /** One offer as a row: its photo, what it is, where it is from, and its price. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun OfferRow(listing: Listing, state: ResultsState, onClick: () -> Unit) {
+private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mark: String?, onLongClick: () -> Unit, onClick: () -> Unit) {
     val copies = state.elsewhere[listing.id].orEmpty()
     val lowest = listing.id in state.summary.cheapestIds
     val fresh = listing.id in state.open.newListingIds
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = arbay.pad, vertical = arbay.gap),
+        Modifier.fillMaxWidth()
+            .background(if (picked) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = arbay.pad, vertical = arbay.gap),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Photo(listing.imageUrls.firstOrNull { it.isNotBlank() }, Modifier.size(68.dp).clip(MaterialTheme.shapes.small), listing.title)
+        Box {
+            Photo(listing.imageUrls.firstOrNull { it.isNotBlank() }, Modifier.size(68.dp).clip(MaterialTheme.shapes.small), listing.title)
+            if (picked) PickedMark(Modifier.align(Alignment.TopStart).padding(4.dp))
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Muted((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "), maxLines = 1)
             listingFoot(listing).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString(" · "), maxLines = 1) }
+            mark?.let { SellerMark(it) }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             PriceText(listing.comparablePrice, lowest = lowest)
@@ -348,19 +395,63 @@ private fun OfferRow(listing: Listing, state: ResultsState, onClick: () -> Unit)
 }
 
 /** One offer as a photo with its price beneath. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun OfferTile(listing: Listing, state: ResultsState, modifier: Modifier, onClick: () -> Unit) {
+private fun OfferTile(listing: Listing, state: ResultsState, modifier: Modifier, picked: Boolean, mark: String?, onLongClick: () -> Unit, onClick: () -> Unit) {
     val copies = state.elsewhere[listing.id].orEmpty()
     Column(
-        modifier.clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, arbay.line, MaterialTheme.shapes.medium).clickable(onClick = onClick),
+        modifier.clip(MaterialTheme.shapes.medium).background(if (picked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+            .border(if (picked) 2.dp else 1.dp, if (picked) MaterialTheme.colorScheme.primary else arbay.line, MaterialTheme.shapes.medium)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        Photo(listing.imageUrls.firstOrNull { it.isNotBlank() }, Modifier.fillMaxWidth().aspectRatio(1f), listing.title)
+        Box {
+            Photo(listing.imageUrls.firstOrNull { it.isNotBlank() }, Modifier.fillMaxWidth().aspectRatio(1f), listing.title)
+            if (picked) PickedMark(Modifier.align(Alignment.TopStart).padding(8.dp))
+        }
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds)
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Muted(sourceLabel(listing, copies), maxLines = 1)
+            mark?.let { SellerMark(it) }
         }
+    }
+}
+
+/** A saved search's words and name, changed together; new words ask the markets again. */
+@Composable
+private fun ChangeSearchDialog(name: String, term: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var newTerm by remember { mutableStateOf(term) }
+    var newName by remember { mutableStateOf(name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Change the search") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(newTerm, { newTerm = it }, Modifier.fillMaxWidth(), label = { Text("Searched for") }, singleLine = true)
+                OutlinedTextField(newName, { newName = it }, Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(enabled = newTerm.isNotBlank(), onClick = { onSave(newName, newTerm) }) { Text("Search again") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** A tick over a picked offer's photo. */
+@Composable
+private fun PickedMark(modifier: Modifier) {
+    Icon(
+        Icons.Outlined.Check, "Picked",
+        modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary).padding(3.dp),
+        tint = MaterialTheme.colorScheme.onPrimary,
+    )
+}
+
+/** Where the user stands with this offer's seller. */
+@Composable
+private fun SellerMark(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
