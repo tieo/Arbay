@@ -4,6 +4,7 @@ import io.github.tieo.arbay.chat.Chat
 import io.github.tieo.arbay.chat.ChatBrowser
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.ktor.http.*
@@ -20,8 +21,11 @@ private data class ReplyBody(val text: String)
 fun Route.chatRoutes() {
     route("/api/chat") {
         get("/account") { call.respond(Chat.account()) }
-        post("/account/signin") { call.respond(Chat.beginSignIn()) }
-        post("/account/signin/done") { call.respond(Chat.endSignIn()) }
+        // Signing in from inside the app; what is typed is passed to the page and not kept.
+        post("/signin") { call.chat { call.respond(Chat.beginSignIn()) } }
+        get("/signin") { call.chat { call.respond(Chat.signInStep()) } }
+        post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>())) } }
+        post("/signin/cancel") { call.respond(Chat.cancelSignIn()) }
 
         get("/conversations") { call.chat { call.respond(Chat.conversations()) } }
         get("/conversations/{id}") {

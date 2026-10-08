@@ -11,6 +11,8 @@ import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.loadServerSettings
 import io.github.tieo.arbay.positionFromHomeTown
 import io.github.tieo.arbay.state.SharedState
+import io.github.tieo.arbay.state.followLive
+import io.github.tieo.arbay.model.LiveKind
 import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
@@ -48,6 +50,21 @@ fun ArbayWeb() {
     LaunchedEffect(Unit) { app.products.loadProducts() }
     LaunchedEffect(Unit) { app.chat.watch() }
     LaunchedEffect(Unit) { SharedState.follow(app.client) }
+    // What changes anywhere shows here at once; what an assistant is talking about opens here.
+    LaunchedEffect(Unit) {
+        followLive(app.client) { event ->
+            when (event.kind) {
+                LiveKind.SAVED_SEARCHES -> app.products.loadProducts()
+                LiveKind.STATE -> SharedState.refresh()
+                LiveKind.CHAT -> { app.chat.refresh(); app.chat.loadReview() }
+                LiveKind.SHOW -> event.path?.let { path ->
+                    val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
+                    if (route != Router.route) Router.go(route)
+                }
+                LiveKind.KEEPALIVE -> Unit
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         // The browser's own position where the site may already read it, never asking from here;
         // the home town otherwise.

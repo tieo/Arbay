@@ -23,6 +23,9 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
+import io.github.tieo.arbay.model.SignInAsk
+import io.github.tieo.arbay.model.SignInStep
+import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.tidyTitle
@@ -181,27 +184,68 @@ private fun Bubble(m: ChatMessage) {
     }
 }
 
-/** Whether Arbay can write from the user's Kleinanzeigen account, and the way to let it. */
+/** Whether Arbay can write from the user's Kleinanzeigen account, and signing in to it from here. */
 @Composable
 fun AccountSection(app: WebApp) {
     val chat = app.chat
     val account by chat.account.collectAsState()
+    val signIn by chat.signIn.collectAsState()
+    val busy by chat.signInBusy.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     val a = account
+    val step = signIn
     H3 { Text("Kleinanzeigen") }
     when {
+        step != null -> SignInSteps(app, step, busy)
         a == null -> P({ classes("muted") }) { Text("Asking the server") }
         a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
-        a.signingIn -> {
-            P({ classes("muted") }) { Text("The sign-in page is open in Arbay's browser.") }
-            Div({ classes("actions") }) {
-                A(href = "/captcha/vnc.html?autoconnect=true&resize=scale", attrs = { classes("quiet", "link-button"); attr("target", "_blank") }) { Icon(Glyph.External); Text("Open it") }
-                PrimaryButton("I'm signed in", Glyph.Check) { chat.endSignIn() }
-            }
-        }
         else -> {
             a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
-            Div({ classes("actions") }) { PrimaryButton("Sign in") { chat.beginSignIn() } }
+            Div({ classes("actions") }) { PrimaryButton(if (busy) "Opening the sign-in" else "Sign in", enabled = !busy) { chat.beginSignIn() } }
+        }
+    }
+}
+
+/**
+ * The market's login page as it stands: a field for what it asks (e-mail, password, a code), and
+ * its picture, which takes clicks for anything else it shows.
+ */
+@Composable
+private fun SignInSteps(app: WebApp, step: SignInStep, busy: Boolean) {
+    val chat = app.chat
+    var value by remember(step.step) { mutableStateOf("") }
+    val label = when (step.step) {
+        SignInAsk.EMAIL -> "E-mail"
+        SignInAsk.PASSWORD -> "Password"
+        SignInAsk.CODE -> "Code"
+        else -> null
+    }
+    step.error?.let { P({ classes("sign-in-error") }) { Text(it) } }
+    Form(attrs = {
+        classes("inline-form")
+        addEventListener("submit") { it.preventDefault(); if (value.isNotBlank() && !busy) chat.signInWith(value) }
+    }) {
+        if (label != null) {
+            Input(if (step.step == SignInAsk.PASSWORD) InputType.Password else if (step.step == SignInAsk.EMAIL) InputType.Email else InputType.Text) {
+                classes("control"); placeholder(label); attr("aria-label", label); attr("autofocus", "")
+                if (step.step == SignInAsk.CODE) attr("autocomplete", "one-time-code")
+                if (busy) attr("disabled", "")
+                value(value); onInput { value = it.value }
+            }
+            PrimaryButton(if (busy) "Waiting for Kleinanzeigen" else "Continue", enabled = !busy && value.isNotBlank()) {}
+        }
+        QuietButton("Cancel") { chat.cancelSignIn() }
+    }
+    step.picture?.let { picture ->
+        Img(src = "data:image/jpeg;base64,$picture", alt = "The Kleinanzeigen sign-in page") {
+            classes("sign-in-page")
+            addEventListener("click") { e ->
+                val img = e.target as org.w3c.dom.HTMLImageElement
+                val m = e as org.w3c.dom.events.MouseEvent
+                if (img.clientWidth > 0 && step.width > 0) {
+                    chat.signInTap(m.offsetX * step.width / img.clientWidth, m.offsetY * step.height / img.clientHeight)
+                }
+            }
         }
     }
 }

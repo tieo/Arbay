@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.crawler.SavedSearchMonitor
+import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.LiveKind
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
@@ -45,7 +47,7 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
 
         post {
             val product = call.receive<TrackedProduct>()
-            call.respond(HttpStatusCode.Created, repo.create(product))
+            call.respond(HttpStatusCode.Created, repo.create(product)).also { Live.changed(LiveKind.SAVED_SEARCHES) }
         }
 
         put("/{id}") {
@@ -53,12 +55,14 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             val product = call.receive<TrackedProduct>()
             if (product.id != id) throw BadRequestException("ID mismatch")
             val updated = repo.update(product) ?: throw NotFoundException("Product $id not found")
+            Live.changed(LiveKind.SAVED_SEARCHES)
             call.respond(updated)
         }
 
         delete("/{id}") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
             if (!repo.delete(id)) throw NotFoundException("Product $id not found")
+            Live.changed(LiveKind.SAVED_SEARCHES)
             call.respond(HttpStatusCode.NoContent)
         }
     }

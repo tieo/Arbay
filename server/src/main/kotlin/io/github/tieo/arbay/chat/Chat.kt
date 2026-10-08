@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.LiveKind
 import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
 import io.github.tieo.arbay.model.ReviewAnswer
@@ -12,6 +14,9 @@ import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.SignInAsk
+import io.github.tieo.arbay.model.SignInInput
+import io.github.tieo.arbay.model.SignInStep
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
 import java.util.UUID
@@ -90,17 +95,30 @@ object Chat {
         ChatAccount(signingIn = signingIn, problem = e.message)
     }
 
-    suspend fun beginSignIn(): ChatAccount {
-        ChatBrowser.call("signin")
-        signingIn = true
-        return account()
+    suspend fun beginSignIn(): SignInStep = step(ChatBrowser.call("signin")).also { signingIn = it.step != SignInAsk.DONE }
+
+    suspend fun signInStep(): SignInStep = step(ChatBrowser.call("signin_state"))
+
+    /** Types [input]'s value into what the page asks for, or clicks its point; nothing is kept. */
+    suspend fun signInWith(input: SignInInput): SignInStep {
+        val answer = if (input.value != null) ChatBrowser.call("signin_fill", 60_000, "value" to input.value)
+        else ChatBrowser.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
+        return step(answer).also { if (it.step == SignInAsk.DONE) { signingIn = false; Live.changed(LiveKind.CHAT) } }
     }
 
-    suspend fun endSignIn(): ChatAccount {
+    suspend fun cancelSignIn(): ChatAccount {
         signingIn = false
         ChatBrowser.call("signin_done")
         return account()
     }
+
+    private fun step(o: JsonObject) = SignInStep(
+        step = runCatching { SignInAsk.valueOf(o["step"]!!.str()!!.uppercase()) }.getOrDefault(SignInAsk.OTHER),
+        error = o["error"]?.str(),
+        picture = o["picture"]?.str(),
+        width = (o["width"] as? JsonPrimitive)?.intOrNull ?: 0,
+        height = (o["height"] as? JsonPrimitive)?.intOrNull ?: 0,
+    )
 
     // --- reading ---
 
@@ -116,10 +134,12 @@ object Chat {
 
     suspend fun markRead(id: String) {
         ChatBrowser.call("read", 30_000, "id" to id)
+        Live.changed(LiveKind.CHAT)
     }
 
     suspend fun reply(id: String, text: String) {
         ChatBrowser.call("reply", 60_000, "id" to id, "text" to text)
+        Live.changed(LiveKind.CHAT)
     }
 
     // --- sending to several sellers ---
@@ -183,8 +203,8 @@ object Chat {
         if (finished.size > 200) outbox.removeAll(finished.sortedBy { it.sendAt }.take(finished.size - 200).toSet())
     }
 
-    private fun persistOutbox() = runCatching { outboxFile.writeTextAtomically(json.encodeToString(outbox.toList())) }
-        .onFailure { log.error("Could not save the outbox: {}", it.message) }
+    private fun persistOutbox() = Live.changed(LiveKind.CHAT).let { runCatching { outboxFile.writeTextAtomically(json.encodeToString(outbox.toList())) }
+        .onFailure { log.error("Could not save the outbox: {}", it.message) } }
 
     // --- how the user's text blocks do ---
 
@@ -230,6 +250,7 @@ object Chat {
 
     fun updateSettings(new: ChatSettings): ChatSettings = synchronized(settingsFile) {
         settings = new
+        Live.changed(LiveKind.CHAT)
         runCatching { settingsFile.writeTextAtomically(json.encodeToString(new)) }
             .onFailure { log.error("Could not save chat settings: {}", it.message) }
         new

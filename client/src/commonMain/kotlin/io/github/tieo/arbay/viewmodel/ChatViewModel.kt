@@ -11,6 +11,9 @@ import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.SignInAsk
+import io.github.tieo.arbay.model.SignInInput
+import io.github.tieo.arbay.model.SignInStep
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -183,13 +186,34 @@ class ChatViewModel(
         viewModelScope.launch { attempt { _settings.value = client.updateChatSettings(new) } }
     }
 
-    fun beginSignIn() = viewModelScope.launch { attempt { _account.value = client.beginChatSignIn() } }
+    private val _signIn = MutableStateFlow<SignInStep?>(null)
+    /** Signing in from inside the app, while it is going on: what the market's page asks for now. */
+    val signIn: StateFlow<SignInStep?> = _signIn.asStateFlow()
 
-    fun endSignIn() = viewModelScope.launch {
+    private val _signInBusy = MutableStateFlow(false)
+    val signInBusy: StateFlow<Boolean> = _signInBusy.asStateFlow()
+
+    fun beginSignIn() = signInStep { client.beginChatSignIn() }
+
+    /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */
+    fun signInWith(value: String) = signInStep { client.chatSignInInput(SignInInput(value = value)) }
+
+    /** Tap the page at a point of its picture, in the page's own pixels. */
+    fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y)) }
+
+    fun cancelSignIn() = viewModelScope.launch {
+        _signIn.value = null
+        attempt { _account.value = client.cancelChatSignIn() }
+    }
+
+    private fun signInStep(call: suspend () -> SignInStep) = viewModelScope.launch {
+        _signInBusy.value = true
         attempt {
-            _account.value = client.endChatSignIn()
-            refresh()
+            val step = call()
+            _signIn.value = step.takeIf { it.step != SignInAsk.DONE }
+            if (step.step == SignInAsk.DONE) refresh()
         }
+        _signInBusy.value = false
     }
 
     fun dismissError() { _error.value = null }

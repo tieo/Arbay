@@ -204,6 +204,20 @@ class ArbayClient(
         client.delete("$baseUrl/api/auctions/reminders/${listingId.encodeURLPathPart()}")
     }
 
+    /** The server's changes as they happen, until the line drops (see LiveEvent). */
+    fun live(): Flow<LiveEvent> = flow {
+        client.prepareGet("$baseUrl/api/live") {
+            timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
+        }.execute { response ->
+            if (!response.status.isSuccess()) throw ArbayApiException(response.status.description)
+            val channel = response.bodyAsChannel()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                if (line.isNotBlank()) emit(streamJson.decodeFromString<LiveEvent>(line.trim()))
+            }
+        }
+    }
+
     /** The user's state that every device shares, by name. */
     suspend fun getState(): Map<String, kotlinx.serialization.json.JsonElement> = client.get("$baseUrl/api/state").body()
 
@@ -218,9 +232,15 @@ class ArbayClient(
 
     suspend fun chatAccount(): ChatAccount = client.get("$baseUrl/api/chat/account").body()
 
-    suspend fun beginChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/account/signin").body()
+    suspend fun beginChatSignIn(): SignInStep = client.post("$baseUrl/api/chat/signin").body()
 
-    suspend fun endChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/account/signin/done").body()
+    suspend fun chatSignInInput(input: SignInInput): SignInStep =
+        client.post("$baseUrl/api/chat/signin/input") {
+            contentType(ContentType.Application.Json)
+            setBody(input)
+        }.body()
+
+    suspend fun cancelChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/signin/cancel").body()
 
     suspend fun conversations(): List<Conversation> = client.get("$baseUrl/api/chat/conversations").body()
 

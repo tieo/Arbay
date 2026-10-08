@@ -64,6 +64,17 @@ import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
+import io.github.tieo.arbay.model.SignInAsk
+import io.github.tieo.arbay.model.SignInStep
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.IntSize
+import coil3.compose.AsyncImage
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Route
@@ -239,29 +250,70 @@ private fun Bubble(m: ChatMessage) {
     }
 }
 
-/** Whether Arbay can write from the user's Kleinanzeigen account, and the way to let it. */
+/** Whether Arbay can write from the user's Kleinanzeigen account, and signing in to it from here. */
 @Composable
 fun AccountPanel(session: Session) {
     val chat = session.chat
     val account by chat.account.collectAsState()
+    val signIn by chat.signIn.collectAsState()
+    val busy by chat.signInBusy.collectAsState()
     val a = account
     Panel {
         Text("Kleinanzeigen", style = MaterialTheme.typography.titleMedium)
+        val step = signIn
         when {
+            step != null -> SignInSteps(step, busy, onValue = chat::signInWith, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
             a == null -> Muted("Asking the server")
             a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
-            a.signingIn -> {
-                Muted("The sign-in page is open in Arbay's browser.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { openBrowser(session.client.baseUrl + "/captcha/vnc.html?autoconnect=true&resize=scale") }) { Text("Open it") }
-                    Button(onClick = { chat.endSignIn() }) { Text("I'm signed in") }
-                }
-            }
             else -> {
                 a.problem?.let { Muted(it) }
-                Button(onClick = { chat.beginSignIn() }) { Text("Sign in") }
+                Button(enabled = !busy, onClick = { chat.beginSignIn() }) { Text(if (busy) "Opening the sign-in" else "Sign in") }
             }
         }
+    }
+}
+
+/**
+ * The market's login page as it stands: a field for what it asks (e-mail, password, a code), and
+ * its picture, which takes taps for anything else it shows.
+ */
+@Composable
+private fun SignInSteps(step: SignInStep, busy: Boolean, onValue: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
+    var value by remember(step.step) { mutableStateOf("") }
+    val label = when (step.step) {
+        SignInAsk.EMAIL -> "E-mail"
+        SignInAsk.PASSWORD -> "Password"
+        SignInAsk.CODE -> "Code"
+        else -> null
+    }
+    step.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    if (label != null) {
+        OutlinedTextField(
+            value, { value = it }, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true, enabled = !busy,
+            visualTransformation = if (step.step == SignInAsk.PASSWORD) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = when (step.step) { SignInAsk.EMAIL -> KeyboardType.Email; SignInAsk.PASSWORD -> KeyboardType.Password; else -> KeyboardType.Number },
+            ),
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (label != null) Button(enabled = !busy && value.isNotBlank(), onClick = { onValue(value) }) { Text(if (busy) "Waiting for Kleinanzeigen" else "Continue") }
+        TextButton(onClick = onCancel) { Text("Cancel") }
+    }
+    step.picture?.let { picture ->
+        var size by remember { mutableStateOf(IntSize.Zero) }
+        AsyncImage(
+            model = "data:image/jpeg;base64,$picture",
+            contentDescription = "The Kleinanzeigen sign-in page",
+            modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).border(1.dp, arbay.line, MaterialTheme.shapes.small)
+                .onSizeChanged { size = it }
+                .pointerInput(step) {
+                    detectTapGestures { at ->
+                        if (size.width > 0 && step.width > 0) onTap(at.x.toDouble() * step.width / size.width, at.y.toDouble() * step.height / size.height)
+                    }
+                },
+            contentScale = ContentScale.FillWidth,
+        )
     }
 }
 

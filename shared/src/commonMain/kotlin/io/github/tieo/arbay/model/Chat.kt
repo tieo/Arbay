@@ -22,6 +22,27 @@ data class ChatAccount(
     val problem: String? = null,
 )
 
+/**
+ * Where signing in to the market stands, as the app shows it: what the login page asks for, what it
+ * said went wrong, and a picture of the page for anything else it shows (a captcha, a choice), which
+ * the user answers by tapping the picture.
+ */
+@Serializable
+data class SignInStep(
+    val step: SignInAsk,
+    val error: String? = null,
+    /** The page as a JPEG, base64. */
+    val picture: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+@Serializable
+enum class SignInAsk { EMAIL, PASSWORD, CODE, OTHER, DONE }
+
+@Serializable
+data class SignInInput(val value: String? = null, val x: Double? = null, val y: Double? = null)
+
 @Serializable
 data class Conversation(
     val id: String,

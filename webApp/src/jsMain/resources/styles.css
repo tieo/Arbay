@@ -678,3 +678,5 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .template-editor { display: flex; flex-direction: column; gap: 6px; }
 .review-answer { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 6px 12px; text-decoration: none; border-left: 2px solid var(--line); margin: 4px 0; }
 .review-answer:hover { border-left-color: var(--accent); }
+.sign-in-page { width: 100%; border: 1px solid var(--line); border-radius: var(--radius-small); cursor: pointer; }
+.sign-in-error { color: var(--danger); }

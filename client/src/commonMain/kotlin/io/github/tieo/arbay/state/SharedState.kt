@@ -51,6 +51,12 @@ object SharedState {
         }
     }
 
+    /** Take the server's copy now rather than at the next minute: it just changed. */
+    fun refresh() {
+        val c = client ?: return
+        scope.launch { pull(c) }
+    }
+
     fun put(key: String, value: JsonElement) {
         val c = client ?: return
         scope.launch { runCatching { c.putState(key, value) } }

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.mcp
 
+import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
@@ -138,6 +139,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 .sortedBy { it.effectivePrice.amount }
                 .take(args.int("limit") ?: 40)
             shown.forEach { seen[it.id] = it }
+            // The user sees what is being talked about: the same search opens on their screens.
+            Live.show(args.str("saved_search_id")?.let { "/saved/${it.encodeURLPathPart()}" } ?: "/search/${words.encodeURLPathPart()}")
             buildString {
                 appendLine("${shown.size} of ${listings.distinctBy { it.id }.size} offers for \"$words\":")
                 shown.forEach { appendLine(it.line()) }
@@ -155,6 +158,31 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             }
             if (!detail.status.isSuccess() || detail.status.value == 204) return@tool l.line() + "\nThe market gave no more than this."
             l.line() + "\n" + detail.bodyAsText()
+        }
+
+        tool(
+            "show_on_screen",
+            "Open a place in Arbay on every screen the user has it open on, so they see what is being talked about.",
+            props = {
+                string("saved_search_id", "Open this saved search")
+                string("words", "Open a search for these words")
+                string("listing_id", "Open this offer, inside the search it came from (give saved_search_id or words too)")
+                string("conversation_id", "Open this conversation")
+                string("place", "Or one of: searches, messages, free_items, settings, vehicle_search")
+            },
+        ) { args ->
+            val search = args.str("saved_search_id")?.let { "/saved/${it.encodeURLPathPart()}" }
+                ?: args.str("words")?.let { "/search/${it.encodeURLPathPart()}" }
+            val path = when {
+                args.str("conversation_id") != null -> "/inbox/${args.str("conversation_id")!!.encodeURLPathPart()}"
+                search != null -> search + (args.str("listing_id")?.let { "/${it.encodeURLPathPart()}" } ?: "")
+                else -> when (args.str("place")) {
+                    "messages" -> "/inbox"; "free_items" -> "/free"; "settings" -> "/settings"; "vehicle_search" -> "/vehicle"
+                    else -> "/"
+                }
+            }
+            Live.show(path)
+            "Showing $path."
         }
 
         tool(
@@ -178,7 +206,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val p = getJson<TrackedProduct>("/api/products/${id.encodeURLPathPart()}")
             val next = p.copy(name = args.str("name") ?: p.name, searchQuery = p.searchQuery.copy(text = args.str("words") ?: p.searchQuery.text))
             val r = http.put("$base/api/products/${id.encodeURLPathPart()}") { contentType(ContentType.Application.Json); setBody(json.encodeToString(TrackedProduct.serializer(), next)) }
-            if (r.status.isSuccess()) "Changed: ${next.name} (\"${next.searchQuery.text}\")" else "Not changed: ${r.bodyAsText()}"
+            if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
+            Live.show("/saved/${id.encodeURLPathPart()}")
+            "Changed: ${next.name} (\"${next.searchQuery.text}\")"
         }
 
         tool(
@@ -415,7 +445,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private companion object {
-        val READ_ONLY = setOf("search", "offer_details", "recent_searches", "seller_account", "outbox", "read_conversation", "draft_messages")
+        val READ_ONLY = setOf("show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "read_conversation", "draft_messages")
     }
 }
 

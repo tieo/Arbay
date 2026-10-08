@@ -10,6 +10,7 @@ import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.auctionReminderRoutes
 import io.github.tieo.arbay.routes.chatRoutes
 import io.github.tieo.arbay.routes.userStateRoutes
+import io.github.tieo.arbay.routes.liveRoutes
 import io.github.tieo.arbay.routes.mcpRoutes
 import io.github.tieo.arbay.SERVER_PORT
 import io.github.tieo.arbay.routes.importSettingsRoutes
@@ -44,6 +45,7 @@ fun Application.configureRouting() {
         auctionReminderRoutes()
         chatRoutes()
         userStateRoutes()
+        liveRoutes()
         mcpRoutes("http://127.0.0.1:$SERVER_PORT")
         placeRoutes()
         webAppRoutes()

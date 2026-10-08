@@ -10,6 +10,10 @@ import io.github.tieo.arbay.debug.debugJson
 import io.github.tieo.arbay.debug.debugSnapshotJson
 import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.state.SharedState
+import io.github.tieo.arbay.state.followLive
+import io.github.tieo.arbay.model.LiveKind
+import io.github.tieo.arbay.navigation.Route
+import io.github.tieo.arbay.ui.Navigator
 import io.github.tieo.arbay.ui.ArbayApp
 import io.github.tieo.arbay.ui.ArbayTheme
 import io.github.tieo.arbay.ui.Session
@@ -49,7 +53,23 @@ fun App() {
         LaunchedEffect(Unit) { session.products.loadProducts() }
         LaunchedEffect(Unit) { session.chat.watch() }
         LaunchedEffect(Unit) { SharedState.follow(client) }
+        val navigator = remember { Navigator() }
+        // What changes anywhere shows here at once; what an assistant is talking about opens here.
+        LaunchedEffect(Unit) {
+            followLive(client) { event ->
+                when (event.kind) {
+                    LiveKind.SAVED_SEARCHES -> session.products.loadProducts()
+                    LiveKind.STATE -> SharedState.refresh()
+                    LiveKind.CHAT -> { session.chat.refresh(); session.chat.loadReview() }
+                    LiveKind.SHOW -> event.path?.let { path ->
+                        val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
+                        if (route != navigator.current) navigator.go(route)
+                    }
+                    LiveKind.KEEPALIVE -> Unit
+                }
+            }
+        }
 
-        ArbayApp(session)
+        ArbayApp(session, navigator)
     }
 }

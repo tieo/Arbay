@@ -7,13 +7,18 @@ a bearer token that the site hands out to a signed-in browser, so every call her
 inside a page of that browser: the cookies, the fingerprint and the IP are the ones the user signed
 in with, and the traffic looks like the site's own.
 
-Signing in is done by the user, by hand, in this same browser over noVNC (captcha_gate.start_viewer):
-no password ever reaches Arbay, and the session lives in the profile directory across restarts.
+Signing in is done by the user from inside Arbay: the sidecar says what the login page asks (e-mail,
+password, a code) with a picture of the page, types what the user enters, and passes clicks on the
+picture through for anything else the page shows. What is typed goes to the page and nowhere else;
+the session then lives in the profile directory across restarts.
 
 Protocol: one JSON object per line on stdin, one JSON answer per line on stdout, in order.
   {"op": "status"}                                  -> {"ok": true, "signedIn": bool, "userId": .., "name": ..}
-  {"op": "signin"}                                  -> opens the login page and the viewer
-  {"op": "signin_done"}                             -> closes the viewer
+  {"op": "signin"}                                  -> opens the login page; answers like signin_state
+  {"op": "signin_state"}                            -> {"ok": true, "step": "email"|"password"|"code"|"other"|"done", "error": .., "picture": <jpeg base64>, "width": .., "height": ..}
+  {"op": "signin_fill", "value": ".."}              -> types into the field the page asks for and submits; answers like signin_state
+  {"op": "signin_click", "x": .., "y": ..}          -> clicks the page at a point of its picture; answers like signin_state
+  {"op": "signin_done"}                             -> leaves the login page
   {"op": "conversations", "page": 0, "size": 30}    -> {"ok": true, "data": <gateway payload>}
   {"op": "conversation", "id": ".."}                -> {"ok": true, "data": <gateway payload>}
   {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true}
@@ -29,8 +34,6 @@ import os
 import sys
 
 import zendriver as zd
-
-import captcha_gate
 
 CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_CHAT_PROFILE", os.path.expanduser("~/.arbay/chat-profile"))
@@ -155,11 +158,65 @@ class Chat:
         self.token = None
         self.signing = True
         await self.tab.get(LOGIN_URL)
-        captcha_gate.start_viewer(os.environ.get("DISPLAY", ":97"))
-        return {"ok": True}
+        await asyncio.sleep(3)
+        return await self.signin_state()
+
+    async def signin_state(self) -> dict:
+        """What the login page asks for now, read from its visible fields."""
+        found = await self.tab.evaluate("""
+            (() => {
+                const shown = e => e && e.offsetParent !== null && !e.disabled;
+                const pick = sel => [...document.querySelectorAll(sel)].find(shown);
+                const err = [...document.querySelectorAll('[role=alert], .ulp-input-error-message, .error, [id*=error]')]
+                    .filter(shown).map(e => e.innerText.trim()).filter(Boolean).join(' ');
+                let step = 'other';
+                if (pick('input[type=password]')) step = 'password';
+                else if (pick('input[autocomplete=one-time-code], input[name=code], input[inputmode=numeric]')) step = 'code';
+                else if (pick('input[type=email], input[name=username], input[name=email]')) step = 'email';
+                return JSON.stringify({step, error: err, host: location.host});
+            })()
+        """)
+        info = json.loads(found)
+        if info["host"] == "www.kleinanzeigen.de":
+            self.signing = False
+            self.token = None
+            status = await self.status()
+            if status.get("signedIn"):
+                return {"ok": True, "step": "done"}
+        picture = await self.tab.screenshot_b64(format="jpeg")
+        size = json.loads(await self.tab.evaluate("JSON.stringify([innerWidth, innerHeight])"))
+        return {"ok": True, "step": info["step"], "error": info["error"] or None, "picture": picture, "width": size[0], "height": size[1]}
+
+    async def signin_fill(self, value: str) -> dict:
+        state = await self.signin_state()
+        selector = {
+            "email": "input[type=email], input[name=username], input[name=email]",
+            "password": "input[type=password]",
+            "code": "input[autocomplete=one-time-code], input[name=code], input[inputmode=numeric]",
+        }.get(state["step"])
+        if not selector:
+            return state
+        fields = await self.tab.select_all(selector)
+        field = None
+        for f in fields:
+            if await f.apply("(e) => e.offsetParent !== null"):
+                field = f
+                break
+        field = field or fields[0]
+        await field.click()
+        await field.clear_input()
+        await field.send_keys(value)
+        # The page's own submit, as pressing Enter in its form would.
+        await field.apply("(e) => { const b = e.form && e.form.querySelector('button[type=submit], button[name=action]'); if (b) b.click(); else if (e.form) e.form.requestSubmit(); }")
+        await asyncio.sleep(4)
+        return await self.signin_state()
+
+    async def signin_click(self, x: float, y: float) -> dict:
+        await self.tab.mouse_click(x, y)
+        await asyncio.sleep(3)
+        return await self.signin_state()
 
     async def signin_done(self) -> dict:
-        captcha_gate.stop_viewer()
         self.token = None
         self.signing = False
         await self.tab.get(ROOT + "/m-nachrichten.html")
@@ -241,6 +298,12 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.signin()
     if op == "signin_done":
         return await chat.signin_done()
+    if op == "signin_state":
+        return await chat.signin_state()
+    if op == "signin_fill":
+        return await chat.signin_fill(req["value"])
+    if op == "signin_click":
+        return await chat.signin_click(float(req["x"]), float(req["y"]))
     if op == "conversations":
         return await chat.conversations(int(req.get("page", 0)), int(req.get("size", 30)))
     if op == "conversation":
