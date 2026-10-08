@@ -161,6 +161,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             l.line() + "\n" + detail.bodyAsText()
         }
 
+        tool("whats_on_screen", "Which page of Arbay each of the user's devices shows right now, newest first: a search, an offer in it, a conversation.") {
+            Live.onScreen().joinToString("\n") { "${it.device}: ${it.path} (since ${it.at})" }.ifEmpty { "No app is open." }
+        }
+
         tool(
             "show_on_screen",
             "Open a place in Arbay on every screen the user has it open on, so they see what is being talked about.",
@@ -460,7 +464,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private companion object {
-        val READ_ONLY = setOf("show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "read_conversation", "draft_messages")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "read_conversation", "draft_messages")
     }
 }
 

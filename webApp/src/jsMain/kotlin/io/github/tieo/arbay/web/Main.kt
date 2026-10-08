@@ -72,6 +72,8 @@ fun ArbayWeb() {
         positionFromHomeTown(app.client)
     }
     val route = Router.route
+    // Which page this is, so an assistant asked about "what I am looking at" knows.
+    LaunchedEffect(route) { runCatching { app.client.reportScreen("browser", route.path()) } }
     Div({ classes("app") }) {
         Rail(app, route)
         when (route) {

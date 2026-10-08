@@ -12,6 +12,8 @@ import io.github.tieo.arbay.results.setSort
 import io.github.tieo.arbay.results.toggleCondition
 import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSaleType
+import io.github.tieo.arbay.results.toggleHiddenSaleType
+import io.github.tieo.arbay.results.toggleHiddenCondition
 import io.github.tieo.arbay.results.toggleSaved
 import io.github.tieo.arbay.results.toggleUnstatedCondition
 import io.github.tieo.arbay.navigation.Panel
@@ -326,15 +328,22 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
         }
 
         Condition.entries.filter { (narrowed.conditionCounts[it] ?: 0) > 0 }.forEach { value ->
-            Chip("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) { state.toggleCondition(app.products, value) }
+            HidableChip(
+                "${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions, value in narrowing.hiddenConditions, value.label.lowercase(),
+                onToggle = { state.toggleCondition(app.products, value) }, onHide = { state.toggleHiddenCondition(app.products, value) },
+            )
         }
         // "Not stated" only matters once a condition is picked: until then every listing shows.
         narrowed.conditionCounts[null]?.takeIf { it > 0 && narrowing.conditions.isNotEmpty() }?.let { count ->
             Chip("Not stated $count", narrowing.unstatedCondition) { state.toggleUnstatedCondition(app.products) }
         }
-        if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1) {
+        if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1 || narrowing.hiddenSaleTypes.isNotEmpty()) {
             SaleType.entries.filter { (narrowed.saleTypeCounts[it] ?: 0) > 0 }.forEach { value ->
-                Chip("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) { state.toggleSaleType(app.products, value) }
+                HidableChip(
+                    "${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes, value in narrowing.hiddenSaleTypes,
+                    if (value == SaleType.AUCTION) "auctions" else value.label.lowercase(),
+                    onToggle = { state.toggleSaleType(app.products, value) }, onHide = { state.toggleHiddenSaleType(app.products, value) },
+                )
             }
         }
         if (state.newCount > 0) Chip("New ${state.newCount}", narrowing.newOnly) { state.toggleNewOnly() }

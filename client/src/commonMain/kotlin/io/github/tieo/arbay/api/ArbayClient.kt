@@ -218,6 +218,14 @@ class ArbayClient(
         }
     }
 
+    /** Tell the server which page this app shows (see OnScreen). */
+    suspend fun reportScreen(device: String, path: String) {
+        client.post("$baseUrl/api/live/here") {
+            contentType(ContentType.Application.Json)
+            setBody(OnScreen(device, path))
+        }
+    }
+
     /** The user's state that every device shares, by name. */
     suspend fun getState(): Map<String, kotlinx.serialization.json.JsonElement> = client.get("$baseUrl/api/state").body()
 

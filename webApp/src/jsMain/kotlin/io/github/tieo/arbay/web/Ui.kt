@@ -115,6 +115,24 @@ fun Chip(text: String, on: Boolean, onToggle: () -> Unit) {
     }
 }
 
+/**
+ * A choice that can also be put out of sight: the chip picks it, the eye beside it hides it. A
+ * hidden one is struck through, and pressing either part brings it back.
+ */
+@Composable
+fun HidableChip(text: String, on: Boolean, hidden: Boolean, what: String, onToggle: () -> Unit, onHide: () -> Unit) {
+    Span({ classes(*listOfNotNull("chip-pair", "hidden".takeIf { hidden }).toTypedArray()) }) {
+        Chip(text, on && !hidden) { if (hidden) onHide() else onToggle() }
+        Button(attrs = {
+            attr("type", "button")
+            classes(*listOfNotNull("chip-hide", "on".takeIf { hidden }).toTypedArray())
+            val label = if (hidden) "Show $what again" else "Hide $what"
+            attr("title", label); attr("aria-label", label); attr("aria-pressed", hidden.toString())
+            onClick { onHide() }
+        }) { Icon(Glyph.EyeOff, 14) }
+    }
+}
+
 /** A switch with its label beside it. */
 @Composable
 fun Switch(label: String, on: Boolean, onChange: (Boolean) -> Unit) {

@@ -7,6 +7,10 @@ import io.ktor.http.ContentType
 import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.github.tieo.arbay.model.OnScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -18,6 +22,12 @@ import kotlinx.serialization.json.Json
  * line every 20 seconds keeps proxies from closing a line that is quiet.
  */
 fun Route.liveRoutes() {
+    // Which page each app shows, so an assistant can know what the user is looking at.
+    post("/api/live/here") {
+        Live.here(call.receive<OnScreen>())
+        call.respond(io.ktor.http.HttpStatusCode.NoContent)
+    }
+
     get("/api/live") {
         call.respondTextWriter(ContentType.parse("application/x-ndjson")) {
             val lines = Channel<LiveEvent>(Channel.UNLIMITED)

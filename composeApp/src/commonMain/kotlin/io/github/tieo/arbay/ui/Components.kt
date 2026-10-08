@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -105,6 +107,32 @@ fun Choice(text: String, on: Boolean, opens: Boolean = false, onClick: () -> Uni
             selectedLabelColor = MaterialTheme.colorScheme.onSurface,
         ),
     )
+}
+
+/**
+ * A choice that can also be put out of sight: the chip picks it, the eye beside it hides it. A
+ * hidden one is struck through, and pressing either part brings it back.
+ */
+@Composable
+fun HidableChoice(text: String, on: Boolean, hidden: Boolean, what: String, onToggle: () -> Unit, onHide: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(
+            selected = on && !hidden,
+            onClick = { if (hidden) onHide() else onToggle() },
+            label = { Text(text, maxLines = 1, textDecoration = if (hidden) TextDecoration.LineThrough else null) },
+            trailingIcon = {
+                Icon(
+                    Icons.Outlined.VisibilityOff, if (hidden) "Show $what again" else "Hide $what",
+                    Modifier.size(18.dp).clip(CircleShape).clickable(onClick = onHide),
+                    tint = if (hidden) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        )
+    }
 }
 
 /** Choices that wrap onto as many lines as they need. */

@@ -101,6 +101,8 @@ import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.results.toggleCondition
 import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSaleType
+import io.github.tieo.arbay.results.toggleHiddenSaleType
+import io.github.tieo.arbay.results.toggleHiddenCondition
 import io.github.tieo.arbay.results.toggleSaved
 import io.github.tieo.arbay.results.toggleUnstatedCondition
 
@@ -316,14 +318,25 @@ private fun NarrowingRow(session: Session, state: ResultsState, hiddenCount: Int
             Choice(label, narrowed.priceFiltered, opens = true) { bandDialog = true }
         }
         Condition.entries.filter { (narrowed.conditionCounts[it] ?: 0) > 0 }.forEach { value ->
-            item { Choice("${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions) { state.toggleCondition(products, value) } }
+            item {
+                HidableChoice(
+                    "${value.label} ${narrowed.conditionCounts[value]}", value in narrowing.conditions, value in narrowing.hiddenConditions, value.label.lowercase(),
+                    onToggle = { state.toggleCondition(products, value) }, onHide = { state.toggleHiddenCondition(products, value) },
+                )
+            }
         }
         narrowed.conditionCounts[null]?.takeIf { it > 0 && narrowing.conditions.isNotEmpty() }?.let { count ->
             item { Choice("Not stated $count", narrowing.unstatedCondition) { state.toggleUnstatedCondition(products) } }
         }
-        if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1) {
+        if (narrowed.saleTypeCounts.keys.filterNotNull().size > 1 || narrowing.hiddenSaleTypes.isNotEmpty()) {
             SaleType.entries.filter { (narrowed.saleTypeCounts[it] ?: 0) > 0 }.forEach { value ->
-                item { Choice("${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes) { state.toggleSaleType(products, value) } }
+                item {
+                    HidableChoice(
+                        "${value.label} ${narrowed.saleTypeCounts[value]}", value in narrowing.saleTypes, value in narrowing.hiddenSaleTypes,
+                        if (value == SaleType.AUCTION) "auctions" else value.label.lowercase(),
+                        onToggle = { state.toggleSaleType(products, value) }, onHide = { state.toggleHiddenSaleType(products, value) },
+                    )
+                }
             }
         }
         if (state.newCount > 0) item { Choice("New ${state.newCount}", narrowing.newOnly) { state.toggleNewOnly() } }

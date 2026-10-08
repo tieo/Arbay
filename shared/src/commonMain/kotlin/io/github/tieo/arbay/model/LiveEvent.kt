@@ -13,6 +13,10 @@ data class LiveEvent(
     val path: String? = null,
 )
 
+/** What one of the user's devices shows right now, as the app there reports it. */
+@Serializable
+data class OnScreen(val device: String, val path: String, val at: kotlin.time.Instant? = null)
+
 @Serializable
 enum class LiveKind {
     /** Saved searches changed. */

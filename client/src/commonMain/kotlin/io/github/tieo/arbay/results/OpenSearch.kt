@@ -188,6 +188,22 @@ private fun ResultsState.setConditions(products: ProductViewModel, next: Set<io.
     open.persist(products) { it.copy(condition = next.toList().takeIf { l -> l.isNotEmpty() }, conditionUnstated = unstated) }
 }
 
+/** Put a condition out of sight, or bring it back; hiding one that was picked unpicks it. */
+fun ResultsState.toggleHiddenCondition(products: ProductViewModel, value: io.github.tieo.arbay.model.Condition) {
+    val hidden = if (value in narrowing.hiddenConditions) narrowing.hiddenConditions - value else narrowing.hiddenConditions + value
+    val wanted = narrowing.conditions - hidden
+    setNarrowing(narrowing.copy(hiddenConditions = hidden, conditions = wanted))
+    open.persist(products) { it.copy(hiddenConditions = hidden.toList(), condition = wanted.toList().takeIf { l -> l.isNotEmpty() }) }
+}
+
+/** Put a way of being sold out of sight (auctions, say), or bring it back. */
+fun ResultsState.toggleHiddenSaleType(products: ProductViewModel, value: io.github.tieo.arbay.model.SaleType) {
+    val hidden = if (value in narrowing.hiddenSaleTypes) narrowing.hiddenSaleTypes - value else narrowing.hiddenSaleTypes + value
+    val wanted = narrowing.saleTypes - hidden
+    setNarrowing(narrowing.copy(hiddenSaleTypes = hidden, saleTypes = wanted))
+    open.persist(products) { it.copy(hiddenSaleTypes = hidden.toList(), saleTypes = wanted.toList().takeIf { l -> l.isNotEmpty() }) }
+}
+
 fun ResultsState.toggleSaleType(products: ProductViewModel, value: io.github.tieo.arbay.model.SaleType) {
     val next = if (value in narrowing.saleTypes) narrowing.saleTypes - value else narrowing.saleTypes + value
     setNarrowing(narrowing.copy(saleTypes = next))

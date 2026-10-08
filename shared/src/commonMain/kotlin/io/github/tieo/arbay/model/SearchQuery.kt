@@ -240,6 +240,11 @@ data class SearchQuery(
     val saleTypes: List<SaleType>? = null,
     /** Whether listings whose market never said how they are sold are shown. */
     val saleTypeUnstated: Boolean = true,
+    // Conditions and ways of being sold the reader put out of sight: never shown, whatever is
+    // picked above. Picking narrows to what is wanted; hiding takes away what is not, and keeps the
+    // rest, including whatever the market did not say.
+    val hiddenConditions: List<Condition> = emptyList(),
+    val hiddenSaleTypes: List<SaleType> = emptyList(),
     // How the results are ordered. Part of the search rather than of the screen showing it, so
     // reopening a saved search restores the order it was left in.
     val sort: SortMode? = null,

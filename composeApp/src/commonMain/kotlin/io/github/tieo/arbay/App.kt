@@ -70,6 +70,8 @@ fun App() {
             }
         }
 
+        // Which page this is, so an assistant asked about "what I am looking at" knows.
+        LaunchedEffect(navigator.current) { runCatching { client.reportScreen("phone", navigator.current.path()) } }
         ArbayApp(session, navigator)
     }
 }

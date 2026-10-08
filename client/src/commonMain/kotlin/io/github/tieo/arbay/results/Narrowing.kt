@@ -30,6 +30,8 @@ data class Narrowing(
     val saleTypes: Set<SaleType> = emptySet(),
     val unstatedSaleType: Boolean = true,
     val newOnly: Boolean = false,
+    val hiddenConditions: Set<Condition> = emptySet(),
+    val hiddenSaleTypes: Set<SaleType> = emptySet(),
 ) {
     companion object {
         /** What a saved search was last narrowed to. "New only" is never saved: the backlog it
@@ -44,6 +46,8 @@ data class Narrowing(
                 unstatedCondition = saved.conditionUnstated,
                 saleTypes = saved.saleTypes?.toSet() ?: emptySet(),
                 unstatedSaleType = saved.saleTypeUnstated,
+                hiddenConditions = saved.hiddenConditions.toSet(),
+                hiddenSaleTypes = saved.hiddenSaleTypes.toSet(),
             )
         }
     }
@@ -53,14 +57,16 @@ data class Narrowing(
  *  every condition. A listing whose market never said is its own answer ("Not stated") rather than
  *  being counted as used: a broken drive sold for parts and a working one were both "not new", so a
  *  search could not be told to leave the broken ones out. */
-fun conditionMatches(wanted: Set<Condition>, unstated: Boolean, condition: Condition?): Boolean = when {
+fun conditionMatches(wanted: Set<Condition>, unstated: Boolean, condition: Condition?, hidden: Set<Condition> = emptySet()): Boolean = when {
+    condition != null && condition in hidden -> false
     wanted.isEmpty() -> condition != null || unstated
     condition == null -> unstated
     else -> condition in wanted
 }
 
 /** Whether a listing sold this way belongs on a screen narrowed to [wanted]. */
-fun saleTypeMatches(wanted: Set<SaleType>, unstated: Boolean, saleType: SaleType?): Boolean = when {
+fun saleTypeMatches(wanted: Set<SaleType>, unstated: Boolean, saleType: SaleType?, hidden: Set<SaleType> = emptySet()): Boolean = when {
+    saleType != null && saleType in hidden -> false
     wanted.isEmpty() -> saleType != null || unstated
     saleType == null -> unstated
     else -> saleType in wanted
@@ -126,8 +132,8 @@ fun narrow(listings: List<Listing>, narrowing: Narrowing, newListingIds: Set<Str
     val active = if (!priceFiltered) allActive
         else allActive.filter { withinBand(it.displayAmount(), priceRange, priceMin, priceMax) }
     val displayed = active
-        .filter { conditionMatches(narrowing.conditions, narrowing.unstatedCondition, it.condition) }
-        .filter { saleTypeMatches(narrowing.saleTypes, narrowing.unstatedSaleType, it.saleType) }
+        .filter { conditionMatches(narrowing.conditions, narrowing.unstatedCondition, it.condition, narrowing.hiddenConditions) }
+        .filter { saleTypeMatches(narrowing.saleTypes, narrowing.unstatedSaleType, it.saleType, narrowing.hiddenSaleTypes) }
         .filter { !narrowing.newOnly || it.id in newListingIds }
     return Narrowed(
         allActive = allActive,
@@ -188,10 +194,10 @@ fun hiddenListings(
         droppedBySearch.filter { it.reason == DropReason.BLOCKED_WORD }.map { it.listing }
     val outOfBand = if (!narrowed.priceFiltered) emptyList()
         else narrowed.allActive.filterNot { narrowed.inPriceRange(it.displayAmount()) }
-    val inCondition = { l: Listing -> conditionMatches(narrowing.conditions, narrowing.unstatedCondition, l.condition) }
+    val inCondition = { l: Listing -> conditionMatches(narrowing.conditions, narrowing.unstatedCondition, l.condition, narrowing.hiddenConditions) }
     val wrongCondition = narrowed.active.filterNot(inCondition)
     val wrongSaleType = narrowed.active.filter(inCondition)
-        .filterNot { saleTypeMatches(narrowing.saleTypes, narrowing.unstatedSaleType, it.saleType) }
+        .filterNot { saleTypeMatches(narrowing.saleTypes, narrowing.unstatedSaleType, it.saleType, narrowing.hiddenSaleTypes) }
     val notNew = if (!narrowing.newOnly) emptyList()
         else narrowed.active.filter { inCondition(it) && it.id !in newListingIds }
 
