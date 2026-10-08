@@ -58,6 +58,8 @@ import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
 import io.github.tieo.arbay.chat.sellerMark
+import io.github.tieo.arbay.state.OfferNotes
+import androidx.compose.material3.TextButton
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
@@ -132,6 +134,10 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     listing.oldPrice?.let { Muted(it.format(), style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.LineThrough)) }
                 }
                 state.summary.againstMiddle(listing)?.let { Muted(it, style = MaterialTheme.typography.bodyMedium) }
+                if (OfferNotes.notes.collectAsState().value[listing.id] != null) Panel {
+                    NoteLine(listing.id, full = true)
+                    TextButton(onClick = { OfferNotes.set(listing.id, null) }) { Text("Remove the note") }
+                }
                 importVatNote(listing)?.let { Muted(it) }
 
                 Button(onClick = { openBrowser(listing.url) }, modifier = Modifier.fillMaxWidth()) {

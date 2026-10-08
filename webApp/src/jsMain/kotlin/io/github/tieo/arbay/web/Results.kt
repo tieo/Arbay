@@ -59,6 +59,9 @@ import io.github.tieo.arbay.results.narrow
 import io.github.tieo.arbay.results.priceSummary
 import io.github.tieo.arbay.results.sourceLabel
 import io.github.tieo.arbay.results.changeSavedSearch
+import io.github.tieo.arbay.state.OfferNotes
+import io.github.tieo.arbay.model.Verdict
+import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.results.withBand
 import io.github.tieo.arbay.viewmodel.PlatformStatus
@@ -385,6 +388,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
                 }
                 listingFoot(listing).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
                 SellerMarkLine(app, listing)
+                NoteLine(listing.id)
             }
             Div({ classes("offer-price") }) {
                 Price(listing.comparablePrice, lowest = lowest)
@@ -412,6 +416,17 @@ private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, acti
             }
         }
         Div({ classes("offer-actions") }) { IconButton(Glyph.EyeOff, "Hide this offer") { onHide() } }
+    }
+}
+
+/** The verdict on this offer, when one was written; "Avoid" alone in the warning colour. */
+@Composable
+fun NoteLine(listingId: String, full: Boolean = false) {
+    val notes by OfferNotes.notes.collectAsState()
+    val note = notes[listingId] ?: return
+    Span({ classes(*listOfNotNull("note", if (note.verdict == Verdict.AVOID) "avoid" else null, "full".takeIf { full }).toTypedArray()) }) {
+        B { Text(note.verdict.label) }
+        Text(" · " + note.text + if (full) "  (" + note.by + ")" else "")
     }
 }
 

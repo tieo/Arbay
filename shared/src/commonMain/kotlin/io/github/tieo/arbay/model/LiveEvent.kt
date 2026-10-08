@@ -30,3 +30,20 @@ enum class LiveKind {
     /** Nothing happened; keeps the line open through whatever sits in between. */
     KEEPALIVE,
 }
+
+/**
+ * A verdict on one offer with the reason for it, written by the user or by an assistant reading the
+ * ad for them, and shown wherever the offer is, so what was concluded in a conversation is on the
+ * screen and not only in it.
+ */
+@Serializable
+data class OfferNote(
+    val listingId: String,
+    val verdict: Verdict,
+    val text: String,
+    /** Who wrote it: "you", or the assistant that did. */
+    val by: String = "you",
+)
+
+@Serializable
+enum class Verdict(val label: String) { GOOD("Good"), ASK("Ask first"), CAREFUL("Careful"), AVOID("Avoid") }

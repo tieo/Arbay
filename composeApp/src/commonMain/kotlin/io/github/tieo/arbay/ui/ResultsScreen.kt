@@ -32,6 +32,12 @@ import androidx.compose.material3.Button
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import io.github.tieo.arbay.chat.sellerMark
+import io.github.tieo.arbay.state.OfferNotes
+import io.github.tieo.arbay.model.Verdict
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
 import io.github.tieo.arbay.results.changeSavedSearch
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -400,6 +406,7 @@ private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mar
             Muted((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "), maxLines = 1)
             listingFoot(listing).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString(" · "), maxLines = 1) }
             mark?.let { SellerMark(it) }
+            NoteLine(listing.id)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             PriceText(listing.comparablePrice, lowest = lowest)
@@ -458,6 +465,24 @@ private fun PickedMark(modifier: Modifier) {
         Icons.Outlined.Check, "Picked",
         modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary).padding(3.dp),
         tint = MaterialTheme.colorScheme.onPrimary,
+    )
+}
+
+/** The verdict on this offer, when one was written; "Avoid" alone in the warning colour. */
+@Composable
+fun NoteLine(listingId: String, full: Boolean = false) {
+    val notes by OfferNotes.notes.collectAsState()
+    val note = notes[listingId] ?: return
+    val avoid = note.verdict == Verdict.AVOID
+    Text(
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(note.verdict.label) }
+            append(" · " + note.text)
+            if (full) append("  (" + note.by + ")")
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (avoid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        maxLines = if (full) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
     )
 }
 

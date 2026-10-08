@@ -692,3 +692,9 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .chip-hide:hover { color: var(--text); }
 .chip-hide.on { color: var(--danger); }
 .chip-pair.hidden .chip { text-decoration: line-through; color: var(--muted); }
+
+/* A verdict written on an offer. */
+.note { font-size: 0.85em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note.full { white-space: normal; }
+.note.avoid { color: var(--danger); }
+.note-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-small); }

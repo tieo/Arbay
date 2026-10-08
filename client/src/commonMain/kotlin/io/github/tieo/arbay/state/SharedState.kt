@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.builtins.ListSerializer
+import io.github.tieo.arbay.model.OfferNote
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -70,6 +72,7 @@ object SharedState {
             ?: SearchHistoryStore.entries.value.takeIf { it.isNotEmpty() }?.let { put("searchHistory", SearchHistoryStore.asJson()) }
         server["hiddenOffers"]?.let { HiddenOffers.adopt(it) }
             ?: HiddenOffers.ids.value.takeIf { it.isNotEmpty() }?.let { put("hiddenOffers", HiddenOffers.asJson()) }
+        server["offerNotes"]?.let { OfferNotes.adopt(it) }
         server["look"]?.let(::adoptLook)
             ?: loadDeviceSettings().keys.takeIf { keys -> LOOK_SETTINGS.any { it in keys } }?.let { put("look", lookAsJson()) }
     }
@@ -88,6 +91,24 @@ object SharedState {
         fun s(k: String) = o[k]?.jsonPrimitive?.contentOrNull
         LookChoice.adopt(s("look"), s("brightness"), s("offerLayout"))
         s("currency")?.let { DisplayCurrency.adopt(it) }
+    }
+}
+
+/** Verdicts on offers, by the user or an assistant, by offer id (see OfferNote). */
+object OfferNotes {
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val _notes = MutableStateFlow<Map<String, OfferNote>>(emptyMap())
+    val notes: StateFlow<Map<String, OfferNote>> = _notes.asStateFlow()
+
+    /** Put a note on an offer, or take it off with null. */
+    fun set(listingId: String, note: OfferNote?) {
+        _notes.value = if (note == null) _notes.value - listingId else _notes.value + (listingId to note)
+        SharedState.put("offerNotes", json.encodeToJsonElement(ListSerializer(OfferNote.serializer()), _notes.value.values.toList()))
+    }
+
+    internal fun adopt(value: JsonElement) {
+        val list = runCatching { json.decodeFromJsonElement(ListSerializer(OfferNote.serializer()), value) }.getOrNull() ?: return
+        _notes.value = list.associateBy { it.listingId }
     }
 }
 

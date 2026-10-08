@@ -51,6 +51,7 @@ import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.newRule
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
+import io.github.tieo.arbay.state.OfferNotes
 import io.github.tieo.arbay.viewmodel.PlatformStatus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -421,6 +422,10 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             state.summary.againstMiddle(listing)?.let { Span({ classes("muted") }) { Text(it) } }
         }
         importVatNote(listing)?.let { P({ classes("muted", "small") }) { Text(it) } }
+        if (OfferNotes.notes.collectAsState().value[listing.id] != null) Div({ classes("note-panel") }) {
+            NoteLine(listing.id, full = true)
+            QuietButton("Remove the note") { OfferNotes.set(listing.id, null) }
+        }
 
         Div({ classes("actions") }) {
             A(href = listing.url, attrs = { classes("primary", "link-button"); attr("target", "_blank"); attr("rel", "noopener noreferrer") }) {

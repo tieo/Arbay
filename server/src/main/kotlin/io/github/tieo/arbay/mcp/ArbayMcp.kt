@@ -7,6 +7,8 @@ import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.OfferNote
+import io.github.tieo.arbay.model.Verdict
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.buyerProtection
@@ -247,6 +249,35 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val next = if (args.bool("bring_back") == true) now - ids.toSet() else now + ids
             http.put("$base/api/state/hiddenOffers") { contentType(ContentType.Application.Json); setBody(JsonArray(next.sorted().map(::JsonPrimitive)).toString()) }
             "${next.size} offers put away."
+        }
+
+        tool(
+            "note_offers",
+            "Put a verdict and its reason on offers, shown to the user on the offer's row and page on every device. Use after reading an ad, so what was concluded is on their screen. A note replaces the one before on that offer.",
+            props = {
+                putJsonObject("notes") {
+                    put("type", "array")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            putJsonObject("listing_id") { put("type", "string") }
+                            putJsonObject("verdict") { put("type", "string"); putJsonArray("enum") { Verdict.entries.forEach { add(JsonPrimitive(it.name)) } } }
+                            putJsonObject("text") { put("type", "string"); put("description", "The reason, short, in the user's language") }
+                        }
+                        putJsonArray("required") { add(JsonPrimitive("listing_id")); add(JsonPrimitive("verdict")); add(JsonPrimitive("text")) }
+                    }
+                }
+                required += "notes"
+            },
+        ) { args ->
+            val now = ((getJsonElement("/api/state") as? JsonObject)?.get("offerNotes") as? JsonArray).orEmpty()
+                .mapNotNull { runCatching { json.decodeFromJsonElement(OfferNote.serializer(), it) }.getOrNull() }
+            val added = (args["notes"] as? JsonArray).orEmpty().map { it as JsonObject }.map {
+                OfferNote(it.str("listing_id")!!, Verdict.valueOf(it.str("verdict")!!.uppercase()), it.str("text")!!, by = "Claude")
+            }
+            val next = now.filterNot { n -> added.any { it.listingId == n.listingId } } + added
+            http.put("$base/api/state/offerNotes") { contentType(ContentType.Application.Json); setBody(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(OfferNote.serializer()), next)) }
+            "Noted ${added.size} offers; ${next.size} notes in all."
         }
 
         tool("recent_searches", "The searches run lately on any device, newest first.") {

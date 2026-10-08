@@ -22,7 +22,7 @@ object UserStateStore {
     private val values = ConcurrentHashMap<String, JsonElement>()
 
     /** The names a device may write, so a typo cannot grow the store with entries nobody reads. */
-    val KEYS = setOf("searchHistory", "hiddenOffers", "look")
+    val KEYS = setOf("searchHistory", "hiddenOffers", "look", "offerNotes")
 
     init {
         file.readStore(log) { json.decodeFromString<Map<String, JsonElement>>(it) }?.let(values::putAll)
