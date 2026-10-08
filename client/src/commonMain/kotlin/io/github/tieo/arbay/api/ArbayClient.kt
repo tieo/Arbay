@@ -246,6 +246,7 @@ class ArbayClient(
     suspend fun chatAccount(): ChatAccount = client.get("$baseUrl/api/chat/account").body()
 
     suspend fun beginChatSignIn(): SignInStep = client.post("$baseUrl/api/chat/signin").body()
+    suspend fun chatSignInStep(): SignInStep = client.get("$baseUrl/api/chat/signin").body()
 
     suspend fun chatSignInInput(input: SignInInput): SignInStep =
         client.post("$baseUrl/api/chat/signin/input") {

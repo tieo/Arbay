@@ -115,6 +115,8 @@ class ChatViewModel(
             attempt {
                 val account = client.chatAccount()
                 _account.value = account
+                // A sign-in going on in Arbay's browser shows here too, at the step it has reached.
+                if (account.signingIn && _signIn.value == null) followSignIn()
                 _outbox.value = client.outbox()
                 if (account.signedIn) _conversations.value = client.conversations()
             }
@@ -214,6 +216,7 @@ class ChatViewModel(
     fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y)) }
 
     fun cancelSignIn() = viewModelScope.launch {
+        signInFollower?.cancel()
         _signIn.value = null
         attempt { _account.value = client.cancelChatSignIn() }
     }
@@ -221,11 +224,33 @@ class ChatViewModel(
     private fun signInStep(call: suspend () -> SignInStep) = viewModelScope.launch {
         _signInBusy.value = true
         attempt {
-            val step = call()
-            _signIn.value = step.takeIf { it.step != SignInAsk.DONE }
-            if (step.step == SignInAsk.DONE) refresh()
+            show(call())
+            followSignIn()
         }
         _signInBusy.value = false
+    }
+
+    private fun show(step: SignInStep) {
+        _signIn.value = step.takeIf { it.step != SignInAsk.DONE }
+        if (step.step == SignInAsk.DONE) refresh()
+    }
+
+    private var signInFollower: Job? = null
+
+    /**
+     * Keep the shown step the page's own while signing in: the page moves on by itself (a code
+     * sent, a check passed) and from other devices, not only from this one's buttons.
+     */
+    private fun followSignIn() {
+        if (rendersASample || signInFollower?.isActive == true) return
+        signInFollower = viewModelScope.launch {
+            if (_signIn.value == null) attempt { show(client.chatSignInStep()) }
+            while (isActive && _signIn.value != null) {
+                delay(4_000)
+                if (_signInBusy.value) continue
+                attempt { show(client.chatSignInStep()) }
+            }
+        }
     }
 
     fun dismissError() { _error.value = null }
