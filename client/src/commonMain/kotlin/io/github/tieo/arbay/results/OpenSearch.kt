@@ -97,6 +97,8 @@ class ResultsState(
     val hidden: List<Hidden>,
     val markets: List<PlatformId>,
     val setNarrowing: (Narrowing) -> Unit,
+    /** How often each Kleinanzeigen ad has been looked at, where known. */
+    val views: Map<String, Int> = emptyMap(),
 ) {
     /** The offers on screen, in order. */
     val shown: List<Listing> get() = narrowed.displayed
@@ -119,6 +121,7 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val blocked by vm.blockedTerms.collectAsState()
     val marketBasis by vm.marketBasis.collectAsState()
     val dropped by vm.droppedBySearch.collectAsState()
+    val views by vm.views.collectAsState()
 
     val savedBlocked = open.saved?.excludeKeywords.orEmpty()
     LaunchedEffect(view.query, view.category) {
@@ -150,12 +153,13 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     if (narrowing == null) narrowing = Narrowing.of(open.saved)
     val current = narrowing ?: Narrowing()
     val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
-    val narrowed = remember(listings, current, money, open.newListingIds) { narrow(listings, current, open.newListingIds) }
+    val scams = remember(fetched, views, money) { likelyScams(fetched, views) }
+    val narrowed = remember(listings, current, money, open.newListingIds, scams) { narrow(listings, current, open.newListingIds, scams.keys) }
     val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
-    val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped) {
-        hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds)
+    val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped, scams) {
+        hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds, scams)
     }
-    return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets) { narrowing = it }
+    return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets, { narrowing = it }, views)
 }
 
 // ── What the reader can change about an open search ────────────────────────

@@ -218,6 +218,11 @@ class ArbayClient(
         }
     }
 
+    /** How often each of these Kleinanzeigen ads has been looked at; others are left out. */
+    suspend fun viewCounts(ids: List<String>): Map<String, Int> = orElse(emptyMap()) {
+        client.get("$baseUrl/api/listings/views") { parameter("ids", ids.joinToString(",")) }.body()
+    }
+
     /** Tell the server which page this app shows (see OnScreen). */
     suspend fun reportScreen(device: String, path: String) {
         client.post("$baseUrl/api/live/here") {

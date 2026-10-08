@@ -142,11 +142,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 .sortedBy { it.effectivePrice.amount }
                 .take(args.int("limit") ?: 40)
             shown.forEach { seen[it.id] = it }
+            val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
             // The user sees what is being talked about: the same search opens on their screens.
             Live.show(args.str("saved_search_id")?.let { "/saved/${it.encodeURLPathPart()}" } ?: "/search/${words.encodeURLPathPart()}")
             buildString {
                 appendLine("${shown.size} of ${listings.distinctBy { it.id }.size} offers for \"$words\":")
-                shown.forEach { appendLine(it.line()) }
+                shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
                 if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; "))
             }
         }
@@ -429,6 +430,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" },
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
+        listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), url,
     ).joinToString(" | ")
 

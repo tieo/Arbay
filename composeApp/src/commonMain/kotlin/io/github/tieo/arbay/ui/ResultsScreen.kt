@@ -404,7 +404,7 @@ private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mar
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Muted((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "), maxLines = 1)
-            listingFoot(listing).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString(" · "), maxLines = 1) }
+            listingFoot(listing, state.views[listing.id]).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString(" · "), maxLines = 1) }
             mark?.let { SellerMark(it) }
             NoteLine(listing.id)
         }

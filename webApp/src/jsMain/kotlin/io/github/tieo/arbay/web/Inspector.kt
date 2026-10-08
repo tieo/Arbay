@@ -174,6 +174,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                         HiddenKind.Condition -> QuietButton("Show every condition") { state.showEveryCondition(app.products) }
                         HiddenKind.SaleType -> QuietButton("Show both") { state.showBothSaleTypes(app.products) }
                         HiddenKind.NotNew -> QuietButton("Show everything") { state.toggleNewOnly() }
+                        HiddenKind.LikelyScam -> {}
                         is HiddenKind.Search -> if (kind.reason == io.github.tieo.arbay.model.DropReason.VEHICLE_CRITERIA) {
                             QuietButton("Edit the criteria") { Router.replace(route.copy(panel = Panel.CRITERIA)) }
                         }

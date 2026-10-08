@@ -28,6 +28,13 @@ fun Route.listingRoutes(repo: ListingRepo) {
             call.respond(repo.search(query, limit))
         }
 
+        // How often each Kleinanzeigen ad has been looked at (see ViewCounts).
+        get("/views") {
+            val ids = call.queryParameters["ids"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?: throw BadRequestException("Missing ids")
+            call.respond(io.github.tieo.arbay.crawler.ViewCounts.of(ids))
+        }
+
         get("/price-history") {
             val query = call.queryParameters["q"] ?: throw BadRequestException("Missing query parameter 'q'")
             val platform = call.queryParameters["platform"]?.let {

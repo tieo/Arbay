@@ -386,7 +386,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
                 Span({ classes("offer-meta") }) {
                     Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
                 }
-                listingFoot(listing).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
+                listingFoot(listing, app.listings.views.collectAsState().value[listing.id]).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
                 SellerMarkLine(app, listing)
                 NoteLine(listing.id)
             }

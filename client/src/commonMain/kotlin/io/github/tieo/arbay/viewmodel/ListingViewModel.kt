@@ -817,6 +817,22 @@ class ListingViewModel(
                 }
                 accountForListingsWithoutAStatus(platforms)
             }
+            if (ranToTheEnd) loadViews()
+        }
+    }
+
+    private val _views = MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** How often each Kleinanzeigen ad in the results has been looked at, once asked. */
+    val views: StateFlow<Map<String, Int>> = _views
+
+    /** Ask for the view counts of the offers still for sale, cheapest first, where none is known yet. */
+    fun loadViews() {
+        if (rendersASample) return
+        val wanted = _allListings.value.filter { !it.sold && it.id !in _views.value }
+            .sortedBy { priceOf(it) }.map { it.id }.filter { it.startsWith("KLEINANZEIGEN:") }.distinct()
+        if (wanted.isEmpty()) return
+        viewModelScope.launch {
+            wanted.chunked(40).forEach { chunk -> _views.value = _views.value + client.viewCounts(chunk) }
         }
     }
 }

@@ -115,13 +115,14 @@ private fun vehicleSpecs(v: VehicleInfo): List<Spec> = buildList {
 }
 
 /** Where it is, how far, how old, how well it fits: the line under a listing's specs. */
-fun listingFoot(listing: Listing): List<String> = buildList {
+fun listingFoot(listing: Listing, views: Int? = null): List<String> = buildList {
     listing.location?.let { loc ->
         val place = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
         if (place.isNotBlank()) add(place)
     }
     listing.distanceKm?.let { add("${it.roundToInt()} km away") }
     listing.listingDate?.let { posted -> ageLabel(posted)?.let { add(it) } }
+    views?.let { add(if (it == 1) "seen once" else "seen $it times") }
     listing.matchScore?.let { add("${(it * 100).roundToInt()}% match") }
 }
 

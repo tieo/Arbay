@@ -119,7 +119,7 @@ private fun withinBand(amount: Long, range: ClosedFloatingPointRange<Float>, tra
 }
 
 /** Applies [narrowing] to the listings a search has on screen ([listings], sold ones included). */
-fun narrow(listings: List<Listing>, narrowing: Narrowing, newListingIds: Set<String>): Narrowed {
+fun narrow(listings: List<Listing>, narrowing: Narrowing, newListingIds: Set<String>, likelyScams: Set<String> = emptySet()): Narrowed {
     val allActive = listings.filter { !it.sold }
     val prices = allActive.map { it.displayAmount() }.sorted()
     val priceMin = (prices.firstOrNull() ?: 0L) / 100f
@@ -135,6 +135,7 @@ fun narrow(listings: List<Listing>, narrowing: Narrowing, newListingIds: Set<Str
         .filter { conditionMatches(narrowing.conditions, narrowing.unstatedCondition, it.condition, narrowing.hiddenConditions) }
         .filter { saleTypeMatches(narrowing.saleTypes, narrowing.unstatedSaleType, it.saleType, narrowing.hiddenSaleTypes) }
         .filter { !narrowing.newOnly || it.id in newListingIds }
+        .filter { it.id !in likelyScams }
     return Narrowed(
         allActive = allActive,
         priceMin = priceMin,
@@ -166,6 +167,7 @@ sealed interface HiddenKind {
     data object Condition : HiddenKind
     data object SaleType : HiddenKind
     data object NotNew : HiddenKind
+    data object LikelyScam : HiddenKind
     data class Search(val reason: DropReason, val detail: String?) : HiddenKind
 }
 
@@ -188,6 +190,7 @@ fun hiddenListings(
     blockedTerms: List<String>,
     droppedBySearch: List<DroppedListing>,
     newListingIds: Set<String>,
+    likelyScams: Map<String, String> = emptyMap(),
 ): List<Hidden> = buildList {
     val banned = fetched.filter { it.id in bannedIds }
     // By id: the list the words leave carries copies with their distance filled in, which are not
@@ -204,6 +207,10 @@ fun hiddenListings(
     val notNew = if (!narrowing.newOnly) emptyList()
         else narrowed.active.filter { inCondition(it) && it.id !in newListingIds }
 
+    val scams = narrowed.active.filter { it.id in likelyScams }
+    if (scams.isNotEmpty()) add(Hidden(HiddenKind.LikelyScam, "likely scams",
+        "Online a month or more, cheaper than most here, and seen at least three times as often as the usual offer: many buyers saw the price and none bought. " +
+            scams.joinToString(" ") { likelyScams.getValue(it.id) }, scams))
     if (banned.isNotEmpty()) add(Hidden(HiddenKind.YouHid, "you hid",
         "Listings you sent away with the bin on their card.", banned))
     if (byWord.isNotEmpty()) add(Hidden(HiddenKind.BlockedWords, "your blocked words",
