@@ -3,6 +3,7 @@ package io.github.tieo.arbay.chat
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.Shipping
 import io.github.tieo.arbay.model.buyerProtection
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.fillIn
@@ -34,13 +35,21 @@ data class SendLine(
  * in person, so nothing comes off. An ad that ships without saying for how much gets the price
  * before shipping and says so, rather than a guessed shipping cost.
  */
-fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits: Map<String, String>, blockIds: List<String> = emptyList()): List<SendLine> =
+fun planSend(
+    listings: List<Listing>,
+    allInEur: Double?,
+    template: String,
+    edits: Map<String, String>,
+    blockIds: List<String> = emptyList(),
+    /** Shipping as each ad's own page states it, which beats the card's "ships". */
+    pageShipping: Map<String, Shipping> = emptyMap(),
+): List<SendLine> =
     listings.map { listing ->
         val title = listing.title.tidyTitle()
         if (!listing.platformId.canMessage) {
             return@map SendLine(listing, null, null, "", edited = false, unreachable = "Only Kleinanzeigen sellers can be written to from Arbay")
         }
-        val shipping = listing.shipping
+        val shipping = pageShipping[listing.id] ?: listing.shipping
         val pickupOnly = shipping != null && !shipping.available && shipping.pickup
         val shippingEur = when {
             shipping == null || pickupOnly -> 0.0

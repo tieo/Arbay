@@ -40,4 +40,16 @@ class KleinanzeigenDetailParserTest {
         assertTrue(v.isVerified(VehicleField.MILEAGE))
         assertTrue(v.isVerified(VehicleField.FIRST_REG_YEAR))
     }
+
+    @Test
+    fun readsTheCheapestShippingBesideThePrice() {
+        // As the page of a phone ad showed it, 2026-10-08.
+        val page = org.jsoup.Jsoup.parse(
+            """<div><h2 class="boxedarticle--price">400 € VB</h2><p class="boxedarticle--old-price">450 €</p>
+               <span class="boxedarticle--details--shipping"> + Versand ab 6,19 €</span></div>""",
+        )
+        val shipping = KleinanzeigenDetailParser.shipping(page)
+        kotlin.test.assertEquals(619L, shipping?.cost?.amount)
+        kotlin.test.assertEquals(null, KleinanzeigenDetailParser.shipping(org.jsoup.Jsoup.parse("<div></div>")))
+    }
 }

@@ -19,4 +19,7 @@ data class ListingDetail(
     /** The seller's own text, as the page shows it. */
     val description: String? = null,
     val location: Location? = null,
+    /** Shipping as the page states it, where the card only said it ships: Kleinanzeigen's page
+     *  names the cheapest carrier the seller allows ("+ Versand ab 6,19 €"). */
+    val shipping: Shipping? = null,
 )

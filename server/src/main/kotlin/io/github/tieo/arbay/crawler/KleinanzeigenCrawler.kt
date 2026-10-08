@@ -365,13 +365,15 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             val html = fetchWithFallback(client, listing.url, "Kleinanzeigen")
             // The card carries the first line of the ad; the page carries the seller's whole text,
             // which is where a van's wheelbase is written when it is written at all.
-            val description = org.jsoup.Jsoup.parse(html)
+            val doc = org.jsoup.Jsoup.parse(html)
+            val description = doc
                 .selectFirst("#viewad-description-text, [id=viewad-description-text]")
                 ?.wholeText()?.trim()?.takeIf { it.isNotBlank() }
             ListingDetail(
                 vehicle = KleinanzeigenDetailParser.parse(html),
                 description = description,
-            ).takeIf { it.vehicle != null || it.description != null }
+                shipping = KleinanzeigenDetailParser.shipping(doc),
+            ).takeIf { it.vehicle != null || it.description != null || it.shipping != null }
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
             null

@@ -333,7 +333,14 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
     val edits = remember { mutableStateMapOf<String, String>() }
     var openLine by remember { mutableStateOf<String?>(null) }
     val limit = allIn.replace(',', '.').toDoubleOrNull()
-    val lines = planSend(listings, limit, text, edits, picked)
+    // Each picked ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
+    val pageShipping = remember { mutableStateMapOf<String, io.github.tieo.arbay.model.Shipping>() }
+    LaunchedEffect(listings.map { it.id }) {
+        listings.filter { it.id !in pageShipping }.forEach { l ->
+            app.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
+        }
+    }
+    val lines = planSend(listings, limit, text, edits, picked, pageShipping)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 

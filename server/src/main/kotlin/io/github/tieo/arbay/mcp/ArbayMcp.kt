@@ -323,10 +323,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val blocks = args.strs("text_ids").map { id -> all.firstOrNull { it.id == id } ?: return@tool "No text block $id." }
             val text = composeBlocks(blocks)
             val allIn = args.num("all_in_eur")
+            // Each ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
+            val pageShipping = args.strs("listing_ids").mapNotNull { seen[it] }.associate { l -> l.id to pageShipping(l) }
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = seen[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
-                val shipping = l.shipping
+                val shipping = pageShipping[id] ?: l.shipping
                 val shippingEur = shipping?.cost?.amount?.div(100.0) ?: 0.0
                 val price = allIn?.let { offerWithin(it, shippingEur, l.platformId.buyerProtection) }
                     ?.let { p -> (l.price.amount / 100).toInt().takeIf { it > 0 }?.let { minOf(p, it) } ?: p }
@@ -427,6 +429,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Every device takes $next within a minute."
         }
     }
+
+    private suspend fun pageShipping(l: Listing): io.github.tieo.arbay.model.Shipping? = runCatching {
+        val r = http.get("$base/api/crawler/listing-detail") { parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id) }
+        if (!r.status.isSuccess() || r.status.value == 204) null
+        else json.decodeFromString(io.github.tieo.arbay.model.ListingDetail.serializer(), r.bodyAsText()).shipping
+    }.getOrNull()
 
     private fun Listing.line(): String = listOfNotNull(
         id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",

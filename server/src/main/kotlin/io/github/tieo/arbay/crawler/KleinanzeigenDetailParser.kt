@@ -21,6 +21,21 @@ object KleinanzeigenDetailParser {
         "november" to 11, "dezember" to 12,
     )
 
+    /**
+     * The shipping the page states beside the price: "+ Versand ab 6,19 €" is the cheapest carrier the
+     * seller allows through Kleinanzeigen, which is what a buyer pays at least; "Nur Abholung" is
+     * pickup only. Null where the page says neither.
+     */
+    fun shipping(doc: org.jsoup.nodes.Document): io.github.tieo.arbay.model.Shipping? {
+        val text = doc.selectFirst(".boxedarticle--details--shipping")?.text()?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        if (text.contains("Abholung", ignoreCase = true) && !text.contains("Versand", ignoreCase = true)) {
+            return io.github.tieo.arbay.model.Shipping(available = false, pickup = true)
+        }
+        val cost = io.github.tieo.arbay.model.Money.parse(text) ?: return io.github.tieo.arbay.model.Shipping(available = true)
+        return io.github.tieo.arbay.model.Shipping(cost = cost, available = true)
+    }
+
     fun parse(html: String): VehicleInfo? {
         val doc = Jsoup.parse(html)
         val attrs = HashMap<String, String>()

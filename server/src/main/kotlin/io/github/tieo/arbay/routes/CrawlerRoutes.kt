@@ -468,7 +468,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
                 ?: throw BadRequestException("Missing or unknown platform")
             val id = call.queryParameters["id"] ?: url
-            io.github.tieo.arbay.crawler.DetailCache.get(id)?.let { return@get call.respond(it) }
+            // A Kleinanzeigen page read before shipping was read from it is read again, once.
+            io.github.tieo.arbay.crawler.DetailCache.get(id)
+                ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
+                ?.let { return@get call.respond(it) }
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(
