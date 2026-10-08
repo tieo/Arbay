@@ -34,6 +34,12 @@ class ChatTest {
     }
 
     @Test
+    fun aFillInCanAddToThePrice() {
+        assertEquals("428 oder 448", fillIn("{preis} oder {preis+20}", 428, "Pixel", null))
+        assertEquals("{preis+20}", fillIn("{preis+20}", null, "Pixel", null))
+    }
+
+    @Test
     fun gatewayConversationReadsAsArbayConversation() {
         val raw = Json.parseToJsonElement(
             """

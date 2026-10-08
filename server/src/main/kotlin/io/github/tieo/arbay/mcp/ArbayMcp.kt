@@ -328,6 +328,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 val shipping = l.shipping
                 val shippingEur = shipping?.cost?.amount?.div(100.0) ?: 0.0
                 val price = allIn?.let { offerWithin(it, shippingEur, l.platformId.buyerProtection) }
+                    ?.let { p -> (l.price.amount / 100).toInt().takeIf { it > 0 }?.let { minOf(p, it) } ?: p }
                 val note = if (allIn != null && shipping?.cost == null) " (shipping not stated, price is before shipping)" else ""
                 "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), shipping?.cost?.let { "%.2f €".format(it.amount / 100.0) })
             }

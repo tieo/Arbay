@@ -46,7 +46,10 @@ fun planSend(listings: List<Listing>, allInEur: Double?, template: String, edits
             shipping.free -> 0.0
             else -> shipping.cost?.takeIf { it.currency == Currency.EUR }?.amount?.div(100.0)
         }
+        // Never more than the seller asks: an ad already under the limit is offered at its own price.
+        val asking = listing.price.takeIf { it.currency == Currency.EUR }?.amount?.div(100)?.toInt()
         val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, if (pickupOnly) null else listing.platformId.buyerProtection) }
+            ?.let { if (asking != null && asking > 0) minOf(it, asking) else it }
         val note = when {
             allInEur == null -> null
             pickupOnly -> "pickup, paid in person"
@@ -73,7 +76,7 @@ fun List<SendLine>.toRequest(searchId: String?, allInEur: Double?): SendRequest 
 )
 
 /** Whether a line still has a fill-in nobody could complete, which would reach the seller as "{preis}". */
-val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis|titel|versand)}""").containsMatchIn(text)
+val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis(\+\d+)?|titel|versand)}""").containsMatchIn(text)
 
 private fun formatEuro(eur: Double): String {
     val cents = kotlin.math.round(eur * 100).toLong()

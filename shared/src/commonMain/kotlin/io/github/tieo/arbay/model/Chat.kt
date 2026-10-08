@@ -180,12 +180,14 @@ val PlatformId.canMessage: Boolean get() = this == PlatformId.KLEINANZEIGEN
 /** The fill-ins a text can use, and what each stands for. */
 val TEMPLATE_FILL_INS: List<Pair<String, String>> = listOf(
     "{preis}" to "the price to offer",
+    "{preis+20}" to "the price to offer plus 20 € (any amount)",
     "{titel}" to "the ad's title",
     "{versand}" to "shipping as the ad states it",
 )
 
 /** [text] with its fill-ins completed for one listing. */
 fun fillIn(text: String, price: Int?, title: String, shipping: String?): String =
-    text.replace("{preis}", price?.toString() ?: "{preis}")
+    text.replace(Regex("""\{preis\+(\d+)}""")) { m -> price?.let { (it + m.groupValues[1].toInt()).toString() } ?: m.value }
+        .replace("{preis}", price?.toString() ?: "{preis}")
         .replace("{titel}", title)
         .replace("{versand}", shipping ?: "{versand}")
