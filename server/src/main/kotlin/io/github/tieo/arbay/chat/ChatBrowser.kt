@@ -45,7 +45,9 @@ object ChatBrowser {
     /** A request the sidecar answered as failed; [detail] is the page it failed on, when it sent one. */
     class ChatFailure(message: String, val signedOut: Boolean, val detail: JsonObject? = null) : RuntimeException(message)
 
-    /** Ask the sidecar for [op] and wait at most [timeoutMs] for its answer. */
+    /** Ask the sidecar for [op] and wait at most [timeoutMs] for its answer. A page call that never
+     *  answered once held this lock, and every chat request behind it, with the app left waiting
+     *  on the server for a minute at a time; the sidecar is ended instead. */
     suspend fun call(op: String, timeoutMs: Long = 60_000, vararg args: Pair<String, Any?>): JsonObject = lock.withLock {
         // The sidecar gives up a little before this side does, and answers that it did.
         val request = JsonObject(mapOf("op" to JsonPrimitive(op), "timeout" to JsonPrimitive(timeoutMs / 1000.0 - 5)) + args.associate { (k, v) ->
@@ -126,6 +128,8 @@ object ChatBrowser {
     fun stop() {
         process?.let { p ->
             runCatching { input?.close() }
+            // A sidecar that answers closes its browser, and with it the signed in profile, on
+            // its own; one stuck on a page call that never returns is ended.
             if (!p.waitFor(5, TimeUnit.SECONDS)) killTree(p)
         }
         process = null

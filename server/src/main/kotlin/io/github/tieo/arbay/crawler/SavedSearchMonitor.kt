@@ -206,8 +206,10 @@ class SavedSearchMonitor(
             // searcher accepted for this market's language. A watch that asked something else
             // would notify about a different set of listings than the screen shows.
             val query = localizedQuery(product.searchQuery.copy(platforms = listOf(platformId)), platformId)
-            // A time limit that runs out is this market failing, not the watch being stopped, so
-            // it is an answer of null here rather than a cancellation that would end the loop.
+            // A crawler can hang for good (a stuck browser once held every search permit for
+            // hours), and nobody hangs up on a background run, so without a limit one hang ends
+            // every watch. A time limit that runs out is this market failing, not the watch being
+            // stopped, so it is an answer of null here rather than a cancellation that would end the loop.
             val results = try {
                 withTimeoutOrNull(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
