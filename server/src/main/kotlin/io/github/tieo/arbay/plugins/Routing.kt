@@ -30,7 +30,7 @@ fun Application.configureRouting() {
 
     // Recurring saved-search updates. No-op for a search whose own autoFetch.enabled is false —
     // opted into per search, not turned on for every bookmark by one server-wide flag.
-    val savedSearches = SavedSearchMonitor(productRepo, listingRepo)
+    val savedSearches = SavedSearchMonitor(productRepo, listingRepo, selfUrl = "http://127.0.0.1:$SERVER_PORT")
     savedSearches.start()
     Chat.start()
 

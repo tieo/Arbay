@@ -71,6 +71,14 @@ class VanDimensionsTest {
     }
 
     @Test
+    fun `VW's own trim line names the roof exactly`() {
+        val d = VanDimensions.read("Volkswagen Crafter\n\nAusstattungslinie: 35 mittellang Hochdach FWD\n\nKasten Hoch")
+        assertEquals(VanSize.HIGH_ROOF, d.height)
+        assertTrue(d.heightSure)
+        assertEquals(VanSize.MEDIUM, d.length)
+    }
+
+    @Test
     fun `a Crafter dealer's short names say mittellang Hochdach`() {
         for (text in listOf("Modell: VW Crafter 35 D MLH", "Volkswagen Crafter 2.0TDI MITTEL HOCH AUTOM",
                 "Crafter Kasten35 DSG Standh mittelhoch Navi", "VW Crafter 30 Kasten MR Hochraum-Kasten")) {

@@ -28,6 +28,14 @@ import kotlin.time.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import io.github.tieo.arbay.model.CrawlerEventType
+import io.github.tieo.arbay.model.CrawlerSearchEvent
+import io.github.tieo.arbay.model.toCarFilters
+import io.ktor.client.request.parameter
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.readUTF8Line
 import org.slf4j.LoggerFactory
 
 /**
@@ -46,6 +54,8 @@ import org.slf4j.LoggerFactory
 class SavedSearchMonitor(
     private val productRepo: ProductRepo,
     private val listingRepo: ListingRepo,
+    /** This server's own address, which a fit alert searches through like the app does. */
+    private val selfUrl: String? = null,
 ) {
 
     private val log = LoggerFactory.getLogger(SavedSearchMonitor::class.java)
@@ -181,7 +191,7 @@ class SavedSearchMonitor(
             val last = synchronized(stateLock) { lastRun[product.id] } ?: 0L
             if (now - last < intervalMs) continue
             try {
-                runProduct(product)
+                if (product.fitAlert.enabled && selfUrl != null) runFit(product, selfUrl) else runProduct(product)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -222,38 +232,7 @@ class SavedSearchMonitor(
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
         }
 
-        synchronized(stateLock) { lastRun[product.id] = System.currentTimeMillis() }
-
-        // Every market refused or failed. Recording that as this search's first, silent run would
-        // spend the one chance to seed quietly on nothing, and the next run that does reach a
-        // market would then announce its entire result set as new stock. Blocks are routine, so
-        // this is the common case, not a corner: leave [seen] untouched and try again next tick.
-        if (found.isEmpty()) {
-            saveStatus()
-            return
-        }
-
-        val silent: Boolean
-        val fresh: List<String>
-        synchronized(stateLock) {
-            silent = product.id !in seen
-            val known = seen.getOrPut(product.id) { mutableSetOf() }
-            fresh = found.keys.filter { it !in known }
-            known.addAll(found.keys)
-            if (fresh.isNotEmpty() && !silent) {
-                unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
-                lastNew[product.id] = fresh.toMutableSet()
-            }
-        }
-        if (fresh.isNotEmpty() && !silent) {
-            saveStatus()
-            // Stored as found, so the app can show this batch later without asking the platform
-            // again — which by then may no longer have it. Archiving mirrors the images too.
-            listingRepo.upsertBatch(fresh.mapNotNull { found[it] })
-        }
-        if (fresh.isEmpty() || silent) { saveSeen(); return }
-
-        val freshListings = fresh.mapNotNull { found[it] }
+        val freshListings = record(product, found) ?: return
 
         // Named notification subfilters someone set on this search specifically — a listing can
         // match more than one, and each match is worth its own notification since each names a
@@ -299,7 +278,7 @@ class SavedSearchMonitor(
 
         log.info(
             "saved-search {}: {} new, {} subfilter matches",
-            product.name, fresh.size, subfilterMatches.size,
+            product.name, freshListings.size, subfilterMatches.size,
         )
         // Which listing, not just how many. A count answers "did it fire"; deciding whether a
         // notification was worth having needs the thing it fired about, and asking afterwards what
@@ -318,6 +297,141 @@ class SavedSearchMonitor(
     }
 
 
+    /**
+     * Notes what one run of [product] found and returns what is new since earlier runs, or null
+     * when there is nothing to tell: no market answered, nothing is new, or this is the search's
+     * first run, which seeds itself silently.
+     */
+    private fun record(product: TrackedProduct, found: Map<String, Listing>): List<Listing>? {
+        synchronized(stateLock) { lastRun[product.id] = System.currentTimeMillis() }
+
+        // Every market refused or failed. Recording that as this search's first, silent run would
+        // spend the one chance to seed quietly on nothing, and the next run that does reach a
+        // market would then announce its entire result set as new stock. Blocks are routine, so
+        // this is the common case, not a corner: leave [seen] untouched and try again next tick.
+        if (found.isEmpty()) {
+            saveStatus()
+            return null
+        }
+
+        val silent: Boolean
+        val fresh: List<String>
+        synchronized(stateLock) {
+            silent = product.id !in seen
+            val known = seen.getOrPut(product.id) { mutableSetOf() }
+            fresh = found.keys.filter { it !in known }
+            known.addAll(found.keys)
+            if (fresh.isNotEmpty() && !silent) {
+                unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
+                lastNew[product.id] = fresh.toMutableSet()
+            }
+        }
+        if (fresh.isNotEmpty() && !silent) {
+            saveStatus()
+            // Stored as found, so the app can show this batch later without asking the platform
+            // again — which by then may no longer have it. Archiving mirrors the images too.
+            listingRepo.upsertBatch(fresh.mapNotNull { found[it] })
+        }
+        saveSeen()
+        if (fresh.isEmpty() || silent) return null
+        return fresh.mapNotNull { found[it] }
+    }
+
+    private val loopback by lazy { io.github.tieo.arbay.routes.loopbackClient() }
+
+    /**
+     * A saved search with a fit alert: searched exactly as the app searches it, so every listing
+     * has had its ad read (size, drive, air conditioning, the dealer's reviews) and carries its
+     * distance from home; then each new one is scored as a whole ([FitScore]) and the ones that fit
+     * well are pushed to the phone ([Ntfy]).
+     *
+     * The criteria the score weighs are left out of the search itself, since as a filter they
+     * would drop a van before it could be weighed: engine power, drive, wheelbase and seller type.
+     * What stays is what narrows the markets to candidates at all: price, year, mileage, gearbox,
+     * fuel, body and the van's size, which is also what makes the server open each ad.
+     */
+    private suspend fun runFit(product: TrackedProduct, selfUrl: String) {
+        val settings = product.fitAlert
+        val q = product.searchQuery
+        val wishes = q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
+        val crawl = wishes.copy(
+            minPowerKw = null, maxPowerKw = null, drivetrain = null,
+            minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
+        )
+        val home = settings.home?.let(::homePoint)
+        val found = LinkedHashMap<String, Listing>()
+        loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
+            parameter("q", q.text)
+            q.platforms.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
+            q.excludeKeywords.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
+            q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+            parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
+            home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }
+        }.execute { response ->
+            if (!response.status.isSuccess()) return@execute
+            val channel = response.bodyAsChannel()
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                if (line.isBlank()) continue
+                val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
+                if (event.type == CrawlerEventType.PLATFORM_DONE) event.listings.forEach { found[it.id] = it }
+                if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
+            }
+        }
+        // The saved market and country picks narrow what was fetched, as they do on the screen.
+        val markets = q.showOnlyMarkets
+        val countries = q.showOnlyCountries
+        val shown = found.filterValues {
+            (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets ||
+                io.github.tieo.arbay.model.MarketSets.countryOf(it.platformId) in countries
+        }
+        val fresh = record(product, shown) ?: return
+        // What the top of the search scores today, every offer counted once: a dealer that lists
+        // the same van on two markets would otherwise push a new one out of the top twice over.
+        val scores = shown.values
+            .mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } }
+            .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
+            .sortedByDescending { it.second.score }
+        val bar = maxOf(settings.minScore, scores.getOrNull(settings.topN - 1)?.second?.score ?: settings.minScore)
+        val freshIds = fresh.mapTo(HashSet()) { it.id }
+        val worth = scores.filter { (l, fit) -> l.id in freshIds && fit.score >= bar }
+        log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
+        // A handful at most: a run that finds twenty good ones at once is a market changing its
+        // pages, not twenty vans, and the rest are on the saved search either way.
+        worth.take(5).forEach { (l, fit) ->
+            val (title, message) = fitMessage(product, l, fit)
+            log.info("  fit {}: {} · {}", "%.2f".format(fit.score), title, l.url)
+            Ntfy.send(title, message, click = l.url, tags = listOf("truck"))
+        }
+    }
+
+    /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */
+    private fun homePoint(home: String): Pair<Double, Double>? {
+        val zip = Regex("""\b\d{4,5}\b""").find(home)?.value
+        val city = home.replace(Regex("""\b\d{4,5}\b"""), "").trim().takeIf { it.isNotEmpty() }
+        return Geocoder.resolve(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry, zip, city)
+    }
+
+    private fun fitMessage(product: TrackedProduct, l: Listing, fit: FitScore.Fit): Pair<String, String> {
+        val v = l.vehicle
+        val euros = "%,d €".format(java.util.Locale.GERMANY, FitScore.priceEur(l).toLong())
+        val place = l.location?.city ?: l.location?.country
+        val drive = fit.driveHours?.let { "~${Math.round(it)} h" }
+        val title = listOfNotNull("${product.name}: $euros", place, drive).joinToString(" · ")
+        val seller = l.seller
+        val dealer = seller?.name?.let { name ->
+            name + (seller.rating?.let { " ${"%.1f".format(it)}★" + (seller.reviewCount?.let { n -> " ($n)" } ?: "") } ?: "")
+        }
+        val facts = listOfNotNull(
+            v?.firstRegYear?.toString(),
+            v?.mileageKm?.let { "%,d km".format(java.util.Locale.GERMANY, it) },
+            v?.powerKw?.let { "$it kW" },
+            dealer,
+            "fit ${Math.round(fit.score * 100)}%",
+        ).joinToString(" · ")
+        val misses = fit.misses.takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "\nmisses: $it" } ?: ""
+        return title to facts + misses
+    }
 
     companion object {
         /**

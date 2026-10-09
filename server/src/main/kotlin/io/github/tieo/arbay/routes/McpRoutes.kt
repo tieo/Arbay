@@ -62,8 +62,9 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     }
 }
 
-/** The tools call this server's own API; a search runs for minutes, so no overall limit. */
-private fun loopbackClient() = HttpClient(CIO) {
+/** For calling this server's own API, as the MCP tools and the saved-search fit alert do; a search
+ *  runs for minutes, so no overall limit. */
+internal fun loopbackClient() = HttpClient(CIO) {
     install(HttpTimeout) {
         connectTimeoutMillis = 10_000
         requestTimeoutMillis = 15 * 60_000

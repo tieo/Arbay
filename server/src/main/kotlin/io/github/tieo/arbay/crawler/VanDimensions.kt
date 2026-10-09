@@ -120,6 +120,9 @@ object VanDimensions {
     // for mittellang Hochdach ("VW Crafter 35 D MLH").
     private val highRoof = Regex("""\b(hochdach|hochraum\w*|hoch|hd|mlh|mittelhoch|mittellanghoch)\b""", RegexOption.IGNORE_CASE)
     private val normalRoof = Regex("""\bnormaldach\b""", RegexOption.IGNORE_CASE)
+    // The trim line a dealer picks from VW's own catalogue on mobile.de ("Ausstattungslinie: 35
+    // mittellang Hochdach FWD"): there Hochdach is exactly the high roof, Superhochdach its own trim.
+    private val catalogueHighRoof = Regex("""ausstattungslinie:[^\n]*\bhochdach\b""", RegexOption.IGNORE_CASE)
     // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5.
     private val overhang = Regex("""\b(verlängerte[mnr]? überhang|überhang)\b""", RegexOption.IGNORE_CASE)
     // VW's own short names for the wheelbases: MR mittlerer Radstand, LR langer Radstand.
@@ -166,6 +169,7 @@ object VanDimensions {
             setOf(VanSize.LONG, VanSize.EXTRA_LONG).takeIf { longWords.containsMatchIn(text) },
         ))
         val roofs = narrowed(listOfNotNull(
+            setOf(VanSize.HIGH_ROOF).takeIf { catalogueHighRoof.containsMatchIn(text) && !superHighRoof.containsMatchIn(text) },
             setOf(VanSize.SUPER_HIGH_ROOF).takeIf { superHighRoof.containsMatchIn(text) },
             setOf(VanSize.NORMAL_ROOF).takeIf { normalRoof.containsMatchIn(text) },
             c.height?.let(::roofsOf)?.takeIf { it.isNotEmpty() },

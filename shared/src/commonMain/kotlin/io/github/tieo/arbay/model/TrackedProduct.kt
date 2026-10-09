@@ -86,4 +86,30 @@ data class TrackedProduct(
     val createdAt: Instant,
     val autoFetch: AutoFetchSettings = AutoFetchSettings(),
     val notificationSubfilters: List<NotificationSubfilter> = emptyList(),
+    val fitAlert: FitAlertSettings = FitAlertSettings(),
+)
+
+/**
+ * Tell the user about a new offer that fits the search as a whole, rather than one that passes
+ * every filter. The search's vehicle criteria are read as wishes and weighed against each other
+ * (see the server's FitScore), so a van that misses one wish by a little and fits the rest still
+ * counts, and one that scrapes past every filter with several small misses does not.
+ *
+ * [home] is where drive times are measured from, as a postcode and place ("70173
+ * Stuttgart"); [softDriveHours] is a drive the user would happily make, past which a fit counts for
+ * less rather than not at all.
+ *
+ * A new offer is sent when it would rank among the [topN] best of everything the search finds right
+ * now, and never twice. A rank rather than a fixed score, because a score means nothing on its own:
+ * the van the user called perfect scored 0.74 on price and distance, below a threshold that would
+ * have let through offers whose size is not even stated. [minScore] only keeps a thin week from
+ * pushing whatever happens to be best of very little.
+ */
+@Serializable
+data class FitAlertSettings(
+    val enabled: Boolean = false,
+    val topN: Int = 10,
+    val minScore: Double = 0.6,
+    val home: String? = null,
+    val softDriveHours: Double = 4.0,
 )
