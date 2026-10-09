@@ -396,13 +396,22 @@ class SavedSearchMonitor(
         val freshIds = fresh.mapTo(HashSet()) { it.id }
         val worth = scores.filter { (l, fit) -> l.id in freshIds && fit.score >= bar }
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
-        // A handful at most: a run that finds twenty good ones at once is a market changing its
-        // pages, not twenty vans, and the rest are on the saved search either way.
-        worth.take(5).forEach { (l, fit) ->
-            val (title, message) = fitMessage(product, l, fit)
-            log.info("  fit {}: {} · {}", "%.2f".format(fit.score), title, l.url)
-            Ntfy.send(title, message, click = l.url, tags = listOf("truck"))
+        worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
+        if (worth.isEmpty()) return
+        // One message per run, however many made it: the best one in full, opened by a tap, and a
+        // line each for the next, with buttons. Several pushes at once were both noise and more
+        // than ntfy.sh takes in a burst (the fifth was refused with 429).
+        val (best, bestFit) = worth.first()
+        val title = if (worth.size == 1) "${product.name}: ${fitLine(best, bestFit)}"
+            else "${product.name}: ${worth.size} new in your top ${settings.topN}"
+        val body = buildString {
+            append(fitDetails(best, bestFit))
+            worth.drop(1).take(4).forEach { (l, fit) -> append("\n· ").append(fitLine(l, fit)) }
         }
+        val buttons = worth.drop(1).take(3).map { (l, _) ->
+            Ntfy.Action(label = listOfNotNull(euros(l), l.location?.city).joinToString(" "), url = l.url)
+        }
+        Ntfy.send(title, body, click = best.url, tags = listOf("truck"), actions = buttons)
     }
 
     /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */
@@ -412,25 +421,30 @@ class SavedSearchMonitor(
         return Geocoder.resolve(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry, zip, city)
     }
 
-    private fun fitMessage(product: TrackedProduct, l: Listing, fit: FitScore.Fit): Pair<String, String> {
+    private fun euros(l: Listing) = "%,d €".format(java.util.Locale.GERMANY, FitScore.priceEur(l).toLong())
+
+    private fun hours(h: Double) = if (h < 1) "~${Math.round(h * 60 / 15) * 15} min" else "~${Math.round(h)} h"
+
+    /** Price, place and drive: "23.950 € · Oldenburg · ~7 h". */
+    private fun fitLine(l: Listing, fit: FitScore.Fit): String =
+        listOfNotNull(euros(l), l.location?.city ?: l.location?.country, fit.driveHours?.let(::hours)).joinToString(" · ")
+
+    /** Year, mileage, power, dealer, how well it fits and what it misses. */
+    private fun fitDetails(l: Listing, fit: FitScore.Fit): String {
         val v = l.vehicle
-        val euros = "%,d €".format(java.util.Locale.GERMANY, FitScore.priceEur(l).toLong())
-        val place = l.location?.city ?: l.location?.country
-        val drive = fit.driveHours?.let { "~${Math.round(it)} h" }
-        val title = listOfNotNull("${product.name}: $euros", place, drive).joinToString(" · ")
         val seller = l.seller
         val dealer = seller?.name?.let { name ->
             name + (seller.rating?.let { " ${"%.1f".format(it)}★" + (seller.reviewCount?.let { n -> " ($n)" } ?: "") } ?: "")
         }
         val facts = listOfNotNull(
+            fitLine(l, fit),
             v?.firstRegYear?.toString(),
             v?.mileageKm?.let { "%,d km".format(java.util.Locale.GERMANY, it) },
             v?.powerKw?.let { "$it kW" },
             dealer,
             "fit ${Math.round(fit.score * 100)}%",
         ).joinToString(" · ")
-        val misses = fit.misses.takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "\nmisses: $it" } ?: ""
-        return title to facts + misses
+        return facts + (fit.misses.takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "\nmisses: $it" } ?: "")
     }
 
     companion object {
