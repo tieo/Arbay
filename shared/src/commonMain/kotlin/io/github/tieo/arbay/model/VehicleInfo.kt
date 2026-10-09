@@ -77,8 +77,9 @@ enum class Fuel {
                 "hybrid" in s || "hybride" in s || "hybridní" in s ->
                     if ("diesel" in s || "nafta" in s) HYBRID_DIESEL else HYBRID_PETROL
                 // Word-boundary match: "Elektro"/"Elektrisch"/"electric"/"BEV" as a fuel, but NOT
-                // "elektrische Fensterheber" (electric windows) and other equipment adjectives.
-                Regex("""\b(elektro\w*|elektrisch|electric|bev)\b""").containsMatchIn(s) || s == "el" -> ELECTRIC
+                // "elektrische Fensterheber" (electric windows), "Elektronik" or "elektronisches
+                // Stabilitätsprogramm" and other equipment words.
+                Regex("""\b(elektro(?!nik|nisch)\w*|elektrisch|electric|bev)\b""").containsMatchIn(s) || s == "el" -> ELECTRIC
                 "diesel" in s || "nafta" in s || "tdi" in s || "hdi" in s || "cdi" in s ||
                     "dci" in s || "bluetec" in s || "crdi" in s || "tdci" in s || "jtd" in s ||
                     "bluehdi" in s || "d4d" in s -> DIESEL

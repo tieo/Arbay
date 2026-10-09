@@ -70,7 +70,11 @@ object VehicleTextParser {
             mileageKm = parseMileage(text),
             powerKw = parsePowerKw(text),
             displacementCc = parseDisplacement(text),
-            fuel = Fuel.parse(text),
+            // Fuel.parse reads a fuel field, where anything it does not know is some other fuel.
+            // In an ad's prose, no fuel word means the text does not say, not that the van runs on
+            // something else: read as OTHER, every Crafter whose ad never wrote "Diesel" was
+            // dropped by a diesel search.
+            fuel = Fuel.parse(text)?.takeIf { it != Fuel.OTHER },
             bodyType = BodyType.parse(text),
             gearbox = parseGearbox(text),
             wheelbaseMm = parseWheelbaseMm(text),

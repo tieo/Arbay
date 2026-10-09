@@ -157,4 +157,17 @@ class VehicleTextParserTest {
         assertNull(v?.powerKw)
         assertEquals(2015, v?.firstRegYear)
     }
+
+    @Test
+    fun `an ad that names no fuel says nothing about it`() {
+        val v = VehicleTextParser.parse("VW Crafter L2H2 Automatik/Kamera/Klima/PDC, 2021, 119.292 km")
+        assertEquals(null, v?.fuel)
+    }
+
+    @Test
+    fun `electronics are not an electric drive`() {
+        val v = VehicleTextParser.parse("Crafter Kasten lang plus HD, Elektronisches Stabilitätsprogramm, Elektronik geprüft, 2.0 TDI")
+        assertEquals(io.github.tieo.arbay.model.Fuel.DIESEL, v?.fuel)
+    }
 }
+
