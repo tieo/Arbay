@@ -85,7 +85,7 @@ class NarrowingTest {
     }
 
     @Test
-    fun `a blocked dealer's offers are one group, whether the server or this screen took them`() {
+    fun `a blocked dealer's offers are one group whether the server or this screen took them`() {
         val dealer = Seller(name = "Beispiel Nutzfahrzeuge GmbH", id = "900001")
         val onScreen = listing("e", 500).copy(seller = dealer)
         val dropped = listing("f", 600).copy(seller = dealer)
