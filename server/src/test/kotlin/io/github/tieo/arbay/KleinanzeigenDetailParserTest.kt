@@ -52,4 +52,21 @@ class KleinanzeigenDetailParserTest {
         kotlin.test.assertEquals(619L, shipping?.cost?.amount)
         kotlin.test.assertEquals(null, KleinanzeigenDetailParser.shipping(org.jsoup.Jsoup.parse("<div></div>")))
     }
+
+    @Test
+    fun `an ad's page says whether it is still up`() {
+        val live = javaClass.getResource("/fixtures/kleinanzeigen_detail.html")!!.readText()
+        assertEquals(io.github.tieo.arbay.model.AdState.LIVE, KleinanzeigenDetailParser.adState(live))
+        // A deleted ad keeps its page, title, price and text; only this setting changes.
+        assertEquals(
+            io.github.tieo.arbay.model.AdState.DELETED,
+            KleinanzeigenDetailParser.adState(live.replace("showDeletedVeil: false", "showDeletedVeil: true")),
+        )
+        assertEquals(
+            io.github.tieo.arbay.model.AdState.PAUSED,
+            KleinanzeigenDetailParser.adState(live.replace("showPausedVeil: false", "showPausedVeil: true")),
+        )
+        assertEquals(null, KleinanzeigenDetailParser.adState("<html><body>nothing here</body></html>"))
+    }
 }
+

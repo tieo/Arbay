@@ -15,6 +15,26 @@ import org.jsoup.Jsoup
  */
 object KleinanzeigenDetailParser {
 
+    private val deletedVeil = Regex("""\bshowDeletedVeil:\s*(true|false)\b""")
+    private val pausedVeil = Regex("""\bshowPausedVeil:\s*(true|false)\b""")
+
+    /**
+     * The ad's state from the page's own settings: `showDeletedVeil: true` puts "Gelöscht" over the
+     * photos, `showPausedVeil: true` a paused one. The page itself stays reachable either way and
+     * the text never says so. Null where the page carries neither setting. A reserved ad has no
+     * setting of its own on the page, so reserved is not told apart from live here.
+     */
+    fun adState(html: String): io.github.tieo.arbay.model.AdState? {
+        val deleted = deletedVeil.find(html)?.groupValues?.get(1)
+        val paused = pausedVeil.find(html)?.groupValues?.get(1)
+        return when {
+            deleted == "true" -> io.github.tieo.arbay.model.AdState.DELETED
+            paused == "true" -> io.github.tieo.arbay.model.AdState.PAUSED
+            deleted != null || paused != null -> io.github.tieo.arbay.model.AdState.LIVE
+            else -> null
+        }
+    }
+
     private val months = mapOf(
         "januar" to 1, "februar" to 2, "märz" to 3, "maerz" to 3, "april" to 4, "mai" to 5,
         "juni" to 6, "juli" to 7, "august" to 8, "september" to 9, "oktober" to 10,

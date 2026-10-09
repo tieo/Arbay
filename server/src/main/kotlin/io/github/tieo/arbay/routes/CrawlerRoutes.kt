@@ -485,6 +485,18 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             }
         }
 
+        // Whether an ad is still up, read off its page now. Never cached: the page of a deleted
+        // Kleinanzeigen ad stays reachable and reads like a live one apart from this.
+        get("/listing-state") {
+            val url = requirePublicHttpUrl(call.queryParameters["url"] ?: throw BadRequestException("Missing url"))
+            val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
+                ?: throw BadRequestException("Missing or unknown platform")
+            val crawler = CrawlerRegistry.crawlerFor(platform) as? io.github.tieo.arbay.crawler.KnowsAdState
+                ?: return@get call.respond(HttpStatusCode.NoContent)
+            val state = crawler.adState(url) ?: return@get call.respond(HttpStatusCode.NoContent)
+            call.respond(kotlinx.serialization.json.buildJsonObject { put("state", kotlinx.serialization.json.JsonPrimitive(state.name)) })
+        }
+
         // Error snapshots — list, view, resolve
         get("/errors") {
             val resolved = call.queryParameters["resolved"]?.toBooleanStrictOrNull()

@@ -23,6 +23,8 @@ import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.offerFor
 import io.github.tieo.arbay.model.tidyTitle
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -432,19 +434,30 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             props = { string("id", "Outbox message id", required = true) },
         ) { args -> http.delete("$base/api/chat/outbox/${args.str("id")!!.encodeURLPathPart()}").bodyAsText() }
 
-        tool("list_conversations", "The user's Kleinanzeigen conversations, newest first, with unread counts.") {
+        tool(
+            "list_conversations",
+            "The user's Kleinanzeigen conversations, newest first, with unread counts and whether each ad is still up, read off its page now.",
+        ) {
             val list = getJsonElement("/api/chat/conversations") as? JsonArray ?: return@tool "Not signed in to Kleinanzeigen."
-            list.joinToString("\n") { c ->
+            val states = kotlinx.coroutines.coroutineScope {
+                list.map { c -> async { adState((c as JsonObject).str("listingId")) } }.awaitAll()
+            }
+            list.zip(states).joinToString("\n") { (c, state) ->
                 val o = c as JsonObject
                 fun s(k: String) = o[k]?.jsonPrimitive?.contentOrNull
-                "${s("id")}: ${s("adTitle")} · ${s("partner")} · ${s("unread")} unread · ${s("lastText")}"
+                "${s("id")}: ${s("adTitle")} · ${s("partner")} · ad ${state ?: "state unknown"} · ${s("unread")} unread · ${s("lastText")}"
             }.ifEmpty { "No conversations." }
         }
 
         tool(
-            "read_conversation", "Every message in one conversation, oldest first, with photo links.",
+            "read_conversation",
+            "Every message in one conversation, oldest first, with photo links, and whether its ad is still up (adState, read off the ad's page now).",
             props = { string("id", "Conversation id", required = true) },
-        ) { args -> getJsonElement("/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}").toString() }
+        ) { args ->
+            val c = getJsonElement("/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}") as? JsonObject
+                ?: return@tool "No such conversation."
+            JsonObject(c + ("adState" to JsonPrimitive(adState(c.str("listingId")) ?: "UNKNOWN"))).toString()
+        }
 
         tool(
             "reply", "Send a reply in a conversation, now. Only send what the user approved.", destructive = true,
@@ -511,6 +524,17 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     private suspend fun hiddenOffers(): Set<String> =
         ((getJsonElement("/api/state") as? JsonObject)?.get("hiddenOffers") as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
+
+    /** An ad's state now (LIVE, PAUSED, DELETED), off its own page; null when the page does not say.
+     *  Kleinanzeigen answers its short ad address, so the listing id is enough to find the page. */
+    private suspend fun adState(listingId: String?): String? {
+        val adId = listingId?.substringAfter("KLEINANZEIGEN:", "")?.takeIf { it.isNotEmpty() } ?: return null
+        val r = http.get("$base/api/crawler/listing-state") {
+            parameter("platform", "KLEINANZEIGEN"); parameter("url", "https://www.kleinanzeigen.de/s-anzeige/$adId")
+        }
+        if (!r.status.isSuccess() || r.status.value == 204) return null
+        return (Json.parseToJsonElement(r.bodyAsText()) as? JsonObject)?.str("state")
+    }
 
     private suspend fun getJsonElement(path: String): JsonElement {
         val r = http.get("$base$path")

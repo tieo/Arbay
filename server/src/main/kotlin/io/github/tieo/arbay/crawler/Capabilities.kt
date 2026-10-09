@@ -66,6 +66,13 @@ interface ReadsAdsTogether {
     suspend fun fetchDetails(listings: List<io.github.tieo.arbay.model.Listing>): Map<String, io.github.tieo.arbay.model.ListingDetail>
 }
 
+/** Says on an ad's own page whether the ad is still up, paused or deleted. Read fresh every time,
+ *  never from the detail cache: it changes while the ad page itself stays the same. */
+interface KnowsAdState {
+    /** The ad's state now, or null when its page could not be read or does not say. */
+    suspend fun adState(url: String): io.github.tieo.arbay.model.AdState?
+}
+
 /** Lists prices in a currency other than the euro, so amounts must be converted before they are
  *  compared or shown. */
 interface PricesInOwnCurrency {

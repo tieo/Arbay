@@ -29,3 +29,12 @@ data class ListingDetail(
      *  a mobile.de result card counts some of them (12 where the page says 474). */
     val sellerReviews: Int? = null,
 )
+
+/**
+ * Whether an ad can still be bought, as its own page says right now. Kleinanzeigen keeps a page up
+ * after the seller deletes or pauses the ad and only drops it from search, so an ad that opens is
+ * not necessarily for sale.
+ */
+@Serializable
+enum class AdState { LIVE, PAUSED, DELETED }
+

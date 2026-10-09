@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
-class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs {
+class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
@@ -427,6 +427,13 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
             log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
             null
         }
+    }
+
+    override suspend fun adState(url: String): AdState? = try {
+        KleinanzeigenDetailParser.adState(fetchWithFallback(client, url, "Kleinanzeigen"))
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        log.debug("ad state unreadable for {}: {}", url, e.message?.take(60))
+        null
     }
 
     /** Verified mileage/first-registration from the card's attribute chips. */
