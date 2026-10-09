@@ -75,6 +75,7 @@ object CarFilterEngine {
      *  omit because a car-for-sale never leads with them. */
     fun isPartQuery(text: String): Boolean =
         partAccessory.containsMatchIn(text) || partAccessoryLead.containsMatchIn(text) ||
+            engineLead.containsMatchIn(text) ||
             partFromDonorVehicle.containsMatchIn(text) || partSuffix.containsMatchIn(text) ||
             Regex("""\b(felge|felgen|reifen|winterreifen|sommerreifen|kompletträder|alufelgen|tyres?|wheels?)\b""",
                 RegexOption.IGNORE_CASE).containsMatchIn(text)
@@ -233,6 +234,10 @@ object CarFilterEngine {
             """\bausr(ü|ue)cklager\b|\b(massen)?schwungrad\b|\babgasrohr\b|\bsto(ß|ss)f(ä|ae)nger\b|""" +
             """\b(ö|oe)lwanne\b|\bzylinderkopf\b|\beinspritzd(ü|ue)se\b|\bhochdruckpumpe\b|""" +
             """\bladeluftk(ü|ue)hler\b|\bkupplungssatz\b|\bt(ü|ue)rrahmen\b|""" +
+            // An engine sold on its own. Only the words that name the engine as the thing for sale:
+            // a van's own title says "Motor neu" or "Motorschaden", which are not here.
+            """\b(austausch|rumpf|teil|komplett|elektro)motor\b|\bmotor(ü|ue)berholung\b|\bmotorblock\b|""" +
+            """\bmotor\s+komplett\b|""" +
             """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|\bfensterheber\b|""" +
             // Paperwork sold for a model, never the car: an owner's manual, a service book.
             """\b(bedienungsanleitung|betriebsanleitung|serviceplan|handbuch|reparaturhandbuch)\b|""" +
@@ -289,6 +294,13 @@ object CarFilterEngine {
         RegexOption.IGNORE_CASE,
     )
 
+    /** "Motor" followed by an engine code in capitals ("Motor DAV", "Motor CKUB"): the engine is
+     *  what is for sale. Case-sensitive, since the code's capitals are what make it a code. */
+    private val engineWithCode = Regex("""\bMotor\s+[A-Z]{3,4}\b""")
+
+    /** A title that leads with the engine, past any decoration ("-TOP- Motor VW Crafter ..."). */
+    private val engineLead = Regex("""^\W*(top\W+)?motor\b""", RegexOption.IGNORE_CASE)
+
     private val partAccessoryLead = Regex(
         """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange|""" +
             """bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|radlager|""" +
@@ -338,6 +350,7 @@ object CarFilterEngine {
         return partAccessory.containsMatchIn(title) || partAccessoryLead.containsMatchIn(title) ||
             partFromDonorVehicle.containsMatchIn(title) || partSuffix.containsMatchIn(title) ||
             partNumber.containsMatchIn(title) || isTyreAd(title) ||
+            engineWithCode.containsMatchIn(title) || engineLead.containsMatchIn(title) ||
             (partNamedEarly.containsMatchIn(title) && fitsAVehicle.containsMatchIn(title))
     }
 

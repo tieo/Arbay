@@ -72,6 +72,30 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun dropsEnginesSoldOnTheirOwn() {
+        // Off the live eBay answer for "crafter" from 10,000 euro on 2026-10-09: engines, priced
+        // like a van, under a whole-vehicle search.
+        val engines = listOf(
+            "Volkswagen Crafter 2019 Diesel 130kW Motor DAV ZUK23371",
+            "Volkswagen Crafter 2024 Diesel 103kW Motor DNA NGL5632",
+            "-TOP- Motor VW Crafter 2.0 TDI BJ.2023 DMZ DMZ(B) NUR 7 TKM Komplett",
+            "Elektromotor Elektroauto Volkswagen Crafter (SY) 2021 7LE901131E / 7LE",
+            "Motorüberholung / Austauschmotor 2.0 TDI (CR) CKUB - VW Crafter Instandsetzung",
+        ).mapIndexed { i, title -> carListing("e$i", PlatformId.EBAY_DE, title, priceCents = 1_000_000, vehicle = VehicleInfo()) }
+        assertEquals(emptyList(), CarFilterEngine.apply(engines, CarFilters()).map { it.title })
+    }
+
+    @Test
+    fun keepsVansThatMentionTheirEngine() {
+        val vans = listOf(
+            "VW Crafter 2.0 TDI Motor neu TÜV neu",
+            "VW Crafter 35 Motorschaden Kasten Hochdach",
+            "Volkswagen Crafter 35 TDI 177 PS Motor läuft einwandfrei",
+        ).mapIndexed { i, title -> carListing("v$i", PlatformId.EBAY_DE, title, priceCents = 1_200_000, vehicle = VehicleInfo()) }
+        assertEquals(3, CarFilterEngine.apply(vans, CarFilters()).size)
+    }
+
+    @Test
     fun keepsCarNamingAReplacedPart() {
         // "Zahnriemen neu" is a selling point on a real car, not a part listing; must survive.
         val car = carListing("z", PlatformId.EBAY_DE, "VW Crafter 2.0 TDI Zahnriemen neu Bremsen neu",
