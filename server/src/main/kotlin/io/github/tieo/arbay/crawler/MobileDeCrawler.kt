@@ -204,6 +204,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         val now = Clock.System.now()
 
         val items = doc.select("[data-testid]").filter { containerTestId.matches(it.attr("data-testid")) }
+        val sellers = sellersByListing(doc)
 
         return items.mapNotNull { item ->
             val href = item.selectFirst("a[href*=/fahrzeuge/details]")?.attr("href")
@@ -266,7 +267,70 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 description = description,
                 scrapedAt = now,
                 vehicle = vehicle,
+                seller = sellers[externalId],
             )
         }
+    }
+
+    /**
+     * Who sells each listing on the page, by the listing's number.
+     *
+     * The card itself shows only the dealer's name. The page also carries every listing as data, in
+     * the chunks its framework streams in (`self.__next_f.push([1,"…"])`), and there each one names
+     * its seller by the site's own account number (`sellerId`) next to a `contact` with the
+     * dealer's name and whether it is a dealer at all. Measured on a Crafter search: every one of
+     * the 24 cards on the page had its entry.
+     *
+     * A private seller's contact name is a person's, and is not kept; the number is enough.
+     */
+    internal fun sellersByListing(doc: org.jsoup.nodes.Document): Map<String, Seller> {
+        val payload = buildString {
+            doc.select("script").forEach { script ->
+                val data = script.data().trim()
+                if (!data.startsWith(FLIGHT_PUSH) || !data.endsWith("])")) return@forEach
+                val literal = data.substring(FLIGHT_PUSH.length, data.length - 2)
+                runCatching { kotlinx.serialization.json.Json.parseToJsonElement(literal) }.getOrNull()
+                    ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+                    ?.takeIf { it.isString }?.let { append(it.content) }
+            }
+        }
+        val found = HashMap<String, Seller>()
+        fun walk(element: kotlinx.serialization.json.JsonElement) {
+            when (element) {
+                is kotlinx.serialization.json.JsonObject -> {
+                    val listingId = (element["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    val sellerId = (element["sellerId"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    if (listingId != null && sellerId != null && listingId !in found) {
+                        val contact = element["contact"] as? kotlinx.serialization.json.JsonObject
+                        fun text(key: String) = (contact?.get(key) as? kotlinx.serialization.json.JsonPrimitive)
+                            ?.content?.trim()?.takeIf { it.isNotBlank() }
+                        val dealer = text("enumType") == "DEALER"
+                        val ratingPage = ((contact?.get("rating") as? kotlinx.serialization.json.JsonObject)
+                            ?.get("link") as? kotlinx.serialization.json.JsonPrimitive)?.content
+                        found[listingId] = Seller(
+                            id = sellerId,
+                            type = if (dealer) SellerType.BUSINESS else SellerType.PRIVATE,
+                            name = if (dealer) text("name") else null,
+                            url = if (dealer) ratingPage?.takeIf { it.startsWith("https://") }?.substringBefore('?') else null,
+                        )
+                    }
+                    element.values.forEach(::walk)
+                }
+                is kotlinx.serialization.json.JsonArray -> element.forEach(::walk)
+                else -> {}
+            }
+        }
+        // One row per line, "<id>:<value>"; the rows that are JSON hold the data, the rest
+        // (module references, text) are skipped.
+        payload.lineSequence().forEach { line ->
+            val value = line.substringAfter(':', "")
+            if (value.isEmpty() || value[0] !in "[{") return@forEach
+            runCatching { kotlinx.serialization.json.Json.parseToJsonElement(value) }.getOrNull()?.let(::walk)
+        }
+        return found
+    }
+
+    private companion object {
+        const val FLIGHT_PUSH = "self.__next_f.push([1,"
     }
 }

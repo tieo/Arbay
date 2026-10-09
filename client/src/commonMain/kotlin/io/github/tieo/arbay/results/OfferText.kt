@@ -42,7 +42,7 @@ fun offerFacts(listing: Listing, place: Location?): List<String> = buildList {
     listing.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
     if (listing.shipping?.free == true) add("free delivery")
     if (listing.negotiable) add("negotiable")
-    listing.seller?.let { s -> add("sold by ${s.name}" + (s.rating?.let { " · $it★" } ?: "")) }
+    listing.seller?.takeIf { !it.name.isNullOrBlank() }?.let { s -> add("sold by ${s.name}" + (s.rating?.let { " · $it★" } ?: "")) }
 }
 
 /** How an offer's price sits against the middle one, when it is far enough off to be worth saying. */

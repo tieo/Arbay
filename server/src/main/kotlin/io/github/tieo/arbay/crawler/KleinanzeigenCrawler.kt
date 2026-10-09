@@ -7,6 +7,11 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.CancellationException
 import kotlin.time.Clock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
@@ -253,6 +258,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
         // selected, and each field below falls back from the old class to the shape of the thing.
         // The failure this fixes was silent: every Kleinanzeigen search answered "0 results".
         val items = doc.select("article[data-adid]")
+        val sellers = sellersByAd(doc)
 
         return items.mapNotNull { item ->
             val adId = item.attr("data-adid").takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -354,8 +360,51 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEve
                 listingDate = listingDate,
                 scrapedAt = now,
                 vehicle = chipVehicle,
+                seller = sellers[adId],
             )
         }
+    }
+
+    /**
+     * Who placed each ad on the page, by the ad's number.
+     *
+     * The card names nobody. The page's own components are handed their data as JSON in a `props`
+     * attribute, every value wrapped as `[0, value]`, and the one listing the results carries each
+     * ad's `userId` and whether it is a private or a commercial seller (`posterType`). Measured on a
+     * Crafter search: all 26 ads on the page had their entry. No name is anywhere on the page, so
+     * the seller is known by the account number alone.
+     */
+    internal fun sellersByAd(doc: org.jsoup.nodes.Document): Map<String, Seller> {
+        val found = HashMap<String, Seller>()
+        fun unwrap(value: JsonElement?): JsonPrimitive? =
+            ((value as? JsonArray)?.takeIf { it.size == 2 }?.get(1) ?: value) as? JsonPrimitive
+        fun walk(element: JsonElement) {
+            when (element) {
+                is JsonObject -> {
+                    val adId = unwrap(element["id"])?.content
+                    val userId = unwrap(element["userId"])?.content?.takeIf { it.isNotBlank() && it != "null" }
+                    if (adId != null && userId != null && adId !in found) {
+                        found[adId] = Seller(
+                            id = userId,
+                            type = when (unwrap(element["posterType"])?.content) {
+                                "PRIVATE" -> SellerType.PRIVATE
+                                "COMMERCIAL" -> SellerType.BUSINESS
+                                else -> null
+                            },
+                        )
+                    }
+                    element.values.forEach(::walk)
+                }
+                is JsonArray -> element.forEach(::walk)
+                else -> {}
+            }
+        }
+        doc.select("astro-island[props]").forEach { island ->
+            val props = island.attr("props")
+            if ("userId" !in props) return@forEach
+            runCatching { Json.parseToJsonElement(props) }.getOrNull()?.let(::walk)
+        }
+        return found
     }
 
     /** Fetches the listing's detail page and parses its full structured attribute table into

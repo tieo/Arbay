@@ -317,11 +317,31 @@ class AutoScout24Crawler(
                     description = description,
                     scrapedAt = now,
                     vehicle = vehicle,
+                    seller = sellerOf(obj["seller"] as? JsonObject),
                 )
             }
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Who sells it, from the card's `seller` object: the site's own account number, which every
+     * card carries, and for a dealer its company name and its page on the site.
+     *
+     * A private seller is shown under a person's name and phone number, which are not kept: the
+     * number alone is enough to recognise the account again.
+     */
+    internal fun sellerOf(seller: JsonObject?): Seller? {
+        val id = seller?.get("id")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
+        val dealer = seller["type"]?.jsonPrimitive?.contentOrNull.equals("Dealer", ignoreCase = true)
+        return Seller(
+            id = id,
+            type = if (dealer) SellerType.BUSINESS else SellerType.PRIVATE,
+            name = if (dealer) seller["companyName"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() } else null,
+            url = if (dealer) (seller["links"] as? JsonObject)?.get("infoPage")?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.startsWith("https://") }?.substringBefore('?') else null,
+        )
     }
 
     internal fun parseFromHtml(html: String): List<Listing> {
