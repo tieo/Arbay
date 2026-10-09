@@ -568,6 +568,11 @@ internal fun detectBlockPage(html: String, platformName: String): CrawlerBlocked
             lower.contains("enable javascript and cookies") ||
             (lower.contains("just a moment") && lower.contains("cloudflare")) ->
             CrawlerBlockedException("$platformName: Cloudflare challenge", ErrorType.CAPTCHA)
+        // eBay's edge serves this in place of results, with status 200: "SORRY Something went
+        // wrong on our end" and a reference. Not known to be a block, so it does not start a
+        // cooldown, but it is an error and not an empty result.
+        lower.contains("something went wrong on our end") && html.length < 10_000 ->
+            CrawlerBlockedException("$platformName: error page in place of results", ErrorType.UNKNOWN)
         lower.contains("something has gone wrong") && html.length < 10_000 ->
             CrawlerBlockedException("$platformName: error page", ErrorType.UNKNOWN)
         lower.contains("tut uns leid") && html.length < 10_000 ->

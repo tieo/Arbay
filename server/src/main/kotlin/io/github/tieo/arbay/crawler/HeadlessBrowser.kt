@@ -139,6 +139,15 @@ object HeadlessBrowser {
         private var firefoxBrowser: Browser? = null
         private var webkitBrowser: Browser? = null
 
+        /** The image's Google Chrome, which every image build brings up to the current stable.
+         *  Playwright's own Chromium is frozen with the base image (134 from March 2025), and eBay
+         *  answered it with an error page in place of results. Null runs Playwright's own. */
+        private val googleChrome: java.nio.file.Path? =
+            java.nio.file.Paths.get("/opt/google/chrome/chrome").takeIf { java.nio.file.Files.isExecutable(it) }
+
+        private fun BrowserType.LaunchOptions.withCurrentChrome(): BrowserType.LaunchOptions =
+            googleChrome?.let { setExecutablePath(it) } ?: this
+
         private fun launchChromium(): Browser {
             if (ensureXvfb()) {
                 // Non-headless via Xvfb — best for PoW challenges
@@ -152,7 +161,8 @@ object HeadlessBrowser {
                         BrowserType.LaunchOptions()
                             .setHeadless(false)
                             .setEnv(env)
-                            .setArgs(chromiumArgs),
+                            .setArgs(chromiumArgs)
+                            .withCurrentChrome(),
                     )
                 } catch (e: Exception) {
                     // Xvfb might be stale — fall back to headless
@@ -160,7 +170,8 @@ object HeadlessBrowser {
                     playwright.chromium().launch(
                         BrowserType.LaunchOptions()
                             .setHeadless(true)
-                            .setArgs(chromiumArgs),
+                            .setArgs(chromiumArgs)
+                            .withCurrentChrome(),
                     )
                 }
             } else {
@@ -168,7 +179,8 @@ object HeadlessBrowser {
                 return playwright.chromium().launch(
                     BrowserType.LaunchOptions()
                         .setHeadless(true)
-                        .setArgs(chromiumArgs),
+                        .setArgs(chromiumArgs)
+                        .withCurrentChrome(),
                 )
             }
         }
