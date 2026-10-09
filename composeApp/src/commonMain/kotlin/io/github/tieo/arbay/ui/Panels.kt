@@ -71,6 +71,7 @@ import io.github.tieo.arbay.results.toggleMarket
 import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSuggestedWord
 import io.github.tieo.arbay.results.unblockWord
+import io.github.tieo.arbay.results.dealerThatCaught
 import io.github.tieo.arbay.results.wordThatCaught
 
 /** A closer look at an open search, as a sheet over its results; dismissing it is a step back. */
@@ -170,6 +171,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
     val vm = session.listings
     val products = session.products
     val blocked by vm.blockedTerms.collectAsState()
+    val dealers by vm.blockedDealers.collectAsState()
     Title("Not shown")
     if (state.hidden.isEmpty()) Muted("Everything the markets sent is on the list.")
     state.hidden.forEach { group ->
@@ -178,6 +180,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
             when (val kind = group.kind) {
                 HiddenKind.YouHid -> TextButton(onClick = { vm.unbanAll() }) { Text("Put all back") }
                 HiddenKind.BlockedWords -> TextButton(onClick = { nav.replace(route.copy(panel = Panel.WORDS)) }) { Text("Edit the words") }
+                HiddenKind.BlockedDealers -> {}
                 HiddenKind.PriceBand -> TextButton(onClick = { state.clearBand(products) }) { Text("Widen it") }
                 HiddenKind.Condition -> TextButton(onClick = { state.showEveryCondition(products) }) { Text("Show every condition") }
                 HiddenKind.SaleType -> TextButton(onClick = { state.showBothSaleTypes(products) }) { Text("Show both") }
@@ -195,6 +198,9 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
                     HiddenKind.YouHid -> IconButton(onClick = { vm.unban(l) }) { Icon(Icons.Outlined.Undo, "Put back") }
                     HiddenKind.BlockedWords -> wordThatCaught(l, blocked)?.let { word ->
                         IconButton(onClick = { state.unblockWord(products, vm, word) }) { Icon(Icons.Outlined.Undo, "Unblock \"$word\"") }
+                    }
+                    HiddenKind.BlockedDealers -> dealerThatCaught(l, dealers)?.let { dealer ->
+                        IconButton(onClick = { vm.unblockDealer(dealer) }) { Icon(Icons.Outlined.Undo, "Unblock ${dealer.name}") }
                     }
                     else -> {}
                 }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
+import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.OfferNote
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -27,7 +28,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The user's state as the server holds it, for every device alike: lately run searches, offers put
- * away, the look and the currency.
+ * away, dealers blocked, the look and the currency.
  *
  * A device keeps its own copy only to draw the first screen before the server has answered. Every
  * change is written through to the server, and the server's copy is taken on start and every
@@ -64,6 +65,13 @@ object SharedState {
         scope.launch { runCatching { c.putState(key, value) } }
     }
 
+    /** Write a change and return once the server holds it, for a change whose next step asks the
+     *  server something that depends on it. False where there is no server or it refused. */
+    suspend fun putNow(key: String, value: JsonElement): Boolean {
+        val c = client ?: return false
+        return try { c.putState(key, value); true } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+    }
+
     private suspend fun pull(c: ArbayClient) {
         val server = try { c.getState() } catch (e: CancellationException) { throw e } catch (_: Exception) { return }
         // Only what this device actually holds is handed over: a device that has never been used
@@ -73,6 +81,7 @@ object SharedState {
         server["hiddenOffers"]?.let { HiddenOffers.adopt(it) }
             ?: HiddenOffers.ids.value.takeIf { it.isNotEmpty() }?.let { put("hiddenOffers", HiddenOffers.asJson()) }
         server["offerNotes"]?.let { OfferNotes.adopt(it) }
+        server["blockedDealers"]?.let { BlockedDealers.adopt(it) }
         server["look"]?.let(::adoptLook)
             ?: loadDeviceSettings().keys.takeIf { keys -> LOOK_SETTINGS.any { it in keys } }?.let { put("look", lookAsJson()) }
     }
@@ -131,5 +140,25 @@ object HiddenOffers {
         if (ids == _ids.value) return
         _ids.value = ids
         runCatching { saveBannedIds(ids) }
+    }
+}
+
+/** Sellers the user blocked, per market (see BlockedDealer). The server drops their offers from
+ *  every search; this copy hides what is already on screen the moment one is blocked. */
+object BlockedDealers {
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val serializer = ListSerializer(BlockedDealer.serializer())
+    private val _dealers = MutableStateFlow<List<BlockedDealer>>(emptyList())
+    val dealers: StateFlow<List<BlockedDealer>> = _dealers.asStateFlow()
+
+    /** Set the blocked dealers, and return once the server holds them, so a search run right after
+     *  is judged by the new list. */
+    suspend fun set(dealers: List<BlockedDealer>): Boolean {
+        _dealers.value = dealers
+        return SharedState.putNow("blockedDealers", json.encodeToJsonElement(serializer, dealers))
+    }
+
+    internal fun adopt(value: JsonElement) {
+        _dealers.value = runCatching { json.decodeFromJsonElement(serializer, value) }.getOrNull() ?: return
     }
 }

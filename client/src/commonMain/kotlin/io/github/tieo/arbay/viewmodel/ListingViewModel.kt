@@ -6,6 +6,7 @@ import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.state.BlockedDealers
 import io.github.tieo.arbay.state.HiddenOffers
 import io.github.tieo.arbay.model.*
 import kotlinx.coroutines.Job
@@ -116,6 +117,9 @@ class ListingViewModel(
 
     val bannedIds: StateFlow<Set<String>> = HiddenOffers.ids
 
+    /** The sellers blocked on every device; their offers already on screen leave it at once. */
+    val blockedDealers: StateFlow<List<BlockedDealer>> = BlockedDealers.dealers
+
     private val _priceHistory = MutableStateFlow<List<Listing>>(emptyList())
     val priceHistory: StateFlow<List<Listing>> = _priceHistory
 
@@ -163,11 +167,12 @@ class ListingViewModel(
     }
 
     /** Whether a listing survives everything except the market and country picks: not banned by
-     *  hand, and carrying none of the blocked words. Punctuation is collapsed to single spaces on
-     *  both sides, so a blocked word still matches "OVP!Lagerverkauf" and a blocked phrase still
-     *  matches "NEU ! Lagerverkauf". */
-    private fun kept(listing: Listing, banned: Set<String>, blocked: List<String>): Boolean {
+     *  hand, not from a blocked dealer, and carrying none of the blocked words. Punctuation is
+     *  collapsed to single spaces on both sides, so a blocked word still matches "OVP!Lagerverkauf"
+     *  and a blocked phrase still matches "NEU ! Lagerverkauf". */
+    private fun kept(listing: Listing, banned: Set<String>, blocked: List<String>, dealers: List<BlockedDealer> = emptyList()): Boolean {
         if (listing.id in banned) return false
+        if (dealers.blocking(listing) != null) return false
         if (blocked.isEmpty()) return true
         // The title, and only the title — the same text the server blocks on, and the text a
         // reader is looking at when they block a word. Reading the description too made a blocked
@@ -204,8 +209,8 @@ class ListingViewModel(
         // their own, and every one of those skipped the sort. Nearest-first then showed a van 489
         // km away third in a list that was otherwise ordered by distance, because that one listing
         // had arrived after the last sort.
-        combine(_allListings, bannedIds, _blockedTerms, _sortMode) { all, banned, blocked, _ ->
-            sortListings(all.filter { kept(it, banned, blocked) })
+        combine(_allListings, bannedIds, _blockedTerms, blockedDealers, _sortMode) { all, banned, blocked, dealers, _ ->
+            sortListings(all.filter { kept(it, banned, blocked, dealers) })
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
@@ -341,6 +346,29 @@ class ListingViewModel(
     fun unblockTerm(term: String): List<String> {
         _blockedTerms.value = _blockedTerms.value.filterNot { it.equals(term, ignoreCase = true) }
         return _blockedTerms.value
+    }
+
+    /** Block the seller of this listing on its market, on every device. Nothing is asked of the
+     *  markets: what is on screen from them leaves it now, and the server drops the rest from
+     *  every search after. */
+    fun blockDealer(listing: Listing) {
+        if (rendersASample) return
+        val dealer = BlockedDealer.of(listing, kotlin.time.Clock.System.now()) ?: return
+        val rest = BlockedDealers.dealers.value.filterNot { it.platform == dealer.platform && it.sellerId == dealer.sellerId && it.name == dealer.name }
+        viewModelScope.launch {
+            if (!BlockedDealers.set(rest + dealer)) _error.value = "The server did not take the block; it holds on this screen only."
+        }
+    }
+
+    /** Unblock a dealer, and run the search again once the server holds the change, so the offers
+     *  it removed for them come back judged by everything else the search asks. The markets'
+     *  answers are kept on the server, so this asks no market again. */
+    fun unblockDealer(dealer: BlockedDealer) {
+        if (rendersASample) return
+        viewModelScope.launch {
+            val stored = BlockedDealers.set(BlockedDealers.dealers.value - dealer)
+            if (stored && _droppedBySearch.value.any { it.reason == DropReason.BLOCKED_DEALER && dealer.matches(it.listing) }) refresh()
+        }
     }
 
     /** Put one listing back. */

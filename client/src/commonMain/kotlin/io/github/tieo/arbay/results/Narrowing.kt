@@ -2,6 +2,7 @@ package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.comparablePrice
+import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DropReason
@@ -10,6 +11,7 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.blocking
 import io.github.tieo.arbay.model.label
 import io.github.tieo.arbay.model.withPriceRangeEur
 import kotlin.math.ceil
@@ -163,6 +165,7 @@ fun SearchQuery.withBand(band: ClosedFloatingPointRange<Float>, narrowed: Narrow
 sealed interface HiddenKind {
     data object YouHid : HiddenKind
     data object BlockedWords : HiddenKind
+    data object BlockedDealers : HiddenKind
     data object PriceBand : HiddenKind
     data object Condition : HiddenKind
     data object SaleType : HiddenKind
@@ -176,7 +179,8 @@ data class Hidden(val kind: HiddenKind, val label: String, val why: String, val 
 
 /**
  * Every way a listing can be missing from a results screen, each with what took it: the reader's
- * bin, their blocked words (here and on the server, which never sends one on), their price band,
+ * bin, their blocked words and blocked dealers (here and on the server, which never sends one on),
+ * their price band,
  * condition, sale type and "new only", and whatever the search itself removed, one group per
  * reason, and where one reason covers several things, one group per thing: "a vehicle criterion" is
  * not an answer, "its mileage" is.
@@ -191,12 +195,18 @@ fun hiddenListings(
     droppedBySearch: List<DroppedListing>,
     newListingIds: Set<String>,
     likelyScams: Map<String, String> = emptyMap(),
+    blockedDealers: List<BlockedDealer> = emptyList(),
 ): List<Hidden> = buildList {
     val banned = fetched.filter { it.id in bannedIds }
     // By id: the list the words leave carries copies with their distance filled in, which are not
     // equal to the listings as fetched, and every one of them read as blocked.
     val leftByWords = marketBasis.mapTo(HashSet()) { it.id }
-    val byWord = fetched.filter { it.id !in bannedIds && it.id !in leftByWords }.distinctBy { it.id } +
+    // A dealer blocked while the search is open takes its offers off this screen at once; the
+    // server drops them from every search after, and says so.
+    val byDealer = (fetched.filter { it.id !in bannedIds && blockedDealers.blocking(it) != null } +
+        droppedBySearch.filter { it.reason == DropReason.BLOCKED_DEALER }.map { it.listing }).distinctBy { it.id }
+    val takenByDealer = byDealer.mapTo(HashSet()) { it.id }
+    val byWord = fetched.filter { it.id !in bannedIds && it.id !in leftByWords && it.id !in takenByDealer }.distinctBy { it.id } +
         droppedBySearch.filter { it.reason == DropReason.BLOCKED_WORD }.map { it.listing }
     val outOfBand = if (!narrowed.priceFiltered) emptyList()
         else narrowed.allActive.filterNot { narrowed.inPriceRange(it.displayAmount()) }
@@ -213,6 +223,9 @@ fun hiddenListings(
             scams.joinToString(" ") { likelyScams.getValue(it.id) }, scams))
     if (banned.isNotEmpty()) add(Hidden(HiddenKind.YouHid, "you hid",
         "Listings you sent away with the bin on their card.", banned))
+    if (byDealer.isNotEmpty()) add(Hidden(HiddenKind.BlockedDealers, "dealers you blocked",
+        "Sold by " + byDealer.mapNotNull { l -> dealerThatCaught(l, blockedDealers)?.name ?: droppedBySearch.firstOrNull { it.listing.id == l.id }?.detail }
+            .distinct().joinToString(", ") + ".", byDealer))
     if (byWord.isNotEmpty()) add(Hidden(HiddenKind.BlockedWords, "your blocked words",
         "Carrying one of your blocked words: " + blockedTerms.joinToString(", "), byWord))
     if (outOfBand.isNotEmpty()) add(Hidden(HiddenKind.PriceBand, "outside your price band",
@@ -227,7 +240,7 @@ fun hiddenListings(
             ?: "only what says how it is sold") + ".", wrongSaleType))
     if (notNew.isNotEmpty()) add(Hidden(HiddenKind.NotNew, "not new since you last looked",
         "You are looking at what this search found since you last opened it.", notNew))
-    droppedBySearch.filterNot { it.reason == DropReason.BLOCKED_WORD }
+    droppedBySearch.filterNot { it.reason == DropReason.BLOCKED_WORD || it.reason == DropReason.BLOCKED_DEALER }
         .groupBy { it.reason to it.detail }
         .forEach { (key, entries) ->
             val (reason, detail) = key
@@ -236,6 +249,11 @@ fun hiddenListings(
                 entries.map { it.listing }))
         }
 }
+
+/** The blocked dealer that took a listing, which is the one to unblock when the reader changes
+ *  their mind. */
+fun dealerThatCaught(listing: Listing, blockedDealers: List<BlockedDealer>): BlockedDealer? =
+    blockedDealers.blocking(listing)
 
 /** The blocked word that caught a listing, which is the word to drop when the reader disagrees. */
 fun wordThatCaught(listing: Listing, blockedTerms: List<String>): String? {

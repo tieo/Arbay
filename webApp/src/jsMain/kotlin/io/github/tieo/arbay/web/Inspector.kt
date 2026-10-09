@@ -33,6 +33,9 @@ import io.github.tieo.arbay.results.isProblem
 import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.saidWhat
 import io.github.tieo.arbay.results.sourceLabel
+import io.github.tieo.arbay.model.BlockedDealer
+import io.github.tieo.arbay.model.shownName
+import io.github.tieo.arbay.results.dealerThatCaught
 import io.github.tieo.arbay.results.wordThatCaught
 import io.github.tieo.arbay.results.blockWord
 import io.github.tieo.arbay.results.clearBand
@@ -160,6 +163,7 @@ private fun MiniOffer(route: Route.Results, listing: Listing, state: ResultsStat
 private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) {
     val vm = app.listings
     val blocked by vm.blockedTerms.collectAsState()
+    val dealers by vm.blockedDealers.collectAsState()
     Div({ classes("panel") }) {
         PanelHead(route, "Not shown")
         if (state.hidden.isEmpty()) P({ classes("muted") }) { Text("Everything the markets sent is on the list.") }
@@ -170,6 +174,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                     when (val kind = group.kind) {
                         HiddenKind.YouHid -> QuietButton("Put all back") { vm.unbanAll() }
                         HiddenKind.BlockedWords -> QuietButton("Edit the words") { Router.replace(route.copy(panel = Panel.WORDS)) }
+                        HiddenKind.BlockedDealers -> {}
                         HiddenKind.PriceBand -> QuietButton("Widen it") { state.clearBand(app.products) }
                         HiddenKind.Condition -> QuietButton("Show every condition") { state.showEveryCondition(app.products) }
                         HiddenKind.SaleType -> QuietButton("Show both") { state.showBothSaleTypes(app.products) }
@@ -192,6 +197,9 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                             HiddenKind.YouHid -> IconButton(Glyph.Undo, "Put back") { vm.unban(listing) }
                             HiddenKind.BlockedWords -> wordThatCaught(listing, blocked)?.let { word ->
                                 IconButton(Glyph.Undo, "Unblock \"$word\"") { state.unblockWord(app.products, vm, word) }
+                            }
+                            HiddenKind.BlockedDealers -> dealerThatCaught(listing, dealers)?.let { dealer ->
+                                IconButton(Glyph.Undo, "Unblock ${dealer.name}") { vm.unblockDealer(dealer) }
                             }
                             else -> {}
                         }
@@ -439,6 +447,12 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
                 }
             }
             if (!isArchived) SellerAction(app, route, listing)
+            if (!isArchived) listing.seller?.let { seller ->
+                if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) QuietButton("Block ${seller.shownName}", Glyph.No) {
+                    app.listings.blockDealer(listing)
+                    Router.replace(route.copy(listing = null))
+                }
+            }
         }
 
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)

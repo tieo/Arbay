@@ -1,6 +1,10 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.Condition
+import io.github.tieo.arbay.model.DropReason
+import io.github.tieo.arbay.model.DroppedListing
+import io.github.tieo.arbay.model.Seller
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketGroup
@@ -10,6 +14,7 @@ import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.Narrowing
+import io.github.tieo.arbay.results.dealerThatCaught
 import io.github.tieo.arbay.results.hiddenListings
 import io.github.tieo.arbay.results.narrow
 import io.github.tieo.arbay.results.withBand
@@ -77,6 +82,26 @@ class NarrowingTest {
         assertEquals(listOf(HiddenKind.PriceBand, HiddenKind.Condition), hidden.map { it.kind })
         assertEquals(listOf("a"), hidden[0].listings.map { it.id })
         assertEquals(listOf("c"), hidden[1].listings.map { it.id })
+    }
+
+    @Test
+    fun `a blocked dealer's offers are one group, whether the server or this screen took them`() {
+        val dealer = Seller(name = "Beispiel Nutzfahrzeuge GmbH", id = "900001")
+        val onScreen = listing("e", 500).copy(seller = dealer)
+        val dropped = listing("f", 600).copy(seller = dealer)
+        val fetched = listings + onScreen
+        val blocked = listOf(BlockedDealer(PlatformId.EBAY_DE, "900001", "Beispiel Nutzfahrzeuge GmbH", Instant.fromEpochSeconds(0)))
+        val basis = fetched.filter { it.id != "e" }
+        val narrowed = narrow(basis, Narrowing(), emptySet())
+        val hidden = hiddenListings(
+            narrowed, Narrowing(), fetched, basis, emptySet(), emptyList(),
+            listOf(DroppedListing(dropped, DropReason.BLOCKED_DEALER, "Beispiel Nutzfahrzeuge GmbH")), emptySet(),
+            blockedDealers = blocked,
+        )
+        assertEquals(listOf(HiddenKind.BlockedDealers), hidden.map { it.kind })
+        assertEquals(listOf("e", "f"), hidden.single().listings.map { it.id })
+        assertEquals("Sold by Beispiel Nutzfahrzeuge GmbH.", hidden.single().why)
+        assertEquals(blocked.single(), dealerThatCaught(dropped, blocked))
     }
 
     @Test

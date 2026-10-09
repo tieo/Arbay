@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
@@ -49,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.AUCTION_LEAD_CHOICES
+import io.github.tieo.arbay.model.BlockedDealer
+import io.github.tieo.arbay.model.shownName
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.SaleType
@@ -147,6 +150,13 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
                 if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
+                if (!isArchived) listing.seller?.let { seller ->
+                    if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) {
+                        OutlinedButton(onClick = { session.listings.blockDealer(listing); nav.back() }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Outlined.Block, null, Modifier.size(18.dp)); HGap(); Text("Block ${seller.shownName}")
+                        }
+                    }
+                }
 
                 if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(session, listing)
 
