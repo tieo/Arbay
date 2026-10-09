@@ -372,11 +372,11 @@ class ArbayClient(
         excludeKeywords: List<String> = emptyList(), aliases: List<String> = emptyList(),
     ): List<Listing> =
         client.get("$baseUrl/api/crawler/search") {
-            // Every market crawled before the one answer comes back, with nothing said meanwhile:
-            // bounded by the server's own search budget rather than the default minute.
+            // Every market crawled before the one answer comes back, with nothing said meanwhile,
+            // so neither the default minute nor the silence limit fits it.
             timeout {
-                requestTimeoutMillis = 420_000
-                socketTimeoutMillis = 420_000
+                requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
             }
             parameter("q", query)
             platform?.let { parameter("platform", it.name) }

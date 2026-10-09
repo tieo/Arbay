@@ -54,7 +54,11 @@ def stop_viewer() -> None:
 
 async def await_human_solve(tab, is_solved, display: str, max_wait: float = 180.0) -> bool:
     """Expose `display` over noVNC, signal the caller that a human solve is needed, then poll
-    `is_solved(html)` until it returns True or `max_wait` elapses. Returns True if solved."""
+    `is_solved(html)` until it returns True or `max_wait` elapses. Returns True if solved.
+
+    The market's time limit on the server stands still while this waits for a person, so
+    `max_wait` is the only bound on a challenge nobody solves: without it that crawl, and the
+    search permit it holds, would wait for good."""
     start_viewer(display)
     ctrl("CAPTCHA_INTERACTIVE")
     waited = 0.0

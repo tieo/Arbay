@@ -11,7 +11,10 @@ import kotlin.coroutines.coroutineContext
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal const val USER_AGENT =
@@ -145,6 +148,57 @@ class CaptchaInteractiveEmitter(val emit: suspend () -> Unit) : CoroutineContext
  *  [CaptchaInteractiveEmitter] is attached; a no-op otherwise. */
 internal suspend fun emitCaptchaInteractive() {
     coroutineContext[CaptchaInteractiveEmitter]?.emit()
+}
+
+/**
+ * The clock of one market's time limit, which stands still while a person is solving that
+ * market's captcha in the live browser. The limit is there for a crawl that never answers; a
+ * person working through a challenge is not that, and counting their time cut off a solve in
+ * progress. How long a person is given is the captcha gate's own limit in the sidecar.
+ */
+class CrawlClock internal constructor(private val limitMs: Long) : CoroutineContext.Element {
+    companion object Key : CoroutineContext.Key<CrawlClock>
+    override val key: CoroutineContext.Key<*> = Key
+
+    private val personSolving = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    /** Stop the clock while a person is solving ([solving] true), run it again once they are done. */
+    fun personSolving(solving: Boolean) { personSolving.value = solving }
+
+    /** Returns once [limitMs] have passed with nobody solving a captcha. */
+    internal suspend fun runOut() {
+        var left = limitMs
+        while (left > 0) {
+            personSolving.first { !it }
+            val from = System.currentTimeMillis()
+            kotlinx.coroutines.withTimeoutOrNull(left) { personSolving.first { it } }
+            left -= System.currentTimeMillis() - from
+        }
+    }
+}
+
+/**
+ * Runs [block] under a [CrawlClock] of [limitMs] and returns its result, or null when the clock
+ * ran out first and [block] was cancelled. A cancellation from outside (the app hung up) carries on.
+ */
+suspend fun <T> withCrawlLimitOrNull(limitMs: Long, block: suspend kotlinx.coroutines.CoroutineScope.() -> T): T? {
+    val clock = CrawlClock(limitMs)
+    val ranOut = java.util.concurrent.atomic.AtomicBoolean(false)
+    return kotlinx.coroutines.coroutineScope {
+        val work = async(clock) { block() }
+        val limit = launch {
+            clock.runOut()
+            ranOut.set(true)
+            work.cancel()
+        }
+        try {
+            work.await()
+        } catch (e: CancellationException) {
+            if (ranOut.get()) null else throw e
+        } finally {
+            limit.cancel()
+        }
+    }
 }
 
 /** Runs the page-by-page crawl every list crawler shares: fetch and parse one page via [fetchPage],

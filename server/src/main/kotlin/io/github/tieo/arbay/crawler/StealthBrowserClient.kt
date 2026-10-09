@@ -5,7 +5,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * Fetches Akamai-protected pages by shelling out to mobilede_fetch.py, which drives real
@@ -46,11 +45,7 @@ object StealthBrowserClient {
      *  after the challenge clears. */
     suspend fun fetchRendered(url: String, waitMarker: String, waitSeconds: Int = 30, minMatches: Int = 1): String {
         val args = listOf("xvfb-run", "-a", "python3", genericScriptPath, url, waitMarker, waitSeconds.toString(), minMatches.toString())
-        val outcome = try {
-            runProcess(args, timeoutMs = (waitSeconds + 45) * 1000L)
-        } catch (_: ProcessTimedOut) {
-            throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
-        }
+        val outcome = runProcess(args)
         if (outcome.exitCode != 0) {
             log.warn("stealth render exit {} for {}: {}", outcome.exitCode, url, outcome.stderr.take(200))
             val type = if (outcome.exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
@@ -59,17 +54,14 @@ object StealthBrowserClient {
         return outcome.stdout.toString(Charsets.UTF_8)
     }
 
-    /** How long a human is given to solve an interactive captcha once the sidecar exposes the live
-     *  browser over noVNC. The crawl's timeout is extended by this once solving begins. */
-    private const val INTERACTIVE_SOLVE_MS = 200_000L
-
     /** Load [url] in real Chrome, solve the Akamai challenge once, then page through up to
      *  [maxPages] in the same session, invoking [onPage] with each page's HTML the moment the
      *  sidecar flushes it — so a caller can parse and stream results live instead of waiting for the
      *  whole multi-page crawl. [onControl] receives the sidecar's control messages (e.g.
-     *  "CAPTCHA_INTERACTIVE" when it exposes the live browser for a human solve). Throws
-     *  [CrawlerBlockedException] if page 1 is blocked (exit 2 → CAPTCHA) or the process errors/times
-     *  out; pages already delivered to [onPage] stand. */
+     *  "CAPTCHA_INTERACTIVE" when it exposes the live browser for a human solve), and the crawl's
+     *  [CrawlClock] stands still from then until the sidecar says the solve ended. Throws
+     *  [CrawlerBlockedException] if page 1 is blocked (exit 2 → CAPTCHA) or the process errors;
+     *  pages already delivered to [onPage] stand. */
     suspend fun fetchStreaming(
         url: String,
         maxPages: Int = 1,
@@ -78,6 +70,7 @@ object StealthBrowserClient {
         onPage: suspend (html: String) -> Unit,
     ) {
         val args = listOf("xvfb-run", "-a", "python3", scriptPath, url, maxPages.toString(), waitSeconds.toString())
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
         val process = ProcessBuilder(args).redirectErrorStream(false).start()
 
         val pages = Channel<String>(Channel.UNLIMITED)
@@ -133,34 +126,16 @@ object StealthBrowserClient {
         readerThread.isDaemon = true
         readerThread.start()
 
-        // A watchdog kills the process if it overruns the deadline; a human solve pushes the deadline
-        // out so the wait for the user does not trip the timeout. The channels close when the process
-        // dies, which ends the consumption loops below.
-        val deadline = java.util.concurrent.atomic.AtomicLong(
-            System.currentTimeMillis() + (waitSeconds + maxPages * 20 + 60) * 1000L)
-        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
-        // Whether the sidecar handed its browser to a person: a run that then overruns ended on a
-        // challenge nobody solved, which is a captcha and not a slow page.
-        val askedForHuman = java.util.concurrent.atomic.AtomicBoolean(false)
         // The reference of an outright refusal page, which has nothing on it for a person to solve.
         val denied = java.util.concurrent.atomic.AtomicReference<String?>(null)
-        val watchdog = Thread {
-            while (process.isAlive) {
-                if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); killTree(process); break }
-                Thread.sleep(1_000)
-            }
-        }
-        watchdog.isDaemon = true
-        watchdog.start()
-
         try {
             coroutineScope {
                 val ctrlJob = launch {
                     for (msg in controls) {
                         if (msg.startsWith("DENIED")) denied.set(msg.removePrefix("DENIED").trim())
-                        if (msg == "CAPTCHA_INTERACTIVE") {
-                            askedForHuman.set(true)
-                            deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
+                        when (msg) {
+                            "CAPTCHA_INTERACTIVE" -> clock?.personSolving(true)
+                            "CAPTCHA_SOLVED", "CAPTCHA_TIMEOUT" -> clock?.personSolving(false)
                         }
                         onControl(msg)
                     }
@@ -170,22 +145,16 @@ object StealthBrowserClient {
             }
         } catch (e: Throwable) {
             // The search that wanted these pages is gone or failed; the browser must go with it
-            // rather than page on until the watchdog's deadline.
+            // rather than page on for nobody.
             killTree(process)
             throw e
+        } finally {
+            clock?.personSolving(false)
         }
 
-        if (timedOut.get()) {
-            stderrThread.join(3_000)
-            val said = stderrBuf.toString().trim().takeLast(300).ifEmpty { "nothing" }
-            if (askedForHuman.get()) {
-                throw CrawlerBlockedException("challenge for $url was not solved in time; the browser said: $said", ErrorType.CAPTCHA)
-            }
-            throw CrawlerBlockedException("stealth browser timeout for $url; the browser said: $said", ErrorType.TIMEOUT)
-        }
-
-        stderrThread.join(3_000)
-        if (!process.waitFor(10, TimeUnit.SECONDS)) killTree(process)
+        // Both streams have ended, so everything that held them, xvfb-run included, has exited.
+        stderrThread.join()
+        process.waitFor()
 
         val stderr = stderrBuf.toString()
         val exitCode = runCatching { process.exitValue() }.getOrElse { -1 }

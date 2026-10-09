@@ -32,11 +32,7 @@ object RnetClient {
     suspend fun fetch(url: String, primeUrl: String? = null): String {
         val args = mutableListOf("python3", scriptPath, "fetch", url)
         if (!primeUrl.isNullOrBlank()) args.add(primeUrl)
-        val outcome = try {
-            runProcess(args, timeoutMs = 70_000)
-        } catch (_: ProcessTimedOut) {
-            throw CrawlerBlockedException("rnet output timeout for $url", ErrorType.TIMEOUT)
-        }
+        val outcome = runProcess(args)
         val stderr = outcome.stderr
 
         val exitCode = outcome.exitCode

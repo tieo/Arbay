@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.SortMode
 import io.github.tieo.arbay.format
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -683,7 +682,6 @@ class ListingViewModel(
             // screen closing or by the next search starting.
             var ranToTheEnd = false
             try {
-                withTimeoutOrNull(360_000L) {
                 client.crawlerSearchStream(
                     query, platforms = platforms, filters = filters,
                     excludeKeywords = excludeKeywords, aliases = aliases, reach = reach,
@@ -790,9 +788,8 @@ class ListingViewModel(
                         CrawlerEventType.SEARCH_COMPLETE -> {}
                     }
                 }
-                } // withTimeoutOrNull
-                // Reached either by the stream ending or by the 360 s cap, and both are this
-                // search finishing rather than something else stopping it.
+                // Reached by the stream ending, which is this search finishing rather than
+                // something else stopping it.
                 ranToTheEnd = true
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Closing the results, or starting another search, cancels this one. Nothing
@@ -832,7 +829,7 @@ class ListingViewModel(
                 }
             } finally {
                 _loading.value = false
-                // A market still working when the search itself ran out of time was too slow. One
+                // A market still working when the search's stream ended was given up on. One
                 // still working when the screen was closed, or when another search replaced this
                 // one, was not: this block runs on cancellation too, so leaving the app mid-fetch
                 // used to mark whatever was in flight as having been given up on.

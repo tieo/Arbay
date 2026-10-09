@@ -36,6 +36,8 @@ import io.github.tieo.arbay.crawler.classifyException
 import io.github.tieo.arbay.crawler.localizedQuery
 import io.github.tieo.arbay.crawler.searchAllSpellings
 import io.github.tieo.arbay.crawler.trackedSearch
+import io.github.tieo.arbay.crawler.withCrawlLimitOrNull
+import kotlinx.coroutines.withTimeoutOrNull
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.SaleType
@@ -58,7 +60,6 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -212,7 +213,9 @@ private fun priceEurCents(money: Money): Long =
     else ExchangeRates.convert(money.amount, money.currency.name, "EUR")
 
 /** How long one market may take before the stream gives up on it. Every crawler runs inside this,
- *  so a hung browser costs one market's results rather than the server's ability to search at all. */
+ *  so a hung browser costs one market's results rather than the server's ability to search at all:
+ *  hung crawlers once kept their streams and scrape permits alive until every search was refused as
+ *  busy for hours. The clock stands still while a person solves the market's captcha (CrawlClock). */
 private const val PLATFORM_BUDGET_MS = 180_000L
 
 /**
@@ -225,9 +228,6 @@ private const val PLATFORM_BUDGET_MS = 180_000L
  * stream in as each finishes.
  */
 private val crawlSlots = kotlinx.coroutines.sync.Semaphore(4)
-
-/** How long a whole search may hold its scrape permit, whatever the crawlers are doing. */
-private const val SEARCH_BUDGET_MS = 420_000L
 
 // How long the listings of one market that finished may take to be placed on the map. It is
 // spent after the market has reported, so running out only leaves some listings unplaced.
@@ -588,7 +588,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
             val permit = call.acquireScrapeSlot() ?: return@get
             try {
-            withTimeoutOrNull(SEARCH_BUDGET_MS) {
             call.respondTextWriter(contentType = ContentType.Text.Plain) {
                 // Send SEARCH_STARTED
                 val startEvent = CrawlerSearchEvent(
@@ -631,7 +630,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // and the server refuses every later search as busy until it restarts.
                           // The budget starts when the crawl does, not when it joins the queue.
                           crawlSlots.withPermit {
-                          withTimeoutOrNull(PLATFORM_BUDGET_MS) crawl@{
+                          withCrawlLimitOrNull(PLATFORM_BUDGET_MS) crawl@{
                             val crawler = CrawlerRegistry.crawlerFor(platformId)
                             if (crawler == null) {
                                 resultChannel.send(CrawlerSearchEvent(
@@ -962,7 +961,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 )
                 write(json.encodeToString(completeEvent) + "\n")
                 flush()
-            }
             }
             } finally {
                 permit.release()

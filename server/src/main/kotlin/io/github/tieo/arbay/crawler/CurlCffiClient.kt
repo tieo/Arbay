@@ -51,11 +51,7 @@ object CurlCffiClient {
 
     private suspend fun run(args: List<String>, desc: String): String {
         log.debug("CurlCffi launching: {}", desc)
-        val outcome = try {
-            runProcess(args, timeoutMs = 70_000)
-        } catch (_: ProcessTimedOut) {
-            throw CrawlerBlockedException("curl_cffi output timeout for $desc", ErrorType.TIMEOUT)
-        }
+        val outcome = runProcess(args)
         val stderr = outcome.stderr
 
         val exitCode = outcome.exitCode
