@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.model
 
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 /**
@@ -22,4 +23,6 @@ data class ListingDetail(
     /** Shipping as the page states it, where the card only said it ships: Kleinanzeigen's page
      *  names the cheapest carrier the seller allows ("+ Versand ab 6,19 €"). */
     val shipping: Shipping? = null,
+    /** When the ad first went up, where only its page says it: mobile.de's results carry no date. */
+    val listedAt: Instant? = null,
 )

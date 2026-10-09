@@ -132,6 +132,10 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         return found
     }
 
+    // The ad's own record in the page's streamed data: created, then modified and renewed, in
+    // seconds. Renewed moves when a dealer pushes the ad up again; created is when it first went up.
+    private val adCreated = Regex("""\\?"created\\?":(\d{9,11}),\\?"modified\\?":\d+,\\?"renewed\\?"""")
+
     private val euroClass = Regex("""euro\s*(\d)""", RegexOption.IGNORE_CASE)
 
     internal fun parseAd(html: String): ListingDetail? {
@@ -180,6 +184,8 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         return ListingDetail(
             vehicle = vehicle.takeIf { it.verified.isNotEmpty() },
             description = description,
+            listedAt = adCreated.find(html)?.groupValues?.get(1)?.toLongOrNull()
+                ?.let { kotlin.time.Instant.fromEpochSeconds(it) },
         ).takeIf { it.vehicle != null || it.description != null }
     }
 
@@ -414,13 +420,19 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                         fun text(key: String) = (contact?.get(key) as? kotlinx.serialization.json.JsonPrimitive)
                             ?.content?.trim()?.takeIf { it.isNotBlank() }
                         val dealer = text("enumType") == "DEALER"
-                        val ratingPage = ((contact?.get("rating") as? kotlinx.serialization.json.JsonObject)
-                            ?.get("link") as? kotlinx.serialization.json.JsonPrimitive)?.content
+                        val rating = contact?.get("rating") as? kotlinx.serialization.json.JsonObject
+                        fun ratingValue(key: String) = (rating?.get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content
+                        val ratingPage = ratingValue("link")
+                        // The dealer's stars on this site, out of 5, and how many reviews they rest on.
+                        val reviews = ratingValue("count")?.toIntOrNull()?.takeIf { it > 0 }
+                        val stars = ratingValue("score")?.toDoubleOrNull()?.takeIf { reviews != null }
                         found[listingId] = Seller(
                             id = sellerId,
                             type = if (dealer) SellerType.BUSINESS else SellerType.PRIVATE,
                             name = if (dealer) text("name") else null,
                             url = if (dealer) ratingPage?.takeIf { it.startsWith("https://") }?.substringBefore('?') else null,
+                            rating = if (dealer) stars else null,
+                            reviewCount = if (dealer) reviews else null,
                         )
                     }
                     element.values.forEach(::walk)

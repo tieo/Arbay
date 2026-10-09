@@ -46,9 +46,20 @@ class AutoScout24Crawler(
                 VehicleInfo(wheelbaseMm = it, verified = setOf(VehicleField.WHEELBASE))
             },
             description = description,
+            listedAt = listedAt(doc),
         ).takeIf { it.vehicle != null || it.description != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
+    }
+
+    /** When the ad went up, as the page's data states it: `listingDetails.createdTimestampWithOffset`. */
+    internal fun listedAt(doc: org.jsoup.nodes.Document): kotlin.time.Instant? {
+        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() as? JsonObject ?: return null
+        val stamp = ((root["props"] as? JsonObject)?.get("pageProps") as? JsonObject)
+            ?.get("listingDetails")?.let { it as? JsonObject }?.get("createdTimestampWithOffset")
+            ?.let { it as? JsonPrimitive }?.takeIf { it.isString }?.content ?: return null
+        return runCatching { kotlin.time.Instant.parse(stamp) }.getOrNull()
     }
 
     /**
@@ -317,7 +328,7 @@ class AutoScout24Crawler(
                     description = description,
                     scrapedAt = now,
                     vehicle = vehicle,
-                    seller = sellerOf(obj["seller"] as? JsonObject),
+                    seller = sellerOf(obj["seller"] as? JsonObject)?.withRatings(obj["ratings"] as? JsonObject),
                 )
             }
         } catch (_: Exception) {
@@ -342,6 +353,15 @@ class AutoScout24Crawler(
             url = if (dealer) (seller["links"] as? JsonObject)?.get("infoPage")?.jsonPrimitive?.contentOrNull
                 ?.takeIf { it.startsWith("https://") }?.substringBefore('?') else null,
         )
+    }
+
+    /** The dealer's stars and how many reviews they rest on, from the card's `ratings` object, where
+     *  the site shows them at all (`ratingsEnabled`). */
+    internal fun Seller.withRatings(ratings: JsonObject?): Seller {
+        if (ratings?.get("ratingsEnabled")?.jsonPrimitive?.contentOrNull != "true") return this
+        val count = ratings["ratingsCount"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.takeIf { it > 0 } ?: return this
+        val stars = ratings["ratingsStars"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return this
+        return copy(rating = stars, reviewCount = count)
     }
 
     internal fun parseFromHtml(html: String): List<Listing> {

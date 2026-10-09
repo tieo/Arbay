@@ -44,4 +44,23 @@ class AutoScout24ParserTest {
             assertTrue(listing.url.contains("autoscout24"))
         }
     }
+
+    @Test
+    fun `a dealer card carries the dealer's stars and review count`() {
+        val results = assertNotNull(AutoScout24Crawler(dummyClient()).parseFromNextData(fixture()))
+        val first = results.first()
+        assertEquals(5.0, first.seller?.rating)
+        assertEquals(52, first.seller?.reviewCount)
+    }
+
+    @Test
+    fun `an ad page says when the ad went up`() {
+        val page = """<html><body><script id="__NEXT_DATA__" type="application/json">""" +
+            """{"props":{"pageProps":{"listingDetails":{"createdTimestampWithOffset":"2026-10-08T16:54:26.319Z"}}}}""" +
+            """</script></body></html>"""
+        assertEquals(
+            kotlin.time.Instant.parse("2026-10-08T16:54:26.319Z"),
+            AutoScout24Crawler(dummyClient()).listedAt(org.jsoup.Jsoup.parse(page)),
+        )
+    }
 }

@@ -83,6 +83,7 @@ object DetailEnricher {
         vehicle = VehicleTextParser.merge(detail.vehicle, vehicle),
         description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
         location = location ?: detail.location,
+        listingDate = listingDate ?: detail.listedAt,
     )
 
     private fun priceEurCents(listing: Listing): Long =
