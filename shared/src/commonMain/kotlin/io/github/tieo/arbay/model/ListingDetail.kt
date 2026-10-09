@@ -25,4 +25,7 @@ data class ListingDetail(
     val shipping: Shipping? = null,
     /** When the ad first went up, where only its page says it: mobile.de's results carry no date. */
     val listedAt: Instant? = null,
+    /** How many reviews the dealer's stars rest on, where only the page has the whole number:
+     *  a mobile.de result card counts some of them (12 where the page says 474). */
+    val sellerReviews: Int? = null,
 )

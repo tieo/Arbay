@@ -74,7 +74,7 @@ class MobileDeParserTest {
 
     @Test
     fun `reads the place and the dealer from the seller box`() {
-        val flight = "{\"id\":2,\"sellerId\":77,\"contact\":{\"enumType\":\"DEALER\",\"rating\":{\"count\":220,\"score\":4.9}}}"
+        val flight = "{\"id\":2,\"sellerId\":77,\"contact\":{\"enumType\":\"DEALER\",\"rating\":{\"count\":12,\"score\":4.9}}}"
         val payload = kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonPrimitive.serializer(),
             kotlinx.serialization.json.JsonPrimitive("1:$flight\n"))
         val html = "<html><body>" +
@@ -88,14 +88,16 @@ class MobileDeParserTest {
         assertEquals("Autohaus Muster GmbH", dealerOne.seller?.name)
         assertEquals("77", dealerOne.seller?.id)
         assertEquals(4.9, dealerOne.seller?.rating)
-        assertEquals(220, dealerOne.seller?.reviewCount)
+        // The card's count is only part of the reviews; the whole number comes from the ad page.
+        assertNull(dealerOne.seller?.reviewCount)
     }
 
     @Test
     fun `an ad page says when the ad first went up`() {
         val html = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText() +
-            "<script>self.__next_f.push([1,\"{\\\"created\\\":1790255912,\\\"modified\\\":1791294945,\\\"renewed\\\":1790255912}\"])</script>"
+            "<script>self.__next_f.push([1,\"{\\\"created\\\":1790255912,\\\"modified\\\":1791294945,\\\"renewed\\\":1790255912,\\\"rating\\\":{\\\"count\\\":12,\\\"totalCount\\\":474,\\\"score\\\":4.9}}\"])</script>"
         val detail = assertNotNull(MobileDeCrawler(dummyClient()).parseAd(html))
         assertEquals(kotlin.time.Instant.fromEpochSeconds(1790255912), detail.listedAt)
+        assertEquals(474, detail.sellerReviews)
     }
 }

@@ -136,6 +136,10 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
     // seconds. Renewed moves when a dealer pushes the ad up again; created is when it first went up.
     private val adCreated = Regex("""\\?"created\\?":(\d{9,11}),\\?"modified\\?":\d+,\\?"renewed\\?"""")
 
+    // The dealer's rating in the page's streamed data: {"count":12,"totalCount":474,"score":4.9,…};
+    // totalCount is the number the page shows ("474 Bewertungen").
+    private val dealerReviews = Regex("""\\?"totalCount\\?":(\d+)""")
+
     private val euroClass = Regex("""euro\s*(\d)""", RegexOption.IGNORE_CASE)
 
     internal fun parseAd(html: String): ListingDetail? {
@@ -186,6 +190,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             description = description,
             listedAt = adCreated.find(html)?.groupValues?.get(1)?.toLongOrNull()
                 ?.let { kotlin.time.Instant.fromEpochSeconds(it) },
+            sellerReviews = dealerReviews.find(html)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 },
         ).takeIf { it.vehicle != null || it.description != null }
     }
 
@@ -423,9 +428,12 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                         val rating = contact?.get("rating") as? kotlinx.serialization.json.JsonObject
                         fun ratingValue(key: String) = (rating?.get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content
                         val ratingPage = ratingValue("link")
-                        // The dealer's stars on this site, out of 5, and how many reviews they rest on.
-                        val reviews = ratingValue("count")?.toIntOrNull()?.takeIf { it > 0 }
-                        val stars = ratingValue("score")?.toDoubleOrNull()?.takeIf { reviews != null }
+                        // The dealer's stars on this site, out of 5. How many reviews they rest on is
+                        // `totalCount`, which only the ad page carries; the card's `count` is a part
+                        // of them (12 for a dealer the page shows with 474) and is not taken.
+                        val stars = ratingValue("score")?.toDoubleOrNull()
+                            ?.takeIf { (ratingValue("count")?.toIntOrNull() ?: 0) > 0 }
+                        val reviews = ratingValue("totalCount")?.toIntOrNull()?.takeIf { it > 0 }
                         found[listingId] = Seller(
                             id = sellerId,
                             type = if (dealer) SellerType.BUSINESS else SellerType.PRIVATE,

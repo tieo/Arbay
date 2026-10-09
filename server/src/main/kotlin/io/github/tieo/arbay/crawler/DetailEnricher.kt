@@ -84,6 +84,7 @@ object DetailEnricher {
         description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
         location = location ?: detail.location,
         listingDate = listingDate ?: detail.listedAt,
+        seller = detail.sellerReviews?.let { reviews -> seller?.copy(reviewCount = reviews) } ?: seller,
     )
 
     private fun priceEurCents(listing: Listing): Long =
