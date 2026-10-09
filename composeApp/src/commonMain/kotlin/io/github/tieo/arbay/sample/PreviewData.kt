@@ -44,7 +44,9 @@ object PreviewData {
 
     val active: List<Listing> = listOf(
         l("1", PlatformId.KLEINANZEIGEN, "Lägler Hummel Parkettschleifmaschine Bandschleifer", 250_00, city = "Steinen", country = "DE", condition = Condition.USED),
-        l("2", PlatformId.EBAY_DE, "Parkettschleifmaschine Trommelschleifer 220V Profi", 380_00, condition = Condition.USED),
+        // Sold by a dealer the card names, so the offer page draws the way to block one.
+        l("2", PlatformId.EBAY_DE, "Parkettschleifmaschine Trommelschleifer 220V Profi", 380_00, condition = Condition.USED)
+            .copy(seller = Seller(name = "Beispiel Maschinenhandel", id = "900001", type = SellerType.BUSINESS)),
         l("3", PlatformId.RICARDO, "Bona Belt Parkettschleifmaschine", 890_00, Currency.CHF, city = "Bern", country = "CH", condition = Condition.USED),
         l("4", PlatformId.WILLHABEN, "Parkettschleifmaschine Lägler Elf", 400_00, city = "Graz", country = "AT", condition = Condition.USED),
         l("5", PlatformId.EBAY_IT, "Levigatrice per parquet Lägler Hummel", 650_00, city = "Milano", country = "IT", condition = Condition.USED),
