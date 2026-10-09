@@ -34,6 +34,9 @@ CHROME = os.environ.get("MOBILEDE_CHROME", "/usr/bin/google-chrome-stable")
 RESULT_MARKERS = ('data-testid="result-list', 'data-testid="listing-title', "/fahrzeuge/details")
 # Markers of the Akamai interstitial / block page — the only thing that counts as "still blocked".
 CHALLENGE_MARKERS = ("sec-if-cpt", "zugriff verweigert", "access denied", "captcha-delivery")
+# Of those, the ones a person can solve: an interactive challenge. "Access denied" with an error
+# reference is a refusal with nothing on it to solve, so no one is asked to try.
+SOLVABLE_MARKERS = ("sec-if-cpt", "captcha-delivery")
 
 
 def has_results(html: str) -> bool:
@@ -43,6 +46,17 @@ def has_results(html: str) -> bool:
 def is_challenge(html: str) -> bool:
     t = html.lower()
     return any(m in t for m in CHALLENGE_MARKERS)
+
+
+def is_denied(html: str) -> bool:
+    """An Akamai refusal page rather than a challenge: blocked outright, nothing to solve."""
+    return is_challenge(html) and not any(m in html.lower() for m in SOLVABLE_MARKERS)
+
+
+def denial_reference(html: str) -> str:
+    import re
+    m = re.search(r"(?:Error Reference|Fehlerreferenz|Referenz)[^0-9]{0,20}([0-9a-f.]{12,})", html, re.I)
+    return m.group(1) if m else "none shown"
 
 
 def with_page(url: str, page: int) -> str:
@@ -68,6 +82,9 @@ async def load(page, url: str, wait_s: float) -> str | None:
             continue
         if has_results(html):
             return html
+        if is_denied(html):
+            captcha_gate.ctrl(f"DENIED {denial_reference(html)}")
+            return None
         if is_challenge(html):
             continue
         # A settled page that is neither results nor a challenge is a real page (e.g. 0 hits).

@@ -142,6 +142,8 @@ object StealthBrowserClient {
         // Whether the sidecar handed its browser to a person: a run that then overruns ended on a
         // challenge nobody solved, which is a captcha and not a slow page.
         val askedForHuman = java.util.concurrent.atomic.AtomicBoolean(false)
+        // The reference of an outright refusal page, which has nothing on it for a person to solve.
+        val denied = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val watchdog = Thread {
             while (process.isAlive) {
                 if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); killTree(process); break }
@@ -155,6 +157,7 @@ object StealthBrowserClient {
             coroutineScope {
                 val ctrlJob = launch {
                     for (msg in controls) {
+                        if (msg.startsWith("DENIED")) denied.set(msg.removePrefix("DENIED").trim())
                         if (msg == "CAPTCHA_INTERACTIVE") {
                             askedForHuman.set(true)
                             deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
@@ -186,6 +189,9 @@ object StealthBrowserClient {
 
         val stderr = stderrBuf.toString()
         val exitCode = runCatching { process.exitValue() }.getOrElse { -1 }
+        denied.get()?.let { reference ->
+            throw CrawlerBlockedException("access denied for $url (reference $reference)", ErrorType.BLOCKED_403)
+        }
         if (exitCode != 0) {
             log.warn("stealth browser exit {} for {}: {}", exitCode, url, stderr.take(200))
             val type = if (exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
