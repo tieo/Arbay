@@ -225,7 +225,9 @@ data class Offer(val price: Int?, val direct: Int?, val shippingEur: Double?, va
 /**
  * What to offer for a listing so that all the buyer pays stays within [allInEur]: shipping as
  * [shippingCostEur] prices it and the market's protection fee from [costs] where the item is
- * shipped. Never more than the seller asks ([askingEur]). Without a readable fee no price is named.
+ * shipped. Never more than the seller asks ([askingEur]). The direct total is capped too: the
+ * price the seller would get for the phone itself, the direct total less shipping, stays at or
+ * below the ask. Without a readable fee no price is named.
  */
 fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEur: Double?, toDoor: Boolean, costs: ChatCosts?): Offer {
     val pickupOnly = shipping != null && !shipping.available && shipping.pickup
@@ -235,8 +237,11 @@ fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEu
     if (allInEur != null && protected && protection == null) {
         return Offer(null, null, shippingEur, "the Sicher bezahlen fee could not be read from Kleinanzeigen")
     }
+    val asking = askingEur?.takeIf { it > 0 }
     val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
-        ?.let { if (askingEur != null && askingEur > 0) minOf(it, askingEur) else it }
+        ?.let { if (asking != null) minOf(it, asking) else it }
+    val direct = price?.let { directPrice(it, shippingEur ?: 0.0, protection) }
+        ?.let { if (asking != null) minOf(it, floor(asking + (shippingEur ?: 0.0)).toInt()) else it }
     val note = when {
         allInEur == null -> null
         pickupOnly -> "pickup, paid in person"
@@ -244,7 +249,7 @@ fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEu
         shipping == null -> "the ad says nothing about shipping"
         else -> doorDeliveryUsed(shipping, toDoor)
     }
-    return Offer(price, price?.let { directPrice(it, shippingEur ?: 0.0, protection) }, shippingEur, note)
+    return Offer(price, direct, shippingEur, note)
 }
 
 /** The markets whose sellers Arbay can write to. */
