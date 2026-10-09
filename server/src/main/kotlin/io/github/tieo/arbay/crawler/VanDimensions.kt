@@ -116,12 +116,15 @@ object VanDimensions {
     private val superHighRoof = Regex("""\bsuperhochdach\b""", RegexOption.IGNORE_CASE)
     // Sellers write "Hochdach" of any tall roof, Superhochdach included ("Lang Hochdach … L3H2" on
     // one listing), so it says high or higher.
-    private val highRoof = Regex("""\bhochdach\b""", RegexOption.IGNORE_CASE)
+    // Dealers shorten it: "MITTEL HOCH", "mittelhoch", "Hochraum-Kasten", "HD" (LR HD), and "MLH"
+    // for mittellang Hochdach ("VW Crafter 35 D MLH").
+    private val highRoof = Regex("""\b(hochdach|hochraum\w*|hoch|hd|mlh|mittelhoch|mittellanghoch)\b""", RegexOption.IGNORE_CASE)
     private val normalRoof = Regex("""\bnormaldach\b""", RegexOption.IGNORE_CASE)
     // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5.
     private val overhang = Regex("""\b(verlängerte[mnr]? überhang|überhang)\b""", RegexOption.IGNORE_CASE)
-    private val longWords = Regex("""\b(langer radstand|lang)\b""", RegexOption.IGNORE_CASE)
-    private val mediumWords = Regex("""\b(mittlere[rn]? radstand|mittellang|mittel lang)\b""", RegexOption.IGNORE_CASE)
+    // VW's own short names for the wheelbases: MR mittlerer Radstand, LR langer Radstand.
+    private val longWords = Regex("""\b(langer radstand|lang|lr)\b""", RegexOption.IGNORE_CASE)
+    private val mediumWords = Regex("""\b(mittlere[rn]? radstand|mittellang|mittel lang|mittel|mr|mlh|mittelhoch|mittellanghoch)\b""", RegexOption.IGNORE_CASE)
 
     /** The sizes every source allows, taken in the order given; a source that would leave none is
      *  passed over, so a seller's slip does not erase what a surer source said. */
