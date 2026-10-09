@@ -106,8 +106,6 @@ object EmbeddingModel {
                 if (stream != null) return@repeat
                 val conn = URI(currentUrl).toURL().openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = false
-                conn.connectTimeout = 15_000
-                conn.readTimeout = 60_000
                 conn.setRequestProperty("User-Agent", "Java/HuggingFace-download")
                 conn.connect()
                 when (conn.responseCode) {

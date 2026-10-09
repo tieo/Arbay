@@ -83,12 +83,7 @@ object Geocoder {
     private fun ensureCountry(cc: String): String? {
         val f = File(dir, "$cc.txt")
         if (f.exists() && f.length() > 0) return f.readText()
-        // Bounded, so an unanswered download fails and is retried on the next start instead of
-        // holding the thread that builds the index.
-        val connection = java.net.URI("https://download.geonames.org/export/zip/$cc.zip").toURL().openConnection().apply {
-            connectTimeout = 15_000
-            readTimeout = 60_000
-        }
+        val connection = java.net.URI("https://download.geonames.org/export/zip/$cc.zip").toURL().openConnection()
         val bytes = connection.getInputStream().use { it.readBytes() }
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
             var entry = zis.nextEntry

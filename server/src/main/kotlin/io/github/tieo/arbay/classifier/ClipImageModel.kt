@@ -70,7 +70,6 @@ object ClipImageModel {
         synchronized(urlCache) { urlCache[url]?.let { return it } }
         val bytes = try {
             val conn = URI(url).toURL().openConnection() as HttpURLConnection
-            conn.connectTimeout = 5000; conn.readTimeout = 8000
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             conn.inputStream.use { it.readBytes() }
         } catch (e: Exception) {
@@ -178,14 +177,13 @@ object ClipImageModel {
         val script = "from huggingface_hub import hf_hub_download; import shutil, sys; " +
             "p = hf_hub_download('$HF_REPO', '$HF_FILE'); shutil.copyfile(p, sys.argv[1])"
         // Copied beside the model and renamed once complete, so a download cut short never sits
-        // at the model's name. The output goes to a file rather than a pipe, so the time limit
-        // holds even when the script stops writing without exiting.
+        // at the model's name. The output goes to a file rather than a pipe, so a script that
+        // writes more than a pipe holds never blocks on it.
         val partial = File(dir, "$MODEL_FILE.part")
         val output = File(dir, "$MODEL_FILE.download.log")
         val proc = ProcessBuilder("python3", "-c", script, partial.absolutePath)
             .redirectErrorStream(true).redirectOutput(output).start()
-        val finished = proc.waitFor(15, java.util.concurrent.TimeUnit.MINUTES)
-        if (!finished) { proc.destroyForcibly(); throw java.io.IOException("CLIP model download timed out") }
+        proc.waitFor()
         if (proc.exitValue() != 0 || !partial.exists() || partial.length() < 1024) {
             throw java.io.IOException("huggingface_hub download failed (exit ${proc.exitValue()}): ${output.readText().take(400)}")
         }

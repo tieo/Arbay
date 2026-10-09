@@ -122,6 +122,8 @@ object FreeItemMonitor {
         )
 
         log.info("Running background check for new free items...")
+        // A crawler can hang for good (a stuck browser once held every search permit for hours),
+        // and nobody hangs up on a background run, so without a limit one hang ends the checks.
         // A time limit that runs out is this crawl failing, not the monitor being stopped, so it
         // is an answer of null here rather than a cancellation that would end the loop.
         val results = try {
