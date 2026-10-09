@@ -237,7 +237,7 @@ object CarFilterEngine {
             // An engine sold on its own. Only the words that name the engine as the thing for sale:
             // a van's own title says "Motor neu" or "Motorschaden", which are not here.
             """\b(austausch|rumpf|teil|komplett|elektro)motor\b|\bmotor(ü|ue)berholung\b|\bmotorblock\b|""" +
-            """\bmotor\s+komplett\b|""" +
+            """\bmotor\s+komplett\b|\bgl(ü|ue)hkerzen?\b|""" +
             """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|\bfensterheber\b|""" +
             // Paperwork sold for a model, never the car: an owner's manual, a service book.
             """\b(bedienungsanleitung|betriebsanleitung|serviceplan|handbuch|reparaturhandbuch)\b|""" +

@@ -132,9 +132,20 @@ class EbayDeCrawler(
                 waitSelector = "li.s-card, li.s-item",
                 extraWaitMs = 1000,
             ) { fetchPage ->
-                val result = fetchPage(buildSearchUrl(query, 1))
+                val searchUrl = buildSearchUrl(query, 1)
+                val result = fetchPage(searchUrl)
                 val html = validateBrowserResult(result, "eBay")
                 val pageResults = parseSearchResults(html)
+                // The last tier coming back empty ends the crawl with nothing to show and no error,
+                // so the page eBay actually served is kept to look at.
+                if (pageResults.isEmpty()) {
+                    ErrorSnapshotStore.capture(
+                        platform = platformId.name, query = query.text,
+                        error = RuntimeException("$domain: the browser page parsed to no listings"),
+                        errorType = ErrorType.EMPTY_RESULTS, url = searchUrl, fetchStage = "chromium",
+                        html = html, finalUrl = result.finalUrl, statusCode = result.statusCode,
+                    )
+                }
                 allResults.addAll(pageResults.filter { seenIds.add(it.externalId) })
 
                 if (query.soldOnly) {
