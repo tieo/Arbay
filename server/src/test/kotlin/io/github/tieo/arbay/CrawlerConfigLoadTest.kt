@@ -11,7 +11,7 @@ class CrawlerConfigLoadTest {
             """{"maxResultsPerPlatform":90,"maxPages":8,"sortByPrice":true,"ebayDeCarCategory":"9800"}""",
         )
         assertEquals(90, config.maxResultsPerPlatform)
-        assertEquals("9800", config.ebayDeCarCategory)
+        assertEquals(8, config.maxPages)
     }
 
     @Test

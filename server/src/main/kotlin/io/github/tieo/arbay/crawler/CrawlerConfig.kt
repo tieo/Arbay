@@ -18,9 +18,6 @@ data class CrawlerConfig(
     // can't spin the pager forever chasing the result target. Not surfaced in the app.
     val maxPages: Int = 8,
     val ebayItemsPerPage: Int = 120,
-    // eBay.de category id (_sacat) constraining a car query to whole vehicles instead of the
-    // parts/accessories that dominate an all-category keyword search. Null = no constraint.
-    val ebayDeCarCategory: String? = "9800",
 ) {
     companion object {
         private val file = DataDir.file("crawler_config.json")

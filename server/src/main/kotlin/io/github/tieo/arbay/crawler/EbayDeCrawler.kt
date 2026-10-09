@@ -191,18 +191,15 @@ class EbayDeCrawler(
     }
 
     private fun buildSearchUrl(query: SearchQuery, page: Int = 1): String {
-        // For a car query on ebay.de, search the whole-vehicle category by MODEL only. eBay
-        // sellers title vans "VW Crafter", not "Volkswagen Crafter", so the full make token
-        // ("volkswagen") matches nothing; the model ("crafter") plus the vehicle category is the
-        // reliable combination. The relevance filter still confirms make/model downstream.
+        // For a car query on ebay.de, search by MODEL only. eBay sellers title vans "VW Crafter",
+        // not "Volkswagen Crafter", so the full make token ("volkswagen") matches nothing. No
+        // category is sent: eBay answers a search in its vehicle categories (_sacat 9800, 9801)
+        // with 403 and never narrowed results to whole vehicles anyway; parts are removed by the
+        // vehicle post-filter, and the relevance filter confirms make and model.
         val carQuery = if (domain == "ebay.de") CarQueryResolver.resolve(query.positiveText) else null
         val keyword = carQuery?.modelSlug?.replace("-", " ") ?: query.text
         val params = buildList {
             add("_nkw=${keyword.encodeUrl()}")
-            if (carQuery != null) {
-                CrawlerConfig.current.ebayDeCarCategory?.takeIf { it.isNotBlank() }
-                    ?.let { add("_sacat=$it") }
-            }
             add("_ipg=${CrawlerConfig.current.ebayItemsPerPage}")
             // Cheapest first, always: the result cap decides which listings come back, and the
             // cheap end is the end a price comparison is about.
