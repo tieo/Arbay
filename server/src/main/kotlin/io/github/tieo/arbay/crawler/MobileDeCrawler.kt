@@ -288,6 +288,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
      *  Every listing had only "DE" on it, so no mobile.de result could say how far away it was. */
     private val placeInfo = Regex("""\b(?:DE-)?(\d{5})\s+([A-ZÄÖÜ][\p{L}.\-]+(?:\s[A-ZÄÖÜ][\p{L}.\-]+){0,2})""")
 
+    /** The place line of a card's seller box, whole: "21244 Buchholz in der Nordheide". */
+    private val sellerBoxPlace = Regex("""(?:DE-)?(\d{5})\s+(\S.*)""")
+
     internal fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
@@ -338,6 +341,21 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 VehicleTextParser.parse(info),
             )
 
+            // The seller box holds one line each, in their own elements: the dealer's name or
+            // "Privatanbieter", then the place, then a rating. Read as one text they run together
+            // ("Privatanbieter91056 Erlangen"), so the lines are taken one by one.
+            val boxLines = item.selectFirst("[data-testid=seller-info]")?.select("span")
+                ?.filter { it.children().isEmpty() }?.map { it.text().trim() }?.filter { it.isNotEmpty() }
+                .orEmpty()
+            val placeAt = boxLines.indexOfFirst { sellerBoxPlace.matches(it) }
+            val boxPlace = boxLines.getOrNull(placeAt)?.let { line -> line to sellerBoxPlace.matchEntire(line)!! }
+            // The page's data names the dealer's account but no longer its name; the box does.
+            val seller = sellers[externalId]?.let { known ->
+                val boxName = boxLines.getOrNull(placeAt - 1)?.takeIf { placeAt > 0 }
+                if (known.type == SellerType.BUSINESS && known.name == null && boxName != null) known.copy(name = boxName)
+                else known
+            }
+
             val imageUrl = item.selectFirst("img")?.let {
                 it.attr("src").ifBlank { it.attr("data-src") }.ifBlank { it.attr("srcset").substringBefore(" ") }
             }?.takeIf { it.startsWith("http") }
@@ -350,13 +368,15 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 title = title,
                 price = price,
                 imageUrls = listOfNotNull(imageUrl),
-                location = placeInfo.find(info)?.let { m ->
+                location = boxPlace?.let { (line, m) ->
+                    Location(city = m.groupValues[2].trim(), zip = m.groupValues[1], country = "DE", raw = line)
+                } ?: placeInfo.find(info)?.let { m ->
                     Location(city = m.groupValues[2].trim(), zip = m.groupValues[1], country = "DE", raw = m.value)
                 } ?: Location(country = "DE"),
                 description = description,
                 scrapedAt = now,
                 vehicle = vehicle,
-                seller = sellers[externalId],
+                seller = seller,
             )
         }
     }
