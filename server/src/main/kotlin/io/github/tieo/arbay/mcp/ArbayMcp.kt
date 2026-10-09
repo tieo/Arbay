@@ -4,7 +4,11 @@ import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
+import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.MarketSets
+import io.github.tieo.arbay.model.SearchReach
+import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.OfferNote
@@ -119,6 +123,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.aliases?.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
                 q?.location?.let { parameter("near", it) }
                 q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
+                // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
+                // sent as the app sends them, so the markets are asked for the same vans the app shows.
+                q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
+                q?.reach?.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
             }.execute { response ->
                 if (!response.status.isSuccess()) return@execute problems.add(response.bodyAsText())
                 val channel = response.bodyAsChannel()
@@ -134,8 +142,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val hidden = hiddenOffers()
             val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
             val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
+            // The saved market and country picks narrow what was fetched, adding up as in the app.
+            val markets = q?.showOnlyMarkets.orEmpty()
+            val countries = q?.showOnlyCountries.orEmpty()
             val shown = listings.distinctBy { it.id }
                 .filter { it.id !in hidden }
+                .filter { (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets || MarketSets.countryOf(it.platformId) in countries }
                 .filter { max == null || it.effectivePrice.amount / 100.0 <= max }
                 .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
                 .sortedBy { it.effectivePrice.amount }
