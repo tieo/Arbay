@@ -133,6 +133,9 @@ object StealthBrowserClient {
         val deadline = java.util.concurrent.atomic.AtomicLong(
             System.currentTimeMillis() + (waitSeconds + maxPages * 20 + 60) * 1000L)
         val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Whether the sidecar handed its browser to a person: a run that then overruns ended on a
+        // challenge nobody solved, which is a captcha and not a slow page.
+        val askedForHuman = java.util.concurrent.atomic.AtomicBoolean(false)
         val watchdog = Thread {
             while (process.isAlive) {
                 if (System.currentTimeMillis() > deadline.get()) { timedOut.set(true); killTree(process); break }
@@ -146,7 +149,10 @@ object StealthBrowserClient {
             coroutineScope {
                 val ctrlJob = launch {
                     for (msg in controls) {
-                        if (msg == "CAPTCHA_INTERACTIVE") deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
+                        if (msg == "CAPTCHA_INTERACTIVE") {
+                            askedForHuman.set(true)
+                            deadline.set(System.currentTimeMillis() + INTERACTIVE_SOLVE_MS)
+                        }
                         onControl(msg)
                     }
                 }
@@ -160,7 +166,14 @@ object StealthBrowserClient {
             throw e
         }
 
-        if (timedOut.get()) throw CrawlerBlockedException("stealth browser timeout for $url", ErrorType.TIMEOUT)
+        if (timedOut.get()) {
+            stderrThread.join(3_000)
+            val said = stderrBuf.toString().trim().takeLast(300).ifEmpty { "nothing" }
+            if (askedForHuman.get()) {
+                throw CrawlerBlockedException("challenge for $url was not solved in time; the browser said: $said", ErrorType.CAPTCHA)
+            }
+            throw CrawlerBlockedException("stealth browser timeout for $url; the browser said: $said", ErrorType.TIMEOUT)
+        }
 
         stderrThread.join(3_000)
         if (!process.waitFor(10, TimeUnit.SECONDS)) killTree(process)
