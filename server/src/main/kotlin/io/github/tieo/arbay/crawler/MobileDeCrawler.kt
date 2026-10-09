@@ -183,7 +183,11 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         )
         // What the size is read from: the headline, the trim line and the seller's text, in that
         // order, which is also how the page shows them.
-        val description = listOfNotNull(headline, trimLine?.let { "Ausstattungslinie: $it" }, sellersText)
+        // The site's own air conditioning field ("Keine Klimaanlage oder -automatik") and the ticked
+        // equipment, since a seller's text rarely says what a van lacks.
+        val climate = fact("climatisation")?.let { "Klimatisierung: $it" }
+        val equipment = features.takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "Ausstattung: $it" }
+        val description = listOfNotNull(headline, trimLine?.let { "Ausstattungslinie: $it" }, climate, equipment, sellersText)
             .joinToString("\n\n").takeIf { it.isNotBlank() }
         return ListingDetail(
             vehicle = vehicle.takeIf { it.verified.isNotEmpty() },

@@ -48,6 +48,8 @@ class MobileDeParserTest {
         assertTrue(description.startsWith("Volkswagen Crafter 2.0TDI*DSG"), description.take(80))
         assertTrue("Ausstattungslinie: 35 lang Hochdach FWD Trendline" in description)
         assertTrue("Radstand 4490 mm" in description)
+        assertTrue("Klimatisierung: Klimaanlage" in description, description)
+        assertTrue("Frontantrieb" in description)
     }
 
     @Test

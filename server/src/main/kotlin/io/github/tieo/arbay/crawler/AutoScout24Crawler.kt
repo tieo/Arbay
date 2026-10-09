@@ -45,11 +45,26 @@ class AutoScout24Crawler(
             vehicle = wheelbase?.let {
                 VehicleInfo(wheelbaseMm = it, verified = setOf(VehicleField.WHEELBASE))
             },
-            description = description,
+            description = listOfNotNull(description, equipment(doc)?.let { "Ausstattung: $it" })
+                .joinToString("\n\n").takeIf { it.isNotBlank() },
             listedAt = listedAt(doc),
         ).takeIf { it.vehicle != null || it.description != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
+    }
+
+    /** The equipment the dealer ticked on the site, as one line ("Klimaanlage, Sitzheizung, …"):
+     *  `listingDetails.vehicle.equipment`, grouped by category. What a seller's prose leaves out —
+     *  whether there is air conditioning at all — is often only here. */
+    internal fun equipment(doc: org.jsoup.nodes.Document): String? {
+        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() as? JsonObject ?: return null
+        val groups = (((root["props"] as? JsonObject)?.get("pageProps") as? JsonObject)
+            ?.get("listingDetails") as? JsonObject)?.get("vehicle")?.let { it as? JsonObject }
+            ?.get("equipment") as? JsonObject ?: return null
+        return groups.values.flatMap { group ->
+            (group as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull }
+        }.takeIf { it.isNotEmpty() }?.joinToString(", ")
     }
 
     /** When the ad went up, as the page's data states it: `listingDetails.createdTimestampWithOffset`. */
