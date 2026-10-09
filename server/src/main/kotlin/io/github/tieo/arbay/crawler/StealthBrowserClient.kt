@@ -83,7 +83,11 @@ object StealthBrowserClient {
         val pages = Channel<String>(Channel.UNLIMITED)
         val controls = Channel<String>(Channel.UNLIMITED)
 
-        // stderr carries control lines (ARBAY_CTRL:*) that must be reacted to live, plus diagnostics.
+        // The sidecar writes control lines (ARBAY_CTRL:*) and diagnostics to stderr, but xvfb-run
+        // runs it with `2>&1`, so on the server they arrive inside stdout. Both streams are read for
+        // control lines, and the controls close once both have ended.
+        val streamsOpen = java.util.concurrent.atomic.AtomicInteger(2)
+        fun streamEnded() { if (streamsOpen.decrementAndGet() == 0) controls.close() }
         val stderrBuf = StringBuilder()
         val stderrThread = Thread {
             try {
@@ -93,13 +97,13 @@ object StealthBrowserClient {
                 }
             } catch (_: Exception) {
             } finally {
-                controls.close()
+                streamEnded()
             }
         }
         stderrThread.isDaemon = true
         stderrThread.start()
 
-        // stdout is split on the page sentinel into whole pages.
+        // stdout is split on the page sentinel into whole pages, after any control line in it is taken out.
         val readerThread = Thread {
             try {
                 val reader = process.inputStream.bufferedReader()
@@ -109,6 +113,7 @@ object StealthBrowserClient {
                     val n = reader.read(chunk)
                     if (n < 0) break
                     buf.append(chunk, 0, n)
+                    takeControlLines(buf).forEach { controls.trySend(it) }
                     var idx = buf.indexOf(PAGE_BREAK)
                     while (idx >= 0) {
                         val page = buf.substring(0, idx)
@@ -122,6 +127,7 @@ object StealthBrowserClient {
             } catch (_: Exception) {
             } finally {
                 pages.close()
+                streamEnded()
             }
         }
         readerThread.isDaemon = true
@@ -187,4 +193,26 @@ object StealthBrowserClient {
         }
     }
 
+    /**
+     * Removes every complete control line (one that starts a line and has ended) from [buf] and
+     * returns their messages in order. A control line still being written stays for the next read.
+     */
+    internal fun takeControlLines(buf: StringBuilder): List<String> {
+        val found = mutableListOf<String>()
+        var from = 0
+        while (true) {
+            val at = buf.indexOf(CTRL_PREFIX, from)
+            if (at < 0) break
+            val end = buf.indexOf("\n", at)
+            if (end < 0) break
+            if (at == 0 || buf[at - 1] == '\n') {
+                found += buf.substring(at + CTRL_PREFIX.length, end).trim()
+                buf.delete(at, end + 1)
+                from = at
+            } else {
+                from = end + 1
+            }
+        }
+        return found
+    }
 }
