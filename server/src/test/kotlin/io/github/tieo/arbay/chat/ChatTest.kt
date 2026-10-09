@@ -6,7 +6,10 @@ import io.github.tieo.arbay.model.directPrice
 import io.github.tieo.arbay.model.offerWithin
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
@@ -68,5 +71,37 @@ class ChatTest {
         assertEquals(listOf("m1", "m2"), c.messages.map { it.id })
         assertEquals(true, c.messages.first().mine)
         assertEquals("2026-09-25T12:21:39.123Z", c.lastAt.toString())
+    }
+
+    /** A conversation as the gateway answers it after a reply, the reply last; the shape of a real answer. */
+    private val afterReply = Json.parseToJsonElement(javaClass.getResource("/fixtures/kleinanzeigen_conversation_after_reply.json")!!.readText())
+        .jsonObject.toConversation(withMessages = true)
+    private val reply = "Top, dann machen wir es so 👍"
+    private val sentAt = Instant.parse("2026-10-09T07:29:35.800Z")
+    private val earlier = setOf("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002")
+
+    @Test
+    fun aReplyShowsWhenItsTextIsANewMessageOfOursAfterTheSend() {
+        assertTrue(replyShows(afterReply, earlier, reply, sentAt))
+        // Whitespace around the text is not part of what was sent.
+        assertTrue(replyShows(afterReply, earlier, " $reply\n", sentAt))
+    }
+
+    @Test
+    fun aReplyDoesNotShowWhenTheConversationLacksIt() {
+        assertFalse(replyShows(afterReply, earlier, "Ein anderer Text", sentAt))
+        assertFalse(replyShows(null, earlier, reply, sentAt))
+        // The same words from the seller are not our reply.
+        assertFalse(replyShows(afterReply, earlier, "Ja, gerne.", Instant.parse("2026-10-09T07:25:00Z")))
+    }
+
+    @Test
+    fun anEarlierMessageWithTheSameTextIsNotTheReply() {
+        // Already there before the send.
+        assertFalse(replyShows(afterReply, earlier + "00000000-0000-0000-0000-000000000003", reply, sentAt))
+        // Dated well before the send.
+        assertFalse(replyShows(afterReply, earlier, reply, Instant.parse("2026-10-09T07:40:00Z")))
+        // A clock a few seconds ahead of Kleinanzeigen's still finds it.
+        assertTrue(replyShows(afterReply, earlier, reply, Instant.parse("2026-10-09T07:30:20Z")))
     }
 }

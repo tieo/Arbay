@@ -30,7 +30,7 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "set_cookies", "cookies": [..]}           -> sets the site's cookies a proxied sign-in left, reloads the home page; answers like status
   {"op": "conversations", "page": 0, "size": 30}    -> {"ok": true, "data": <gateway payload>}
   {"op": "conversation", "id": ".."}                -> {"ok": true, "data": <gateway payload>}
-  {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true}
+  {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true, "answer": <the gateway's answer to the post>}
   {"op": "read", "id": ".."}                        -> {"ok": true}
   {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
   {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
@@ -473,9 +473,10 @@ class Chat:
         return {"ok": True, "data": await self.gateway(f"/messagebox/api/users/{uid}/conversations/{cid}?contentWarnings=true")}
 
     async def reply(self, cid: str, text: str) -> dict:
+        """Posts the reply; what the gateway answered goes back so a reply that does not show can say it."""
         _, uid = await self.session()
-        await self.gateway(f"/messagebox/api/users/{uid}/conversations/{cid}?warnPhoneNumber=true", "POST", {"message": text})
-        return {"ok": True}
+        answer = await self.gateway(f"/messagebox/api/users/{uid}/conversations/{cid}?warnPhoneNumber=true", "POST", {"message": text})
+        return {"ok": True, "answer": answer}
 
     async def read(self, cid: str) -> dict:
         _, uid = await self.session()

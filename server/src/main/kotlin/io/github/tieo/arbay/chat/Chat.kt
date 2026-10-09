@@ -177,9 +177,21 @@ object Chat {
         Live.changed(LiveKind.CHAT)
     }
 
+    /**
+     * Sends [text] in conversation [id] and reads the conversation back until the reply shows in it.
+     * The gateway answers a post it accepted with success whatever then becomes of the message, so
+     * only the read back counts as sent; a reply that does not show fails with the gateway's answer.
+     */
     suspend fun reply(id: String, text: String) {
-        ChatBrowser.call("reply", 60_000, "id" to id, "text" to text)
+        val before = runCatching { conversation(id) }.getOrNull()?.messages.orEmpty().map { it.id }.toSet()
+        val sentAt = Clock.System.now()
+        val answer = ChatBrowser.call("reply", 60_000, "id" to id, "text" to text)["answer"]
         Live.changed(LiveKind.CHAT)
+        repeat(3) { attempt ->
+            if (attempt > 0) delay(2.seconds)
+            if (replyShows(conversation(id), before, text, sentAt)) return
+        }
+        throw ChatBrowser.ChatFailure("the reply was sent but does not show in the conversation; Kleinanzeigen answered: $answer", signedOut = false)
     }
 
     // --- sending to several sellers ---
@@ -371,6 +383,17 @@ private fun JsonObject.toMessage(): ChatMessage? {
         offerEur = (this["offeredPriceInEuroCent"] as? JsonPrimitive)?.longOrNull?.let { it / 100.0 },
     )
 }
+
+/**
+ * Whether [after], a conversation read back after sending [text] at [sentAt], holds that reply: a
+ * message of ours with the same text that was not among the [before] message ids and is dated no
+ * earlier than the send, give or take a minute between this clock and Kleinanzeigen's.
+ */
+internal fun replyShows(after: Conversation?, before: Set<String>, text: String, sentAt: Instant): Boolean =
+    after?.messages.orEmpty().any { m ->
+        val at = m.at
+        m.mine && m.id !in before && m.text.trim() == text.trim() && at != null && at >= sentAt - 1.minutes
+    }
 
 /** The gateway writes times with an offset that may lack its colon (+0200) and with microseconds. */
 internal fun parseGatewayTime(raw: String): Instant? = runCatching { Instant.parse(raw) }.getOrNull()

@@ -1,0 +1,23 @@
+{
+  "id": "1aa:2bb:3cc",
+  "role": "Buyer",
+  "adId": "1000000001",
+  "adTitle": "Phone",
+  "adStatus": "ACTIVE",
+  "sellerName": "Seller",
+  "buyerName": "Buyer",
+  "numUnread": 0,
+  "flaggingEnabled": true,
+  "userActionRequired": false,
+  "messages": [
+    {"textShort": "Noch da?", "boundness": "OUTBOUND", "title": "Phone", "type": "MESSAGE",
+     "receivedDate": "2026-10-08T23:19:51.724+0200", "attachments": [], "messageId": "00000000-0000-0000-0000-000000000001",
+     "userReputationContext": {}, "unichatMessage": {"authorId": "1", "payload": {"type": "chat/text-message", "content": {"text": "Noch da?"}}}},
+    {"textShort": "Ja, gerne.", "boundness": "INBOUND", "title": "Phone", "type": "MESSAGE",
+     "receivedDate": "2026-10-09T09:25:25.365+0200", "attachments": [], "messageId": "00000000-0000-0000-0000-000000000002",
+     "userReputationContext": {}, "unichatMessage": {"authorId": "2", "payload": {"type": "chat/text-message", "content": {"text": "Ja, gerne."}}}},
+    {"textShort": "Top, dann machen wir es so 👍", "boundness": "OUTBOUND", "title": "Phone", "type": "MESSAGE",
+     "receivedDate": "2026-10-09T09:29:36.021+0200", "attachments": [], "messageId": "00000000-0000-0000-0000-000000000003",
+     "userReputationContext": {}, "unichatMessage": {"authorId": "1", "payload": {"type": "chat/text-message", "content": {"text": "Top, dann machen wir es so 👍"}}}}
+  ]
+}
