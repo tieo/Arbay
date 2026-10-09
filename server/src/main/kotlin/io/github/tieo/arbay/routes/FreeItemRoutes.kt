@@ -28,8 +28,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -397,26 +395,24 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
 
                 try {
                     val kleinanzeigenCrawler = crawler as KleinanzeigenCrawler
-                    val (total, hasMore) = withTimeout(300_000L) {
-                        kotlinx.coroutines.withContext(progressEmitter) {
-                            kleinanzeigenCrawler.searchFreeItemsStreaming(searchQuery) { page, pageResults, totalSoFar ->
-                                rawTotal = totalSoFar
-                                val scored = scoreListings(pageResults)
-                                allScored.addAll(scored)
+                    val (total, hasMore) = kotlinx.coroutines.withContext(progressEmitter) {
+                        kleinanzeigenCrawler.searchFreeItemsStreaming(searchQuery) { page, pageResults, totalSoFar ->
+                            rawTotal = totalSoFar
+                            val scored = scoreListings(pageResults)
+                            allScored.addAll(scored)
 
-                                // Send incremental results per page
-                                synchronized(this@respondTextWriter) {
-                                    write(json.encodeToString(CrawlerSearchEvent(
-                                        type = CrawlerEventType.PLATFORM_PROGRESS,
-                                        platform = PlatformId.KLEINANZEIGEN.name,
-                                        platformName = PlatformId.KLEINANZEIGEN.displayName,
-                                        resultCount = allScored.size,
-                                        rawCount = totalSoFar,
-                                        listings = scored,
-                                        fetchStage = "PAGE_$page",
-                                    )) + "\n")
-                                    flush()
-                                }
+                            // Send incremental results per page
+                            synchronized(this@respondTextWriter) {
+                                write(json.encodeToString(CrawlerSearchEvent(
+                                    type = CrawlerEventType.PLATFORM_PROGRESS,
+                                    platform = PlatformId.KLEINANZEIGEN.name,
+                                    platformName = PlatformId.KLEINANZEIGEN.displayName,
+                                    resultCount = allScored.size,
+                                    rawCount = totalSoFar,
+                                    listings = scored,
+                                    fetchStage = "PAGE_$page",
+                                )) + "\n")
+                                flush()
                             }
                         }
                     }
@@ -440,17 +436,6 @@ fun Route.freeItemRoutes(savedSearches: SavedSearchMonitor) {
                         totalPlatforms = 1,
                         hasMore = streamHasMore,
                         nextPage = startPage + batchSize,
-                    )) + "\n")
-                    flush()
-                } catch (e: TimeoutCancellationException) {
-                    write(json.encodeToString(CrawlerSearchEvent(
-                        type = CrawlerEventType.PLATFORM_ERROR,
-                        platform = PlatformId.KLEINANZEIGEN.name,
-                        platformName = PlatformId.KLEINANZEIGEN.displayName,
-                        error = "Timeout after 300s",
-                        errorType = "TIMEOUT",
-                        completedPlatforms = 1,
-                        totalPlatforms = 1,
                     )) + "\n")
                     flush()
                 } catch (e: CancellationException) {

@@ -28,22 +28,18 @@ class EbayDeCrawler(
      *
      * eBay answers a plain client with a challenge on an item page, so this goes straight to the
      * browser tier, primed with a search page: it serves an item page to a browser that arrives
-     * from its own search and a 403 to one that arrives cold. Bounded, since a defended page costs
-     * a browser attempt per engine and a market that will not answer must cost seconds rather than
-     * the whole search's budget.
+     * from its own search and a 403 to one that arrives cold.
      */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        kotlinx.coroutines.withTimeoutOrNull(30_000L) {
-            val html = fetchWithFallback(
-                client, listing.url, "eBay",
-                primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
-                browserOnly = true,
-            )
-            ListingDetail(
-                vehicle = EbayDetailParser.parse(html),
-                location = itemLocation(html),
-            ).takeIf { it.vehicle != null || it.location != null }
-        }
+        val html = fetchWithFallback(
+            client, listing.url, "eBay",
+            primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
+            browserOnly = true,
+        )
+        ListingDetail(
+            vehicle = EbayDetailParser.parse(html),
+            location = itemLocation(html),
+        ).takeIf { it.vehicle != null || it.location != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
     }

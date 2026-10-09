@@ -37,7 +37,6 @@ import io.github.tieo.arbay.crawler.localizedQuery
 import io.github.tieo.arbay.crawler.searchAllSpellings
 import io.github.tieo.arbay.crawler.trackedSearch
 import io.github.tieo.arbay.crawler.withCrawlLimitOrNull
-import kotlinx.coroutines.withTimeoutOrNull
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.SaleType
@@ -228,10 +227,6 @@ private const val PLATFORM_BUDGET_MS = 180_000L
  * stream in as each finishes.
  */
 private val crawlSlots = kotlinx.coroutines.sync.Semaphore(4)
-
-// How long the listings of one market that finished may take to be placed on the map. It is
-// spent after the market has reported, so running out only leaves some listings unplaced.
-private const val LOCATION_BUDGET_MS = 90_000L
 
 /** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
  *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
@@ -902,8 +897,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // is asked afterwards, not before: the cards are on screen the moment the
                           // crawl is done, and the places fill in behind them. The app replaces a
                           // market's listings when that market reports again, so the second report
-                          // is the same listings with an address on them. This runs on its own
-                          // budget, after the crawl slot is free, and whatever goes wrong in it
+                          // is the same listings with an address on them. This runs outside the
+                          // market's time limit, after the crawl slot is free, and whatever goes wrong in it
                           // leaves the market's finished report standing: failing here must not
                           // turn a market that answered into one that did not, nor end the search
                           // for every other market.
@@ -911,13 +906,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           val doneBy = finishedBy
                           if (done != null && doneBy != null && done.listings.any { it.location == null }) {
                               try {
-                                  withTimeoutOrNull(LOCATION_BUDGET_MS) {
-                                      val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
-                                      if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
-                                          resultChannel.send(done.copy(
-                                              listings = asDelivered(placed, localizedQuery(searchQuery, platformId)),
-                                          ))
-                                      }
+                                  val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
+                                  if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
+                                      resultChannel.send(done.copy(
+                                          listings = asDelivered(placed, localizedQuery(searchQuery, platformId)),
+                                      ))
                                   }
                               } catch (e: CancellationException) {
                                   throw e

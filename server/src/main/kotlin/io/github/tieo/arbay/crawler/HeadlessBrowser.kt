@@ -255,7 +255,7 @@ object HeadlessBrowser {
                 if (primeUrl != null) {
                     log.debug("[{}] Priming via {}", engine, primeUrl)
                     try {
-                        page.navigate(primeUrl, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(20_000.0))
+                        page.navigate(primeUrl, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED))
                         if (isChallengePage(page.url())) {
                             log.debug("[{}] Priming hit challenge, waiting...", engine)
                             waitForChallenge(page)
@@ -265,7 +265,7 @@ object HeadlessBrowser {
                     } catch (_: Exception) {}
                 }
 
-                page.navigate(url, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30_000.0))
+                page.navigate(url, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED))
 
                 // Wait through JS challenges
                 if (isChallengePage(page.url())) {
@@ -279,7 +279,7 @@ object HeadlessBrowser {
                     page.waitForSelector(waitSelector, Page.WaitForSelectorOptions().setTimeout(waitTimeoutMs).setState(WaitForSelectorState.ATTACHED))
                 }
                 if (waitNetworkIdle) {
-                    page.waitForLoadState(LoadState.NETWORKIDLE, Page.WaitForLoadStateOptions().setTimeout(30_000.0))
+                    page.waitForLoadState(LoadState.NETWORKIDLE)
                 }
                 if (extraWaitMs > 0) page.waitForTimeout(extraWaitMs.toDouble())
 
@@ -319,7 +319,7 @@ object HeadlessBrowser {
                 if (primeUrl != null) {
                     log.debug("[{}] Session priming via {}", engine, primeUrl)
                     try {
-                        page.navigate(primeUrl, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(20_000.0))
+                        page.navigate(primeUrl, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED))
                         if (isChallengePage(page.url())) {
                             log.debug("[{}] Priming hit challenge, waiting...", engine)
                             waitForChallenge(page)
@@ -333,7 +333,7 @@ object HeadlessBrowser {
                 }
 
                 block { url ->
-                    page.navigate(url, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30_000.0))
+                    page.navigate(url, Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED))
                     if (isChallengePage(page.url())) {
                         log.debug("[{}] Challenge on page, waiting...", engine)
                         if (!waitForChallenge(page)) {
