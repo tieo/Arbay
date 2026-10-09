@@ -385,7 +385,19 @@ class SavedSearchMonitor(
             (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets ||
                 io.github.tieo.arbay.model.MarketSets.countryOf(it.platformId) in countries
         }
-        val fresh = record(product, shown) ?: return
+        // A fit alert's own first run only learns what is there. The search may have run before
+        // without it, on a plain crawl that never opened the ads, and everything this richer run
+        // finds would count as new: switching the alert on once pushed four offers at once.
+        val fitKey = "fit:${product.id}"
+        val firstFitRun = synchronized(stateLock) {
+            (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
+        }
+        val fresh = record(product, shown)
+        if (firstFitRun) {
+            log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
+            return
+        }
+        if (fresh == null) return
         // What the top of the search scores today, every offer counted once: a dealer that lists
         // the same van on two markets would otherwise push a new one out of the top twice over.
         val scores = shown.values
