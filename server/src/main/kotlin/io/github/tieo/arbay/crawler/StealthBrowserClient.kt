@@ -68,8 +68,31 @@ object StealthBrowserClient {
         waitSeconds: Int = 30,
         onControl: suspend (msg: String) -> Unit = {},
         onPage: suspend (html: String) -> Unit,
+    ) = stream(
+        listOf("xvfb-run", "-a", "python3", scriptPath, url, maxPages.toString(), waitSeconds.toString()),
+        url, onControl, onPage,
+    )
+
+    /** Open each of [urls], ad pages, in turn in one browser session, so the challenge is passed
+     *  once for all of them rather than once per ad. [onPage] receives the pages in the order of
+     *  [urls], one per URL, until the first that does not load; the rest get none. Blocks and
+     *  controls behave as in [fetchStreaming], with the first ad in the place of page 1. */
+    suspend fun fetchAds(
+        urls: List<String>,
+        waitSeconds: Int = 30,
+        onControl: suspend (msg: String) -> Unit = {},
+        onPage: suspend (html: String) -> Unit,
+    ) = stream(
+        listOf("xvfb-run", "-a", "python3", scriptPath, "--ads", waitSeconds.toString()) + urls,
+        urls.first(), onControl, onPage,
+    )
+
+    private suspend fun stream(
+        args: List<String>,
+        url: String,
+        onControl: suspend (msg: String) -> Unit,
+        onPage: suspend (html: String) -> Unit,
     ) {
-        val args = listOf("xvfb-run", "-a", "python3", scriptPath, url, maxPages.toString(), waitSeconds.toString())
         val clock = kotlin.coroutines.coroutineContext[CrawlClock]
         val process = ProcessBuilder(args).redirectErrorStream(false).start()
 

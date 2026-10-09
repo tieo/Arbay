@@ -34,4 +34,35 @@ class MobileDeParserTest {
         }
         assertTrue(results.any { it.title.contains("Crafter", ignoreCase = true) }, "No Crafter titles parsed")
     }
+
+    @Test
+    fun `reads what an ad page adds to the card`() {
+        val html = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText()
+        val detail = assertNotNull(MobileDeCrawler(dummyClient()).parseAd(html))
+        val vehicle = assertNotNull(detail.vehicle)
+        assertEquals(io.github.tieo.arbay.model.Drivetrain.FWD, vehicle.drivetrain)
+        assertEquals(4490, vehicle.wheelbaseMm)
+        assertEquals(3, vehicle.seats)
+        assertEquals(6, vehicle.emissionClassEuro)
+        val description = assertNotNull(detail.description)
+        assertTrue(description.startsWith("Volkswagen Crafter 2.0TDI*DSG"), description.take(80))
+        assertTrue("Ausstattungslinie: 35 lang Hochdach FWD Trendline" in description)
+        assertTrue("Radstand 4490 mm" in description)
+    }
+
+    @Test
+    fun `a long Hochdach ad reads as VW's long high roof van`() {
+        val html = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText()
+        val detail = assertNotNull(MobileDeCrawler(dummyClient()).parseAd(html))
+        val reading = io.github.tieo.arbay.crawler.VanDimensions.read(
+            "Volkswagen Crafter ${detail.description}", wheelbaseMm = detail.vehicle?.wheelbaseMm,
+        )
+        assertEquals(io.github.tieo.arbay.model.VanSize.HIGH_ROOF, reading.height)
+        assertEquals(io.github.tieo.arbay.model.VanSize.LONG, reading.length)
+    }
+
+    @Test
+    fun `a page without technical data is no ad`() {
+        assertNull(MobileDeCrawler(dummyClient()).parseAd("<html><body>Access denied</body></html>"))
+    }
 }

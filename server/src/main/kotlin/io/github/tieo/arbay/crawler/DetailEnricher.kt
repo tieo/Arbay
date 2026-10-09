@@ -36,6 +36,10 @@ object DetailEnricher {
         if (filters.minSeats != null) add(VehicleField.SEATS)
         if (filters.minEmissionEuro != null) add(VehicleField.EMISSION)
         if (filters.minWheelbaseMm != null || filters.maxWheelbaseMm != null) add(VehicleField.WHEELBASE)
+        // A van's size is read off its text and wheelbase, which the page has and the card often
+        // lacks: a mobile.de card says only "Volkswagen Crafter".
+        if (filters.vanLengths.isNotEmpty()) add(VehicleField.VAN_LENGTH)
+        if (filters.vanHeights.isNotEmpty()) add(VehicleField.VAN_HEIGHT)
     }
 
     private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {
@@ -58,10 +62,15 @@ object DetailEnricher {
             .take(MAX_FETCHES_PER_PLATFORM)
             .mapTo(HashSet()) { it.id }
 
+        if (crawler is ReadsAdsTogether && toFetch.isNotEmpty()) {
+            crawler.fetchDetails(listings.filter { it.id in toFetch })
+                .forEach { (id, detail) -> DetailCache.put(id, detail) }
+        }
+
         return listings.map { listing ->
             if (!needsDetail(listing, needed)) return@map listing
             DetailCache.get(listing.id)?.let { return@map listing.withDetail(it) }
-            if (listing.id !in toFetch) return@map listing // beyond budget → stays inferred, badged unverified
+            if (listing.id !in toFetch || crawler is ReadsAdsTogether) return@map listing // beyond budget or unread → stays inferred, badged unverified
             val detail = gate.withPermit { crawler.fetchDetail(listing) } ?: return@map listing
             DetailCache.put(listing.id, detail)
             listing.withDetail(detail)

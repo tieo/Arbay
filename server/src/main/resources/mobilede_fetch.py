@@ -14,6 +14,9 @@ Usage:
       same warmed session (much cheaper than one solve per page), pausing between pages to
       stay polite. Each page's HTML is printed to stdout and flushed as soon as it loads,
       terminated by a sentinel line, so the caller can parse and surface pages live.
+  mobilede_fetch.py --ads <wait_seconds> <url>...
+      Open each ad page in turn in one session, the same way. The pages come in the order given,
+      one per URL, and stop at the first one that does not load, so the n-th page is the n-th ad.
 
 Requires: zendriver (pip), google-chrome-stable (apt), a display (run under xvfb-run).
 Exit codes: 2 = the Akamai challenge never cleared on page 1 (a genuine block),
@@ -32,6 +35,8 @@ CHROME = os.environ.get("MOBILEDE_CHROME", "/usr/bin/google-chrome-stable")
 
 # Markers that prove the search result page actually rendered.
 RESULT_MARKERS = ('data-testid="result-list', 'data-testid="listing-title', "/fahrzeuge/details")
+# Marker that proves an ad page rendered: its technical data list.
+AD_MARKERS = ('data-testid="vip-technical-data-box"',)
 # Markers of the Akamai interstitial / block page — the only thing that counts as "still blocked".
 CHALLENGE_MARKERS = ("sec-if-cpt", "zugriff verweigert", "access denied", "captcha-delivery")
 # Of those, the ones a person can solve: an interactive challenge. "Access denied" with an error
@@ -41,6 +46,10 @@ SOLVABLE_MARKERS = ("sec-if-cpt", "captcha-delivery")
 
 def has_results(html: str) -> bool:
     return any(m in html for m in RESULT_MARKERS)
+
+
+def has_ad(html: str) -> bool:
+    return any(m in html for m in AD_MARKERS)
 
 
 def is_challenge(html: str) -> bool:
@@ -66,8 +75,8 @@ def with_page(url: str, page: int) -> str:
     return f"{url}{sep}pageNumber={page}"
 
 
-async def load(page, url: str, wait_s: float) -> str | None:
-    """Navigate to `url` and poll until the results render or the wait elapses. Returns the page
+async def load(page, url: str, wait_s: float, ready=has_results) -> str | None:
+    """Navigate to `url` and poll until `ready` holds or the wait elapses. Returns the page
     HTML once results are present, or a fully-rendered no-results page (a valid answer). Returns
     None only when the Akamai challenge never clears. A transient CDP error during a poll is ignored
     and retried; a hard navigation failure propagates to the caller (classified as an error, not a
@@ -80,7 +89,7 @@ async def load(page, url: str, wait_s: float) -> str | None:
             html = await p.get_content()
         except Exception:
             continue
-        if has_results(html):
+        if ready(html):
             return html
         if is_denied(html):
             captcha_gate.ctrl(f"DENIED {denial_reference(html)}")
@@ -96,7 +105,7 @@ async def load(page, url: str, wait_s: float) -> str | None:
     if is_challenge(html) or not html:
         display = os.environ.get("DISPLAY", ":99")
         solved = await captcha_gate.await_human_solve(
-            p, lambda h: has_results(h) or (not is_challenge(h) and len(h) > 40000), display)
+            p, lambda h: ready(h) or (not is_challenge(h) and len(h) > 40000), display)
         return (await p.get_content()) if solved else None
     return html if len(html) > 40000 else None
 
@@ -129,7 +138,39 @@ async def run(url: str, max_pages: int, wait_s: float) -> bool:
         await browser.stop()
 
 
+async def run_ads(urls: list[str], wait_s: float) -> bool:
+    """Streams each ad's page to stdout, stopping at the first that does not load. Returns True if
+    the first ad was blocked, which is the session failing rather than one ad."""
+    kwargs = {"headless": False}
+    if os.path.exists(CHROME):
+        kwargs["browser_executable_path"] = CHROME
+    browser = await zd.start(**kwargs)
+    try:
+        for i, url in enumerate(urls):
+            if i > 0:
+                await asyncio.sleep(1.0)  # the same pause as between result pages
+            html = await load(browser, url, wait_s if i == 0 else 12.0, ready=has_ad)
+            if html is None:
+                if i == 0:
+                    return True
+                break
+            emit(html)
+        return False
+    finally:
+        await browser.stop()
+
+
 def main() -> None:
+    if len(sys.argv) > 3 and sys.argv[1] == "--ads":
+        try:
+            is_blocked = asyncio.run(run_ads(sys.argv[3:], float(sys.argv[2])))
+        except Exception as e:
+            sys.stderr.write(f"error: {e}\n")
+            sys.exit(1)
+        if is_blocked:
+            sys.stderr.write("blocked: challenge did not resolve\n")
+            sys.exit(2)
+        return
     if len(sys.argv) < 2:
         sys.stderr.write("usage: mobilede_fetch.py <url> [max_pages] [wait_seconds]\n")
         sys.exit(1)

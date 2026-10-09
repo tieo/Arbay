@@ -3,10 +3,12 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlin.time.Clock
+import kotlinx.coroutines.CancellationException
 import org.jsoup.Jsoup
+import org.jsoup.nodes.TextNode
 import org.slf4j.LoggerFactory
 
-class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation {
+class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpecs, ReadsAdsTogether {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
@@ -92,6 +94,93 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             }
         }
         return all
+    }
+
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = fetchDetails(listOf(listing))[listing.id]
+
+    /**
+     * Each ad's own page, read in one stealth browser session: a session costs a browser start and
+     * the bot check, an ad after that a page load.
+     *
+     * The card says "Volkswagen Crafter" and nothing about which one. The page has the seller's
+     * headline, the trim line the dealer picked from the site's own catalogue ("35 lang Hochdach
+     * FWD Trendline"), the equipment list, which is where the drive is ("Frontantrieb"), and the
+     * seller's text, which is where a wheelbase is written ("Radstand 4490 mm").
+     */
+    override suspend fun fetchDetails(listings: List<Listing>): Map<String, ListingDetail> {
+        if (listings.isEmpty()) return emptyMap()
+        val platform = platformId.displayName
+        if (RequestMonitor.overBudget(platform)) return emptyMap()
+        val found = HashMap<String, ListingDetail>()
+        var next = 0
+        try {
+            StealthBrowserClient.fetchAds(
+                listings.map { "https://suchen.mobile.de/fahrzeuge/details.html?id=${it.externalId}" },
+                onControl = { msg -> if (msg == "CAPTCHA_INTERACTIVE") emitCaptchaInteractive() },
+            ) { html ->
+                RequestMonitor.recordRequest(platform)
+                val listing = listings.getOrNull(next++) ?: return@fetchAds
+                parseAd(html)?.let { found[listing.id] = it }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The ads read before the session failed stand; the rest stay as their cards say.
+            log.warn("mobile.de ads: {} of {} read, then {}", next, listings.size, e.message)
+        }
+        log.info("mobile.de ads: {} of {} read", found.size, listings.size)
+        return found
+    }
+
+    private val euroClass = Regex("""euro\s*(\d)""", RegexOption.IGNORE_CASE)
+
+    internal fun parseAd(html: String): ListingDetail? {
+        val doc = Jsoup.parse(html)
+        if (doc.selectFirst("[data-testid=vip-technical-data-box]") == null) return null
+        // Each fact is a <dt data-testid="<name>-item"> followed by its <dd>.
+        fun fact(name: String): String? =
+            doc.selectFirst("dt[data-testid=$name-item]")?.nextElementSibling()?.text()?.trim()?.takeIf { it.isNotBlank() }
+
+        // The headline is the make and model the site sets plus a line the seller writes; the
+        // element around both carries the whole of it as its label.
+        val headline = doc.selectFirst("[data-testid=vip-ad-title]")?.parents()
+            ?.firstOrNull { it.hasAttr("aria-label") }?.attr("aria-label")?.trim()?.takeIf { it.isNotBlank() }
+        val sellersText = doc.selectFirst("[data-testid=vip-vehicle-description-text]")?.let { text ->
+            text.select("br").forEach { it.after(TextNode("\n")) }
+            text.wholeText().lines().joinToString("\n") { it.trim() }.trim().takeIf { it.isNotBlank() }
+        }
+        val trimLine = fact("trimLine")
+        val features = doc.select("[data-testid=vip-features-list] li").map { it.text().trim() }.toSet()
+
+        val drives = buildSet {
+            if ("Frontantrieb" in features) add(Drivetrain.FWD)
+            if ("Hinterradantrieb" in features) add(Drivetrain.RWD)
+            if ("Allradantrieb" in features) add(Drivetrain.AWD)
+        }
+        val drivetrain = drives.singleOrNull()
+        val wheelbase = sellersText?.let { VehicleTextParser.parseWheelbaseMm(it) }
+        val seats = fact("numSeats")?.toIntOrNull()?.takeIf { it in 1..60 }
+        val emission = fact("emissionClass")?.let { euroClass.find(it)?.groupValues?.get(1)?.toIntOrNull() }
+        val vehicle = VehicleInfo(
+            drivetrain = drivetrain,
+            wheelbaseMm = wheelbase,
+            seats = seats,
+            emissionClassEuro = emission,
+            verified = buildSet {
+                if (drivetrain != null) add(VehicleField.DRIVETRAIN)
+                if (wheelbase != null) add(VehicleField.WHEELBASE)
+                if (seats != null) add(VehicleField.SEATS)
+                if (emission != null) add(VehicleField.EMISSION)
+            },
+        )
+        // What the size is read from: the headline, the trim line and the seller's text, in that
+        // order, which is also how the page shows them.
+        val description = listOfNotNull(headline, trimLine?.let { "Ausstattungslinie: $it" }, sellersText)
+            .joinToString("\n\n").takeIf { it.isNotBlank() }
+        return ListingDetail(
+            vehicle = vehicle.takeIf { it.verified.isNotEmpty() },
+            description = description,
+        ).takeIf { it.vehicle != null || it.description != null }
     }
 
     /** mobile.de's native URL filter params, so the site returns only matching cars instead of

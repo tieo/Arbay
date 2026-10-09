@@ -58,6 +58,14 @@ interface KnowsLocation
  *  class — worth one extra fetch when a filter needs a field the card does not carry. */
 interface HasDetailSpecs
 
+/** Reads several ads in one go for less than one at a time. mobile.de's pages open only in a real
+ *  browser that has passed its bot check, which costs a browser start and a challenge per session,
+ *  so its ads are read together in one session rather than each in its own. */
+interface ReadsAdsTogether {
+    /** What each ad's page says, by listing id; an ad that could not be read is missing. */
+    suspend fun fetchDetails(listings: List<io.github.tieo.arbay.model.Listing>): Map<String, io.github.tieo.arbay.model.ListingDetail>
+}
+
 /** Lists prices in a currency other than the euro, so amounts must be converted before they are
  *  compared or shown. */
 interface PricesInOwnCurrency {
