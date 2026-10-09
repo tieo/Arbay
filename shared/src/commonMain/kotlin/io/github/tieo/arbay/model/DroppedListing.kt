@@ -61,6 +61,10 @@ enum class DropReason {
      *  offer" put twelve real vans under a heading that says the market sent junk. */
     BLOCKED_WORD,
 
+    /** Sold by a dealer the reader blocked. The user's own decision about who they buy from, kept
+     *  apart from everything said about the listing itself. */
+    BLOCKED_DEALER,
+
     /** A price the scraper read wrong — digits from several fields run together. */
     IMPLAUSIBLE_PRICE,
 }
@@ -80,5 +84,6 @@ val DropReason.label: String
         DropReason.TOO_FAR -> "too far away"
         DropReason.VEHICLE_CRITERIA -> "a vehicle criterion"
         DropReason.BLOCKED_WORD -> "a word you blocked"
+        DropReason.BLOCKED_DEALER -> "a dealer you blocked"
         DropReason.IMPLAUSIBLE_PRICE -> "unreadable price"
     }

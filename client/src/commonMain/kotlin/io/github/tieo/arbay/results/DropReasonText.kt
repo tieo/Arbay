@@ -31,6 +31,8 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
             "instead, and marked unchecked for that criterion."
     DropReason.BLOCKED_WORD ->
         "Carries a word you blocked for this search. Drop the word in Filters to see these again."
+    DropReason.BLOCKED_DEALER ->
+        "Sold by a dealer you blocked, on every search and every device."
     DropReason.IMPLAUSIBLE_PRICE ->
         "The price read off the page is not a price: digits from several fields run together."
     null -> ""

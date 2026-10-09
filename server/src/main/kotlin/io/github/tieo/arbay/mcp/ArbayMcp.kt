@@ -1,7 +1,9 @@
 package io.github.tieo.arbay.mcp
 
 import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.ChatSettings
+import io.github.tieo.arbay.model.dealerNameKey
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.CarFilters
@@ -264,6 +266,41 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
+            "block_dealer",
+            "Block the seller of offers, so every search on every device drops whatever they sell on that market and lists it under \"a dealer you blocked\"; or unblock them. The seller is the one the offer's market names. The same dealer on another market is blocked by naming one of its offers there.",
+            props = {
+                stringArray("listing_ids", "Offer ids whose sellers to block", required = true)
+                string("reason", "Why, in the user's words")
+                boolean("unblock", "Unblock these sellers instead")
+            },
+        ) { args ->
+            val now = blockedDealers()
+            val lines = mutableListOf<String>()
+            var next = now
+            args.strs("listing_ids").forEach { id ->
+                val listing = offer(id) ?: return@forEach run { lines += "$id: unknown offer; search first." }
+                val dealer = BlockedDealer.of(listing, Clock.System.now(), args.str("reason"))
+                    ?: return@forEach run { lines += "$id: ${listing.platformId.displayName} names no seller on this offer." }
+                val same = { d: BlockedDealer -> d.platform == dealer.platform && d.sellerId == dealer.sellerId && (d.sellerId != null || dealerNameKey(d.name) == dealerNameKey(dealer.name)) }
+                if (args.bool("unblock") == true) {
+                    next = next.filterNot(same)
+                    lines += "$id: unblocked ${dealer.name} on ${dealer.platform.displayName}."
+                } else {
+                    next = next.filterNot(same) + dealer
+                    lines += "$id: blocked ${dealer.name} on ${dealer.platform.displayName}" + (dealer.sellerId?.let { " (seller $it)" } ?: " (by name)") + "."
+                }
+            }
+            if (next != now) {
+                val r = http.put("$base/api/state/blockedDealers") {
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(BlockedDealer.serializer()), next))
+                }
+                if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
+            }
+            (lines + "${next.size} dealers blocked: " + next.joinToString("; ") { "${it.name} on ${it.platform.displayName}" }).joinToString("\n")
+        }
+
+        tool(
             "note_offers",
             "Put a verdict and its reason on offers, shown to the user on the offer's row and page on every device. Use after reading an ad, so what was concluded is on their screen. A note replaces the one before on that offer.",
             props = {
@@ -450,7 +487,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private fun Listing.line(): String = listOfNotNull(
         id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",
         platformId.name.lowercase(),
-        location?.city, distanceKm?.let { "${it.toInt()} km" },
+        location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), url,
@@ -461,6 +498,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         fun s(k: String) = o[k]?.jsonPrimitive?.contentOrNull
         "${s("id")}: ${s("title")} · ${s("state")} · at ${s("sendAt")}" + (s("error")?.let { " · $it" } ?: "")
     }.ifEmpty { "Nothing on its way." }
+
+    private suspend fun blockedDealers(): List<BlockedDealer> =
+        ((getJsonElement("/api/state") as? JsonObject)?.get("blockedDealers") as? JsonArray).orEmpty()
+            .mapNotNull { runCatching { json.decodeFromJsonElement(BlockedDealer.serializer(), it) }.getOrNull() }
+
+    /** An offer by id: one this session searched, else the newest copy the server holds, else the
+     *  copy archived when it was first found. */
+    private suspend fun offer(id: String): Listing? = seen[id]
+        ?: runCatching { getJson<Listing>("/api/listings/${id.encodeURLPathPart()}") }.getOrNull()
+        ?: io.github.tieo.arbay.repo.ListingArchive.get(id)
 
     private suspend fun hiddenOffers(): Set<String> =
         ((getJsonElement("/api/state") as? JsonObject)?.get("hiddenOffers") as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()

@@ -1,9 +1,12 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.DropReason
 import io.github.tieo.arbay.model.DroppedListing
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.blocking
+import io.github.tieo.arbay.repo.UserStateStore
 
 object RelevanceFilter {
 
@@ -611,8 +614,11 @@ object RelevanceFilter {
         return wantedOrJobAd.containsMatchIn(listing.title)
     }
 
-    fun filter(listings: List<Listing>, query: SearchQuery): List<Listing> =
-        partition(listings, query).kept
+    fun filter(
+        listings: List<Listing>,
+        query: SearchQuery,
+        blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+    ): List<Listing> = partition(listings, query, blockedDealers).kept
 
     /**
      * Whether the listing's own title carries any word of the search.
@@ -637,11 +643,24 @@ object RelevanceFilter {
 
     /** What a market sent, split into what the search keeps and what it drops, each drop carrying
      *  the reason it was dropped. [filter] is the kept half; the dropped half is what the app shows
-     *  when someone asks what the search removed. */
-    fun partition(listings: List<Listing>, query: SearchQuery): Partitioned {
+     *  when someone asks what the search removed.
+     *
+     *  A listing from a dealer the user blocked goes first and under its own reason, whatever else
+     *  could be said about it: who they buy from is their decision, and the dealer's name is what
+     *  they need to see to take it back. */
+    fun partition(
+        listings: List<Listing>,
+        query: SearchQuery,
+        blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+    ): Partitioned {
         val parsed = parseQuery(query)
         val dropped = mutableListOf<DroppedListing>()
         val listings = listings.filter { listing ->
+            val dealer = blockedDealers.blocking(listing)
+            if (dealer != null) {
+                dropped += DroppedListing(listing, DropReason.BLOCKED_DEALER, dealer.name)
+                return@filter false
+            }
             val reason = when {
                 !hasSanePrice(listing) -> DropReason.IMPLAUSIBLE_PRICE
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
