@@ -276,6 +276,8 @@ class SavedSearchMonitor(
             }
         }
 
+        if (subfilterMatches.isNotEmpty()) pushSubfilterMatches(product, subfilterMatches)
+
         log.info(
             "saved-search {}: {} new, {} subfilter matches",
             product.name, freshListings.size, subfilterMatches.size,
@@ -424,6 +426,30 @@ class SavedSearchMonitor(
             Ntfy.Action(label = listOfNotNull(euros(l), l.location?.city).joinToString(" "), url = l.url)
         }
         Ntfy.send(title, body, click = best.url, tags = listOf("truck"), actions = buttons)
+    }
+
+    /**
+     * Subfilter matches to the phone through ntfy as well as the app: one message per run, the
+     * cheapest in full and a tap away, the next ones as lines and buttons. Nothing is sent while
+     * no topic is set.
+     */
+    private suspend fun pushSubfilterMatches(product: TrackedProduct, matches: List<Pair<NotificationSubfilter, Listing>>) {
+        if (!Ntfy.configured) return
+        fun price(l: Listing) = eurCents(l.landedPrice(ImportSettingsStore.current))
+        fun line(l: Listing) = listOfNotNull(
+            price(l)?.let { "%,d €".format(java.util.Locale.GERMANY, it / 100) },
+            l.title.take(60),
+            l.location?.let { it.city ?: it.country },
+        ).joinToString(" · ")
+        val listings = matches.map { it.second }.distinctBy { it.id }.sortedBy { price(it) ?: Long.MAX_VALUE }
+        val best = listings.first()
+        val title = if (listings.size == 1) "${product.name}: ${line(best)}"
+            else "${product.name}: ${listings.size} new under your alert"
+        val body = listings.take(5).joinToString("\n") { "· " + line(it) }
+        val buttons = listings.drop(1).take(3).map { l ->
+            Ntfy.Action(label = listOfNotNull(price(l)?.let { "%,d €".format(java.util.Locale.GERMANY, it / 100) }, l.location?.city).joinToString(" "), url = l.url)
+        }
+        Ntfy.send(title, body, click = best.url, tags = listOf("mag"), actions = buttons)
     }
 
     /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */
