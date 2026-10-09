@@ -49,12 +49,13 @@ class ShippingCostTest {
     }
 
     @Test
-    fun directTotalStaysWithinTheAskPlusShipping() {
-        // Asks 350, ships for 6.19: the direct total would be 372, but the phone itself may not go above 350.
+    fun noLineGoesAboveTheAsk() {
+        // Asks 350, ships for 6.19: the direct total would be 372, and even 356 (ask plus shipping)
+        // is more than the seller asked for. Every line stops at the ask, shipping included.
         val parcel = Shipping(cost = Money.cents(619))
         val offer = offerFor(ka, 350, parcel, 450.0, toDoor = false, fee)
         assertEquals(350, offer.price)
-        assertEquals(356, offer.direct)
+        assertEquals(350, offer.direct)
     }
 
     @Test

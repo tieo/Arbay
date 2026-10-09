@@ -240,8 +240,10 @@ fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEu
     val asking = askingEur?.takeIf { it > 0 }
     val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
         ?.let { if (asking != null) minOf(it, asking) else it }
+    // The ad's price is the ceiling of every line, shipping included: the user never offers a
+    // seller more than they asked for, and a PayPal total of ask plus shipping is more.
     val direct = price?.let { directPrice(it, shippingEur ?: 0.0, protection) }
-        ?.let { if (asking != null) minOf(it, floor(asking + (shippingEur ?: 0.0)).toInt()) else it }
+        ?.let { if (asking != null) minOf(it, asking) else it }
     val note = when {
         allInEur == null -> null
         pickupOnly -> "pickup, paid in person"
