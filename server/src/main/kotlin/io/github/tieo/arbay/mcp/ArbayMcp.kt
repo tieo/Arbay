@@ -297,7 +297,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 }
                 if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
             }
-            (lines + "${next.size} dealers blocked: " + next.joinToString("; ") { "${it.name} on ${it.platform.displayName}" }).joinToString("\n")
+            (lines + ("${next.size} dealers blocked: " + next.joinToString("; ") { "${it.name} on ${it.platform.displayName}" })).joinToString("\n")
         }
 
         tool(
