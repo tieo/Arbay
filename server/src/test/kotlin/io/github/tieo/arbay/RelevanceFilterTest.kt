@@ -730,6 +730,62 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a drive sold for a console or a handheld is the drive`() {
+        // Kleinanzeigen and eBay, live: each is a drive, and each was dropped as the machine it fits.
+        val kept = search("1TB NVMe", listOf(
+            listing("WD PC SN740 1TB m.2 NVME 2230 SSD für Notebook Steam Deck Surface"),
+            listing("Western Digital PC SN740 1TB NVMe M.2 SSD 2230"),
+            listing("PlayStation | WE_Black SN850 NVMe SSD | 1 TB | Neu & Versiegelt"),
+            listing("Valve Steam Deck mit 1 TB NVMe SSD Upgrade Kioxia"),
+            listing("Samsung 990 PRO 1TB NVMe"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("WD PC SN740") }, kept.toString())
+        assertTrue(kept.any { it.startsWith("Western Digital PC SN740") }, kept.toString())
+        assertTrue(kept.any { it.startsWith("PlayStation | WE_Black") }, kept.toString())
+        assertTrue(kept.none { it.startsWith("Valve Steam Deck mit") }, "the Deck with a drive in it is the Deck: $kept")
+        val ps5 = search("4TB SSD", listOf(
+            listing("Ps5 Wd black 4tb Festplatte ssd SN850P 850X"),
+            listing("PlayStation 5 (FW7.61) + ps5-linux + OVP DualSense + 4TB NVME"),
+            listing("Samsung 990 PRO 4TB SSD"),
+        )).map { it.title }
+        assertTrue(ps5.any { it.startsWith("Ps5 Wd black") }, ps5.toString())
+        assertTrue(ps5.none { it.startsWith("PlayStation 5 (FW") }, ps5.toString())
+        val deck = search("512GB NVMe", listOf(
+            listing("Original steam deck 512gb 2230 nvme ssd"),
+            listing("Steam Deck OLED 512GB"),
+            listing("Samsung PM9A1 512GB NVMe"),
+        )).map { it.title }
+        assertTrue(deck.any { it.startsWith("Original steam deck") }, deck.toString())
+        assertTrue(deck.none { it == "Steam Deck OLED 512GB" }, deck.toString())
+    }
+
+    @Test
+    fun `a speed in megabytes is no second size, and WD is Western Digital`() {
+        val kept = search("500GB NVMe", listOf(
+            listing("Kingston Nv3 SNV3S/500G 500Gb Nvme Ssd M.2 Interface PCIE Gen4 2280 Lesen 6000 Mb"),
+        )).map { it.title }
+        assertEquals(1, kept.size)
+        val wd = search("WD 4TB NVMe", listOf(
+            listing("Western Digital Blue SN5000 NVMe 4TB"),
+            listing("WD Black SN850X 4TB NVMe"),
+        )).map { it.title }
+        assertEquals(2, wd.size, wd.toString())
+    }
+
+    @Test
+    fun `a brand search keeps its model though every title names the model`() {
+        // eBay, live, for "Samsung 4TB NVMe": nearly every title is a 990, so the word could not
+        // tell one product from the category, and the 990s that left out "NVMe" were lost.
+        val kept = search("Samsung 4TB NVMe", (1..10).map { listing("Samsung 990 PRO 4TB NVMe M.2 Angebot $it") } + listOf(
+            listing("Samsung 990 PRO 4 TB, SSD"),
+            listing("Samsung 990 EVO Plus 4 TB, SSD"),
+            listing("Samsung 870 QVO 4TB SATA"),
+        )).map { it.title }
+        assertTrue("Samsung 990 PRO 4 TB, SSD" in kept, kept.toString())
+        assertTrue(kept.none { it.contains("870 QVO") }, kept.toString())
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.

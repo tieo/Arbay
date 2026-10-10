@@ -496,9 +496,9 @@ object RelevanceFilter {
         // A drive that states its size twice ("2TB (2000GB)", "2TB (2048GB)") states one size. Only
         // a listing that also offers something smaller than what was asked for is priced at a size
         // nobody asked for, which is what makes its place among the cheapest wrong.
-        // A size a hundred times smaller is not one on sale beside it: "7300MB" is a speed with its
+        // A size fifty times smaller is not one on sale beside it: "7300MB" is a speed with its
         // "/s" left off, and "Nur 5GB Geschrieben" how much the drive has written.
-        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) && it >= asked.min() / 100 }
+        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) && it >= asked.min() / 50 }
         if (offered.size < 2 || smaller.isEmpty()) return false
         // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
         // is two terabytes, sold as two sticks, at a price for the pair.
@@ -616,8 +616,23 @@ object RelevanceFilter {
     /** "PS5 kompatibel", "PS5 ready": the machine a part is said to fit, not the thing sold. */
     private val fitsMachine = Regex("""^\W*(kompatib\w*|compatib\w*|ready|bereit|geeignet|tauglich)\b""", RegexOption.IGNORE_CASE)
 
-    private fun namesTheMachineItself(title: String, naming: MatchResult): Boolean =
-        !fitsMachine.containsMatchIn(title.substring(naming.range.last + 1))
+    private fun namesTheMachineItself(title: String, naming: MatchResult): Boolean {
+        val after = title.substring(naming.range.last + 1)
+        if (fitsMachine.containsMatchIn(after)) return false
+        // "Ps5 Wd black 4tb", "PlayStation | WE_Black SN850 NVMe", "steam deck 512gb 2230 nvme": the
+        // machine named as what the drive is for, with the drive straight after it. A machine sold
+        // with one says so first ("PS5 mit …", "Steam Deck mit 1 TB", "PlayStation 5 + …").
+        val next = after.split(Regex("[^\\p{L}\\p{N}._+&]+")).filter { it.isNotBlank() }.take(2)
+        return next.none { storageWord.matches(it) } || next.any { comesWithWord.matches(it) }
+    }
+
+    private val storageWord = Regex(
+        // "M.2" with its dot: "MacBook Pro M2 Max" names the processor.
+        """(?i)ssd|nvme|m\.2|22[3468]0|festplatte|wd|we_black|wd_black|western|samsung|seagate|crucial|""" +
+            """kingston|lexar|sandisk|corsair|kioxia|hynix|sabrent|teamgroup|adata|xpg|wd-black""",
+    )
+
+    private val comesWithWord = Regex("""(?i)mit|inkl\.?|inklusive|incl\.?|with|\+|&|und|and|plus""")
 
     private val phoneOrTablet = Regex("""\b(smartphone|handy|iphone|ipad|galaxy|tablet)\b""", RegexOption.IGNORE_CASE)
 
@@ -907,9 +922,8 @@ object RelevanceFilter {
      * 1TB" is an NVMe drive and an M.2 one, and a search for "1TB NVMe" or "4TB M.2" threw it out
      * for not saying so. Other sellers in the same answer do say so: where most of the listings
      * carrying the same model word ("990", "sn850x", "p310") also carry the word searched for, a
-     * listing with that model word carries it too. Only a word a few listings share is a model's
-     * name; one most of the answer carries ("m2", "ssd") names the category and proves nothing,
-     * which is what keeps a SATA "MX500 M.2" from passing as NVMe.
+     * listing with that model word carries it too. A spec word ("2280", "gen4") is on SATA drives
+     * as much as on NVMe ones and names no product, so it shows nothing.
      */
     private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
@@ -921,14 +935,12 @@ object RelevanceFilter {
         val modelWordsOf = listings.map { modelWords(it.title) }
         val carriers = HashMap<String, MutableList<Int>>()
         modelWordsOf.forEachIndexed { i, ws -> ws.forEach { carriers.getOrPut(it) { mutableListOf() } += i } }
-        // On too much of this answer to name one product.
-        val broad = carriers.filterValues { it.size.toDouble() / listings.size > MODEL_WORD_SHARE }.keys
         val result = HashMap<String, Set<String>>()
         listings.forEachIndexed { i, listing ->
             val shown = words.filter { w ->
                 !carries.getValue(w)[i] && modelWordsOf[i].any { m ->
                     val others = carriers.getValue(m).filter { it != i }
-                    val here = others.size >= MODEL_EVIDENCE_LISTINGS && m !in broad &&
+                    val here = others.size >= MODEL_EVIDENCE_LISTINGS &&
                         others.count { carries.getValue(w)[it] }.toDouble() / others.size >= MODEL_EVIDENCE_SHARE
                     // An answer too small to show it is judged by what the other answers showed.
                     here || evidence?.shows(m, w) == true
@@ -940,7 +952,6 @@ object RelevanceFilter {
             listingModels = listings.indices.associate { listings[it].id to modelWordsOf[it] },
             carried = listings.indices.associate { i -> listings[i].id to words.filter { carries.getValue(it)[i] }.toSet() },
             words = words,
-            broadInAnswer = broad,
         )
         return result
     }
@@ -953,17 +964,18 @@ object RelevanceFilter {
         normalize(gluedThousands(title.lowercase())).split(" ").filter { w ->
             w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
                 (if (w.all { it.isDigit() }) w.length in 3..4 else w.length >= 3) &&
-                !isASize(w) && sizeInGigabytes(w) == null
+                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w)
         }.toSet()
+
+    /** Words a title states a spec in rather than names a product with: a card length, a bus
+     *  generation, a lane count. A SATA drive is "M.2 2280" as much as an NVMe one is. */
+    private val specWord = Regex("""22(30|42|60|80|110)|gen\d|pcie\d|pci\d|ddr\d|usb\d\w*|3d""")
 
     /** Other listings that have to share a model word before it says anything about this one. */
     private const val MODEL_EVIDENCE_LISTINGS = 2
 
     /** The share of those that have to carry the word searched for. */
     private const val MODEL_EVIDENCE_SHARE = 0.6
-
-    /** The most of an answer a model word can be on and still name one product rather than all. */
-    private const val MODEL_WORD_SHARE = 0.35
 
     /**
      * Whether the listing carries what a compound the search names is made of.
@@ -1103,6 +1115,8 @@ object RelevanceFilter {
         // Geizhals names a drive by its slot and bus and never calls it an SSD: "Lexar NM790 1TB,
         // M.2 2280 / M-Key / PCIe 4.0 x4". Only a drive is keyed for M.2 storage or speaks NVMe.
         "ssd" to listOf("nvme", "m key", "solid state"),
+        // A make written out by some sellers and by its initials by others.
+        "wd" to listOf("western digital", "wd black", "wd blue"),
     )
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.

@@ -24,18 +24,14 @@ class ModelWordEvidence(private val file: File?) {
     private data class Persisted(
         /** "model|word" → listing id → whether that listing carried the word. */
         val pairs: Map<String, Map<String, Boolean>> = emptyMap(),
-        /** model word → [answers it was too common in to name one product, answers it was in]. */
-        val breadth: Map<String, List<Int>> = emptyMap(),
     )
 
     private val pairs = HashMap<String, LinkedHashMap<String, Boolean>>()
-    private val breadth = HashMap<String, IntArray>()
     private var lastWrite = 0L
 
     init {
         file?.readStore(log) { json.decodeFromString(Persisted.serializer(), it) }?.let { p ->
             p.pairs.forEach { (k, v) -> pairs[k] = LinkedHashMap(v) }
-            p.breadth.forEach { (k, v) -> if (v.size == 2) breadth[k] = intArrayOf(v[0], v[1]) }
             log.info("Model word evidence loaded for {} pairs", pairs.size)
         }
     }
@@ -45,21 +41,12 @@ class ModelWordEvidence(private val file: File?) {
     fun shows(model: String, word: String): Boolean {
         val seen = pairs["$model|$word"] ?: return false
         if (seen.size < MIN_LISTINGS) return false
-        val (broad, answers) = breadth[model]?.let { it[0] to it[1] } ?: return false
-        if (answers == 0 || broad.toDouble() / answers > MAX_BROAD_SHARE) return false
         return seen.values.count { it }.toDouble() / seen.size >= MIN_CARRYING_SHARE
     }
 
-    /** One market's answer: each listing's model words, which searched words it carried, and which
-     *  model words were on too much of the answer to name one product. */
+    /** One market's answer: each listing's model words and which searched words it carried. */
     @Synchronized
-    fun record(listingModels: Map<String, Set<String>>, carried: Map<String, Set<String>>, words: List<String>, broadInAnswer: Set<String>) {
-        val modelsInAnswer = listingModels.values.flatten().toSet()
-        for (m in modelsInAnswer) {
-            val b = breadth.getOrPut(m) { IntArray(2) }
-            if (m in broadInAnswer) b[0]++
-            b[1]++
-        }
+    fun record(listingModels: Map<String, Set<String>>, carried: Map<String, Set<String>>, words: List<String>) {
         for ((id, models) in listingModels) for (m in models) for (w in words) {
             val seen = pairs.getOrPut("$m|$w") { LinkedHashMap() }
             seen[id] = w in carried[id].orEmpty()
@@ -77,7 +64,7 @@ class ModelWordEvidence(private val file: File?) {
         runCatching {
             f.writeTextAtomically(json.encodeToString(
                 Persisted.serializer(),
-                Persisted(pairs.mapValues { it.value.toMap() }, breadth.mapValues { it.value.toList() }),
+                Persisted(pairs.mapValues { it.value.toMap() }),
             ))
         }.onFailure { log.error("Model word evidence not written: {}", it.message) }
     }
@@ -91,10 +78,6 @@ class ModelWordEvidence(private val file: File?) {
 
         /** The share of them that have to carry the word. */
         private const val MIN_CARRYING_SHARE = 0.6
-
-        /** A model word too common in more than this share of the answers it was in names a
-         *  category ("2280", "gen4"), not a product. */
-        private const val MAX_BROAD_SHARE = 0.2
 
         private const val MAX_LISTINGS_PER_PAIR = 300
 
