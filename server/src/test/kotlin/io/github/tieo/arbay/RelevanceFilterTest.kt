@@ -555,6 +555,38 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `the size alone is not the search where sellers write the rest`() {
+        // Vinted, live, for "4TB NVMe": under half its titles say NVMe, so the word could not be
+        // required, and hard disks came through on "4TB" alone.
+        val kept = search("4TB NVMe", listOf(
+            listing("Seagate Skyhawk 4tb"),
+            listing("Disque dur 4To Western Digital Neuf"),
+            listing("Festplatte 4Tb"),
+            listing("Fikwot FN960 4TB NVMe SSD PCIe 4.0"),
+            listing("SSD M2 4TB Nvme PCI-e 4.0 Sabrent Rocket Q4"),
+            listing("Ssd 4Tb sn7100 PCIe senza scatola"),
+            // The rest of what Vinted sent, which carries neither the size nor the word.
+            listing("Pullover"),
+            listing("Hard Disk 250GB"),
+            listing("Computer disk"),
+            listing("Blu-ray-Laufwerk"),
+        )).map { it.title }
+        assertEquals(
+            listOf("Fikwot FN960 4TB NVMe SSD PCIe 4.0", "SSD M2 4TB Nvme PCI-e 4.0 Sabrent Rocket Q4", "Ssd 4Tb sn7100 PCIe senza scatola"),
+            kept.sorted(),
+        )
+    }
+
+    @Test
+    fun `a range of sizes is priced at its smallest`() {
+        val kept = search("4TB NVMe", listOf(
+            listing("SSD Patriot Viper Gaming VP4300 Lite M.2 NVMe 2.0 | PCIe 4.0 x4 | 1 - 4 TB"),
+            listing("WD_BLACK SN850X 4TB NVMe"),
+        )).map { it.title }
+        assertEquals(listOf("WD_BLACK SN850X 4TB NVMe"), kept)
+    }
+
+    @Test
     fun `a model number ending in X is one thing, not a lot`() {
         // Live, for "4TB NVMe": the SN850X read as a lot of 850 and was dropped as not one offer.
         val kept = search("4TB NVMe", listOf(

@@ -427,10 +427,15 @@ object RelevanceFilter {
 
     /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
      *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
-    private fun sizesIn(title: String): Set<Double> =
-        sizeInTitle.findAll(gluedThousands(title))
-            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
-            .toSet()
+    private fun sizesIn(title: String): Set<Double> {
+        val text = gluedThousands(title)
+        val stated = sizeInTitle.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        // A range names its lower end without the unit: "1 - 4 TB" sells 1TB to 4TB, priced at 1TB.
+        val rangeStarts = sizeRange.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        return (stated + rangeStarts).toSet()
+    }
+
+    private val sizeRange = Regex("""\b(\d{1,4})\s*[-–]\s*\d{1,4}\s?(gb|tb)\b""", RegexOption.IGNORE_CASE)
 
     /** Whether two sizes are the one size, decimal or binary: 2TB is sold as 2000GB and as 2048GB. */
     private fun sameSize(a: Double, b: Double): Boolean =
@@ -778,6 +783,16 @@ object RelevanceFilter {
             parsed.copy(positiveTokens = required + telling)
         }
         val sellersWriteTheseWords = asked.positiveTokens.isNotEmpty() || asked.orGroups.isNotEmpty()
+        // A size is not a search on its own. Where only the size could be required, a listing still
+        // has to carry some other word of the search, as long as this market's sellers write those
+        // words at all: Vinted answers "4TB NVMe" with hard disks and memory cards that share
+        // nothing with it but "4TB". A market that never writes them (Idealo does not write "SSD"
+        // under a drive) leaves its listings to its own search, as every other rule here does.
+        val beyondTheSize = parsed.positiveTokens.filterNot { isASize(it) }
+        val onlyTheSizeRequired = parsed.orGroups.isEmpty() && beyondTheSize.isNotEmpty() &&
+            beyondTheSize.size < parsed.positiveTokens.size &&
+            asked.positiveTokens.all { isASize(it) } &&
+            beyondTheSize.any { shareCarrying(it) > 0.0 }
 
 
         val kept = listings.mapNotNull { listing ->
@@ -796,6 +811,10 @@ object RelevanceFilter {
             // shows these are words its sellers write. Where they are not, the market's search is
             // the only judge there is, and it already ran.
             if (sellersWriteTheseWords && s < ENOUGH_OF_THE_SEARCH) {
+                dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                return@mapNotNull null
+            }
+            if (onlyTheSizeRequired && score(listing, parsed.copy(positiveTokens = beyondTheSize)) == 0.0) {
                 dropped += DroppedListing(listing, DropReason.OFF_TARGET)
                 return@mapNotNull null
             }
