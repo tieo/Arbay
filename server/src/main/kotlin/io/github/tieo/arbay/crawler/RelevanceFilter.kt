@@ -506,9 +506,12 @@ object RelevanceFilter {
     }
 
     /** A size stated as working memory: "16 GB RAM", "32GB DDR5", or joined to the storage with a plus, "16GB+256GB"
-     *  and "256GB + 16GB". What the device runs on, beside what it stores. */
+     *  and "256GB + 16GB". What the device runs on, beside what it stores. A phone's memory tier
+     *  written straight beside its storage is the same: "256GB-16GB", "16GB 256GB", "512GB 16GB". */
     private val memorySize = Regex(
-        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher|(lp)?ddr\d\w*)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b""",
+        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher|(lp)?ddr\d\w*)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b|""" +
+            """(?<=\b(64|128|256|512)\s?gb|\b1\s?tb)\s*[-|,]?\s*\b(6|8|12|16|24)\s?gb\b|""" +
+            """\b(6|8|12|16|24)\s?gb\s*[-|,]?\s*(?=(64|128|256|512)\s?gb\b|1\s?tb\b)""",
         RegexOption.IGNORE_CASE,
     )
 

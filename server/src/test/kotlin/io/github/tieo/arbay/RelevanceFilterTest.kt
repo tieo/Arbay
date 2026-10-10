@@ -1119,4 +1119,15 @@ class RelevanceFilterTest {
         val kept = search("iPhone 15 Pro Max", listings).map { it.title }
         assertEquals(listings.dropLast(2).map { it.title }, kept)
     }
+
+    @Test
+    fun `a phone's memory written beside its storage is not a second size`() {
+        val listings = listOf(
+            listing("Google Pixel 10 Pro XL 5G 256GB-16GB Wie Neu Top Zustand 100% .", price = 78900),
+            listing("Google Pixel 10 Pro XL 5G 16GB 256GB Obsidian Ohne Simlock NEU", price = 83000),
+            listing("Google Pixel 10 Pro XL 256GB 16GB Obsidian + Pixel Buds Pro 2", price = 94900),
+            listing("Google Pixel 10 Pro XL 128GB/256GB Obsidian", price = 70000),
+        )
+        assertEquals(listings.dropLast(1).map { it.title }, search("Pixel 10 Pro XL 256GB", listings).map { it.title })
+    }
 }
