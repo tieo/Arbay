@@ -538,6 +538,23 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a machine that holds the size asked for is not the part`() {
+        // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
+        // be required there, and the phones and the console came through on their size alone.
+        val kept = search("1TB NVMe", listOf(
+            listing("Samsung Galaxy S25 Ultra Dual SIM 1TB titanium black"),
+            listing("Apple iPhone Air 1TB lichtgold"),
+            listing("Microsoft Xbox One X 1 TB [Battlefield V Gold Rush Special Edition]"),
+            listing("Samsung 980 Pro 1TB SSD für PC"),
+            listing("WD Blue SN5000 1TB"),
+            // The rest of the shelf, which does not carry the size, as most of reBuy's answer did not.
+            listing("Die Zeitmaschine"),
+            listing("Power Semiconductor Drives"),
+        )).map { it.title }
+        assertEquals(listOf("Samsung 980 Pro 1TB SSD für PC", "WD Blue SN5000 1TB"), kept.sorted())
+    }
+
+    @Test
     fun `a model number ending in X is one thing, not a lot`() {
         // Live, for "4TB NVMe": the SN850X read as a lot of 850 and was dropped as not one offer.
         val kept = search("4TB NVMe", listOf(

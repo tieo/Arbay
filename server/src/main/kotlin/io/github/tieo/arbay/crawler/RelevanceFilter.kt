@@ -523,7 +523,8 @@ object RelevanceFilter {
      * the head. A search that asks for the machine keeps them, since then the machine is the thing.
      */
     private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
-        if (hostDevice.containsMatchIn(queryText)) return false
+        if (hostDevice.containsMatchIn(queryText) || phoneOrTablet.containsMatchIn(queryText)) return false
+        if (isADeviceOfThatSize(listing, parsed)) return true
         // The rule weighs how much of the search falls either side of the machine's name, so it
         // needs more than one word to weigh. Asked for a part number alone, everything sits on one
         // side by definition, and "Crucial 32GB Notebook DDR4-SODIMM CT32G4SFD832A" — a module for
@@ -549,6 +550,27 @@ object RelevanceFilter {
         // MacBook Pro M2 Max carries "m2" in its own name, where it is the processor and not the
         // slot, and the drive it holds is listed with everything else it holds.
         return inTail > inHead
+    }
+
+    private val phoneOrTablet = Regex("""\b(smartphone|handy|iphone|ipad|galaxy|tablet)\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Whether the listing is a machine that holds the size searched for, and nothing else of the
+     * search. reBuy answers "1TB NVMe" with a Galaxy S25 Ultra 1TB, an iPhone Air 1TB and an Xbox One
+     * X 1 TB: none of them carries "NVMe" or anything written in its place, so on that market the
+     * word could not be required, and the size alone let them through. The machine is what the title
+     * leads with, in its first three words and ahead of the size; a drive that names what it goes
+     * into ("Samsung 980 Pro 1TB SSD für PC") names it after.
+     */
+    private fun isADeviceOfThatSize(listing: Listing, parsed: ParsedQuery): Boolean {
+        val words = parsed.positiveTokens.filterNot { isASize(it) }
+        if (words.isEmpty() || words.size == parsed.positiveTokens.size) return false
+        val size = sizeInTitle.find(listing.title) ?: return false
+        val device = listOfNotNull(hostDevice.find(listing.title), phoneOrTablet.find(listing.title))
+            .minByOrNull { it.range.first } ?: return false
+        if (device.range.first > size.range.first) return false
+        if (listing.title.take(device.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
+        return score(listing, parsed.copy(positiveTokens = words, orGroups = emptyList())) == 0.0
     }
 
     // What a thing is sold with, named as the thing on offer. A search for headphones comes back
