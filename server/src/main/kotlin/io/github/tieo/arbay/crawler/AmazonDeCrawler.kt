@@ -25,16 +25,18 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler {
             val pageResults = parseSearchResults(html)
             if (pageResults.isEmpty()) {
                 if (page == 1) {
-                    // No results on page 1 — check if Amazon served a bot-detection/challenge page
-                    // (returned as HTTP 200, so detectCaptcha may have missed it)
+                    // Nothing parsed off page 1 is a genuine empty answer only where Amazon says so
+                    // in words. Anything else is a page that is not a result list: a challenge
+                    // served as HTTP 200, short or long, or a layout the parser no longer reads.
+                    // "4TB NVMe" came back as zero results once and as 27 a minute later, and
+                    // passing that page through as "nothing found" hid it.
                     val lower = html.lowercase()
-                    val hasNoResultsSignal = lower.contains("keine ergebnisse") ||
+                    val saysNothingFound = lower.contains("keine ergebnisse") ||
                         lower.contains("keinen treffer") ||
                         lower.contains("no results for") ||
-                        lower.contains("did not match any") ||
-                        lower.contains("data-component-type") // real search page (0 results is ok)
-                    if (!hasNoResultsSignal && html.length > 10_000) {
-                        throw CrawlerBlockedException("Amazon: bot detection", ErrorType.BLOCKED_403)
+                        lower.contains("did not match any")
+                    if (!saysNothingFound) {
+                        throw CrawlerBlockedException("Amazon: page 1 carried no results and no 'nothing found'", ErrorType.BLOCKED_403, url = url, html = html)
                     }
                 }
                 break
