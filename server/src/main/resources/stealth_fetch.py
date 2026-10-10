@@ -22,8 +22,30 @@ import os
 import asyncio
 
 import zendriver as zd
+from zendriver import cdp
+from zendriver.core.cloudflare import cf_find_interactive_challenge
 
 CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
+
+
+async def tick_turnstile(page) -> bool:
+    """Clicks Cloudflare's "Verify you are human" box where the challenge shows one.
+
+    Cloudflare decides per visit whether a browser passes on its own or has to tick the box; Back
+    Market's search waited behind the box on about two visits in three, and one click on it lets the
+    page through. The box sits at the left of the challenge iframe, vertically centred.
+    """
+    _, _, frame = await cf_find_interactive_challenge(page)
+    if frame is None or "display: none" in frame.attrs.get("style", ""):
+        return False
+    box = await page.send(cdp.dom.get_box_model(node_id=frame.node.node_id))
+    xs, ys = box.content[0::2], box.content[1::2]
+    x = min(xs) + (max(xs) - min(xs)) * 0.1
+    y = (min(ys) + max(ys)) / 2
+    await page.mouse_move(x, y, steps=12)
+    await asyncio.sleep(0.4)
+    await page.mouse_click(x, y)
+    return True
 
 
 async def run(url: str, marker: str, wait_s: float, min_matches: int) -> str | None:
@@ -44,6 +66,10 @@ async def run(url: str, marker: str, wait_s: float, min_matches: int) -> str | N
                 # Small settle so a grid still painting finishes its first batch.
                 await asyncio.sleep(1.5)
                 return await page.get_content()
+            # The box lives in a shadow root the page's HTML does not show, so it is looked for
+            # directly; ticked once it has shown, and again if it shows anew after a failed attempt.
+            if waited % 6 == 0:
+                await tick_turnstile(page)
         # Marker never showed. Return what we have only if it is clearly a full page, not a
         # challenge stub, so the caller can still try to parse.
         return html if len(html) > 40000 else None
