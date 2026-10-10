@@ -164,9 +164,14 @@ object RelevanceFilter {
         // Glued, only two digits are a count: "20x" is twenty of them, while "SN850X" and a Ryzen
         // "5800X" are the names of one, and reading them as lots threw a single 4TB drive away.
         // A count followed by a length is a measurement: "M.2 22 x 80 mm" is the card's size.
-        if (Regex("""(?:^|\s)(?!1\s*x)(?:\d{2}x|\d{2,}\s+x)(?:\s|$)(?!\s*\d+\s*(mm|cm)\b)""").containsMatchIn(titleNorm) ||
+        // A spaced count is at most three digits: "Ryzen 9 7950 X" is a processor. And what the search
+        // itself names is never a count: "Surface Pro X 13" and a "ThinkBook 14x" are the machines.
+        val searched = (parsed.positiveTokens + parsed.orGroups.flatten()).toSet()
+        val countBefore = Regex("""(?:^|\s)(?!1\s*x)(\d{2}x|\d{2,3}\s+x)(?:\s|$)(?!\s*\d+\s*(mm|cm)\b)""")
+            .findAll(titleNorm).any { it.groupValues[1].replace(" ", "") !in searched }
+        val countAfter = "x" !in searched &&
             Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz|mm|cm))""").containsMatchIn(titleNorm)
-        ) return -1.0
+        if (countBefore || countAfter) return -1.0
 
         // Word-start positions in titleCompact (for guarding compact matches)
         val wordStartsInCompact: Set<Int> = buildSet {

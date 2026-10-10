@@ -714,6 +714,22 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a model named like a count is the model when the search names it`() {
+        val surface = search("Surface Pro X", listOf(
+            listing("Microsoft Surface Pro X 13\" SQ2 512GB SSD 16GB RAM [Wi-Fi + 4G] platin"),
+            listing("Microsoft Surface Pro X SQ1 8GB 256GB"),
+        )).map { it.title }
+        assertEquals(2, surface.size, surface.toString())
+        val thinkbook = search("ThinkBook 14x", listOf(listing("Lenovo ThinkBook 14x ILL, Luna Grey, Core Ultra 5 226V, 16GB RAM, 512GB SSD")))
+        assertEquals(1, thinkbook.size)
+        val ryzen = search("Ryzen 9 7950X", listOf(listing("AMD Ryzen 9 7950 X Prozessor boxed")))
+        assertEquals(1, ryzen.size)
+        // A count is still a count.
+        assertTrue(search("512GB NVMe", listOf(listing("11x 512GB M.2 NVMe SSDs – verschiedene Hersteller – getestet"))).isEmpty())
+        assertTrue(search("Kabel", listOf(listing("Kabel x 20 Stück"))).isEmpty())
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.
