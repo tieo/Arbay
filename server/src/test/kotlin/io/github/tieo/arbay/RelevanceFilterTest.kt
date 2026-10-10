@@ -757,6 +757,12 @@ class RelevanceFilterTest {
         )).map { it.title }
         assertTrue(deck.any { it.startsWith("Original steam deck") }, deck.toString())
         assertTrue(deck.none { it == "Steam Deck OLED 512GB" }, deck.toString())
+        // Asked for by model, the name ahead of the model is where the title is cut.
+        val sn740 = search("SN740 1TB", listOf(
+            listing("Western Digital PC SN740 1TB NVMe M.2 SSD 2230"),
+            listing("WD PC SN740 1TB M.2 2230 SSD NVMe PCIe4x4 For Steam Deck ASUS ROG Flow X Ally Z1"),
+        )).map { it.title }
+        assertEquals(2, sn740.size, sn740.toString())
     }
 
     @Test

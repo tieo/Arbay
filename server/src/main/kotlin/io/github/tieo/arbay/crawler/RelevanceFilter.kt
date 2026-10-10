@@ -601,7 +601,10 @@ object RelevanceFilter {
         // CT32G4SFD832A" says "laptop" about what the part goes into, five words in, and is the
         // part itself; "Gaming PC: 9850X3D, …" and "NEUER GAMER PC ULTRA 7 …" say it at the front,
         // about themselves.
-        val naming = hostDevice.find(head)?.takeIf { namesTheMachineItself(listing.title, it) } ?: return false
+        // Matched on the whole title, so what follows a name is seen even past the cut: "PC SN740"
+        // is a drive, and cut before "SN740" the head read as a PC.
+        val naming = hostDevice.findAll(listing.title)
+            .firstOrNull { it.range.last < boundary && namesTheMachineItself(listing.title, it) } ?: return false
         if (head.take(naming.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
         val headCompact = head.lowercase().replace(NON_ALNUM, "")
         val tailCompact = listing.title.substring(boundary).lowercase().replace(NON_ALNUM, "")
