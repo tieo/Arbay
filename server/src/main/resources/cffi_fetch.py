@@ -181,7 +181,9 @@ def _idealo_category(session, headers, url):
     out = []
     for href, title, rest in tiles:
         m_id = re.search(r'/(\d{5,})_', href)
-        m_price = re.search(r'((?:\d{1,3}\.)*\d+,\d{2})\s*(?:&nbsp;|\s)*€', rest)
+        # A tile shows the price per unit ahead of the price: "(0,14 €/GB)" then "ab 141,99 €".
+        # An amount followed by a slash is the unit price.
+        m_price = re.search(r'((?:\d{1,3}\.)*\d+,\d{2})\s*(?:&nbsp;|\s)*€(?!\s*/)', rest)
         if not m_id or not m_price:
             continue
         out.append({
