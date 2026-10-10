@@ -337,6 +337,8 @@ internal suspend fun fetchWithFallback(
     primeUrl: String? = null,
     waitNetworkIdle: Boolean = false,
     browserOnly: Boolean = false,
+    stealthMarker: String? = null,
+    stealthMinMatches: Int = 1,
 ): String {
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
@@ -426,6 +428,23 @@ internal suspend fun fetchWithFallback(
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         errors.add("Firefox: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Firefox failed: {}", platformName, e.message?.take(80))
+    }
+
+    // === Step 5: real Chrome that ticks Cloudflare's box ===
+    // Where a site's challenge stops every engine above, a real Chrome passes it by ticking the
+    // "Verify you are human" box; it is the slowest tier, so only sites that name what their page
+    // shows once through ([stealthMarker]) reach it.
+    if (stealthMarker != null) {
+        emitter?.let { it.emit("Stealth") }
+        try {
+            // The marker showing is what proves the page; a challenge script left in it is not a block.
+            val html = StealthBrowserClient.fetchRendered(url, stealthMarker, waitSeconds = 40, minMatches = stealthMinMatches)
+            RequestMonitor.recordTier(platformName, "Stealth")
+            return html
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            errors.add("Stealth: ${e.message?.take(60)}")
+            fetchLog.debug("[{}] Stealth failed: {}", platformName, e.message?.take(80))
+        }
     }
 
     // All engines failed

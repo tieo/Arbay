@@ -24,7 +24,10 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
 
     /** The seller's text off the item page, which the catalog card does not carry. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        parseDetail(fetchWithFallback(client, listing.url.substringBefore("?"), "Vinted", waitSelector = "[itemprop=description]"))
+        parseDetail(fetchWithFallback(
+            client, listing.url.substringBefore("?"), "Vinted",
+            waitSelector = "[itemprop=description]", stealthMarker = "itemprop=\"description\"",
+        ))
     } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
         null
     }
@@ -41,6 +44,8 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
         val html = fetchWithFallback(
             client, url, "Vinted",
             waitSelector = "[data-testid=grid-item]",
+            // After a burst of searches Vinted answers every engine with Cloudflare's challenge.
+            stealthMarker = "data-testid=\"grid-item\"", stealthMinMatches = 3,
         )
         return parseSearchResults(html)
     }
