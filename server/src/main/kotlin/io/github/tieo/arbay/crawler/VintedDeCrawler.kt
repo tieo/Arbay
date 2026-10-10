@@ -22,6 +22,19 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
 
     override val platformId = PlatformId.VINTED_DE
 
+    /** The seller's text off the item page, which the catalog card does not carry. */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        parseDetail(fetchWithFallback(client, listing.url.substringBefore("?"), "Vinted", waitSelector = "[itemprop=description]"))
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
+    internal fun parseDetail(html: String): ListingDetail? =
+        Jsoup.parse(html).selectFirst("[itemprop=description]")?.wholeText()
+            ?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.joinToString("\n")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ListingDetail(description = it) }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.vinted.de/catalog?search_text=${query.positiveText.encodeUrl()}" +
             (if (query.startPage > 1) "&page=${query.startPage}" else "")

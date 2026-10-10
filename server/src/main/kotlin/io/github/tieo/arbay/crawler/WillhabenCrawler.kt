@@ -48,6 +48,41 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPag
         return ids
     }
 
+    /** The seller's text and where the thing is, off the ad's own page: both sit in its
+     *  __NEXT_DATA__, which the card carries neither of. */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        parseDetail(fetchWithFallback(client, listing.url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500))
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
+    internal fun parseDetail(html: String): ListingDetail? {
+        val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val ad = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull()
+            ?.get("props")?.jsonObject?.get("pageProps")?.jsonObject?.get("advertDetails")?.jsonObject ?: return null
+        val descriptionHtml = ad["attributes"]?.jsonObject?.get("attribute")?.jsonArray
+            ?.firstOrNull { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull == "DESCRIPTION" }
+            ?.jsonObject?.get("values")?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull
+        // The text is stored as HTML with a <br/> where the seller pressed return.
+        val description = descriptionHtml?.let { h ->
+            Jsoup.parse(h.replace(Regex("(?i)<br\\s*/?>"), "\n")).wholeText().lines()
+                .map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+        }?.takeIf { it.isNotBlank() }
+        val address = ad["advertAddressDetails"]?.jsonObject
+        val location = address?.let { a ->
+            val zip = a["postCode"]?.jsonPrimitive?.contentOrNull
+            val place = a["postalName"]?.jsonPrimitive?.contentOrNull
+            Location(
+                city = place?.substringBefore(",")?.trim(),
+                zip = zip,
+                country = "AT",
+                raw = listOfNotNull(zip, place).joinToString(" ").takeIf { it.isNotBlank() },
+            )
+        }
+        return ListingDetail(description = description, location = location)
+            .takeIf { it.description != null || it.location != null }
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         // willhaben's used-car vertical ignores keyword search — it filters by numeric make/model IDs
         // (the `CAR_MODEL/MAKE` and `CAR_MODEL/MODEL` params). So a car query is resolved to those IDs:
