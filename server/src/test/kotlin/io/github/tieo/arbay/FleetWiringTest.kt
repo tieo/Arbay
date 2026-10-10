@@ -62,10 +62,11 @@ class FleetWiringTest {
     @Test
     fun `a later page is asked only of markets that can start there`() {
         val page3 = SearchQuery(text = "2TB NVMe", category = MarketGroup.GENERAL, startPage = 3)
-        listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.AMAZON_DE)
+        listOf(PlatformId.KLEINANZEIGEN, PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.AMAZON_DE)
             .forEach { assertEquals(null, CrawlerRegistry.crawlerFor(it)!!.cannotAnswer(page3), "$it pages") }
-        // Answered with their first page, these would serve page 1 again as if it were page 3.
-        listOf(PlatformId.GEIZHALS, PlatformId.IDEALO, PlatformId.REBUY)
+        // Answered with their first page, these would serve page 1 again as if it were page 3. eBay
+        // serves a paged search to the browser with placeholder cards and to everything else a 403.
+        listOf(PlatformId.GEIZHALS, PlatformId.IDEALO, PlatformId.REBUY, PlatformId.EBAY_DE)
             .forEach { assertNotNull(CrawlerRegistry.crawlerFor(it)!!.cannotAnswer(page3), "$it has one page") }
         assertEquals(null, CrawlerRegistry.crawlerFor(PlatformId.GEIZHALS)!!.cannotAnswer(page3.copy(startPage = 1)))
     }

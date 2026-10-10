@@ -18,7 +18,7 @@ class EbayDeCrawler(
     private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.EBAY_DE,
     private val domain: String = "ebay.de",
-) : Crawler, StartsAtAnyPage, FetchesEveryPage, HasSoldListings, SellsByAuction {
+) : Crawler, FetchesEveryPage, HasSoldListings, SellsByAuction {
 
     /**
      * What eBay keeps on the item page and nowhere on the card: the vehicle specs in "Info zum
@@ -62,7 +62,7 @@ class EbayDeCrawler(
         val emitter = coroutineContext[FetchProgressEmitter.Key]
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val firstUrl = buildSearchUrl(query, query.startPage)
+        val firstUrl = buildSearchUrl(query, 1)
 
         // Step 0: official eBay Browse API (free, reliable) when credentials are configured.
         // Falls through to scraping if unconfigured or the call fails/returns nothing.
@@ -108,7 +108,7 @@ class EbayDeCrawler(
             // like any other refusal.
             val cap = CrawlerConfig.current.maxResultsPerPlatform
             if (firstPage.size >= 20 && allResults.size < cap) {
-                for (page in query.startPage + 1 until query.startPage + maxPages) {
+                for (page in 2..maxPages) {
                     val html = try {
                         val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
                         validateHtml(h, "eBay"); h
@@ -161,7 +161,7 @@ class EbayDeCrawler(
                 waitSelector = "li.s-card, li.s-item",
                 extraWaitMs = 1000,
             ) { fetchPage ->
-                val searchUrl = buildSearchUrl(query, query.startPage)
+                val searchUrl = buildSearchUrl(query, 1)
                 val result = fetchPage(searchUrl)
                 val html = validateBrowserResult(result, "eBay")
                 val pageResults = parseSearchResults(html)
@@ -200,7 +200,7 @@ class EbayDeCrawler(
         val maxPages = query.pageLimit()
         val cap = CrawlerConfig.current.maxResultsPerPlatform
         if (firstPage.size >= 20 && allResults.size < cap) {
-            for (page in query.startPage + 1 until query.startPage + maxPages) {
+            for (page in 2..maxPages) {
                 val html = try {
                     val h = fetchHttp(client, buildSearchUrl(query, page), "eBay")
                     validateHtml(h, "eBay"); h
