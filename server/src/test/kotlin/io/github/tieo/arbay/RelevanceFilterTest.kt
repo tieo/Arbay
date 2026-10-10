@@ -1055,4 +1055,34 @@ class RelevanceFilterTest {
             kept,
         )
     }
+
+    @Test
+    fun `a phone whose title reports its battery is the phone`() {
+        // A search for an iPhone 11 Pro Max lost every phone that stated its battery health: the
+        // battery word read as a battery sold on its own.
+        val listings = listOf(
+            listing("iPhone 11 Pro Max 64 GB Akku 85%", price = 19900),
+            listing("Apple iPhone 11 Pro Max Schwarz 64GB Guter Zustand 100% Batterie Simlockfrei iOS", price = 19000),
+            listing("Apple iPhone 11 Pro Max Gold | OVP | 82 % Akku | Sehr guter Zustand", price = 19500),
+            listing("iPhone 11 Pro Max 256GB Space Gray — Top-Zustand, Neuer Akku 100%", price = 27500),
+            listing("Apple iPhone 11 / 11 Pro / 11 Pro Max Akku Reparatur / Austausch", price = 5900),
+            listing("Iphone 11 Pro Max Schwarz mit Grau Magcase Hülle", price = 24200),
+            listing("iPhone 11 Pro Max Hülle", price = 200),
+        )
+        val kept = search("iPhone 11 Pro Max", listings).map { it.title }
+        assertEquals(listings.map { it.title }.filterNot { "Reparatur" in it || it.endsWith("Max Hülle") }, kept)
+    }
+
+    @Test
+    fun `the make and the model qualifiers count however the seller spaces them`() {
+        val listings = listOf(
+            listing("İPhone 11 pro Max 64 GB", price = 19000),
+            listing("iphone 11 ProMax 256GB Nachtgrün", price = 22000),
+            listing("I Phone 11 Pro Max", price = 16900),
+            listing("iPhone 11 max pro", price = 15800),
+            listing("iPhone 11 Pro 256 GB weiß", price = 17000),
+        )
+        val kept = search("iPhone 11 Pro Max", listings).map { it.title }
+        assertEquals(listings.dropLast(1).map { it.title }, kept)
+    }
 }

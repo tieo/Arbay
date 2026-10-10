@@ -682,7 +682,14 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
-    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*(\p{L}+\s+)?$""", RegexOption.IGNORE_CASE)
+    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*([\p{L}\d]+[\s-]+){0,2}$""", RegexOption.IGNORE_CASE)
+
+    /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Neuer Akku
+     *  100%", "82 % Akku". A battery sold on its own has no health to report. */
+    private val batteryReport = Regex(
+        """\d{2,3}\s?%\s*(akku|batterie|battery)|(akku|batterie|battery)\w*\s*:?\s*\d{2,3}\s?%""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /**
      * Whether the title's own subject is something sold alongside the thing searched for.
@@ -693,7 +700,9 @@ object RelevanceFilter {
      */
     private fun isAnAccessoryNamedOutright(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (accessoryNoun.containsMatchIn(queryText)) return false
-        val match = accessoryNoun.find(listing.title) ?: return false
+        val reports = batteryReport.findAll(listing.title).map { it.range }.toList()
+        val match = accessoryNoun.findAll(listing.title)
+            .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
         val before = listing.title.take(match.range.first)
         if (comesWith.containsMatchIn(before)) return false
         // A case or a charger has no storage. Where the size searched for is stated ahead of the
@@ -1134,6 +1143,14 @@ object RelevanceFilter {
         // so that umlaut replacements like "ä"→"ae" work on titles from all crawlers.
         val nfc = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFC)
         return nfc
+            // A dotted capital I ("İPhone", typed on a Turkish keyboard) lowercases to an i with a
+            // combining dot, which the symbol strip below would turn into "i phone".
+            .replace("̇", "").replace("İ", "i")
+            // Sellers write the make's word apart and the model's qualifiers together or swapped:
+            // "I Phone 11 Pro Max", "iPhone 11 ProMax", "iPhone 11 max pro" are all the 11 Pro Max.
+            .replace(Regex("""\b(i)\s+(phone|pad)\b""", RegexOption.IGNORE_CASE), "$1$2")
+            .replace(Regex("""\b(pro)(max)\b""", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("""(\d)\s+max\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro max")
             // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".
             // Joined before periods become spaces, so a title's "M.2" and a query's "m.2" end up
             // in the same shape ("m2") — split, the title says "m 2" and the query token "m2"
