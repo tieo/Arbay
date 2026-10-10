@@ -140,7 +140,9 @@ object RelevanceFilter {
         // A count sits before the x ("20x", "4 x") or stands as its own word after it ("x 20").
         // Glued to what follows, the x belongs to a model name — Biwin X570, Emtec X200 — and
         // reading those as lots of 570 and 200 threw two real drives off a search for one.
-        if (Regex("""(?:^|\s)(?!1\s*x)\d{2,}\s*x(?:\s|$)""").containsMatchIn(titleNorm) ||
+        // Glued, only two digits are a count: "20x" is twenty of them, while "SN850X" and a Ryzen
+        // "5800X" are the names of one, and reading them as lots threw a single 4TB drive away.
+        if (Regex("""(?:^|\s)(?!1\s*x)(?:\d{2}x|\d{2,}\s+x)(?:\s|$)""").containsMatchIn(titleNorm) ||
             Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz))""").containsMatchIn(titleNorm)
         ) return -1.0
 
@@ -154,6 +156,16 @@ object RelevanceFilter {
         }
 
         fun tokenMatches(token: String): Boolean {
+            // A size is a number of bytes, written however the seller writes it: a 2TB drive is
+            // sold as "2048GB" and "2000GB" as often as "2TB", and only the spelling differs.
+            if (isASize(token)) sizeInGigabytes(token)?.let { asked ->
+                if (sizesIn(listing.title).any { sameSize(it, asked) }) return true
+            }
+            // A word the title says in other words: every PCIe M.2 drive is an NVMe drive, and
+            // geizhals, eBay and Ricardo name the bus instead ("M.2 2280 / M-Key / PCIe 4.0 x4").
+            WRITTEN_AS[token]?.let { names ->
+                if (names.any { name -> " $titleNormForMatching ".contains(" $name ") }) return true
+            }
             // A make glued to the model is one word on some markets: TruckScout24 writes
             // "VWCrafter", and every real Crafter there read as carrying neither word of
             // "Volkswagen Crafter" — the model is not at a word start, and the make is not the
@@ -407,11 +419,22 @@ object RelevanceFilter {
         return headWords.none { q.contains(it) }
     }
 
-    /** Sizes as a listing writes them: a number glued or spaced to a storage unit. */
-    /** A speed, not a size: "7.300 MB/s Lesen" is how fast the drive is, and counting it as a
-     *  second size made every drive that advertises one look like a row of variants. */
+    /** Sizes as a listing writes them: a number glued or spaced to a storage unit, French "Go"
+     *  and "To" included. A speed is not a size: "7.300 MB/s Lesen" is how fast the drive is, and
+     *  counting it as a second size made every drive that advertises one look like a row of variants. */
     private val sizeInTitle =
-        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+
+    /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
+     *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
+    private fun sizesIn(title: String): Set<Double> =
+        sizeInTitle.findAll(gluedThousands(title))
+            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+            .toSet()
+
+    /** Whether two sizes are the one size, decimal or binary: 2TB is sold as 2000GB and as 2048GB. */
+    private fun sameSize(a: Double, b: Double): Boolean =
+        a == b || a == b / 1000 * 1024 || b == a / 1000 * 1024
 
     /**
      * Whether the listing offers a row of sizes and is priced at the smallest of them.
@@ -426,13 +449,12 @@ object RelevanceFilter {
      */
     private fun isOneOfSeveralSizes(listing: Listing, parsed: ParsedQuery): Boolean {
         val asked = parsed.positiveTokens.mapNotNull { sizeInGigabytes(it) }.ifEmpty { return false }
-        val offered = sizeInTitle.findAll(listing.title)
-            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
-            .toSet()
-        // A drive that states its size twice ("2TB (2000GB)") states one size. Only a listing that
-        // also offers something smaller than what was asked for is priced at a size nobody asked
-        // for, which is what makes its place among the cheapest wrong.
-        if (offered.size < 2 || offered.none { it < asked.min() }) return false
+        val offered = sizesIn(listing.title)
+        // A drive that states its size twice ("2TB (2000GB)", "2TB (2048GB)") states one size. Only
+        // a listing that also offers something smaller than what was asked for is priced at a size
+        // nobody asked for, which is what makes its place among the cheapest wrong.
+        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) }
+        if (offered.size < 2 || smaller.isEmpty()) return false
         // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
         // is two terabytes, sold as two sticks, at a price for the pair.
         return !addsUpToTheAskedSize(listing.title, asked.min())
@@ -452,11 +474,11 @@ object RelevanceFilter {
     /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
      *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
     private fun sizeInGigabytes(token: String): Double? {
-        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb)$""", RegexOption.IGNORE_CASE)
+        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
             .find(token.trim()) ?: return null
         val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
         return when (m.groupValues[2].lowercase()) {
-            "tb" -> value * 1000
+            "tb", "to" -> value * 1000
             "mb" -> value / 1000
             else -> value
         }
@@ -889,6 +911,13 @@ object RelevanceFilter {
         val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
         return "${listings.size} results, only $matching contain query tokens — search likely ignored (sample: $sample)"
     }
+
+    /** Words of a search a title can carry under another name, as normalized words. Only names that
+     *  always mean the word: PCIe on an M.2 drive is the NVMe protocol, while "M.2" alone is not,
+     *  since M.2 SATA drives exist. */
+    private val WRITTEN_AS = mapOf(
+        "nvme" to listOf("pcie", "pci e", "pci express", "pcie3", "pcie4", "pcie5"),
+    )
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.
     // "Samsung Galaxy S25 FE ultra sauber" must NOT match "Samsung Galaxy S25 Ultra" query.

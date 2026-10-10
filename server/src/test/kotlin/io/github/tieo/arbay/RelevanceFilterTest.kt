@@ -516,6 +516,38 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a size is the same size however it is written`() {
+        // Off the live answers for "2TB NVMe": each of these is a 2TB NVMe drive, and each was
+        // thrown out as off target for writing the size in gigabytes or the bus instead of "NVMe".
+        val kept = search("2TB NVMe", listOf(
+            listing("Crucial P310 NVMe 2000GB"),
+            listing("Kingston KC3000 PCIe 4.0 NVMe SSD 2048GB, M.2 2280 / M-Key / PCIe 4.0 x4"),
+            listing("Samsung SSD 990 PRO 2TB, M.2 2280 / M-Key / PCIe 4.0 x4"),
+            listing("SSD Samsung 990 NVMe 2To - M.2 PCle 4.0"),
+            listing("Western Digital WD Green SN350 NVMe SSD 2 TB M.2 Solid State Disk 2.000 GB Intern"),
+            listing("Samsung SSD 990 PRO 1TB, M.2 2280 / M-Key / PCIe 4.0 x4"),
+            listing("Samsung Portable SSD T9, 2 TB, USB 3.2 Gen.2x2, Extern"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Crucial P310") }, "2000GB is 2TB")
+        assertTrue(kept.any { it.startsWith("Kingston KC3000") }, "and so is 2048GB")
+        assertTrue(kept.any { it.startsWith("Samsung SSD 990 PRO 2TB") }, "a PCIe M.2 drive is an NVMe drive")
+        assertTrue(kept.any { it.startsWith("SSD Samsung 990 NVMe 2To") }, "French writes To")
+        assertTrue(kept.any { it.startsWith("Western Digital") }, "2.000 GB is the same 2TB again, not a second size")
+        assertTrue(kept.none { it.contains("1TB") }, "a 1TB drive is not 2TB")
+        assertTrue(kept.none { it.contains("Portable") }, "a USB drive is not NVMe")
+    }
+
+    @Test
+    fun `a model number ending in X is one thing, not a lot`() {
+        // Live, for "4TB NVMe": the SN850X read as a lot of 850 and was dropped as not one offer.
+        val kept = search("4TB NVMe", listOf(
+            listing("WDBlack Optimus GX PRO 850X NVMe SSD 4TB"),
+            listing("20x NVMe SSD 4TB Restposten"),
+        )).map { it.title }
+        assertEquals(listOf("WDBlack Optimus GX PRO 850X NVMe SSD 4TB"), kept)
+    }
+
+    @Test
     fun `a size asked for by number is not negotiable`() {
         // reBuy, live, for the same search: it carries "SSD" in one listing of its own shelf, which
         // used to be enough to let the whole shelf through unjudged.
