@@ -443,8 +443,15 @@ object RelevanceFilter {
         val stated = sizeInTitle.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
         // A range names its lower end without the unit: "1 - 4 TB" sells 1TB to 4TB, priced at 1TB.
         val rangeStarts = sizeRange.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
-        return (stated + rangeStarts).toSet()
+        // "128/256GB" offers two tiers of storage. Below 32 the first number is working memory
+        // written beside the storage ("12/256GB"), and the listing is one device.
+        val tierStarts = storageTiers.findAll(text).mapNotNull { m ->
+            m.groupValues[1].toIntOrNull()?.takeIf { it >= 32 }?.let { sizeInGigabytes("${it}gb") }
+        }
+        return (stated + rangeStarts + tierStarts).toSet()
     }
+
+    private val storageTiers = Regex("""\b(\d{2,4})\s*/\s*\d{2,4}\s?gb\b""", RegexOption.IGNORE_CASE)
 
     private val sizeRange = Regex("""\b(\d{1,4})\s*[-–]\s*\d{1,4}\s?(gb|tb)\b""", RegexOption.IGNORE_CASE)
 
@@ -477,8 +484,12 @@ object RelevanceFilter {
         return !addsUpToTheAskedSize(listing.title, asked.min())
     }
 
-    /** A size stated as working memory, "16 GB RAM" or "16GB+": what the device runs on, not stores. */
-    private val memorySize = Regex("""\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher)\b""", RegexOption.IGNORE_CASE)
+    /** A size stated as working memory: "16 GB RAM", or joined to the storage with a plus, "16GB+256GB"
+     *  and "256GB + 16GB". What the device runs on, beside what it stores. */
+    private val memorySize = Regex(
+        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /** The sizes the search names, read off each phrasing as typed: "256 GB" with a space is as
      *  much a size as "256GB", and read word by word it was neither. */
@@ -684,7 +695,9 @@ object RelevanceFilter {
         """(^|\s)(suche|suchen|gesucht|gesuchte?r?)\b|\bwerde\s+teil\b|""" +
             """\(?\s*[mwd]\s*[/|]\s*[mwd]\s*[/|]\s*[mwd]\s*\)?|""" +
             """\b(stellenangebot|stellenanzeige|minijob|aushilfe|festanstellung|""" +
-            """wanted|looking\s+for|gezocht|cercasi|se\s+busca|recherche\s+un)\b""",
+            """wanted|looking\s+for|gezocht|cercasi|se\s+busca|recherche\s+un)\b|""" +
+            // A size a buyer sets as the least they will take: "Pixel 9 oder 10 Pro XL mind. 256GB".
+            """\bmind(\.|estens)\s*\d+\s?(gb|tb)\b""",
         RegexOption.IGNORE_CASE,
     )
 

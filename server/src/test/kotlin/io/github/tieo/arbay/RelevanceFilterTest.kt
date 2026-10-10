@@ -598,10 +598,22 @@ class RelevanceFilterTest {
     fun `a size typed with a space still marks a row of sizes`() {
         val result = RelevanceFilter.partition(listOf(
             listing("Google Pixel 9 Pro XL 128GB 256GB 512GB 1TB Rose Grau Weiß Schwarz - WIE NEU"),
+            listing("Google Pixel 9 Pro XL 5G 128/256GB Smartphone Handy Mobile Android 6.8\" Schwarz"),
             listing("Google Pixel 9 Pro XL 256GB Hazel"),
-        ), SearchQuery(text = "Pixel 9 Pro XL 256 GB", category = MarketGroup.GENERAL), emptyList())
-        assertEquals(listOf("Google Pixel 9 Pro XL 256GB Hazel"), result.kept.map { it.title })
-        assertEquals(listOf(DropReason.ONE_OF_SEVERAL_SIZES), result.dropped.map { it.reason })
+            // Memory written beside the storage is one phone, not a second size.
+            listing("Google Pixel 9 Pro XL 16GB+256GB OBSIDIAN BLACK Unlocked Android Mobile Phone"),
+            listing("Google Pixel 9 Pro XL 5G Hazel 256GB + 16GB Dual-SIM Unlocked SIMFree NEU"),
+            listing("Google Pixel 9 Pro XL 12/256GB Obsidian"),
+            listing("Google Pixel 9 Pro XL 256 GB – 16 GB RAM Akku 93% Gebraucht"),
+            // A buyer's ad.
+            listing("Google Pixel 9 oder 10 Pro XL mind. 256GB"),
+        ), SearchQuery(text = "Pixel 9 Pro XL 256 GB", aliases = listOf("Pixel 9 Pro XL 256GB"), category = MarketGroup.GENERAL), emptyList())
+        assertEquals(5, result.kept.size, result.kept.map { it.title }.toString())
+        assertEquals(
+            listOf(DropReason.ONE_OF_SEVERAL_SIZES, DropReason.ONE_OF_SEVERAL_SIZES, DropReason.WANTED_AD),
+            result.dropped.map { it.reason },
+            result.dropped.map { it.listing.title }.toString(),
+        )
     }
 
     @Test
