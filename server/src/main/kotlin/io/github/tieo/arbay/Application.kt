@@ -5,6 +5,7 @@ import io.github.tieo.arbay.classifier.FreeItemProfileStore
 import io.github.tieo.arbay.classifier.ModelRegistry
 import io.github.tieo.arbay.classifier.models.*
 import io.github.tieo.arbay.crawler.CarTaxonomyProvider
+import io.github.tieo.arbay.crawler.ModelWordEvidence
 import io.github.tieo.arbay.crawler.ExchangeRates
 import io.github.tieo.arbay.plugins.configureRouting
 import io.github.tieo.arbay.plugins.configureSerialization
@@ -25,6 +26,7 @@ fun main() {
     // CLIP image preprocessing uses java.awt (BufferedImage/Graphics2D); headless avoids
     // needing an X11 display/libs on the server.
     System.setProperty("java.awt.headless", "true")
+    ModelWordEvidence.install(DataDir.file("model_word_evidence.json"))
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }

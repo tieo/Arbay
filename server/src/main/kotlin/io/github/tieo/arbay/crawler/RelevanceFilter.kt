@@ -451,9 +451,19 @@ object RelevanceFilter {
         // written beside the storage ("12/256GB"), and the listing is one device.
         val tierStarts = storageTiers.findAll(text).mapNotNull { m ->
             m.groupValues[1].toIntOrNull()?.takeIf { it >= 32 }?.let { sizeInGigabytes("${it}gb") }
+        } + spacedTiers.findAll(text).mapNotNull { m ->
+            // "256 512GB" with only a space between: a number that is itself a storage tier, and
+            // smaller than the one after it. A model number ("RTX 3070 512GB") is neither.
+            val first = m.groupValues[1].toInt()
+            val second = m.groupValues[2].toInt()
+            first.takeIf { it in STORAGE_TIERS && second in STORAGE_TIERS && it < second }?.let { sizeInGigabytes("${it}gb") }
         }
         return (stated + rangeStarts + tierStarts).toSet()
     }
+
+    private val spacedTiers = Regex("""\b(\d{2,4})\s+(\d{2,4})\s?gb\b""", RegexOption.IGNORE_CASE)
+
+    private val STORAGE_TIERS = setOf(32, 64, 128, 256, 512, 1024)
 
     private val storageTiers = Regex("""\b(\d{2,4})\s*/\s*\d{2,4}\s?gb\b""", RegexOption.IGNORE_CASE)
 
@@ -490,10 +500,10 @@ object RelevanceFilter {
         return !addsUpToTheAskedSize(listing.title, asked.min())
     }
 
-    /** A size stated as working memory: "16 GB RAM", or joined to the storage with a plus, "16GB+256GB"
+    /** A size stated as working memory: "16 GB RAM", "32GB DDR5", or joined to the storage with a plus, "16GB+256GB"
      *  and "256GB + 16GB". What the device runs on, beside what it stores. */
     private val memorySize = Regex(
-        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b""",
+        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher|(lp)?ddr\d\w*)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -533,6 +543,8 @@ object RelevanceFilter {
     private val hostDevice = Regex(
         """\b(gaming[\s-]?pc|gamer[\s-]?pc|komplett[\s-]?pc|desktop|tower|workstation|server|""" +
             """notebook|laptop|macbook|imac|mac\s?mini|thinkpad|elitebook|probook|latitude|""" +
+            """zbook|precision|optiplex|thinkcentre|thinkstation|ideapad|vivobook|zenbook|""" +
+            """surface\s?(pro|laptop)|chromebook|mac\s?studio|steam\s?deck|rog\s?ally|""" +
             """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
             // "PC SN730" is the name Western Digital sells a drive under, not a computer.
             """pc(?!\s*sn\d)|""" +
@@ -584,7 +596,7 @@ object RelevanceFilter {
         // CT32G4SFD832A" says "laptop" about what the part goes into, five words in, and is the
         // part itself; "Gaming PC: 9850X3D, …" and "NEUER GAMER PC ULTRA 7 …" say it at the front,
         // about themselves.
-        val naming = hostDevice.find(head) ?: return false
+        val naming = hostDevice.find(head)?.takeIf { namesTheMachineItself(listing.title, it) } ?: return false
         if (head.take(naming.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
         val headCompact = head.lowercase().replace(NON_ALNUM, "")
         val tailCompact = listing.title.substring(boundary).lowercase().replace(NON_ALNUM, "")
@@ -595,6 +607,12 @@ object RelevanceFilter {
         // slot, and the drive it holds is listed with everything else it holds.
         return inTail > inHead
     }
+
+    /** "PS5 kompatibel", "PS5 ready": the machine a part is said to fit, not the thing sold. */
+    private val fitsMachine = Regex("""^\W*(kompatib\w*|compatib\w*|ready|bereit|geeignet|tauglich)\b""", RegexOption.IGNORE_CASE)
+
+    private fun namesTheMachineItself(title: String, naming: MatchResult): Boolean =
+        !fitsMachine.containsMatchIn(title.substring(naming.range.last + 1))
 
     private val phoneOrTablet = Regex("""\b(smartphone|handy|iphone|ipad|galaxy|tablet)\b""", RegexOption.IGNORE_CASE)
 
@@ -611,6 +629,7 @@ object RelevanceFilter {
         if (words.isEmpty() || words.size == parsed.positiveTokens.size) return false
         val size = sizeInTitle.find(listing.title) ?: return false
         val device = listOfNotNull(hostDevice.find(listing.title), phoneOrTablet.find(listing.title))
+            .filter { namesTheMachineItself(listing.title, it) }
             .minByOrNull { it.range.first } ?: return false
         if (device.range.first > size.range.first) return false
         if (listing.title.take(device.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
@@ -847,7 +866,7 @@ object RelevanceFilter {
             beyondTheSize.any { shareCarrying(it) > 0.0 }
 
 
-        val implied = impliedWords(listings, asked)
+        val implied = impliedWords(listings, parsed)
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
             // as something the market got wrong.
@@ -890,24 +909,34 @@ object RelevanceFilter {
     private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
             .filter { w -> !isASize(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
-        if (words.isEmpty() || listings.size < MODEL_EVIDENCE_LISTINGS + 1) return emptyMap()
+        if (words.isEmpty() || listings.isEmpty()) return emptyMap()
+        val evidence = ModelWordEvidence.installed
         val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
         val carries = words.associateWith { w -> listings.map { score(it, single(w)) == 1.0 } }
         val modelWordsOf = listings.map { modelWords(it.title) }
         val carriers = HashMap<String, MutableList<Int>>()
         modelWordsOf.forEachIndexed { i, ws -> ws.forEach { carriers.getOrPut(it) { mutableListOf() } += i } }
+        // On too much of this answer to name one product.
+        val broad = carriers.filterValues { it.size.toDouble() / listings.size > MODEL_WORD_SHARE }.keys
         val result = HashMap<String, Set<String>>()
         listings.forEachIndexed { i, listing ->
             val shown = words.filter { w ->
                 !carries.getValue(w)[i] && modelWordsOf[i].any { m ->
                     val others = carriers.getValue(m).filter { it != i }
-                    others.size >= MODEL_EVIDENCE_LISTINGS &&
-                        others.size.toDouble() / listings.size <= MODEL_WORD_SHARE &&
+                    val here = others.size >= MODEL_EVIDENCE_LISTINGS && m !in broad &&
                         others.count { carries.getValue(w)[it] }.toDouble() / others.size >= MODEL_EVIDENCE_SHARE
+                    // An answer too small to show it is judged by what the other answers showed.
+                    here || evidence?.shows(m, w) == true
                 }
             }
             if (shown.isNotEmpty()) result[listing.id] = shown.toSet()
         }
+        evidence?.record(
+            listingModels = listings.indices.associate { listings[it].id to modelWordsOf[it] },
+            carried = listings.indices.associate { i -> listings[i].id to words.filter { carries.getValue(it)[i] }.toSet() },
+            words = words,
+            broadInAnswer = broad,
+        )
         return result
     }
 
@@ -1066,6 +1095,9 @@ object RelevanceFilter {
      *  since M.2 SATA drives exist. */
     private val WRITTEN_AS = mapOf(
         "nvme" to listOf("pcie", "pci e", "pci express", "pcie3", "pcie4", "pcie5"),
+        // Geizhals names a drive by its slot and bus and never calls it an SSD: "Lexar NM790 1TB,
+        // M.2 2280 / M-Key / PCIe 4.0 x4". Only a drive is keyed for M.2 storage or speaks NVMe.
+        "ssd" to listOf("nvme", "m key", "solid state"),
     )
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.

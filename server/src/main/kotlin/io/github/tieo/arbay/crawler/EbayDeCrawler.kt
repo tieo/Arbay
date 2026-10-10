@@ -125,6 +125,21 @@ class EbayDeCrawler(
 
         // Step 3: Chromium — prime once, fetch 1 active + 1 sold page (semaphore held briefly)
         emitter?.emit("Chromium")
+        // eBay's edge answers one browser request in several with its "Something went wrong on our
+        // end" page, and the next one goes through: of eight searches in a row, the first got it on
+        // both engines and the seven after it did not. One more session is that next request.
+        for (attempt in 1..2) try {
+            chromiumSearch(query, allResults, seenIds)
+            break
+        } catch (e: CrawlerBlockedException) {
+            if (attempt == 2 || !e.isEdgeErrorPage) throw e
+            allResults.clear()
+            seenIds.clear()
+        }
+        return allResults
+    }
+
+    private suspend fun chromiumSearch(query: SearchQuery, allResults: MutableList<Listing>, seenIds: MutableSet<String>) {
         withContext(Dispatchers.IO) {
             HeadlessBrowser.withSession(
                 engine = BrowserEngine.CHROMIUM,
@@ -158,8 +173,6 @@ class EbayDeCrawler(
                 }
             }
         }
-
-        return allResults
     }
 
     private suspend fun fetchActiveAndSoldHttp(

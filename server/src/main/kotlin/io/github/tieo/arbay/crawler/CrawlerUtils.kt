@@ -274,6 +274,12 @@ internal fun validateHtml(html: String, platformName: String) {
     detectBlockPage(html, platformName)?.let { throw it.withEvidence(html = html) }
 }
 
+internal const val EDGE_ERROR_PAGE = "error page in place of results"
+
+/** eBay's passing "Something went wrong on our end", which the next request does not get. */
+internal val CrawlerBlockedException.isEdgeErrorPage: Boolean
+    get() = message?.endsWith(EDGE_ERROR_PAGE) == true
+
 /** The same refusal, carrying the page that showed it. */
 internal fun CrawlerBlockedException.withEvidence(
     url: String? = null,
@@ -569,10 +575,11 @@ internal fun detectBlockPage(html: String, platformName: String): CrawlerBlocked
             (lower.contains("just a moment") && lower.contains("cloudflare")) ->
             CrawlerBlockedException("$platformName: Cloudflare challenge", ErrorType.CAPTCHA)
         // eBay's edge serves this in place of results, with status 200: "SORRY Something went
-        // wrong on our end" and a reference. Not known to be a block, so it does not start a
-        // cooldown, but it is an error and not an empty result.
+        // wrong on our end" and a reference. Measured, it is one request in several, and the next
+        // one a few seconds later goes through, so it is no block and starts no cooldown: the
+        // crawler asks again (see [isEdgeErrorPage]).
         lower.contains("something went wrong on our end") && html.length < 10_000 ->
-            CrawlerBlockedException("$platformName: error page in place of results", ErrorType.UNKNOWN)
+            CrawlerBlockedException("$platformName: $EDGE_ERROR_PAGE", ErrorType.UNKNOWN)
         lower.contains("something has gone wrong") && html.length < 10_000 ->
             CrawlerBlockedException("$platformName: error page", ErrorType.UNKNOWN)
         lower.contains("tut uns leid") && html.length < 10_000 ->

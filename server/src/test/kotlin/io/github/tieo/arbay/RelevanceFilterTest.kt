@@ -657,6 +657,63 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a small answer is judged by what the other answers showed`() {
+        // Ricardo, live, for "4TB M.2": its 990 PROs did not write "M.2", and an answer of a few
+        // listings cannot show that a 990 is one. The bigger answers before it did.
+        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
+        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        try {
+            val big = (1..12).map { listing("Samsung 990 PRO 4TB M.2 NVMe Nummer $it") } +
+                (1..12).map { listing("Kingston NV3 4TB M.2 2280 Angebot $it") } +
+                (1..12).map { listing("WD Black SN850X 4TB M.2 Nummer $it") }
+            search("4TB M.2", big)
+            val kept = search("4TB M.2", listOf(
+                listing("SAMSUNG NVMe 990 PRO 4TB"),
+                listing("Samsung 990 Pro 4000 GB"),
+                listing("Crucial MX500 4TB SATA 2,5 Zoll"),
+                listing("Seagate IronWolf 4TB NAS"),
+                listing("WD Black SN850X 4TB M.2"),
+            )).map { it.title }
+            assertTrue("SAMSUNG NVMe 990 PRO 4TB" in kept, kept.toString())
+            assertTrue("Samsung 990 Pro 4000 GB" in kept, kept.toString())
+            assertTrue(kept.none { it.contains("MX500") || it.contains("IronWolf") }, kept.toString())
+        } finally {
+            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+        }
+    }
+
+    @Test
+    fun `a drive named by slot, said to fit a console, or beside RAM is still the drive`() {
+        val kept = search("1TB SSD", listOf(
+            listing("Lexar NM790 1TB, M.2 2280 / M-Key / PCIe 4.0 x4"),
+            listing("Samsung SSD 990 PRO 1TB, M.2 2280 / M-Key / PCIe 4.0 x4"),
+            listing("Crucial SSD P3 Plus 1TB"),
+            listing("Ps5 Kompatible Highend SSD Seagate FireCuda 530 1TB M.2 NVMe"),
+            listing("Kingston SSD NV3 1TB"),
+        )).map { it.title }
+        assertTrue(kept.any { it.startsWith("Lexar NM790") }, "Geizhals never writes SSD under a drive: $kept")
+        assertTrue(kept.any { it.startsWith("Ps5 Kompatible") }, "a drive said to fit a PS5 is the drive: $kept")
+        val pcs = RelevanceFilter.partition(listOf(
+            listing("Gaming PC | Ryzen 5 7500F | 32GB DDR5 | 1TB NVMe"),
+            listing("HP ZBook Fury 15.6 G8 - i9-11950H | 32GB | 1TB NVMe | RTX A2000"),
+            listing("Samsung 990 PRO 1TB NVMe"),
+        ), SearchQuery(text = "1TB NVMe", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Samsung 990 PRO 1TB NVMe"), pcs.kept.map { it.title })
+        assertTrue(pcs.dropped.all { it.reason == DropReason.BUILT_INTO_A_DEVICE }, pcs.dropped.map { it.listing.title to it.reason }.toString())
+    }
+
+    @Test
+    fun `two storage tiers written with a space are a row`() {
+        val result = RelevanceFilter.partition(listOf(
+            listing("Google Pixel 9 Pro XL 5G 256 512GB 6,8 \"OLED 50MP 5060mAh Telefon von FedEx"),
+            listing("Nvidia RTX 3070 512GB SSD Gaming PC"),
+            listing("Google Pixel 9 Pro XL 512GB Obsidian"),
+        ), SearchQuery(text = "Pixel 9 Pro XL 512GB", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Google Pixel 9 Pro XL 512GB Obsidian"), result.kept.map { it.title })
+        assertEquals(DropReason.ONE_OF_SEVERAL_SIZES, result.dropped.first { it.listing.title.contains("FedEx") }.reason)
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.
