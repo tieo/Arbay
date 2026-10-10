@@ -104,14 +104,16 @@ object RelevanceFilter {
         }
     }
 
-    fun score(listing: Listing, parsed: ParsedQuery): Double {
+    /** [implied] are words of the search the market's own answer shows this listing to be, though
+     *  its title leaves them out (see [impliedWords]). */
+    fun score(listing: Listing, parsed: ParsedQuery, implied: Set<String> = emptySet()): Double {
         // Each alias is the whole search phrased another way, and is held to everything the search
         // typed alone is held to: its size, its model numbers, its "Pro XL" written together.
         // Counted only as a share of words, "Pixel 9 Pro XL 256GB" let a 128GB phone, a 9 Pro and
         // a 9 Pro Fold through on four words of five.
         val phrasings = parsed.orGroups.filter { it.isNotEmpty() }
         if (phrasings.isNotEmpty()) {
-            return phrasings.maxOf { score(listing, parsed.copy(positiveTokens = it, orGroups = emptyList())) }
+            return phrasings.maxOf { score(listing, parsed.copy(positiveTokens = it, orGroups = emptyList()), implied) }
         }
         // Thousands groups are glued back together before anything else reads the title, so a
         // mileage or a price is one number here as it is on the page. Split into "30" and "000",
@@ -161,8 +163,9 @@ object RelevanceFilter {
         // reading those as lots of 570 and 200 threw two real drives off a search for one.
         // Glued, only two digits are a count: "20x" is twenty of them, while "SN850X" and a Ryzen
         // "5800X" are the names of one, and reading them as lots threw a single 4TB drive away.
-        if (Regex("""(?:^|\s)(?!1\s*x)(?:\d{2}x|\d{2,}\s+x)(?:\s|$)""").containsMatchIn(titleNorm) ||
-            Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz))""").containsMatchIn(titleNorm)
+        // A count followed by a length is a measurement: "M.2 22 x 80 mm" is the card's size.
+        if (Regex("""(?:^|\s)(?!1\s*x)(?:\d{2}x|\d{2,}\s+x)(?:\s|$)(?!\s*\d+\s*(mm|cm)\b)""").containsMatchIn(titleNorm) ||
+            Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz|mm|cm))""").containsMatchIn(titleNorm)
         ) return -1.0
 
         // Word-start positions in titleCompact (for guarding compact matches)
@@ -175,6 +178,7 @@ object RelevanceFilter {
         }
 
         fun tokenMatches(token: String): Boolean {
+            if (token in implied) return true
             // A size is a number of bytes, written however the seller writes it: a 2TB drive is
             // sold as "2048GB" and "2000GB" as often as "2TB", and only the spelling differs.
             if (isASize(token)) sizeInGigabytes(token)?.let { asked ->
@@ -477,7 +481,9 @@ object RelevanceFilter {
         // A drive that states its size twice ("2TB (2000GB)", "2TB (2048GB)") states one size. Only
         // a listing that also offers something smaller than what was asked for is priced at a size
         // nobody asked for, which is what makes its place among the cheapest wrong.
-        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) }
+        // A size a hundred times smaller is not one on sale beside it: "7300MB" is a speed with its
+        // "/s" left off, and "Nur 5GB Geschrieben" how much the drive has written.
+        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) && it >= asked.min() / 100 }
         if (offered.size < 2 || smaller.isEmpty()) return false
         // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
         // is two terabytes, sold as two sticks, at a price for the pair.
@@ -527,7 +533,9 @@ object RelevanceFilter {
     private val hostDevice = Regex(
         """\b(gaming[\s-]?pc|gamer[\s-]?pc|komplett[\s-]?pc|desktop|tower|workstation|server|""" +
             """notebook|laptop|macbook|imac|mac\s?mini|thinkpad|elitebook|probook|latitude|""" +
-            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|pc|""" +
+            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
+            // "PC SN730" is the name Western Digital sells a drive under, not a computer.
+            """pc(?!\s*sn\d)|""" +
             // The same machines as the markets in other languages name them.
             """port(á|a)til(es)?|ordenador(es)?|portatile|computer|ordinateur|draagbare)\b""",
         RegexOption.IGNORE_CASE,
@@ -682,7 +690,8 @@ object RelevanceFilter {
     private fun isConsumableFor(listing: Listing, queryText: String): Boolean {
         // The query is really after the consumable itself ("schleifpapier ...") — keep those.
         if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
-        if (abrasiveGrit.containsMatchIn(listing.title)) return true
+        // A sanding sheet has no capacity: "Patriot P400 4TB" and "Patriot P320 2 TB" are drives.
+        if (abrasiveGrit.containsMatchIn(listing.title) && sizesIn(listing.title).isEmpty()) return true
         // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
         val match = consumableNoun.find(listing.title) ?: return false
         return !comesWith.containsMatchIn(listing.title.take(match.range.first))
@@ -838,6 +847,7 @@ object RelevanceFilter {
             beyondTheSize.any { shareCarrying(it) > 0.0 }
 
 
+        val implied = impliedWords(listings, asked)
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
             // as something the market got wrong.
@@ -845,7 +855,7 @@ object RelevanceFilter {
                 dropped += DroppedListing(listing, DropReason.BLOCKED_WORD)
                 return@mapNotNull null
             }
-            val s = score(listing, asked)
+            val s = score(listing, asked, implied[listing.id].orEmpty())
             if (s < 0) {
                 dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
                 return@mapNotNull null
@@ -857,7 +867,7 @@ object RelevanceFilter {
                 dropped += DroppedListing(listing, DropReason.OFF_TARGET)
                 return@mapNotNull null
             }
-            if (onlyTheSizeRequired && score(listing, parsed.copy(positiveTokens = beyondTheSize)) == 0.0) {
+            if (onlyTheSizeRequired && score(listing, parsed.copy(positiveTokens = beyondTheSize), implied[listing.id].orEmpty()) == 0.0) {
                 dropped += DroppedListing(listing, DropReason.OFF_TARGET)
                 return@mapNotNull null
             }
@@ -865,6 +875,61 @@ object RelevanceFilter {
         }.sortedByDescending { it.second }.map { it.first }
         return Partitioned(kept, dropped)
     }
+
+    /**
+     * The words of the search each listing is shown to be by the rest of the market's answer.
+     *
+     * A seller names the product and leaves out what everyone knows it is: "Samsung 990 PRO SSD
+     * 1TB" is an NVMe drive and an M.2 one, and a search for "1TB NVMe" or "4TB M.2" threw it out
+     * for not saying so. Other sellers in the same answer do say so: where most of the listings
+     * carrying the same model word ("990", "sn850x", "p310") also carry the word searched for, a
+     * listing with that model word carries it too. Only a word a few listings share is a model's
+     * name; one most of the answer carries ("m2", "ssd") names the category and proves nothing,
+     * which is what keeps a SATA "MX500 M.2" from passing as NVMe.
+     */
+    private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
+        val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
+            .filter { w -> !isASize(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
+        if (words.isEmpty() || listings.size < MODEL_EVIDENCE_LISTINGS + 1) return emptyMap()
+        val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
+        val carries = words.associateWith { w -> listings.map { score(it, single(w)) == 1.0 } }
+        val modelWordsOf = listings.map { modelWords(it.title) }
+        val carriers = HashMap<String, MutableList<Int>>()
+        modelWordsOf.forEachIndexed { i, ws -> ws.forEach { carriers.getOrPut(it) { mutableListOf() } += i } }
+        val result = HashMap<String, Set<String>>()
+        listings.forEachIndexed { i, listing ->
+            val shown = words.filter { w ->
+                !carries.getValue(w)[i] && modelWordsOf[i].any { m ->
+                    val others = carriers.getValue(m).filter { it != i }
+                    others.size >= MODEL_EVIDENCE_LISTINGS &&
+                        others.size.toDouble() / listings.size <= MODEL_WORD_SHARE &&
+                        others.count { carries.getValue(w)[it] }.toDouble() / others.size >= MODEL_EVIDENCE_SHARE
+                }
+            }
+            if (shown.isNotEmpty()) result[listing.id] = shown.toSet()
+        }
+        return result
+    }
+
+    /** The words in a title that can name a model: a number of three or four digits ("990"), or
+     *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a
+     *  form factor or a lane count ("M.2", "x4"), which SATA drives carry as well. Sizes are what
+     *  was asked, not which product it is. */
+    private fun modelWords(title: String): Set<String> =
+        normalize(gluedThousands(title.lowercase())).split(" ").filter { w ->
+            w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
+                (if (w.all { it.isDigit() }) w.length in 3..4 else w.length >= 3) &&
+                !isASize(w) && sizeInGigabytes(w) == null
+        }.toSet()
+
+    /** Other listings that have to share a model word before it says anything about this one. */
+    private const val MODEL_EVIDENCE_LISTINGS = 2
+
+    /** The share of those that have to carry the word searched for. */
+    private const val MODEL_EVIDENCE_SHARE = 0.6
+
+    /** The most of an answer a model word can be on and still name one product rather than all. */
+    private const val MODEL_WORD_SHARE = 0.35
 
     /**
      * Whether the listing carries what a compound the search names is made of.

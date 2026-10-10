@@ -617,6 +617,46 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a model the rest of the answer calls NVMe is NVMe though its title does not say so`() {
+        // Vinted and Ricardo, live, for "1TB NVMe": the 990 PRO and the 980 PRO were thrown out for
+        // leaving out a word every other seller of the same drive writes.
+        val kept = search("1TB NVMe", listOf(
+            listing("Samsung 990 PRO NVMe M.2 SSD 1TB"),
+            listing("Samsung SSD 990 PRO 1TB NVMe PCIe 4.0"),
+            listing("Samsung 990 PRO 1TB NVMe Interne SSD"),
+            listing("Samsung 980 PRO 1TB NVMe M.2"),
+            listing("Samsung 980 PRO NVMe 1TB PCIe 4.0"),
+            listing("WD Black SN850X 1TB NVMe"),
+            listing("Crucial P3 Plus 1TB NVMe"),
+            listing("Kingston NV3 1TB NVMe PCIe 4.0"),
+            listing("Lexar NM790 1TB NVMe"),
+            listing("Samsung 990 PRO SSD 1TB"),
+            listing("SSD Samsung 980 Pro 1TB"),
+            // A SATA drive shares only the category words with them, and stays out.
+            listing("Crucial MX500 1TB M.2 SATA"),
+            listing("Crucial MX500 1TB 2,5 Zoll"),
+            listing("Samsung 870 EVO 1TB"),
+        )).map { it.title }
+        assertTrue("Samsung 990 PRO SSD 1TB" in kept, kept.toString())
+        assertTrue("SSD Samsung 980 Pro 1TB" in kept, kept.toString())
+        assertTrue(kept.none { it.contains("MX500") || it.contains("870 EVO") }, kept.toString())
+    }
+
+    @Test
+    fun `a drive is not a sanding sheet, a speed is not a size, and a card size is not a lot`() {
+        val kept = search("4TB NVMe", listOf(
+            listing("Patriot P400 V4 4TB interne SSD - NVMe PCIe Gen 4x4 - M.2 2280"),
+            listing("4Tb Western Digital WD_BLACK SN850X SSD 4TB 7300MB warranty top NVMe"),
+            listing("Samsung 990 EVO Plus 4TB NVMe (M.2 22 x 80 mm)"),
+            listing("Western Digital PC SN810 4TB NVMe SSD"),
+            listing("Samsung 990 PRO 4TB NVMe"),
+            listing("SSD WD_BLACK SN850X Gaming NVMe M.2 | PCIe 4.0 x4 | 1 - 4 TB"),
+        )).map { it.title }
+        assertEquals(5, kept.size, kept.toString())
+        assertTrue(kept.none { it.contains("1 - 4 TB") }, "a range is still priced at its smallest")
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.
