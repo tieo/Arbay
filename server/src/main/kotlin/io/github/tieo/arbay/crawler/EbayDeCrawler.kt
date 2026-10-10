@@ -36,13 +36,27 @@ class EbayDeCrawler(
             primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
             browserOnly = true,
         )
+        val doc = Jsoup.parse(html)
         ListingDetail(
             vehicle = EbayDetailParser.parse(html),
+            description = sellerText(doc),
             location = itemLocation(html),
-        ).takeIf { it.vehicle != null || it.location != null }
+            sellerReviews = sellerFeedback(doc),
+        ).takeIf { it.vehicle != null || it.location != null || it.description != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
     }
+
+    /**
+     * The seller's own description. The item page holds it in an iframe from itm.ebaydesc.com, a
+     * host that answers a plain request where the item page itself needs the browser.
+     */
+    private suspend fun sellerText(doc: org.jsoup.nodes.Document): String? {
+        val src = doc.selectFirst("iframe#desc_ifr")?.attr("src")?.takeIf { it.startsWith("https://") } ?: return null
+        val page = try { fetchHttp(client, src, "eBay") } catch (e: CancellationException) { throw e } catch (_: Exception) { return null }
+        return descriptionText(page)
+    }
+
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val emitter = coroutineContext[FetchProgressEmitter.Key]
@@ -533,6 +547,22 @@ class EbayDeCrawler(
     }
 
     companion object {
+        /** The text of eBay's description page, one line per paragraph or break the seller made. */
+        internal fun descriptionText(page: String): String? {
+            val doc = Jsoup.parse(page)
+            val body = doc.selectFirst("[data-testid=x-item-description-child]") ?: doc.body() ?: return null
+            body.select("script, style").remove()
+            body.select("br, p, div, li, tr").forEach { it.appendText("\n") }
+            return body.wholeText().lines().map { it.trim() }.filter { it.isNotEmpty() }
+                .joinToString("\n").takeIf { it.isNotBlank() }
+        }
+
+        /** The seller's feedback count, "sou_venir (532)" on the seller card. */
+        internal fun sellerFeedback(doc: org.jsoup.nodes.Document): Int? =
+            doc.selectFirst("[data-testid=x-sellercard-atf]")?.text()
+                ?.let { Regex("""\((\d[\d.]*)\)""").find(it) }
+                ?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()
+
         /** eBay's "new listing" flag, which it writes into the title element as a span of its own and
          *  in the language of whichever eBay this is. */
         /** Text eBay puts inside the title element for screen readers, in every language it runs
