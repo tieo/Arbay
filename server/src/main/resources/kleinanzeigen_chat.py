@@ -150,6 +150,15 @@ class Chat:
 
     async def start(self) -> None:
         os.makedirs(PROFILE, exist_ok=True)
+        # The server starts this sidecar only once the one before it has ended, so a lock left in
+        # the profile is always stale. Chrome reads it as a live owner whenever its process id has
+        # gone to another process since: after a restart that was a crawler's Chrome, and the
+        # signed in browser refused to start.
+        for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+            try:
+                os.unlink(os.path.join(PROFILE, name))
+            except FileNotFoundError:
+                pass
         # The window fills the display the user signs in on, and a restart (the server's, which
         # ends Chrome abruptly) leaves no restore prompt over the page.
         kwargs = {"headless": False, "user_data_dir": PROFILE,
