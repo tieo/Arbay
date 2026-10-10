@@ -443,7 +443,7 @@ object RelevanceFilter {
      *  and "To" included. A speed is not a size: "7.300 MB/s Lesen" is how fast the drive is, and
      *  counting it as a second size made every drive that advertises one look like a row of variants. */
     private val sizeInTitle =
-        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
 
     /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
      *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
@@ -531,11 +531,11 @@ object RelevanceFilter {
     /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
      *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
     private fun sizeInGigabytes(token: String): Double? {
-        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
+        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
             .find(token.trim()) ?: return null
         val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
         return when (m.groupValues[2].lowercase()) {
-            "tb", "to" -> value * 1000
+            "tb", "to", "terabyte", "terabytes" -> value * 1000
             "mb" -> value / 1000
             else -> value
         }
@@ -682,7 +682,7 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
-    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*([\p{L}\d]+[\s-]+){0,2}$""", RegexOption.IGNORE_CASE)
+    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
 
     /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Neuer Akku
      *  100%", "82 % Akku". A battery sold on its own has no health to report. */
@@ -705,11 +705,20 @@ object RelevanceFilter {
             .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
         val before = listing.title.take(match.range.first)
         if (comesWith.containsMatchIn(before)) return false
-        // A case or a charger has no storage. Where the size searched for is stated ahead of the
-        // noun, the noun is said about the device: "Pixel 9 Pro XL 256 GB Akku 93%" reports the
-        // phone's battery, and "256 GB Bundle Neues Mainboard" its repair.
+        return !saidAboutTheDevice(before, parsed)
+    }
+
+    /**
+     * Whether what a title states ahead of an accessory's noun makes the noun part of a device's
+     * description. A case or a charger has no storage and no battery health: where the size searched
+     * for or a battery's state comes first, "Pixel 9 Pro XL 256 GB Akku 93%" reports the phone's
+     * battery, "256 GB Bundle Neues Mainboard" its repair, and "iPhone 11 Pro Max · 82 % Akku ·
+     * Zubehör" what comes with it.
+     */
+    private fun saidAboutTheDevice(before: String, parsed: ParsedQuery): Boolean {
+        if (batteryReport.containsMatchIn(before)) return true
         val asked = askedSizes(parsed)
-        return asked.isEmpty() || sizesIn(before).none { offered -> asked.any { sameSize(it, offered) } }
+        return asked.isNotEmpty() && sizesIn(before).any { offered -> asked.any { sameSize(it, offered) } }
     }
 
     // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
@@ -738,14 +747,15 @@ object RelevanceFilter {
     // language-agnostic tell that catches a sanding belt/sheet whatever tongue names it.
     private val abrasiveGrit = Regex("""\bP(?:40|60|80|100|120|150|180|220|240|320|400)\b""")
 
-    private fun isConsumableFor(listing: Listing, queryText: String): Boolean {
+    private fun isConsumableFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         // The query is really after the consumable itself ("schleifpapier ...") — keep those.
         if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
         // A sanding sheet has no capacity: "Patriot P400 4TB" and "Patriot P320 2 TB" are drives.
         if (abrasiveGrit.containsMatchIn(listing.title) && sizesIn(listing.title).isEmpty()) return true
         // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
         val match = consumableNoun.find(listing.title) ?: return false
-        return !comesWith.containsMatchIn(listing.title.take(match.range.first))
+        val before = listing.title.take(match.range.first)
+        return !comesWith.containsMatchIn(before) && !saidAboutTheDevice(before, parsed)
     }
 
     // An ad seeking the thing, or seeking a person to do it, rather than offering one for sale. The
@@ -828,7 +838,7 @@ object RelevanceFilter {
                 namesAVehicle(query.text) && !CarFilterEngine.isPartQuery(query.text) &&
                     CarFilterEngine.namesAVehiclePart(listing) -> DropReason.ACCESSORY
                 isOneOfSeveralSizes(listing, parsed) -> DropReason.ONE_OF_SEVERAL_SIZES
-                isConsumableFor(listing, query.text) -> DropReason.CONSUMABLE
+                isConsumableFor(listing, parsed, query.text) -> DropReason.CONSUMABLE
                 else -> null
             }
             if (reason != null) dropped += DroppedListing(listing, reason)
@@ -1147,9 +1157,13 @@ object RelevanceFilter {
             // combining dot, which the symbol strip below would turn into "i phone".
             .replace("̇", "").replace("İ", "i")
             // Sellers write the make's word apart and the model's qualifiers together or swapped:
-            // "I Phone 11 Pro Max", "iPhone 11 ProMax", "iPhone 11 max pro" are all the 11 Pro Max.
-            .replace(Regex("""\b(i)\s+(phone|pad)\b""", RegexOption.IGNORE_CASE), "$1$2")
-            .replace(Regex("""\b(pro)(max)\b""", RegexOption.IGNORE_CASE), "$1 $2")
+            // "I Phone", "I-Phone", "Iphon", "Ipfon 11 ProMax", "iPhone 11 max pro" are all the 11 Pro Max.
+            .replace(Regex("""\bi[\s-]*(phone|phon|pfon|fon)\b""", RegexOption.IGNORE_CASE), "iphone")
+            .replace(Regex("""\bi[\s-]+pad\b""", RegexOption.IGNORE_CASE), "ipad")
+            .replace(Regex("""(pro)(max)\b""", RegexOption.IGNORE_CASE), "$1 $2")
+            // A unit written out: "512 Gigabyte" is 512 GB.
+            .replace(Regex("""(\d)\s*gigabytes?\b""", RegexOption.IGNORE_CASE), "$1 gb")
+            .replace(Regex("""(\d)\s*terabytes?\b""", RegexOption.IGNORE_CASE), "$1 tb")
             .replace(Regex("""(\d)\s+max\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro max")
             // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".
             // Joined before periods become spaces, so a title's "M.2" and a query's "m.2" end up
