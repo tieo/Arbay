@@ -17,6 +17,10 @@ object RelevanceFilter {
         val positiveTokens: List<String>,
         val negativeTokens: List<String>,
         val orGroups: List<List<String>>,
+        /** Whether the search as typed names a unit, so sizes in a title are part of what it asks
+         *  for. Read once off every word typed: the words a listing is held to are narrowed to
+         *  those its market writes, and a unit typed apart ("256 GB") is rarely written apart. */
+        val asksForASize: Boolean = false,
     )
 
     /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
@@ -29,12 +33,20 @@ object RelevanceFilter {
         } else {
             emptyList()
         }
+        val positiveTokens = tokenize(query.text)
         return ParsedQuery(
-            positiveTokens = tokenize(query.text),
+            positiveTokens = positiveTokens,
             negativeTokens = query.excludeKeywords.map { normalizeToken(it) },
             orGroups = orGroups,
+            asksForASize = (positiveTokens + orGroups.flatten()).any { namesAUnit(it) },
         )
     }
+
+    /** A unit on its own ("GB"), or glued to a number or a kit's quantity×size ("32GB", "1x32GB"). */
+    private fun namesAUnit(token: String): Boolean =
+        token in unitSuffixes || unitSuffixes.any { u ->
+            token.endsWith(u) && token.dropLast(u.length).let { pre -> pre.isNotEmpty() && pre.all { c -> c.isDigit() || c == 'x' } }
+        }
 
     private fun tokenize(phrase: String): List<String> =
         phrase.split(" ").filter { it.isNotBlank() }.map { normalizeToken(it) }
@@ -93,6 +105,14 @@ object RelevanceFilter {
     }
 
     fun score(listing: Listing, parsed: ParsedQuery): Double {
+        // Each alias is the whole search phrased another way, and is held to everything the search
+        // typed alone is held to: its size, its model numbers, its "Pro XL" written together.
+        // Counted only as a share of words, "Pixel 9 Pro XL 256GB" let a 128GB phone, a 9 Pro and
+        // a 9 Pro Fold through on four words of five.
+        val phrasings = parsed.orGroups.filter { it.isNotEmpty() }
+        if (phrasings.isNotEmpty()) {
+            return phrasings.maxOf { score(listing, parsed.copy(positiveTokens = it, orGroups = emptyList())) }
+        }
         // Thousands groups are glued back together before anything else reads the title, so a
         // mileage or a price is one number here as it is on the page. Split into "30" and "000",
         // it both matched a blocked "30" and offered "000" as a model number to match against.
@@ -114,11 +134,10 @@ object RelevanceFilter {
         // kit's quantity×size ("1x32GB"). A fixed list of "plausible" sizes was tried here before
         // and got it wrong both ways — it missed "1x32" (not a bare number) and would reject a
         // real, non-power-of-two drive size ("500GB", "480GB") that a query is free to ask for.
-        val queryHasStorageToken = (parsed.positiveTokens + parsed.orGroups.flatten()).any { t ->
-            t in unitSuffixes || unitSuffixes.any { u ->
-                t.endsWith(u) && t.dropLast(u.length).let { pre -> pre.isNotEmpty() && pre.all { c -> c.isDigit() || c == 'x' } }
-            }
-        }
+        // Read off the search as typed, not off the words this listing is held to: those are narrowed
+        // to what the market writes, and narrowed past "GB" the "256GB" a phone was sold as got
+        // stripped before "256" could match it, which threw every such phone off a 256 GB search.
+        val queryHasStorageToken = parsed.asksForASize || (parsed.positiveTokens + parsed.orGroups.flatten()).any { namesAUnit(it) }
         val titleNormStripped = titleNormForMatching
             .let { if (queryHasStorageToken) it else it.replace(Regex("\\d+\\s*(?:gb|tb|mb)\\b"), " ") }
             // Greedy: strip ALL digit groups after the OS name (handles "ios 12 7 5" from "iOS 12.7.5")
@@ -275,55 +294,47 @@ object RelevanceFilter {
         // - Mixed alphanumeric (length ≤ 3 with at least one digit): "r5", "a7", "m4", "s25"
         //   These are specific model codes — "R5" must not match against "5D" variants. Without
         //   this check, "Canon EOS R5 Mark II" scores 4/5=80% against "Canon EOS 5D Mark II".
-        if (parsed.orGroups.isEmpty()) {
-            val modelCodesRequired = parsed.positiveTokens.filter { t ->
-                t.length <= 3 && t.any { c -> c.isDigit() }
-            }
-            // Use tokenMatches (not just titleWords) to support compact-form codes like "xt5"
-            // matching "x t5" (from "X-T5" hyphen-split in title).
-            if (modelCodesRequired.any { token -> !tokenMatches(token) }) return 0.0
+        // A size is required the same way: a 128GB phone is not the 256GB one on the strength of
+        // every other word.
+        val modelCodesRequired = parsed.positiveTokens.filter { t ->
+            (t.length <= 3 && t.any { c -> c.isDigit() }) || isASize(t)
+        }
+        // Use tokenMatches (not just titleWords) to support compact-form codes like "xt5"
+        // matching "x t5" (from "X-T5" hyphen-split in title).
+        if (modelCodesRequired.any { token -> !tokenMatches(token) }) return 0.0
 
-            // Bigram check: for each consecutive pair [word, short-numeric OR model qualifier] in
-            // the query, require the pair to appear consecutively in the title.
-            // Numeric example: "switch 2", "mini 7", "series 10" — prevents "Splatoon 2 Nintendo Switch"
-            // from matching "Nintendo Switch 2" because "2" is from the game title.
-            // Qualifier example: "s25 ultra", "pro max" — prevents "Galaxy S25 FE ultra sauber"
-            // (German "extremely clean") from matching "Galaxy S25 Ultra" query.
-            val sp = " $titleNormStripped "
-            val tokens = parsed.positiveTokens
-            for (i in 0 until tokens.size - 1) {
-                val a = tokens[i]
-                val b = tokens[i + 1]
-                // Only apply when 'a' is a proper word (length > 2) — skip short codes like "m4"
-                // that can appear in any order relative to their following size specifier.
-                val isNumericBigram = b.length <= 2 && b.all { c -> c.isDigit() } && a.length > 2 && a.any { c -> c.isLetter() }
-                // Model variant qualifiers must also be adjacent to their preceding token.
-                // Also applies when 'a' is a 2-char alphanumeric model code (e.g. "z6 iii", "r5 ii") —
-                // these are specific enough that the qualifier must be adjacent.
-                val isAlphanumericCode = a.length == 2 && a.any { c -> c.isLetter() } && a.any { c -> c.isDigit() }
-                val isQualifierBigram = b in MODEL_QUALIFIER_SUFFIXES && (a.length > 2 || isAlphanumericCode)
-                if (isNumericBigram || isQualifierBigram) {
-                    if (!sp.contains(" $a $b ") && !sp.endsWith(" $a $b")) {
-                        return 0.0
-                    }
+        // Bigram check: for each consecutive pair [word, short-numeric OR model qualifier] in
+        // the query, require the pair to appear consecutively in the title.
+        // Numeric example: "switch 2", "mini 7", "series 10" — prevents "Splatoon 2 Nintendo Switch"
+        // from matching "Nintendo Switch 2" because "2" is from the game title.
+        // Qualifier example: "s25 ultra", "pro max" — prevents "Galaxy S25 FE ultra sauber"
+        // (German "extremely clean") from matching "Galaxy S25 Ultra" query.
+        val sp = " $titleNormStripped "
+        val tokens = parsed.positiveTokens
+        for (i in 0 until tokens.size - 1) {
+            val a = tokens[i]
+            val b = tokens[i + 1]
+            // Only apply when 'a' is a proper word (length > 2) — skip short codes like "m4"
+            // that can appear in any order relative to their following size specifier.
+            val isNumericBigram = b.length <= 2 && b.all { c -> c.isDigit() } && a.length > 2 && a.any { c -> c.isLetter() }
+            // Model variant qualifiers must also be adjacent to their preceding token.
+            // Also applies when 'a' is a 2-char alphanumeric model code (e.g. "z6 iii", "r5 ii") —
+            // these are specific enough that the qualifier must be adjacent.
+            val isAlphanumericCode = a.length == 2 && a.any { c -> c.isLetter() } && a.any { c -> c.isDigit() }
+            val isQualifierBigram = b in MODEL_QUALIFIER_SUFFIXES && (a.length > 2 || isAlphanumericCode) ||
+                // "XL" after a qualifier is part of the model's name: a Pixel 9 Pro and a 9 Pro Fold
+                // are other phones than the 9 Pro XL. After anything else it is a clothing size,
+                // written wherever the seller puts it ("Jacke Gr. XL").
+                b == "xl" && a in MODEL_QUALIFIER_SUFFIXES
+            if (isNumericBigram || isQualifierBigram) {
+                if (!sp.contains(" $a $b ") && !sp.endsWith(" $a $b")) {
+                    return 0.0
                 }
             }
         }
 
-        val tokenCount: Int
-        val matchedCount: Int
-
-        if (parsed.orGroups.isNotEmpty()) {
-            val bestGroup = parsed.orGroups.maxByOrNull { group ->
-                if (group.isEmpty()) 0.0
-                else group.count { token -> tokenMatches(token) }.toDouble() / group.size
-            } ?: return 0.0
-            tokenCount = bestGroup.size
-            matchedCount = bestGroup.count { token -> tokenMatches(token) }
-        } else {
-            tokenCount = parsed.positiveTokens.size
-            matchedCount = parsed.positiveTokens.count { token -> tokenMatches(token) }
-        }
+        val tokenCount = parsed.positiveTokens.size
+        val matchedCount = parsed.positiveTokens.count { token -> tokenMatches(token) }
 
         if (tokenCount == 0) return 0.5
         return matchedCount.toDouble() / tokenCount

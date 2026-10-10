@@ -538,6 +538,44 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a size typed apart from its unit finds it glued`() {
+        // eBay, live, for "Pixel 9 Pro XL 256 GB": every phone that wrote "256GB" was thrown out
+        // as off target, and only those that wrote "256 GB" apart were kept.
+        val kept = search("Pixel 9 Pro XL 256 GB", listOf(
+            listing("Google Pixel 9 Pro XL 256GB Hazel"),
+            listing("Google Pixel 9 Pro XL Dual SIM 256GB obsidian"),
+            listing("Google Pixel 9 Pro XL 256GB Smartphone Grau Slate GZC4K FCC ID A4RGZC4K"),
+            listing("Google Pixel 9 Pro XL 5G Dual-SIM 256 GB grau Smartphone Handy Mobile Android"),
+            listing("Google Pixel 9 Pro XL 256 GB 16 GB RAM Dunkelgrau 5G Smartphone Gebraucht"),
+            listing("Google Pixel 9 Pro XL 128GB Hazel"),
+            listing("Google Pixel 9 Pro 256GB Schwarz"),
+        )).map { it.title }
+        assertTrue(kept.any { it == "Google Pixel 9 Pro XL 256GB Hazel" }, "256GB is 256 GB")
+        assertTrue(kept.any { it.contains("Dual SIM 256GB obsidian") })
+        assertTrue(kept.any { it.contains("Slate") })
+        assertTrue(kept.any { it.contains("Dual-SIM 256 GB") })
+        assertTrue(kept.none { it.contains("128GB") }, "a 128GB phone is not 256GB")
+    }
+
+    @Test
+    fun `an alias is held to its size and model like the search itself`() {
+        // The saved Pixel search, live: "Pixel 9 Pro XL 256 GB" with the alias "Pixel 9 Pro XL
+        // 256GB" kept 128GB phones, a 9 Pro and a 9 Pro Fold on four words of five.
+        val kept = search("Pixel 9 Pro XL 256 GB", aliases = listOf("Pixel 9 Pro XL 256GB"), listings = listOf(
+            listing("Google Pixel 9 Pro XL 256GB Hazel"),
+            listing("Google Pixel 9 Pro XL 5G Dual-SIM 256 GB grau Smartphone Handy Mobile Android"),
+            listing("Google Pixel 9 Pro XL 128GB Hazel"),
+            listing("Google Pixel 9 Pro XL 128GB Obsidian, !!Display Burn-In!! -used"),
+            listing("Google Pixel 9 Pro 256 GB Schwarz ,OVP & Ladekabel, Zubehörpaket"),
+            listing("Google Pixel 9 pro fold . 16+256Gb . Wie neu . Top Zustand 100% ！"),
+        )).map { it.title }
+        assertEquals(
+            listOf("Google Pixel 9 Pro XL 256GB Hazel", "Google Pixel 9 Pro XL 5G Dual-SIM 256 GB grau Smartphone Handy Mobile Android"),
+            kept.sorted(),
+        )
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.
