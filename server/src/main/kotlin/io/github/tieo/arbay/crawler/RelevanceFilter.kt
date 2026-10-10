@@ -682,12 +682,16 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
-    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
+    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with|und|sowie|plus|and)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
 
-    /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Neuer Akku
-     *  100%", "82 % Akku". A battery sold on its own has no health to report. */
+    /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Akku Kapazität
+     *  88%", "Batterie: %83", "Akku 100 Prozent", "Akku Top", "Neu Akku", "Batterie & Display Neu".
+     *  A battery sold on its own has no health to report and is not new in something. */
     private val batteryReport = Regex(
-        """\d{2,3}\s?%\s*(akku|batterie|battery)|(akku|batterie|battery)\w*\s*:?\s*\d{2,3}\s?%""",
+        """\d{2,3}\s?(%|prozent)\s*(akku|batterie|battery)|""" +
+            """(akku|batterie|battery)\w*(\s+\p{L}+){0,2}\s*:?\s*(\d{2,3}\s?(%|prozent)|%\s?\d{2,3})|""" +
+            """(akku|batterie|battery)\w*\s*(&\s*display\s*)?(neu|top|getauscht|gewechselt|erneuert|ersetzt)\b|""" +
+            """\b(neue[rnms]?|neu)\s+(akku|batterie|battery)""",
         RegexOption.IGNORE_CASE,
     )
 

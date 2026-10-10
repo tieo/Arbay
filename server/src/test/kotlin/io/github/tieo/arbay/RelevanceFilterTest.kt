@@ -1103,4 +1103,20 @@ class RelevanceFilterTest {
         )
         assertEquals(sized.map { it.title }, search("iPhone 11 Pro Max 256GB", sized).map { it.title })
     }
+
+    @Test
+    fun `a battery stated in any of the ways sellers write it is the phone's`() {
+        val listings = listOf(
+            listing("IPHONE 15 PRO MAX IN DER FARBE BLACK 256GB SEHR GUTE ZUSTAND FREI FÜR ALLE SIM-KARTEN AKKU KAPAZITÄT 88%", price = 54900),
+            listing("iPhone 15 pro Max 250 GB Batterie: %83", price = 47700),
+            listing("iPhone 15 Pro Max wie Neu Akku 100 Prozent", price = 59900),
+            listing("Apple Iphone 15 Pro Max Akku Top 256 Gb", price = 46000),
+            listing("Apple iPhone 15 Pro Max - 256GB - Titan Blau - Batterie & Display Neu - in OVP", price = 54900),
+            listing("Apple iPhone 15 Pro Max 512 GB OVP und MagSafe Case", price = 55000),
+            listing("iPhone 15 Pro Max Hülle und Schutzfolie", price = 1000),
+            listing("Ladekabel und Netzteil iPhone 15 Pro Max", price = 1500),
+        )
+        val kept = search("iPhone 15 Pro Max", listings).map { it.title }
+        assertEquals(listings.dropLast(2).map { it.title }, kept)
+    }
 }
