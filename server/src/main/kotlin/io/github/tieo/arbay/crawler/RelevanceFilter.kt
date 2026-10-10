@@ -443,7 +443,7 @@ object RelevanceFilter {
      *  and "To" included. A speed is not a size: "7.300 MB/s Lesen" is how fast the drive is, and
      *  counting it as a second size made every drive that advertises one look like a row of variants. */
     private val sizeInTitle =
-        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
 
     /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
      *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
@@ -534,7 +534,7 @@ object RelevanceFilter {
     /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
      *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
     private fun sizeInGigabytes(token: String): Double? {
-        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
+        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
             .find(token.trim()) ?: return null
         val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
         return when (m.groupValues[2].lowercase()) {
@@ -1168,8 +1168,8 @@ object RelevanceFilter {
             .replace(Regex("""\bi[\s-]*(phone|phon|pfon|fon)\b""", RegexOption.IGNORE_CASE), "iphone")
             .replace(Regex("""\bi[\s-]+pad\b""", RegexOption.IGNORE_CASE), "ipad")
             .replace(Regex("""(pro)(max)\b""", RegexOption.IGNORE_CASE), "$1 $2")
-            // A unit written out: "512 Gigabyte" is 512 GB.
-            .replace(Regex("""(\d)\s*gigabytes?\b""", RegexOption.IGNORE_CASE), "$1 gb")
+            // A unit written out: "512 Gigabyte" and "256 giga" are 512 GB and 256 GB.
+            .replace(Regex("""(\d)\s*(gigabytes?|gigas?)\b""", RegexOption.IGNORE_CASE), "$1 gb")
             .replace(Regex("""(\d)\s*terabytes?\b""", RegexOption.IGNORE_CASE), "$1 tb")
             .replace(Regex("""(\d)\s+max\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro max")
             // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".

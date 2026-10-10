@@ -1091,9 +1091,10 @@ class RelevanceFilterTest {
         val listings = listOf(
             listing("iPhone 11 Pro Max · 512 GB · Nachtgrün · 82 % Akku · Zubehör", price = 27000),
             listing("iPhone 11 Pro Max 512 Gigabyte", price = 28000),
+            listing("iPhone 11 Pro Max 512 giga nero", price = 28000),
             listing("iPhone 11 Pro Max 64GB Silver", price = 15000),
         )
-        assertEquals(listings.take(2).map { it.title }, search("iPhone 11 Pro Max 512GB", listings).map { it.title })
+        assertEquals(listings.take(3).map { it.title }, search("iPhone 11 Pro Max 512GB", listings).map { it.title })
         val sized = listOf(
             listing("iPhone 11 Pro Max - 256 GB - 70% Akku - viel Zubehör", price = 22900),
             listing("Apple iPhone 11 Pro Max 256 GB mit 2 Lederhüllen und Zubehör", price = 15500),
