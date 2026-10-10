@@ -16,7 +16,7 @@ import org.jsoup.Jsoup
  * `ad_attributes` list holding the manufacture year and odometer. These are the site's own data,
  * so they are recorded as verified. Prices are quoted in EUR or RSD per the ad's currency field.
  */
-class KupujemProdajemCrawler(private val client: HttpClient) : Crawler {
+class KupujemProdajemCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.KUPUJEM
 
     private val json = Json { ignoreUnknownKeys = true }

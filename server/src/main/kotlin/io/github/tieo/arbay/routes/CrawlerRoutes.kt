@@ -5,6 +5,7 @@ import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.BlockCooldown
 import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
 import io.github.tieo.arbay.crawler.CarFilterEngine
+import io.github.tieo.arbay.crawler.cannotAnswer
 import io.github.tieo.arbay.crawler.CarQueryResolver
 import io.github.tieo.arbay.crawler.CrawlThrottle
 import io.github.tieo.arbay.crawler.Crawler
@@ -202,6 +203,10 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
         // with it; the rest are measured against what their listings say.
         location = queryParameters["near"]?.takeIf { it.isNotBlank() } ?: base.location,
         radiusKm = queryParameters["radiusKm"]?.toIntOrNull() ?: base.radiusKm,
+        // Where in each market's answer to begin, and how many pages to read from there: what lies
+        // past the first pages is reachable only by asking for it.
+        startPage = queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(1) ?: base.startPage,
+        maxPages = queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 20) ?: base.maxPages,
     )
 }
 
@@ -648,6 +653,17 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     platform = platformId.name,
                                     platformName = platformId.displayName,
                                     error = "No crawler available",
+                                ))
+                                return@crawl
+                            }
+                            // A search this market cannot answer (a later page from a market that
+                            // only has its first) says so instead of answering a different question.
+                            crawler.cannotAnswer(searchQuery)?.let { reason ->
+                                resultChannel.send(CrawlerSearchEvent(
+                                    type = CrawlerEventType.PLATFORM_ERROR,
+                                    platform = platformId.name,
+                                    platformName = platformId.displayName,
+                                    error = reason,
                                 ))
                                 return@crawl
                             }

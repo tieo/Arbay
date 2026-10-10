@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
-class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState {
+class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,

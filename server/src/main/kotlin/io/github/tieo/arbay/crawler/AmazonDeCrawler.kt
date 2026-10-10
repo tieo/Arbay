@@ -6,7 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlin.time.Clock
 import org.jsoup.Jsoup
 
-class AmazonDeCrawler(private val client: HttpClient) : Crawler {
+class AmazonDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.AMAZON_DE
 
     override suspend fun search(query: SearchQuery): List<Listing> {
@@ -14,17 +14,17 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler {
         val seenIds = mutableSetOf<String>()
         val maxPages = query.pageLimit(cap = 3) // Amazon blocks after ~3
 
-        for (page in 1..maxPages) {
+        for (page in query.startPage until query.startPage + maxPages) {
             val url = buildSearchUrl(query, page)
             val html = try {
-                CurlCffiClient.fetch(url, primeUrl = if (page == 1) "https://www.amazon.de" else null)
+                CurlCffiClient.fetch(url, primeUrl = if (page == query.startPage) "https://www.amazon.de" else null)
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                if (page == 1) throw e
+                if (page == query.startPage) throw e
                 break
             }
             val pageResults = parseSearchResults(html)
             if (pageResults.isEmpty()) {
-                if (page == 1) {
+                if (page == query.startPage) {
                     // Nothing parsed off page 1 is a genuine empty answer only where Amazon says so
                     // in words. Anything else is a page that is not a result list: a challenge
                     // served as HTTP 200, short or long, or a layout the parser no longer reads.

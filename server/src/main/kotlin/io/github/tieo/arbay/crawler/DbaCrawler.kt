@@ -28,7 +28,7 @@ import org.jsoup.Jsoup
  * Prices are in DKK. Engine power is in HP (hk) — the API uses HP, not kW.
  * Transmission: 1 = Manuelt, 2 = Automatisk.
  */
-class DbaCrawler(private val client: HttpClient) : Crawler {
+class DbaCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.DBA
 
     companion object {

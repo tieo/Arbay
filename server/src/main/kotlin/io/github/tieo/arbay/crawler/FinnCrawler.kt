@@ -12,7 +12,7 @@ import io.ktor.client.statement.*
  * so it filters at the source (year/mileage/power/price/gearbox) via the shared [MobilityApi] and
  * needs only its host and currency (NOK). See [DbaCrawler].
  */
-class FinnCrawler(private val client: HttpClient) : Crawler {
+class FinnCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.FINN
 
     private val host = "www.finn.no"

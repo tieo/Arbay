@@ -24,6 +24,10 @@ interface FetchesEveryPage {
     val pageLimit: Int get() = Int.MAX_VALUE
 }
 
+/** Starts a search at any page asked for, so the listings past the first pages can be fetched with
+ *  a search of their own. A market that does not declare this answers every page with its first. */
+interface StartsAtAnyPage
+
 /** Turns vehicle criteria into the market's own URL parameters, so filtering happens at the source
  *  rather than over what came back. Which criteria differs per market, and saying so lets the app
  *  explain why a filter narrowed one market's results and not another's. */
@@ -116,5 +120,7 @@ fun Crawler.can(capability: Class<*>): Boolean = capability.isInstance(this)
 fun Crawler.cannotAnswer(query: SearchQuery): String? = when {
     query.soldOnly && this !is HasSoldListings ->
         "${platformId.displayName} does not publish what sold"
+    query.startPage > 1 && this !is StartsAtAnyPage ->
+        "${platformId.displayName} answers with its first page only"
     else -> null
 }

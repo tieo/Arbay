@@ -24,7 +24,7 @@ import org.jsoup.Jsoup
  * Mileage is in Swedish mil on the site. The converter divides km by 10 and rounds up
  * to the nearest whole mil so the ceiling is inclusive.
  */
-class BytbilCrawler(private val client: HttpClient) : Crawler {
+class BytbilCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.BYTBIL
 
     companion object {

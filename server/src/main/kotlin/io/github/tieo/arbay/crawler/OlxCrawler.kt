@@ -25,7 +25,7 @@ class OlxCrawler(
     private val currency: Currency = Currency.EUR,
     private val countryCode: String = "PT",
     private val siteLabel: String = "OLX PT",
-) : Crawler {
+) : Crawler, StartsAtAnyPage {
 
     private val json = Json { ignoreUnknownKeys = true }
 

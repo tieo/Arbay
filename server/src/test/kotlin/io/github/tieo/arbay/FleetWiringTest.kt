@@ -1,6 +1,9 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.crawler.cannotAnswer
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.PlatformId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,5 +57,16 @@ class FleetWiringTest {
         // The split from one EU chip into per-country markets is easy to half-wire.
         listOf(PlatformId.AUTOSCOUT24_IT, PlatformId.AUTOSCOUT24_FR, PlatformId.AUTOSCOUT24_ES, PlatformId.AUTOSCOUT24_BE)
             .forEach { assertEquals(it, CrawlerRegistry.crawlerFor(it)?.platformId, "$it not wired to itself") }
+    }
+
+    @Test
+    fun `a later page is asked only of markets that can start there`() {
+        val page3 = SearchQuery(text = "2TB NVMe", category = MarketGroup.GENERAL, startPage = 3)
+        listOf(PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE, PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.AMAZON_DE)
+            .forEach { assertEquals(null, CrawlerRegistry.crawlerFor(it)!!.cannotAnswer(page3), "$it pages") }
+        // Answered with their first page, these would serve page 1 again as if it were page 3.
+        listOf(PlatformId.GEIZHALS, PlatformId.IDEALO, PlatformId.REBUY)
+            .forEach { assertNotNull(CrawlerRegistry.crawlerFor(it)!!.cannotAnswer(page3), "$it has one page") }
+        assertEquals(null, CrawlerRegistry.crawlerFor(PlatformId.GEIZHALS)!!.cannotAnswer(page3.copy(startPage = 1)))
     }
 }

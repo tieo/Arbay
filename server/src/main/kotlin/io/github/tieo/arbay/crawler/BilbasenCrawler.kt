@@ -14,7 +14,7 @@ import org.jsoup.Jsoup
  * make/model heading, a "kr." price, a description and a location line. CSS module
  * class suffixes are build-specific, so selectors match on the stable prefix only.
  */
-class BilbasenCrawler(private val client: HttpClient) : Crawler {
+class BilbasenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.BILBASEN
 
     override suspend fun search(query: SearchQuery): List<Listing> {

@@ -8,7 +8,7 @@ import kotlin.time.Instant
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
-class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsListingAge, KnowsLocation {
+class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsListingAge, KnowsLocation {
     override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER)
 
     override val platformId = PlatformId.WILLHABEN
@@ -57,7 +57,8 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
         val makeId = carQuery?.makeSlug?.let { makeIds()[it] }
         if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug, query)
 
-        val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}"
+        val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}" +
+            (if (query.startPage > 1) "&page=${query.startPage}" else "")
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.
         val html = fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
@@ -76,6 +77,7 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSo
             append("$carBase?CAR_MODEL/MAKE=$makeId")
             modelId?.let { append("&CAR_MODEL/MODEL=$it") }
             append(filterParams(query))
+            if (query.startPage > 1) append("&page=${query.startPage}")
         }
         return parseSearchResults(
             fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500),

@@ -12,7 +12,7 @@ import kotlinx.serialization.json.*
  * straight from the site's own JSON API (/api/v1/items/search), the same endpoint its React
  * frontend calls, so no HTML scraping is needed and no bot protection stands in the way.
  */
-class SautoCrawler(private val client: HttpClient) : Crawler {
+class SautoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.SAUTO
 
     override suspend fun search(query: SearchQuery): List<Listing> {

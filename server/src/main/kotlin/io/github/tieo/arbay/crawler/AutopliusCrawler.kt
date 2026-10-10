@@ -15,7 +15,7 @@ import org.jsoup.nodes.Element
  * Those values come from the site's own fields rather than free prose, so they are recorded as
  * verified and may exclude on a filter.
  */
-class AutopliusCrawler(private val client: HttpClient) : Crawler {
+class AutopliusCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.AUTOPLIUS
 
     override suspend fun search(query: SearchQuery): List<Listing> {

@@ -5,7 +5,7 @@ import io.ktor.client.*
 import kotlin.time.Clock
 import org.jsoup.Jsoup
 
-class VintedDeCrawler(private val client: HttpClient) : Crawler {
+class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
 
     /** The product's name off a card, without the fields the title attribute reads out after it. */
     internal fun cardTitle(item: org.jsoup.nodes.Element): String? =
@@ -23,7 +23,8 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.VINTED_DE
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val url = "https://www.vinted.de/catalog?search_text=${query.positiveText.encodeUrl()}"
+        val url = "https://www.vinted.de/catalog?search_text=${query.positiveText.encodeUrl()}" +
+            (if (query.startPage > 1) "&page=${query.startPage}" else "")
         val html = fetchWithFallback(
             client, url, "Vinted",
             waitSelector = "[data-testid=grid-item]",

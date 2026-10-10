@@ -30,7 +30,7 @@ class OtomotoCrawler(
     private val siteCurrency: Currency = Currency.PLN,
     private val countryCode: String = "PL",
     private val siteLabel: String = "OTOMoto",
-) : Crawler, FetchesEveryPage, FiltersAtTheSource, KnowsLocation {
+) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation {
     override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
 
 

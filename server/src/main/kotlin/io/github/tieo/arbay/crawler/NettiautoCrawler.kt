@@ -14,7 +14,7 @@ import org.jsoup.nodes.Element
  * `.product-card__basic-info-list`, which is the site's own data rather than free prose, so the
  * values are recorded as verified and may exclude on a filter.
  */
-class NettiautoCrawler(private val client: HttpClient) : Crawler {
+class NettiautoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.NETTIAUTO
 
     override suspend fun search(query: SearchQuery): List<Listing> {
