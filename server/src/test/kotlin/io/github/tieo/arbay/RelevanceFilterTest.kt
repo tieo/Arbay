@@ -576,6 +576,35 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a phone described by its battery or its accessories is the phone`() {
+        // Kleinanzeigen, live, for "Pixel 9 Pro XL 256 GB": each of these is the phone, and each
+        // was thrown out as an accessory or a consumable for a word said about it.
+        val listings = listOf(
+            listing("Google Pixel 9 Pro XL 256 GB – 16 GB RAM Akku 93% Gebraucht"),
+            listing("Google Pixel 9 pro XL 256 gb 94 Prozent Batterie"),
+            listing("Pixel 9 Pro XL 256 GB Bundle Neues Mainboard durch Garantietausch"),
+            listing("Google Pixel 9 Pro XL 256 GB mit viel Zubehör"),
+            listing("Google Pixel 9 Pro XL 256GB Hazel + Zubehör *OVP wie NEU*"),
+            listing("Google Pixel 9 Pro XL Hülle Silikon"),
+            listing("Google Pixel 9 Pro XL Akku Ersatz"),
+        )
+        val result = RelevanceFilter.partition(listings, SearchQuery(text = "Pixel 9 Pro XL 256 GB", category = MarketGroup.GENERAL), emptyList())
+        val kept = result.kept.map { it.title }
+        assertEquals(5, kept.size, kept.toString())
+        assertTrue(kept.none { it.contains("Hülle") || it.contains("Ersatz") }, "a case and a battery carry no storage")
+    }
+
+    @Test
+    fun `a size typed with a space still marks a row of sizes`() {
+        val result = RelevanceFilter.partition(listOf(
+            listing("Google Pixel 9 Pro XL 128GB 256GB 512GB 1TB Rose Grau Weiß Schwarz - WIE NEU"),
+            listing("Google Pixel 9 Pro XL 256GB Hazel"),
+        ), SearchQuery(text = "Pixel 9 Pro XL 256 GB", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Google Pixel 9 Pro XL 256GB Hazel"), result.kept.map { it.title })
+        assertEquals(listOf(DropReason.ONE_OF_SEVERAL_SIZES), result.dropped.map { it.reason })
+    }
+
+    @Test
     fun `a machine that holds the size asked for is not the part`() {
         // reBuy, live, for "1TB NVMe": not one title on its shelf says NVMe, so the word could not
         // be required there, and the phones and the console came through on their size alone.

@@ -464,8 +464,9 @@ object RelevanceFilter {
      * misled about.
      */
     private fun isOneOfSeveralSizes(listing: Listing, parsed: ParsedQuery): Boolean {
-        val asked = parsed.positiveTokens.mapNotNull { sizeInGigabytes(it) }.ifEmpty { return false }
-        val offered = sizesIn(listing.title)
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        // A phone's working memory is not a size it is sold in: "256 GB – 16 GB RAM" is one phone.
+        val offered = sizesIn(listing.title.replace(memorySize, " "))
         // A drive that states its size twice ("2TB (2000GB)", "2TB (2048GB)") states one size. Only
         // a listing that also offers something smaller than what was asked for is priced at a size
         // nobody asked for, which is what makes its place among the cheapest wrong.
@@ -475,6 +476,14 @@ object RelevanceFilter {
         // is two terabytes, sold as two sticks, at a price for the pair.
         return !addsUpToTheAskedSize(listing.title, asked.min())
     }
+
+    /** A size stated as working memory, "16 GB RAM" or "16GB+": what the device runs on, not stores. */
+    private val memorySize = Regex("""\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher)\b""", RegexOption.IGNORE_CASE)
+
+    /** The sizes the search names, read off each phrasing as typed: "256 GB" with a space is as
+     *  much a size as "256GB", and read word by word it was neither. */
+    private fun askedSizes(parsed: ParsedQuery): List<Double> =
+        (listOf(parsed.positiveTokens) + parsed.orGroups).flatMap { sizesIn(it.joinToString(" ")) }
 
     /** "2x 1TB", "4 x 512GB": a count and a size whose product is the size asked for, which is
      *  that size sold in pieces rather than a smaller thing at a smaller price. */
@@ -609,9 +618,10 @@ object RelevanceFilter {
         RegexOption.IGNORE_CASE,
     )
 
-    /** "mit Tasche", "inkl. Ladekabel", "+ Etui": what comes with the thing, rather than instead
-     *  of it. A word after one of these names an extra, and the ad is still about the product. */
-    private val comesWith = Regex("""(mit|inkl\.?|inklusive|incl\.?|including|with|\+|&)\s*$""", RegexOption.IGNORE_CASE)
+    /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
+     *  rather than instead of it. A word after one of these names an extra, and the ad is still
+     *  about the product. */
+    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with)|\+|&)\s*(\p{L}+\s+)?$""", RegexOption.IGNORE_CASE)
 
     /**
      * Whether the title's own subject is something sold alongside the thing searched for.
@@ -620,10 +630,16 @@ object RelevanceFilter {
      * listing reading "WH-1000XM5 mit Tasche" is the headphones, and "WH-1000XM5
      * Aufbewahrungshülle" is the bag.
      */
-    private fun isAnAccessoryNamedOutright(listing: Listing, queryText: String): Boolean {
+    private fun isAnAccessoryNamedOutright(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (accessoryNoun.containsMatchIn(queryText)) return false
         val match = accessoryNoun.find(listing.title) ?: return false
-        return !comesWith.containsMatchIn(listing.title.take(match.range.first))
+        val before = listing.title.take(match.range.first)
+        if (comesWith.containsMatchIn(before)) return false
+        // A case or a charger has no storage. Where the size searched for is stated ahead of the
+        // noun, the noun is said about the device: "Pixel 9 Pro XL 256 GB Akku 93%" reports the
+        // phone's battery, and "256 GB Bundle Neues Mainboard" its repair.
+        val asked = askedSizes(parsed)
+        return asked.isEmpty() || sizesIn(before).none { offered -> asked.any { sameSize(it, offered) } }
     }
 
     // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
@@ -655,7 +671,10 @@ object RelevanceFilter {
     private fun isConsumableFor(listing: Listing, queryText: String): Boolean {
         // The query is really after the consumable itself ("schleifpapier ...") — keep those.
         if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
-        return consumableNoun.containsMatchIn(listing.title) || abrasiveGrit.containsMatchIn(listing.title)
+        if (abrasiveGrit.containsMatchIn(listing.title)) return true
+        // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
+        val match = consumableNoun.find(listing.title) ?: return false
+        return !comesWith.containsMatchIn(listing.title.take(match.range.first))
     }
 
     // An ad seeking the thing, or seeking a person to do it, rather than offering one for sale. The
@@ -726,7 +745,7 @@ object RelevanceFilter {
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
-                isAnAccessoryNamedOutright(listing, query.text) -> DropReason.ACCESSORY
+                isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
                 // A part off the vehicle, named without a "für": a trim strip, a sill plate, a
                 // wheel bolt, an OEM number. Only for a search that names a vehicle — a model
