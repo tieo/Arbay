@@ -390,6 +390,19 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a case named in French, Italian or Spanish is not the phone`() {
+        // Live, for "Pixel 10 Pro XL": Vinted's French sellers led the list with "Coque" cases at
+        // under 5 euro, kept as phones.
+        val kept = search("Pixel 10 Pro XL", listOf(
+            listing("Coque Google pixel 10 pro XL", price = 175),
+            listing("Coques pixel 10 pro xl lot de 2", price = 400),
+            listing("Custodie Pixel 10 Pro XL", price = 500),
+            listing("Google Pixel 10 Pro XL 256 GB Obsidian", price = 62000),
+        )).map { it.title }
+        assertEquals(listOf("Google Pixel 10 Pro XL 256 GB Obsidian"), kept)
+    }
+
+    @Test
     fun `a part that says what it goes into is still the part`() {
         // Live, for the part number "CT32G4SFD832A": seven exact matches were dropped as whole
         // machines because their titles say "Laptop RAM", and Geizhals lists the same module

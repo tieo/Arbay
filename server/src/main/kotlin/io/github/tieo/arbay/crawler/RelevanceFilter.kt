@@ -676,7 +676,7 @@ object RelevanceFilter {
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
             // what fits inside it.
             """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
-            """\b(ear\s?pads?|headband|pcb|repair\s?kit|housse|custodia|funda|hoes|""" +
+            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|housses?|custodi(a|e)|fundas?|hoes|""" +
             """cover|case|charger|enclosure|caddy|docking\s?station|""" +
             """bo(î|i)tier|carcasa|caja\s+externa|behuizing)\b""",
         RegexOption.IGNORE_CASE,
