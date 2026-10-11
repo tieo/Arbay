@@ -788,6 +788,17 @@ object RelevanceFilter {
         return wantedOrJobAd.containsMatchIn(listing.title)
     }
 
+    /**
+     * Whether the search is a part number and nothing else: written in digits, seven at least, with
+     * no more than a letter or two among them ("16131179011", "16 13 1 179 011", "A9018900065").
+     * A model code is no part number: "WH-1000XM5" names headphones a case is sold for.
+     */
+    private fun isAPartNumber(parsed: ParsedQuery): Boolean {
+        val tokens = parsed.positiveTokens.takeIf { it.isNotEmpty() } ?: return false
+        val compact = tokens.joinToString("").replace(NON_ALNUM, "")
+        return compact.count(Char::isDigit) >= 7 && compact.count(Char::isLetter) <= 2
+    }
+
     fun filter(
         listings: List<Listing>,
         query: SearchQuery,
@@ -827,7 +838,13 @@ object RelevanceFilter {
         query: SearchQuery,
         blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
     ): Partitioned {
-        val parsed = parseQuery(query)
+        val asParsed = parseQuery(query)
+        val namesOnePart = isAPartNumber(asParsed)
+        // A part number is one code however it is spaced: "16 13 1 179 011" is the same part a title
+        // writes as "16131179011", and five short numbers looked for as words of their own are in
+        // none of its titles.
+        val parsed = if (!namesOnePart) asParsed
+            else asParsed.copy(positiveTokens = listOf(asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "")))
         val dropped = mutableListOf<DroppedListing>()
         val listings = listings.filter { listing ->
             val dealer = blockedDealers.blocking(listing)
@@ -839,6 +856,11 @@ object RelevanceFilter {
                 !hasSanePrice(listing) -> DropReason.IMPLAUSIBLE_PRICE
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
+                // A part number names one part, and whatever that part is, it is the thing asked
+                // for: every listing of the BMW cover 16131179011 was dropped as an accessory for
+                // calling itself "Abdeckung". The rules below tell a thing from what is sold for it,
+                // which a search for the part itself has no use for.
+                namesOnePart -> null
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE

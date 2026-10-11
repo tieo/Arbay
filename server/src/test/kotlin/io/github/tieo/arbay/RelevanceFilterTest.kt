@@ -424,6 +424,24 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a search for a part number keeps the part whatever kind of part it is`() {
+        // Live, for "16131179011": eBay returned twenty listings of that BMW E30 fuel cap vent
+        // cover, and all but one were dropped as accessories for calling it an "Abdeckung".
+        val titles = listOf(
+            "ORIGINAL BMW Abdeckung Tankdeckel Entlüftungsschlauch 3er E30 - 16131179011",
+            "Original BMW 16131179011 - Abdeckung 3er",
+            "Neu Original BMW Cover 16131179011",
+            "BMW E30 Abdeckung Tankentlüftung 16 13 1 179 011",
+        )
+        for (q in listOf("16131179011", "16 13 1 179 011")) {
+            val kept = search(q, titles.map { listing(it, price = 11998) }).map { it.title }
+            assertEquals(titles, kept, "searched as $q")
+        }
+        // A size is no part number: a case for a 256 GB phone is still a case.
+        assertTrue(search("Pixel 9 Pro XL 256 GB", listOf(listing("Pixel 9 Pro XL Hülle", price = 900))).isEmpty())
+    }
+
+    @Test
     fun `a part that says what it goes into is still the part`() {
         // Live, for the part number "CT32G4SFD832A": seven exact matches were dropped as whole
         // machines because their titles say "Laptop RAM", and Geizhals lists the same module
