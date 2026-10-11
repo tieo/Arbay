@@ -443,6 +443,51 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a part number search keeps the part described the way its numbered listings describe it`() {
+        // eBay's whole answer to "16131179011" on 2026-10-11. Replicas and used originals rarely
+        // print the number; the listings that do say the part is an E30 "Abdeckung" or "Cover",
+        // so a listing described that way is the part. Another number is another part, and a
+        // diesel cap for an F20 is no E30 cover.
+        val answer = listOf(
+            "ORIGINAL BMW Abdeckung Tankdeckel Entlüftungsschlauch 3er E30 - 16131179011",
+            "ORIGINAL BMW Abdeckung für Tankdeckel Entlüftungsschlauch 3er E30 16131179011",
+            "BMW E30 Abdeckung Tankentlüftung 16131179011 – 3er Serie Ersatzteil",
+            "Original BMW Abdeckung 16131179011",
+            "Neu Original BMW Cover 16131179011",
+            "BMW E30 3er Tankdeckel Schlauch Atemleitung Abdeckung Neu 1179011",
+            "BMW 3 E30 Kraftstoffentlüftungsleitungsabdeckung 316 1.8 Benzin 16131179011",
+            "Neu BMW 3 E30 Fuel Breather Line Decken 316 1.8 Benzin-16131179011 OEM Original",
+            "BMW 3 E30 Fuel Breather Line Cover 316 1.8 Petrol 16131179011",
+            "BMW 3 E30 Kraftstoffentlüftungsleitung Abdeckung 316 1.8 Benzin 16131179011",
+            "BMW E30 3 Abdeckung 16131179011 Original",
+            "BMW GENUINE 3 SERIES E30 FUEL TANK FILLER HOSE BREATHER LINE COVER 1179011",
+            "BMW E30 Original Kohlefaser Tankentlüftung Abdeckung 16131179011",
+            "BMW NEUER ORIGINAL F20 F30 F10 G20 G31 G11 DIESEL TANK DECKEL ABDECKUNG",
+            "Abdeckung Radhaus Tankrohr Tank passend für E30",
+            "Schutzabdeckung für BMW 3er E30 Kraftstoffrohr Cover Kunststoff",
+            "OEM BMW E30 Abdeckung Tankdeckel Entlüftungsschlauch Schutzblech 16131176746",
+            "BMW NEW GENUINE F20 F30 F10 G20 G31 G11 DIESEL FUEL TANK FILLER PIPE CAP COVER",
+            "CAtuned Fuel Breather Line Cover PLASTIC Compatible with E30",
+            // What a search for "E30 Abdeckung" brought back: covers of the same car that are not
+            // this cover, and covers for a Motorola Moto E30.
+            "Bmw e30 Lautsprecher Abdeckung schwarz",
+            "BMW E30 TOURING ABDECKUNG KOFFERRAUM ( 17€ INKL DHL VERSICHERT )",
+            "Abdeckung schwarz für Fensterkurbel vorne/hinten BMW E30 / E34",
+            "Betterfon Motorola Moto E20 E30 E40 Carbon Hülle Outdoor Case Back Cover Handy Tasche",
+            // And what "E30 Abdeckung Tankdeckel" brought back: tank caps.
+            "Tankdeckel Verschluss Kraftstoffbehälter für BMW 3er E21 E30 E36 E46",
+            "Gummidichtung Tankdeckel Verschluss Kraftstoffbehälter für Audi VW BMW E21 E30",
+        )
+        val kept = search("16131179011", answer.map { listing(it, price = 5200) }).map { it.title }.toSet()
+        assertTrue(kept.none { "Lautsprecher" in it || "KOFFERRAUM" in it || "Fensterkurbel" in it || "Motorola" in it || "Verschluss" in it }, "other covers: $kept")
+        assertTrue("Abdeckung Radhaus Tankrohr Tank passend für E30" in kept, "an ABS replica without the number")
+        assertTrue("CAtuned Fuel Breather Line Cover PLASTIC Compatible with E30" in kept)
+        assertTrue(answer.filter { "1179011" in it }.all { it in kept }, "every numbered listing")
+        assertTrue(kept.none { "F20" in it }, "a diesel cap for other models")
+        assertTrue(kept.none { "16131176746" in it }, "another part number is another part")
+    }
+
+    @Test
     fun `a part that says what it goes into is still the part`() {
         // Live, for the part number "CT32G4SFD832A": seven exact matches were dropped as whole
         // machines because their titles say "Laptop RAM", and Geizhals lists the same module

@@ -65,10 +65,23 @@ suspend fun Crawler.searchAllSpellings(
         .map { it.trim() }
         .filter { it.isNotBlank() && !it.equals(query.text, ignoreCase = true) }
         .map { QueryVariants.Candidate(it, sharesStem = true) }
-    val automatic = if (!query.reach.otherWords) emptyList() else fromMarket.ifEmpty {
-        QueryVariants.candidatesFrom(primary, query.text, background)
-            .map { QueryVariants.Candidate(it, sharesStem = true) }
+    // A part number is described, not renamed: the listings that print it say what the part is
+    // and what it fits, and those words find the listings that print no number. Shown either way,
+    // searched when the search asks for other words.
+    val described = RelevanceFilter.partNumberOf(query)?.let { (code, short) ->
+        val reference = if (platformId == PlatformId.EBAY_DE) emptyList() else PartNumberReference.listings(query, code)
+        PartDescriptions.learn(primary + reference, code, short).searchTerms()
+    }.orEmpty()
+    described.forEach { term ->
+        emitTermVerdict(SuggestedTerm(term = term, worthTrying = true, why = "how the listings carrying this number describe the part"))
     }
+    val automatic = if (!query.reach.otherWords) emptyList() else
+        described.map { QueryVariants.Candidate(it, sharesStem = true) }.ifEmpty {
+            fromMarket.ifEmpty {
+                QueryVariants.candidatesFrom(primary, query.text, background)
+                    .map { QueryVariants.Candidate(it, sharesStem = true) }
+            }
+        }
     val terms = (picked + automatic).distinctBy { it.term.lowercase() }
     if (terms.isEmpty()) return primary
 
@@ -100,7 +113,11 @@ suspend fun Crawler.searchAllSpellings(
         emitTermVerdict(SuggestedTerm(
             term = candidate.term,
             worthTrying = true,
-            why = if (candidate.term in query.reach.extraTerms) "picked by hand" else "another name for it",
+            why = when (candidate.term) {
+                in query.reach.extraTerms -> "picked by hand"
+                in described -> "how the listings carrying this number describe the part"
+                else -> "another name for it"
+            },
             searched = true,
             added = added,
         ))

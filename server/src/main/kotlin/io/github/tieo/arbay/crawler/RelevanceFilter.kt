@@ -793,6 +793,23 @@ object RelevanceFilter {
      * no more than a letter or two among them ("16131179011", "16 13 1 179 011", "A9018900065").
      * A model code is no part number: "WH-1000XM5" names headphones a case is sold for.
      */
+    /** Whether [listing] is the part [code] names: its title prints the number, or is described the
+     *  way the listings printing it describe the part ([PartDescriptions.describes]). */
+    private fun isThePart(listing: Listing, code: String, short: String?, descriptions: PartDescriptions?): Boolean {
+        val compact = listing.title.lowercase().replace(NON_ALNUM, "")
+        if (code in compact || (short != null && short in compact)) return true
+        return descriptions?.describes(compact) == true
+    }
+
+    /** The part number a search is, compacted, with BMW's seven digit form of it; null for a
+     *  search that is not a part number alone. */
+    fun partNumberOf(query: SearchQuery): Pair<String, String?>? {
+        val parsed = parseQuery(query)
+        if (!isAPartNumber(parsed)) return null
+        val code = parsed.positiveTokens.joinToString("").replace(NON_ALNUM, "").lowercase()
+        return code to code.takeLast(7).takeIf { code.length == 11 && code.all(Char::isDigit) }
+    }
+
     private fun isAPartNumber(parsed: ParsedQuery): Boolean {
         val tokens = parsed.positiveTokens.takeIf { it.isNotEmpty() } ?: return false
         val compact = tokens.joinToString("").replace(NON_ALNUM, "")
@@ -843,13 +860,21 @@ object RelevanceFilter {
         // A part number is one code however it is spaced: "16 13 1 179 011" is the same part a title
         // writes as "16131179011", and five short numbers looked for as words of their own are in
         // none of its titles.
-        val parsed = if (!namesOnePart) asParsed else {
-            val code = asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "")
-            // BMW numbers its parts in eleven digits, main group, subgroup and the part's own seven
-            // ("16 13 1 179 011"), and sellers write the seven alone as well: "Abdeckung Neu 1179011"
-            // is the same cover, and was dropped as off target.
-            val short = code.takeLast(7).takeIf { code.length == 11 && code.all(Char::isDigit) }
-            asParsed.copy(positiveTokens = listOf(code), orGroups = if (short == null) emptyList() else listOf(listOf(code), listOf(short)))
+        val partCode = if (namesOnePart) asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "").lowercase() else null
+        // BMW numbers its parts in eleven digits, main group, subgroup and the part's own seven
+        // ("16 13 1 179 011"), and sellers write the seven alone as well: "Abdeckung Neu 1179011"
+        // is the same cover, and was dropped as off target.
+        val shortPartCode = partCode?.takeLast(7)?.takeIf { partCode.length == 11 && partCode.all(Char::isDigit) }
+        val partDescriptions = partCode?.let { PartDescriptions.learn(listings + PartNumberReference.known(it), it, shortPartCode) }
+        val partPhrasings = partDescriptions?.phrasings.orEmpty()
+        val parsed = if (partCode == null) asParsed else {
+            val code = partCode
+            val short = shortPartCode
+            // Many listings of the part do not print its number at all; the ones that do say how
+            // the part is described, and a listing described that way is the part too.
+            val described = partPhrasings
+            val names = listOfNotNull(listOf(code), short?.let { listOf(it) }) + described
+            asParsed.copy(positiveTokens = listOf(code), orGroups = if (names.size == 1) emptyList() else names)
         }
         val dropped = mutableListOf<DroppedListing>()
         val listings = listings.filter { listing ->
@@ -866,6 +891,11 @@ object RelevanceFilter {
                 // for: every listing of the BMW cover 16131179011 was dropped as an accessory for
                 // calling itself "Abdeckung". The rules below tell a thing from what is sold for it,
                 // which a search for the part itself has no use for.
+                namesOnePart && PartDescriptions.printsAnotherNumber(listing.title, partCode!!, shortPartCode) -> DropReason.OFF_TARGET
+                // Exactly: the number, or the model and two of the part's words, each in full. A
+                // share of a description's words is how a Motorola "Moto E30 … Back Cover" passed
+                // as the E30's fuel breather cover.
+                namesOnePart && !isThePart(listing, partCode!!, shortPartCode, partDescriptions) -> DropReason.OFF_TARGET
                 namesOnePart -> null
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
