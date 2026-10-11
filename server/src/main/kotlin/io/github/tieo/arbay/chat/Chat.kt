@@ -402,7 +402,7 @@ internal fun JsonObject.toConversation(withMessages: Boolean = false): Conversat
     val id = this["id"]?.str() ?: return null
     val buying = this["role"]?.str()?.uppercase() != "SELLER"
     val messages = if (!withMessages) emptyList() else this["messages"]?.jsonArray.orEmpty()
-        .mapNotNull { (it as? JsonObject)?.toMessage() }
+        .mapNotNull { (it as? JsonObject)?.toMessage(buying) }
         .filter { it.text.isNotBlank() || it.attachments.isNotEmpty() || it.offerEur != null }
         .sortedBy { it.at }
     return Conversation(
@@ -419,14 +419,16 @@ internal fun JsonObject.toConversation(withMessages: Boolean = false): Conversat
     )
 }
 
-private fun JsonObject.toMessage(): ChatMessage? {
+/** One gateway message; [buying] says which side of the conversation the user is on. */
+private fun JsonObject.toMessage(buying: Boolean): ChatMessage? {
     val unichat = (this["unichatMessage"] as? JsonObject)?.get("payload")?.let { it as? JsonObject }
         ?.get("content")?.let { it as? JsonObject }?.get("text")?.str()
     // The body can sit in three places; the short one is a preview, so the longest is the message.
     val text = listOfNotNull(this["textShort"]?.str(), unichat, this["text"]?.str()).maxByOrNull { it.length } ?: ""
     return ChatMessage(
         id = this["messageId"]?.str() ?: return null,
-        mine = this["boundness"]?.str() == "OUTBOUND",
+        // A price offer through "Sicher bezahlen" carries no direction, only whether the buyer made it.
+        mine = this["boundness"]?.str()?.let { it == "OUTBOUND" } ?: (this["isBuyerOffer"]?.bool() == buying),
         text = text,
         at = this["receivedDate"]?.str()?.let(::parseGatewayTime),
         attachments = (this["attachments"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("url")?.str() },

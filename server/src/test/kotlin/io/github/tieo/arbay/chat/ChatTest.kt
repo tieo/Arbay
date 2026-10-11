@@ -69,6 +69,20 @@ class ChatTest {
         assertEquals("2026-09-25T12:21:39.123Z", c.lastAt.toString())
     }
 
+    @Test
+    fun aPriceOfferWeMadeIsOursThoughItCarriesNoDirection() {
+        // The shape of a real "Sicher bezahlen" offer message: no boundness, only isBuyerOffer.
+        val offer = """{"messageId":"o1","receivedDate":"2026-10-11T12:27:08.977+0200","type":"PAYMENT_AND_SHIPPING_MESSAGE",
+            "paymentAndShippingMessageType":"BUYER_OFFER_MADE_BUYER_MESSAGE","title":"Bezahlung angefragt",
+            "textShort":"Sobald der Verkäufer deine Anfrage annimmt","offeredPriceInEuroCent":42500,"isBuyerOffer":true}"""
+        fun conversation(role: String) = Json.parseToJsonElement(
+            """{"id":"c","adId":"1","role":"$role","messages":[$offer]}""",
+        ).jsonObject.toConversation(withMessages = true)!!.messages.single()
+        assertTrue(conversation("BUYER").mine)
+        assertEquals(425.0, conversation("BUYER").offerEur)
+        assertFalse(conversation("SELLER").mine)
+    }
+
     /** A conversation as the gateway answers it after a reply, the reply last; the shape of a real answer. */
     private val afterReply = Json.parseToJsonElement(javaClass.getResource("/fixtures/kleinanzeigen_conversation_after_reply.json")!!.readText())
         .jsonObject.toConversation(withMessages = true)
