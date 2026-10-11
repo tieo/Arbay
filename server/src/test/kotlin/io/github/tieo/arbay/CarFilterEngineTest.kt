@@ -492,6 +492,27 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun `a seat, a conversion kit and a French-listed motor among Crafters are parts`() {
+        // Live, for the saved "Volkswagen Crafter" search: eBay.de listed these at 10,000 to
+        // 27,000 euro among the vans.
+        val parts = listOf(
+            "Moteur électrique, voiture électrique Volkswagen Crafter (SY) 2021 7LE901131E",
+            "VW Crafter MAN TGE Fahrersitz mit Anpassungen 2018 - 2023",
+            "CAMPER Volkswagen VW Crafter 35 L2H2 Silber Camper Ausbau Komplettset",
+            "Getriebe VW Crafter 2.0 TDI 03L 130 277 B",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        val survivors = CarFilterEngine.apply(parts, CarFilters()).map { it.title }
+        assertTrue(survivors.isEmpty(), "not dropped: $survivors")
+        val vans = listOf(
+            "vw crafter 2.0TDI 188PS Bj.2019",
+            "VW Crafter - L3H2 - 3,5t",
+            "Kastenwagen hoch VW Crafter 35 L3H3 Autom Navi Kamera",
+            "VW Crafter Camper Ausbau Standheizung 2020",
+        ).map { carListing(it, PlatformId.EBAY_DE, it, vehicle = VehicleInfo()) }
+        assertEquals(vans.size, CarFilterEngine.apply(vans, CarFilters()).size)
+    }
+
+    @Test
     fun `wheel-tyre ad drops on a size or lead word, but a car bragging new tyres survives`() {
         val wheelAds = listOf(
             "4x VW Golf 4 Sommerreifen auf Alufelge 195/65 R15",

@@ -239,6 +239,11 @@ object CarFilterEngine {
             """\b(austausch|rumpf|teil|komplett|elektro)motor\b|\bmotor(ü|ue)berholung\b|\bmotorblock\b|""" +
             """\bmotor\s+komplett\b|\bgl(ü|ue)hkerzen?\b|""" +
             """\bbeifahrert(ü|ue)r\b|\bfahrert(ü|ue)r\b|\bpumpen?\b|\bfensterheber\b|""" +
+            // A seat out of a van, and a conversion kit for one: "VW Crafter MAN TGE Fahrersitz mit
+            // Anpassungen", "Camper Ausbau Komplettset", both listed among the vans themselves.
+            """\b(beifahrer|fahrer)sitze?\b|\b(komplett|ausbau)set\b|""" +
+            // French parts sellers on eBay.de: "Moteur électrique ... Volkswagen Crafter (SY)".
+            """\bmoteur\b|\bpi(è|e)ces?\s+d(é|e)tach(é|e)es\b|""" +
             // Paperwork sold for a model, never the car: an owner's manual, a service book.
             """\b(bedienungsanleitung|betriebsanleitung|serviceplan|handbuch|reparaturhandbuch)\b|""" +
             // Rims/alloys on their own are a wheel ad, not a car; unlike tyres (which a car brags
@@ -349,14 +354,17 @@ object CarFilterEngine {
         val title = listing.title
         return partAccessory.containsMatchIn(title) || partAccessoryLead.containsMatchIn(title) ||
             partFromDonorVehicle.containsMatchIn(title) || partSuffix.containsMatchIn(title) ||
-            partNumber.containsMatchIn(title) || isTyreAd(title) ||
+            partNumber.containsMatchIn(title) || vagPartNumber.containsMatchIn(title) || isTyreAd(title) ||
             engineWithCode.containsMatchIn(title) || engineLead.containsMatchIn(title) ||
             (partNamedEarly.containsMatchIn(title) && fitsAVehicle.containsMatchIn(title))
     }
 
     /** An OEM part number, which is what a parts seller titles a part with and what a whole
      *  vehicle is never titled with: "A9018900065", "A0031532728", "804528". Ten digits of it
-     *  cannot be a year, a mileage or a price. */
+     *  cannot be a year, a mileage or a price. Volkswagen group numbers carry letters in their
+     *  first three places ("7LE901131E", "03L 130 277 B"), which [partNumber] alone does not see. */
+    private val vagPartNumber = Regex("""\b\d(?=[0-9A-Z]{0,1}[A-Z])[0-9A-Z]{2}\s?\d{3}\s?\d{3}\s?[A-Z]{0,3}\b""")
+
     private val partNumber = Regex("""\b[A-Z]?\d{6,11}\b(?!\s*(km|tkm|kw|ps|eur|€))""", RegexOption.IGNORE_CASE)
 
     private fun isLikelyNonVehicle(listing: Listing): Boolean {
