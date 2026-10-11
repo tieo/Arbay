@@ -76,4 +76,25 @@ class ArbayMcpTest {
         assertEquals("2.0", body["jsonrpc"]?.jsonPrimitive?.content, reply.bodyAsText())
         assertTrue("error" !in body, reply.bodyAsText())
     }
+
+    /** A client that connected before a restart keeps sending its old session id; the server has
+     *  no memory of it, and the call is answered all the same. */
+    @Test
+    fun aCallFromBeforeARestartIsAnswered() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        routing { chatRoutes(); mcpRoutes("", client) }
+        val reply = client.post("/mcp") {
+            header("Accept", "application/json, text/event-stream")
+            header("mcp-session-id", "a-session-from-before-the-restart")
+            contentType(ContentType.Application.Json)
+            setBody("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_texts","arguments":{}}}""")
+        }
+        assertEquals(200, reply.status.value, reply.bodyAsText())
+        val body = Json.parseToJsonElement(reply.bodyAsText()).jsonObject
+        assertTrue("error" !in body, reply.bodyAsText())
+    }
 }
