@@ -403,6 +403,8 @@ class RelevanceFilterTest {
             listing("Google Pixel 10 Pro XL Schutzglas Kameraschutz", price = 999),
             listing("Spigen Nano Pop Google Pixel 10 Pro XL", price = 1540),
             listing("Google Pixel 10 pro XL hoesje", price = 1645),
+            listing("Telefoonhoesjes Google pixel 10 pro XL", price = 1540),
+            listing("Google Pixel 10 Pro XL Display Reparatur EXPRESS Heidelberg", price = 39900),
             listing("Google pixel 10 pro XL Emty Box!!", price = 1645),
             listing("Lot étui de téléphone Google pixel 10 pro xl", price = 1645),
             listing("Das Praxisbuch Google Pixel 10 & Pixel 10 Pro/XL - Anleitung für Einsteiger", price = 1950),

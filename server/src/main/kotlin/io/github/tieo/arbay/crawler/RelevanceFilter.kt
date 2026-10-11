@@ -669,14 +669,14 @@ object RelevanceFilter {
         // German builds these as compounds — Aufbewahrungshülle, Hochleistungsakku,
         // Ersatzohrpolster — so the head noun is matched wherever the word ends, not only where it
         // stands alone. The other languages a cross-border search reaches name them plainly.
-        """(?U)\w*(h(ü|ue)llen?|etuis?|taschen?|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
-            """polster|kopfband|halterung|st(ä|ae)nder|schutzfolien?|displayschutz|kameraschutz|(panzer|schutz)gl(a|ä)s(er)?|reparaturset|""" +
+        """(?U)\w*(h(ü|ue)llen?|hoes(jes?)?|etuis?|taschen?|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
+            """polster|kopfband|halterung|st(ä|ae)nder|schutzfolien?|displayschutz|kameraschutz|(panzer|schutz)gl(a|ä)s(er)?|reparatur(set)?|""" +
             """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung|""" +
             // What a drive is put into rather than the drive: a search for a 2 TB M.2 came back led
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
             // what fits inside it.
             """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
-            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|hoes(jes?)?|""" +
+            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|""" +
             """(é|e)tuis?|(back|flip|book|hard|soft)?covers?|case|charger|enclosure|caddy|docking\s?station|""" +
             """screen\s?protectors?|praxisbuch|handbuch|anleitung|""" +
             // A box sold empty: "Emty Box!!", "leere OVP", "nur Karton".
