@@ -25,6 +25,7 @@ import io.github.tieo.arbay.model.tidyTitle
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -35,6 +36,8 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
@@ -120,7 +123,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val q = saved?.searchQuery
             val listings = mutableListOf<Listing>()
             val problems = mutableListOf<String>()
-            http.prepareGet("$base/api/crawler/search/stream") {
+            // Arbay's crawl throttle answers 429 with Retry-After when searches arrive together, as
+            // they do when an LLM runs several tool calls at once; the search waits its turn instead
+            // of reporting the throttle as every market failing.
+            var throttled = true
+            while (throttled) http.prepareGet("$base/api/crawler/search/stream") {
                 parameter("q", words)
                 q?.platforms?.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
                 q?.excludeKeywords?.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
@@ -132,6 +139,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
                 q?.reach?.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
             }.execute { response ->
+                throttled = response.status == HttpStatusCode.TooManyRequests
+                if (throttled) return@execute delay((response.headers[HttpHeaders.RetryAfter]?.toLongOrNull() ?: 1) * 1000)
                 if (!response.status.isSuccess()) return@execute problems.add(response.bodyAsText())
                 val channel = response.bodyAsChannel()
                 while (true) {
