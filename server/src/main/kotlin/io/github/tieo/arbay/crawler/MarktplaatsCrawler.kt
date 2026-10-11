@@ -45,27 +45,31 @@ class MarktplaatsCrawler(
         // almost all of them parts, and 1059 inside the category. Verified on this site's own
         // counts: the gearbox is stated by 1040 of those 1059 and the fuel by 1047, so both are
         // asked for; a drive type by 796, so that one waits for a search that excludes unstated
-        // specs. The filters are path segments, `/f/<name>/<id>/`, taken from its own facet links.
-        val filterPath = if (car == null || !host.contains("marktplaats")) "" else buildString {
+        // specs. The filters are names and ids from its own facet links, all in one path segment,
+        // `/f/diesel+automaat/474+534/`, ordered by id: a second `/f/` segment answers 404, and any
+        // other order is redirected to this one.
+        val filterPath = if (car == null || !host.contains("marktplaats")) "" else {
             val criteria = query.carCriteria
-            when (criteria.transmission) {
-                Transmission.AUTOMATIC -> append("f/automaat/534/")
-                Transmission.MANUAL -> append("f/handgeschakeld/535/")
-                null -> {}
-            }
-            criteria.fuels.singleOrNull()?.let { fuel ->
-                when (fuel) {
-                    Fuel.DIESEL -> append("f/diesel/474/")
-                    Fuel.ELECTRIC -> append("f/elektrisch/11756/")
-                    else -> {}
-                }
-            }
-            if (criteria.strictUnknown) when (criteria.drivetrain) {
-                Drivetrain.AWD -> append("f/vierwielaandrijving/13945/")
-                Drivetrain.FWD -> append("f/voorwielaandrijving/13943/")
-                Drivetrain.RWD -> append("f/achterwielaandrijving/13944/")
-                null -> {}
-            }
+            val facets = listOfNotNull(
+                when (criteria.transmission) {
+                    Transmission.AUTOMATIC -> "automaat" to 534
+                    Transmission.MANUAL -> "handgeschakeld" to 535
+                    null -> null
+                },
+                when (criteria.fuels.singleOrNull()) {
+                    Fuel.DIESEL -> "diesel" to 474
+                    Fuel.ELECTRIC -> "elektrisch" to 11756
+                    else -> null
+                },
+                if (!criteria.strictUnknown) null else when (criteria.drivetrain) {
+                    Drivetrain.AWD -> "vierwielaandrijving" to 13945
+                    Drivetrain.FWD -> "voorwielaandrijving" to 13943
+                    Drivetrain.RWD -> "achterwielaandrijving" to 13944
+                    null -> null
+                },
+            ).sortedBy { it.second }
+            if (facets.isEmpty()) "" else
+                "f/${facets.joinToString("+") { it.first }}/${facets.joinToString("+") { it.second.toString() }}/"
         }
         val base = if (car != null && host.contains("marktplaats"))
             "$host/l/auto-s/$filterPath" + "q/${text.encodeUrl()}/"
