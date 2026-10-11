@@ -29,6 +29,7 @@ import io.github.tieo.arbay.signin.SignInProxy
 import java.util.UUID
 import kotlin.random.Random
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -270,6 +271,25 @@ object Chat {
     }
 
     // --- price offers through "Sicher bezahlen" ---
+
+    private val shippingByAd = java.util.concurrent.ConcurrentHashMap<String, Pair<Instant, List<ShippingOption>>>()
+
+    /**
+     * The ways ad [adId] ships through "Sicher bezahlen", priced as the buyer pays at payment, read
+     * through the signed-in browser and kept for an hour. Null when that cannot be read, signed out
+     * or for an ad without "Sicher bezahlen".
+     */
+    suspend fun shippingOptions(adId: String): List<ShippingOption>? {
+        shippingByAd[adId]?.takeIf { Clock.System.now() - it.first < 1.hours }?.let { return it.second }
+        val data = runCatching { ChatBrowser.call("shipping_options", 30_000, "adId" to adId)["data"] as? JsonObject }
+            .getOrNull() ?: return null
+        val options = (data["options"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val cents = (o["priceInEuroCent"] as? JsonPrimitive)?.longOrNull ?: return@mapNotNull null
+            ShippingOption(listOfNotNull(o["carrierName"]?.str(), o["name"]?.str()).joinToString(" "), cents / 100.0)
+        }
+        return options.takeIf { it.isNotEmpty() }?.also { shippingByAd[adId] = Clock.System.now() to it }
+    }
 
     /** The conversation's price dialog filled with [price] and read back; sent only when [send]. */
     private suspend fun offerDialog(id: String, price: Double, most: Double?, send: Boolean): PriceOffer {

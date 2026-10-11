@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.ChatCosts
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Shipping
+import io.github.tieo.arbay.model.ShippingOption
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -85,9 +86,20 @@ object KleinanzeigenCosts {
         return ChatCosts(protection = r.protection, protectionReadAt = r.protectionAt)
     }
 
-    /** [shipping] with what delivering it to the door costs, when its stated price is a parcel shop price. */
-    suspend fun withDoorDelivery(shipping: Shipping?): Shipping? {
+    /**
+     * [shipping] with what delivering it to the door costs, when its stated price is a parcel shop
+     * price. The ad's own list at payment, read through the signed-in browser ([liveDoorOptions]),
+     * comes first: every way it lists goes to the door, and its prices are what the buyer pays
+     * (Hermes Päckchen 5,19 € there against 4,95 € in the help article's table, measured). The
+     * help article's table counts where that list cannot be read.
+     */
+    suspend fun withDoorDelivery(shipping: Shipping?, liveDoorOptions: (suspend () -> List<ShippingOption>?)? = null): Shipping? {
         val cost = shipping?.cost ?: return shipping
+        if (shipping.available && !shipping.free) {
+            liveDoorOptions?.invoke()?.minByOrNull { it.eur }?.let { cheapest ->
+                return shipping.copy(doorCost = Money(Math.round(cheapest.eur * 100), Currency.EUR), doorBy = cheapest.name)
+            }
+        }
         val r = readings()
         val (by, cents) = doorDelivery(cost, r.options, r.door) ?: return shipping
         return shipping.copy(doorCost = Money(cents, Currency.EUR), doorBy = by)

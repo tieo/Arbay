@@ -3,6 +3,8 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.crawler.KleinanzeigenCosts
 import io.github.tieo.arbay.model.BuyerProtection
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.Shipping
+import io.github.tieo.arbay.model.ShippingOption
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -48,5 +50,16 @@ class KleinanzeigenCostsTest {
     @Test
     fun readsTheSicherBezahlenFee() {
         assertEquals(BuyerProtection(fixedEur = 0.5, share = 0.045), KleinanzeigenCosts.parseProtection(fixture("kleinanzeigen_help_sicher_bezahlen.json")))
+    }
+
+    @Test
+    fun theAdsOwnListAtPaymentSetsTheDoorPrice() {
+        // As the ad's list answered on 2026-10-11: every way goes to the door, the Päckchen at 5,19.
+        val live = listOf(ShippingOption("Hermes Päckchen", 5.19), ShippingOption("Hermes S-Paket", 5.79), ShippingOption("DHL Paket 2 kg", 6.19))
+        val shipping = kotlinx.coroutines.runBlocking {
+            KleinanzeigenCosts.withDoorDelivery(Shipping(cost = Money.cents(99), available = true)) { live }
+        }
+        assertEquals(Money.cents(519), shipping?.doorCost)
+        assertEquals("Hermes Päckchen", shipping?.doorBy)
     }
 }

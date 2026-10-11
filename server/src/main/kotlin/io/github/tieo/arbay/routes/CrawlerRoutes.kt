@@ -470,9 +470,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val id = call.queryParameters["id"] ?: url
             // A Kleinanzeigen page read before shipping was read from it is read again, once, and so
             // is an eBay page read before its description was.
-            // Door delivery comes from Kleinanzeigen's current price list, so it is added on the way out.
+            // Door delivery comes from what the ad charges at payment, else Kleinanzeigen's price list,
+            // so it is added on the way out.
             suspend fun ListingDetail.priced() =
-                if (platform == PlatformId.KLEINANZEIGEN) copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(shipping)) else this
+                if (platform != PlatformId.KLEINANZEIGEN) this
+                else copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(shipping) {
+                    id.substringAfter(':').takeIf { it.all(Char::isDigit) }?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
+                })
             io.github.tieo.arbay.crawler.DetailCache.get(id)
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
                 // eBay's description was read from its page only later; a page read before is read again.
