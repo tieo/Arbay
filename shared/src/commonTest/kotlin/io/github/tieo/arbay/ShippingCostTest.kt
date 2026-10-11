@@ -44,7 +44,8 @@ class ShippingCostTest {
         val offer = offerFor(ka, 600, parcelShop, 450.0, toDoor = true, fee)
         // 450 - 4.95 - 0.50 = 444.55, / 1.045 = 425.4
         assertEquals(425, offer.price)
-        assertEquals(449, offer.direct)
+        // Paid directly, nothing comes on top, so the seller gets the whole limit.
+        assertEquals(450, offer.direct)
         assertEquals(400, offerFor(ka, 400, parcelShop, 450.0, toDoor = true, fee).price)
     }
 

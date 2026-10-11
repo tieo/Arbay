@@ -199,14 +199,6 @@ fun offerWithin(allInEur: Double, shippingEur: Double, protection: BuyerProtecti
     return floor(price).toInt().coerceAtLeast(0)
 }
 
-/**
- * What [price] costs the buyer in all through the market's protection: the price, the fee and the
- * shipping the ad states. Offered as the price for paying the seller directly, it hands the seller
- * what the protection would have cost, so the buyer pays the same either way. Rounded down.
- */
-fun directPrice(price: Int, shippingEur: Double, protection: BuyerProtection?): Int =
-    floor(price + shippingEur + (protection?.let { it.fixedEur + price * it.share } ?: 0.0)).toInt()
-
 /** A market's buyer protection, as the buyer pays for it: a fixed part and a share of the price. */
 @Serializable
 data class BuyerProtection(val fixedEur: Double, val share: Double)
@@ -240,9 +232,12 @@ fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEu
     val asking = askingEur?.takeIf { it > 0 }
     val price = allInEur?.let { offerWithin(it, shippingEur ?: 0.0, protection) }
         ?.let { if (asking != null) minOf(it, asking) else it }
-    // The ad's price is the ceiling of every line, shipping included: the user never offers a
-    // seller more than they asked for, and a PayPal total of ask plus shipping is more.
-    val direct = price?.let { directPrice(it, shippingEur ?: 0.0, protection) }
+    // Paying directly costs nothing on top, so the whole all-in limit goes to the seller. Worked
+    // back from [price] instead, the euro that price was rounded down by was lost: 449 offered
+    // against a 450 limit. The ad's price is the ceiling of every line, shipping included: the
+    // user never offers a seller more than they asked for, and a PayPal total of ask plus
+    // shipping is more.
+    val direct = allInEur?.let { floor(it).toInt() }
         ?.let { if (asking != null) minOf(it, asking) else it }
     val note = when {
         allInEur == null -> null
@@ -260,7 +255,7 @@ val PlatformId.canMessage: Boolean get() = this == PlatformId.KLEINANZEIGEN
 /** The fill-ins a text can use, and what each stands for. */
 val TEMPLATE_FILL_INS: List<Pair<String, String>> = listOf(
     "{preis}" to "the price to offer",
-    "{preis_direkt}" to "the same total paid directly, without buyer protection: the price plus the fee and stated shipping, all to the seller",
+    "{preis_direkt}" to "the whole all-in limit paid directly, without buyer protection, shipping included, all to the seller; never above the ask",
     "{preis+20}" to "the price to offer plus 20 € (any amount)",
     "{titel}" to "the ad's title",
     "{versand}" to "shipping as the ad states it",

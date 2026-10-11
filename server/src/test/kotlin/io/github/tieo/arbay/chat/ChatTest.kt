@@ -2,7 +2,6 @@ package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.crawler.KleinanzeigenCosts
 import io.github.tieo.arbay.model.fillIn
-import io.github.tieo.arbay.model.directPrice
 import io.github.tieo.arbay.model.offerWithin
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,11 +37,8 @@ class ChatTest {
     }
 
     @Test
-    fun theDirectPriceIsWhatTheProtectedOneCostsInAll() {
-        // 430 € through Sicher bezahlen costs 430 + 0.50 + 19.35 = 449.85 €.
-        assertEquals(449, directPrice(430, 0.0, protection))
-        assertEquals(418, directPrice(400, 0.0, protection))
-        assertEquals("430 oder 449", fillIn("{preis} oder {preis_direkt}", 430, "Pixel", null, directPrice(430, 0.0, protection)))
+    fun theDirectPriceFillsIn() {
+        assertEquals("425 oder 450", fillIn("{preis} oder {preis_direkt}", 425, "Pixel", null, 450))
     }
 
     @Test
