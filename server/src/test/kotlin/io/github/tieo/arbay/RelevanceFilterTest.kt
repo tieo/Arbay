@@ -390,16 +390,21 @@ class RelevanceFilterTest {
     }
 
     @Test
-    fun `a case named in French, Italian or Spanish is not the phone`() {
-        // Live, for "Pixel 10 Pro XL": Vinted's French sellers led the list with "Coque" cases at
-        // under 5 euro, kept as phones.
+    fun `a case, box or screen glass for the phone is not the phone`() {
+        // Live, for "Pixel 10 Pro XL": cases written in French, Italian or as a German plural, an
+        // empty box and screen glass led the list at under 15 euro, kept as phones.
         val kept = search("Pixel 10 Pro XL", listOf(
             listing("Coque Google pixel 10 pro XL", price = 175),
             listing("Coques pixel 10 pro xl lot de 2", price = 400),
             listing("Custodie Pixel 10 Pro XL", price = 500),
+            listing("Handyhüllen Pixel 10 Pro XL", price = 700),
+            listing("Boite Google Pixel 10 pro XL noire", price = 910),
+            listing("LK 2 Stück für Google Pixel 10 Pro XL für Panzerglas", price = 1188),
+            listing("Google Pixel 10 Pro XL Schutzglas Kameraschutz", price = 999),
             listing("Google Pixel 10 Pro XL 256 GB Obsidian", price = 62000),
+            listing("Google Pixel 10 Pro XL 512 GB mit Panzerglas und Hüllen", price = 70000),
         )).map { it.title }
-        assertEquals(listOf("Google Pixel 10 Pro XL 256 GB Obsidian"), kept)
+        assertEquals(listOf("Google Pixel 10 Pro XL 256 GB Obsidian", "Google Pixel 10 Pro XL 512 GB mit Panzerglas und Hüllen"), kept)
     }
 
     @Test
