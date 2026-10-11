@@ -676,8 +676,13 @@ object RelevanceFilter {
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
             // what fits inside it.
             """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
-            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|hoes|""" +
-            """cover|case|charger|enclosure|caddy|docking\s?station|""" +
+            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|hoes(jes?)?|""" +
+            """(é|e)tuis?|(back|flip|book|hard|soft)?covers?|case|charger|enclosure|caddy|docking\s?station|""" +
+            """screen\s?protectors?|praxisbuch|handbuch|anleitung|""" +
+            // A box sold empty: "Emty Box!!", "leere OVP", "nur Karton".
+            """(empty|emty|leere?)\s+(box|karton|ovp|verpackung)|nur\s+(die\s+)?(box|karton|ovp)|""" +
+            // Brands that make nothing but cases and glass for the phones they name.
+            """spigen|otterbox|benks|nillkin|ringke|caseology|rhinoshield|dbrand|""" +
             """bo(î|i)tier|carcasa|caja\s+externa|behuizing)\b""",
         RegexOption.IGNORE_CASE,
     )

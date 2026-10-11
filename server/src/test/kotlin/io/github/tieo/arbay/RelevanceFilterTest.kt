@@ -401,10 +401,24 @@ class RelevanceFilterTest {
             listing("Boite Google Pixel 10 pro XL noire", price = 910),
             listing("LK 2 Stück für Google Pixel 10 Pro XL für Panzerglas", price = 1188),
             listing("Google Pixel 10 Pro XL Schutzglas Kameraschutz", price = 999),
+            listing("Spigen Nano Pop Google Pixel 10 Pro XL", price = 1540),
+            listing("Google Pixel 10 pro XL hoesje", price = 1645),
+            listing("Google pixel 10 pro XL Emty Box!!", price = 1645),
+            listing("Lot étui de téléphone Google pixel 10 pro xl", price = 1645),
+            listing("Das Praxisbuch Google Pixel 10 & Pixel 10 Pro/XL - Anleitung für Einsteiger", price = 1950),
+            listing("Spigen GLAS.tR EZ Fit Privacy Screen Protector für Google Pixel 10 Pro XL, 2er-Pack", price = 2090),
+            listing("Benks Pixel 10 Pro XL", price = 2170),
+            listing("Otterbox Defender Pro XT mit Pixelsnap für Google Pixel 10 Pro XL Dark Side", price = 3011),
+            listing("Google Pixel 10 Pro XL Backcover Obsidian", price = 3499),
             listing("Google Pixel 10 Pro XL 256 GB Obsidian", price = 62000),
             listing("Google Pixel 10 Pro XL 512 GB mit Panzerglas und Hüllen", price = 70000),
+            listing("Google Pixel 10 Pro XL 256 GB inkl. Spigen Case und OVP", price = 64000),
         )).map { it.title }
-        assertEquals(listOf("Google Pixel 10 Pro XL 256 GB Obsidian", "Google Pixel 10 Pro XL 512 GB mit Panzerglas und Hüllen"), kept)
+        assertEquals(listOf(
+            "Google Pixel 10 Pro XL 256 GB Obsidian",
+            "Google Pixel 10 Pro XL 512 GB mit Panzerglas und Hüllen",
+            "Google Pixel 10 Pro XL 256 GB inkl. Spigen Case und OVP",
+        ), kept)
     }
 
     @Test
