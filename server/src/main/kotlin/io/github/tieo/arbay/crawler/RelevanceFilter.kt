@@ -843,8 +843,14 @@ object RelevanceFilter {
         // A part number is one code however it is spaced: "16 13 1 179 011" is the same part a title
         // writes as "16131179011", and five short numbers looked for as words of their own are in
         // none of its titles.
-        val parsed = if (!namesOnePart) asParsed
-            else asParsed.copy(positiveTokens = listOf(asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "")))
+        val parsed = if (!namesOnePart) asParsed else {
+            val code = asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "")
+            // BMW numbers its parts in eleven digits, main group, subgroup and the part's own seven
+            // ("16 13 1 179 011"), and sellers write the seven alone as well: "Abdeckung Neu 1179011"
+            // is the same cover, and was dropped as off target.
+            val short = code.takeLast(7).takeIf { code.length == 11 && code.all(Char::isDigit) }
+            asParsed.copy(positiveTokens = listOf(code), orGroups = if (short == null) emptyList() else listOf(listOf(code), listOf(short)))
+        }
         val dropped = mutableListOf<DroppedListing>()
         val listings = listings.filter { listing ->
             val dealer = blockedDealers.blocking(listing)

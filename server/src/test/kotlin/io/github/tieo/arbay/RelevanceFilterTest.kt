@@ -432,6 +432,7 @@ class RelevanceFilterTest {
             "Original BMW 16131179011 - Abdeckung 3er",
             "Neu Original BMW Cover 16131179011",
             "BMW E30 Abdeckung Tankentlüftung 16 13 1 179 011",
+            "BMW E30 3er Tankdeckel Schlauch Atemleitung Abdeckung Neu 1179011",
         )
         for (q in listOf("16131179011", "16 13 1 179 011")) {
             val kept = search(q, titles.map { listing(it, price = 11998) }).map { it.title }
