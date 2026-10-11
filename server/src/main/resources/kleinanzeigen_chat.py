@@ -34,6 +34,11 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "read", "id": ".."}                        -> {"ok": true}
   {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
   {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
+  {"op": "offer", "id": "..", "price": 425.0, "toDoor": true, "most": 450.0, "send": false}
+                                                    -> {"ok": true, "price": .., "fee": .., "shippingFrom": .., "shipping": [{"name", "eur"}],
+                                                        "shippingEur": .., "paid": .., "sent": bool, "picture": ..}; a price offer through
+                                                        "Sicher bezahlen", filled into the conversation's own dialog, and sent with its own
+                                                        button only when "send" is true and what the buyer pays stays within "most"
 Failures answer {"ok": false, "error": "..", "signedOut": bool}.
 
 Requires: zendriver, google-chrome-stable, xdotool, a display in DISPLAY (Xvfb, started by the server).
@@ -586,6 +591,122 @@ class Chat:
             return {"ok": False, "signedOut": False, "error": "the message was sent but no conversation about the ad appeared", "detail": detail}
         return {"ok": True, "conversationId": cid, "requests": detail.get("requests", [])}
 
+    # The conversation's "Preis vorschlagen" dialog: a few screens about "Sicher bezahlen", each with
+    # "Weiter", then the amount, a summary of price, fee and shipping, and its own send button.
+    DIALOG = "[role=dialog], [aria-modal=true]"
+    OFFER_FIELD = "#price-input"
+
+    async def dialog_buttons(self, label: str) -> list:
+        """Visible buttons in the open dialog whose text starts with [label]."""
+        return [(e, p) for e, p in await self.visible(f"{self.DIALOG} button")
+                if (e.text_all or "").strip().lower().startswith(label.lower())]
+
+    async def dialog_text(self) -> str:
+        return await self.tab.evaluate(f"(document.querySelector({json.dumps(self.DIALOG)}) || document.body).innerText")
+
+    @staticmethod
+    def euros(text: str) -> float | None:
+        """The amount in a German money line, "1.234,56 €" or "ab 0,99 €"."""
+        import re
+        m = re.search(r"(\d[\d.]*,\d{2}|\d[\d.]*)\s*€", text)
+        return float(m.group(1).replace(".", "").replace(",", ".")) if m else None
+
+    def summary(self, text: str) -> dict:
+        """Price, fee, cheapest shipping and total, read off the dialog's summary lines."""
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        def after(label: str):
+            for i, l in enumerate(lines):
+                if l == label and i + 1 < len(lines):
+                    return self.euros(lines[i + 1])
+            return None
+        return {"price": after("Dein Preisvorschlag"), "fee": after("Käuferschutz"),
+                "shippingFrom": after("Versand"), "total": after("Gesamtbetrag")}
+
+    async def offer(self, cid: str, price: float, to_door: bool, most: float | None, send: bool) -> dict:
+        """A price offer through "Sicher bezahlen", made in the conversation's own dialog as a person
+        does: through the screens about the service, the amount typed into its field, and sent with
+        the dialog's own button only when [send] is true. The dialog's summary says what the buyer
+        pays, and its shipping note lists the ways the seller ships; both go back as read, so the
+        price can be checked against the limit before anything is sent. A sent offer counts only once
+        it shows in the conversation.
+
+        What the buyer pays ("paid") is the price, the fee and the shipping they will pick at payment:
+        the cheapest delivery to the door the seller offers when [to_door], else the cheapest of all.
+        A send whose payment would pass [most] is refused before the button is pressed."""
+        _, uid = await self.session()
+        await self.tab.get(f"{ROOT}/m-nachrichten.html?conversationId={cid}")
+        await asyncio.sleep(random.uniform(3, 4.5))
+        await self.accept_cookies()
+        openers = [(e, p) for e, p in await self.visible("button")
+                   if (e.text_all or "").strip().lower() == "preis vorschlagen"]
+        if not openers:
+            return {"ok": False, "signedOut": False, "error": "the conversation offers no price suggestion (no Sicher bezahlen for this ad)", "detail": await self.page_detail()}
+        await self.press(*openers[0])
+        field = []
+        for _ in range(8):
+            await asyncio.sleep(random.uniform(1.2, 2))
+            field = await self.visible(self.OFFER_FIELD)
+            if field:
+                break
+            onward = await self.dialog_buttons("Weiter")
+            if onward:
+                await self.press(*onward[0])
+        if not field:
+            return {"ok": False, "signedOut": False, "error": "the price dialog shows no amount field", "detail": await self.page_detail()}
+        await self.press(*field[0])
+        await asyncio.sleep(random.uniform(0.3, 0.7))
+        amount = f"{price:.2f}".replace(".", ",").removesuffix(",00")
+        await self.hand.type(amount, fast=True)
+        # The summary is worked out once the field is left.
+        await self.hand.key("Tab")
+        await asyncio.sleep(2.5)
+        read = self.summary(await self.dialog_text())
+        options = []
+        note = [(e, p) for e, p in await self.dialog_buttons("ab ")]
+        if note:
+            await self.press(*note[0])
+            await asyncio.sleep(1.5)
+            lines = [l.strip() for l in (await self.dialog_text()).splitlines() if l.strip()]
+            for name, cost in zip(lines, lines[1:]):
+                eur = self.euros(cost)
+                if eur is not None and cost.endswith("€") and self.euros(name) is None:
+                    options.append({"name": name, "eur": eur})
+            done = await self.dialog_buttons("Alles klar")
+            if done:
+                await self.press(*done[0])
+                await asyncio.sleep(1)
+        picture = (await self.page_detail()).get("picture")
+        # The note lists the seller's ways of shipping to a door; the summary's "ab" price is the
+        # cheapest of all, a parcel shop included.
+        shipping_eur = min((o["eur"] for o in options), default=None) if to_door else read["shippingFrom"]
+        if shipping_eur is None:
+            shipping_eur = read["shippingFrom"]
+        paid = None if read["price"] is None or read["fee"] is None else round(read["price"] + read["fee"] + (shipping_eur or 0), 2)
+        answer = {"ok": True, **read, "shipping": options, "shippingEur": shipping_eur, "paid": paid, "sent": False, "picture": picture}
+        if read["price"] is None or abs(read["price"] - price) > 0.005:
+            await self.tab.get(ROOT + "/")
+            return {**answer, "ok": False, "signedOut": False, "error": f"the dialog took the amount as {read['price']}, not {price}"}
+        if not send:
+            await self.tab.get(ROOT + "/")
+            return answer
+        if most is not None and (paid is None or paid > most + 0.005):
+            await self.tab.get(ROOT + "/")
+            return {**answer, "ok": False, "signedOut": False, "error": f"not sent: the buyer would pay {paid} €, more than {most} €"}
+        sends = await self.dialog_buttons("Preisvorschlag senden")
+        if not sends:
+            return {"ok": False, "signedOut": False, "error": "the price dialog shows no send button", "detail": await self.page_detail()}
+        await self.press(*sends[0])
+        cents = round(price * 100)
+        for _ in range(8):
+            await asyncio.sleep(2)
+            data = await self.gateway(f"/messagebox/api/users/{uid}/conversations/{cid}?contentWarnings=true")
+            if any(m.get("offeredPriceInEuroCent") == cents for m in (data or {}).get("messages") or []):
+                await self.tab.get(ROOT + "/")
+                return {**answer, "sent": True}
+        detail = await self.page_detail()
+        await self.tab.get(ROOT + "/")
+        return {"ok": False, "signedOut": False, "error": "the offer was sent but does not show in the conversation", "detail": detail}
+
     async def find_conversation(self, uid: int, ad_id: str) -> str | None:
         data = await self.gateway(f"/messagebox/api/users/{uid}/conversations?page=0&size=50")
         for c in (data or {}).get("conversations") or []:
@@ -622,6 +743,10 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.read(req["id"])
     if op == "contact_preview":
         return await chat.contact_preview(str(req["adId"]))
+    if op == "offer":
+        most = req.get("most")
+        return await chat.offer(req["id"], float(req["price"]), bool(req.get("toDoor", True)),
+                                float(most) if most is not None else None, bool(req.get("send")))
     if op == "contact":
         return await chat.contact(str(req["adId"]), req["text"])
     return {"ok": False, "error": f"unknown op {op}"}

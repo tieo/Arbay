@@ -21,6 +21,7 @@ import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.offerFor
+import io.github.tieo.arbay.model.PriceOffer
 import io.github.tieo.arbay.model.tidyTitle
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.awaitAll
@@ -486,6 +487,46 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             if (r.status.isSuccess()) "Sent." else "Not sent: ${r.bodyAsText()}"
         }
 
+        tool(
+            "fit_price_offer",
+            "Work out a price offer through Kleinanzeigen's \"Sicher bezahlen\" in a conversation: the highest price whose payment " +
+                "(price, buyer protection fee and the shipping the user picks) stays within the all-in limit, read off the " +
+                "conversation's own offer dialog. Sends nothing.",
+            props = {
+                string("id", "Conversation id", required = true)
+                number("all_in_eur", "Most the user pays, fee and shipping included", required = true)
+            },
+        ) { args ->
+            val r = http.post("$base/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}/offer") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("allInEur", args.num("all_in_eur")!!) }.toString())
+            }
+            if (!r.status.isSuccess()) return@tool "Could not read the offer dialog: ${r.bodyAsText()}"
+            json.decodeFromString<PriceOffer>(r.bodyAsText()).describe()
+        }
+
+        tool(
+            "send_price_offer",
+            "Send a price offer through \"Sicher bezahlen\" in a conversation, the price the user approved. Refused before " +
+                "sending if the payment would pass the all-in limit; counts as sent only once it shows in the conversation.",
+            destructive = true,
+            props = {
+                string("id", "Conversation id", required = true)
+                number("price", "The price to offer", required = true)
+                number("all_in_eur", "Most the user pays, fee and shipping included", required = true)
+            },
+        ) { args ->
+            val r = http.post("$base/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}/offer") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("allInEur", args.num("all_in_eur")!!); put("price", args.num("price")!!); put("send", true)
+                }.toString())
+            }
+            if (!r.status.isSuccess()) return@tool "Not sent: ${r.bodyAsText()}"
+            val offer = json.decodeFromString<PriceOffer>(r.bodyAsText())
+            (if (offer.sent) "Sent. " else "Not sent. ") + offer.describe()
+        }
+
         // ── Settings every device shares ──
 
         tool(
@@ -615,3 +656,11 @@ private fun JsonObject.num(k: String) = this[k]?.jsonPrimitive?.doubleOrNull
 private fun JsonObject.int(k: String) = this[k]?.jsonPrimitive?.intOrNull
 private fun JsonObject.bool(k: String) = this[k]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
 private fun JsonObject.strs(k: String) = (this[k] as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }
+
+/** An offer as its dialog added it up, in one line. */
+private fun PriceOffer.describe(): String {
+    fun eur(v: Double?) = v?.let { "%.2f €".format(it) } ?: "?"
+    val ways = shipping.joinToString(", ") { "${it.name} ${eur(it.eur)}" }.ifEmpty { "not listed" }
+    return "Offer ${eur(price)} + buyer protection ${eur(fee)} + shipping ${eur(shippingEur)} = paid ${eur(paid)}. " +
+        "The seller ships: $ways."
+}

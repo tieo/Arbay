@@ -13,6 +13,10 @@ import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.PriceOffer
+import io.github.tieo.arbay.model.ShippingOption
+import io.github.tieo.arbay.model.offerWithin
+import io.github.tieo.arbay.crawler.KleinanzeigenCosts
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
@@ -41,6 +45,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -263,6 +268,51 @@ object Chat {
             html = detail["html"]?.str(),
         )
     }
+
+    // --- price offers through "Sicher bezahlen" ---
+
+    /** The conversation's price dialog filled with [price] and read back; sent only when [send]. */
+    private suspend fun offerDialog(id: String, price: Double, most: Double?, send: Boolean): PriceOffer {
+        val o = ChatBrowser.call(
+            "offer", 150_000, "id" to id, "price" to price, "toDoor" to settings.toDoor, "most" to most, "send" to send,
+        )
+        fun num(key: String) = (o[key] as? JsonPrimitive)?.doubleOrNull
+        return PriceOffer(
+            price = num("price") ?: price,
+            fee = num("fee"),
+            shippingEur = num("shippingEur"),
+            shipping = (o["shipping"] as? JsonArray).orEmpty().mapNotNull { e ->
+                val x = e as? JsonObject ?: return@mapNotNull null
+                ShippingOption(x["name"]?.str() ?: return@mapNotNull null, (x["eur"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null)
+            },
+            paid = num("paid"),
+            sent = o["sent"]?.bool() == true,
+            picture = o["picture"]?.str(),
+        ).also { if (send) Live.changed(LiveKind.CHAT) }
+    }
+
+    /**
+     * The highest whole-euro price whose payment, as the conversation's own dialog adds it up (price,
+     * fee and the shipping the buyer picks), stays within [allInEur]; nothing is sent. The first try
+     * leaves shipping out, so it is the most the limit could allow; the dialog then says what the
+     * shipping and the fee come to, and the price comes down until the payment fits.
+     */
+    suspend fun fitOffer(id: String, allInEur: Double): PriceOffer {
+        val protection = KleinanzeigenCosts.costs().protection
+        var price = offerWithin(allInEur, 0.0, protection)
+        var read = offerDialog(id, price.toDouble(), null, send = false)
+        repeat(4) {
+            val paid = read.paid ?: return read
+            if (paid <= allInEur + 0.005) return read
+            price = minOf(offerWithin(allInEur, read.shippingEur ?: 0.0, protection), price - 1)
+            read = offerDialog(id, price.toDouble(), null, send = false)
+        }
+        return read
+    }
+
+    /** Sends [price] as a price offer, refused before sending if the payment would pass [allInEur]. */
+    suspend fun sendOffer(id: String, price: Double, allInEur: Double): PriceOffer =
+        offerDialog(id, price, allInEur, send = true)
 
     /** Opens an ad's message dialog without typing or sending, to see that it is there. */
     suspend fun contactPreview(adId: String): JsonObject = ChatBrowser.call("contact_preview", 90_000, "adId" to adId)

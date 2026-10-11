@@ -1,5 +1,9 @@
 package io.github.tieo.arbay.routes
 
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonObject
 import io.github.tieo.arbay.chat.Chat
 import io.github.tieo.arbay.chat.ChatBrowser
 import io.github.tieo.arbay.model.ChatSettings
@@ -58,6 +62,20 @@ fun Route.chatRoutes() {
             val text = call.receive<ReplyBody>().text.trim()
             if (text.isEmpty()) throw BadRequestException("Nothing to send")
             call.chat { Chat.reply(id, text); call.respond(HttpStatusCode.OK, mapOf("ok" to true)) }
+        }
+
+        // A price offer through "Sicher bezahlen": with only allInEur, the dialog is filled and read
+        // and nothing is sent; with a price and send, that price is sent if the payment fits allInEur.
+        post("/conversations/{id}/offer") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            val body = call.receive<JsonObject>()
+            val allIn = body["allInEur"]?.jsonPrimitive?.doubleOrNull ?: throw BadRequestException("allInEur")
+            val price = body["price"]?.jsonPrimitive?.doubleOrNull
+            val send = body["send"]?.jsonPrimitive?.booleanOrNull == true
+            call.chat {
+                if (send) call.respond(Chat.sendOffer(id, price ?: throw BadRequestException("price"), allIn))
+                else call.respond(Chat.fitOffer(id, allIn))
+            }
         }
 
         get("/outbox") { call.respond(Chat.outbox()) }

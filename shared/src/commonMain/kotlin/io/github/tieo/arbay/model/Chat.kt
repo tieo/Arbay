@@ -199,6 +199,27 @@ fun offerWithin(allInEur: Double, shippingEur: Double, protection: BuyerProtecti
     return floor(price).toInt().coerceAtLeast(0)
 }
 
+/** One way a seller ships, as the "Sicher bezahlen" dialog names and prices it. */
+@Serializable
+data class ShippingOption(val name: String, val eur: Double)
+
+/**
+ * A price offer through Kleinanzeigen's "Sicher bezahlen", as its own dialog worked it out: the
+ * [price] offered, the buyer protection [fee], the shipping the buyer picks at payment
+ * ([shippingEur], out of [shipping]) and what the buyer [paid] in all. [sent] once it shows in the
+ * conversation; [picture] is the dialog as it looked, a JPEG in base64.
+ */
+@Serializable
+data class PriceOffer(
+    val price: Double,
+    val fee: Double? = null,
+    val shippingEur: Double? = null,
+    val shipping: List<ShippingOption> = emptyList(),
+    val paid: Double? = null,
+    val sent: Boolean = false,
+    val picture: String? = null,
+)
+
 /** A market's buyer protection, as the buyer pays for it: a fixed part and a share of the price. */
 @Serializable
 data class BuyerProtection(val fixedEur: Double, val share: Double)
