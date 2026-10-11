@@ -36,4 +36,19 @@ class TruckScout24ParserTest {
             assertTrue(listing.url.startsWith("https://www.truckscout24.de/tsp/"), "Unexpected url: ${listing.url}")
         }
     }
+
+    /** Dealers headline the net price ("14.900 € Festpreis zzgl. MwSt.") and add the gross in
+     *  brackets; a private buyer pays the gross, so that is the listing's price. */
+    @Test
+    fun `a dealer's net price is read as the gross a buyer pays`() {
+        val html = fixture()
+        val stated = org.jsoup.Jsoup.parse(html).select("section[data-listing-id]").mapNotNull { card ->
+            val text = card.selectFirst("[data-grid=price]")?.text() ?: return@mapNotNull null
+            val gross = Regex("""(\d[\d.]*)\s*€\s*brutto""").find(text)?.groupValues?.get(1) ?: return@mapNotNull null
+            card.attr("data-listing-id") to gross.replace(".", "").toLong() * 100
+        }.toMap()
+        assertTrue(stated.isNotEmpty(), "the fixture holds dealer cards with a gross figure")
+        val listings = TruckScout24Crawler(dummyClient()).parse(html).associateBy { it.externalId }
+        stated.forEach { (id, cents) -> assertEquals(cents, listings.getValue(id).price.amount, "listing $id") }
+    }
 }
