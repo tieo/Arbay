@@ -488,6 +488,14 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a Pixel written XL Pro is the Pro XL`() {
+        // Live, for the saved "Pixel 9 Pro XL 256 GB": a Hazel phone at 500 euro was dropped as
+        // off target for its seller writing "9 XL Pro".
+        val kept = search("Pixel 9 Pro XL 256 GB", listOf(listing("Google Pixel 9 XL Pro Hazel 256 GB", price = 50000)))
+        assertEquals(1, kept.size)
+    }
+
+    @Test
     fun `a part that says what it goes into is still the part`() {
         // Live, for the part number "CT32G4SFD832A": seven exact matches were dropped as whole
         // machines because their titles say "Laptop RAM", and Geizhals lists the same module

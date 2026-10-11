@@ -1235,6 +1235,8 @@ object RelevanceFilter {
             .replace(Regex("""(\d)\s*(gigabytes?|gigas?)\b""", RegexOption.IGNORE_CASE), "$1 gb")
             .replace(Regex("""(\d)\s*terabytes?\b""", RegexOption.IGNORE_CASE), "$1 tb")
             .replace(Regex("""(\d)\s+max\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro max")
+            // "Pixel 9 XL Pro" is the 9 Pro XL, in the order a seller happened to write it.
+            .replace(Regex("""(\d)\s+xl\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro xl")
             // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".
             // Joined before periods become spaces, so a title's "M.2" and a query's "m.2" end up
             // in the same shape ("m2") — split, the title says "m 2" and the query token "m2"
