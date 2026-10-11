@@ -27,6 +27,14 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -63,6 +71,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -77,6 +86,10 @@ import kotlinx.serialization.json.putJsonObject
  * and a client that asks before running a tool marked destructive asks the user first.
  */
 class ArbayMcp(private val http: HttpClient, private val base: String) {
+    /** How long a search call waits for markets before answering with what has arrived: inside
+     *  the tool call's own time limit, which a search on a busy server outlasted. */
+    private val ANSWER_WITHIN = 40.seconds
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     /** Listings returned by searches in this session, so a later tool can name them by id. */
@@ -92,6 +105,111 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             fill-ins ({preis}, {titel}, {versand}) and never write wording of your own unless the user dictates it.
         """.trimIndent(),
     ).apply { registerTools() }
+
+    /** Searches started through [search], kept while they run and a while after, by id. */
+    private val runs = java.util.concurrent.ConcurrentHashMap<String, SearchRun>()
+    private val searches = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** One search through the markets, filled in as each market answers. */
+    private inner class SearchRun(val id: String, val words: String, val saved: TrackedProduct?, val savedId: String?) {
+        val listings: MutableList<Listing> = java.util.Collections.synchronizedList(mutableListOf())
+        val problems: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        val searching: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        val startedAt = kotlin.time.Clock.System.now()
+        /** Set while the server's crawl throttle has it waiting for a free slot. */
+        @Volatile var queued: String? = null
+        lateinit var job: Job
+
+        suspend fun describe(args: JsonObject): String {
+            val q = saved?.searchQuery
+            val hidden = hiddenOffers()
+            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
+            val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
+            // The saved market and country picks narrow what was fetched, adding up as in the app.
+            val markets = q?.showOnlyMarkets.orEmpty()
+            val countries = q?.showOnlyCountries.orEmpty()
+            val all = synchronized(listings) { listings.toList() }.distinctBy { it.id }
+            val shown = all
+                .filter { it.id !in hidden }
+                .filter { (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets || MarketSets.countryOf(it.platformId) in countries }
+                .filter { max == null || it.effectivePrice.amount / 100.0 <= max }
+                .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
+                .sortedBy { it.effectivePrice.amount }
+                .take(args.int("limit") ?: 40)
+            shown.forEach { seen[it.id] = it }
+            val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
+            return buildString {
+                appendLine("${shown.size} of ${all.size} offers for \"$words\":")
+                shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
+                synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
+                if (job.isActive) appendLine(
+                    (queued?.let { "Queued: $it. It starts when a running search finishes." }
+                        ?: "Still searching: ${searching.joinToString(", ").ifEmpty { "the markets have not answered yet" }}.") +
+                        " Call search with search_id=$id for the rest.",
+                )
+            }
+        }
+    }
+
+    /** Starts a search in the background and returns it, or null when there is nothing to search for. */
+    private suspend fun startSearch(args: JsonObject): SearchRun? {
+        val savedId = args.str("saved_search_id")
+        val saved = savedId?.let { getJson<TrackedProduct>("/api/products/${it.encodeURLPathPart()}") }
+        val words = args.str("words") ?: saved?.searchQuery?.text ?: return null
+        val q = saved?.searchQuery
+        val run = SearchRun(UUID.randomUUID().toString().take(8), words, saved, savedId)
+        val cutoff = kotlin.time.Clock.System.now() - kotlin.time.Duration.parse("30m")
+        runs.values.removeIf { !it.job.isActive && it.startedAt < cutoff }
+        run.job = searches.launch {
+            // Arbay's crawl throttle answers 429 with Retry-After when searches arrive together, as
+            // they do when an LLM runs several tool calls at once; the search waits its turn instead
+            // of reporting the throttle as every market failing.
+            var throttled = true
+            while (throttled) http.prepareGet("$base/api/crawler/search/stream") {
+                parameter("q", words)
+                q?.platforms?.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
+                q?.excludeKeywords?.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
+                q?.aliases?.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+                q?.location?.let { parameter("near", it) }
+                q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
+                // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
+                // sent as the app sends them, so the markets are asked for the same vans the app shows.
+                q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
+                val reach = (q?.reach ?: SearchReach()).let { r -> if (args.bool("other_words") == true) r.copy(otherWords = true) else r }
+                reach.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
+            }.execute { response ->
+                throttled = response.status == HttpStatusCode.TooManyRequests
+                if (throttled) {
+                    run.queued = runCatching { json.parseToJsonElement(response.bodyAsText()).jsonObject["error"]?.jsonPrimitive?.content }
+                        .getOrNull() ?: "the server is busy"
+                    return@execute delay((response.headers[HttpHeaders.RetryAfter]?.toLongOrNull() ?: 1) * 1000)
+                }
+                run.queued = null
+                if (!response.status.isSuccess()) return@execute run.problems.add(response.bodyAsText())
+                val channel = response.bodyAsChannel()
+                while (true) {
+                    val line = channel.readUTF8Line() ?: break
+                    if (line.isBlank()) continue
+                    val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
+                    val market = event.platformName.ifEmpty { event.platform }
+                    when (event.type) {
+                        CrawlerEventType.PLATFORM_STARTED -> run.searching += market
+                        CrawlerEventType.PLATFORM_DONE -> run.searching -= market
+                        CrawlerEventType.PLATFORM_ERROR -> { run.searching -= market; run.problems += "$market: ${event.error ?: event.errorType}" }
+                        else -> {}
+                    }
+                    // A market's final answer replaces what it streamed while still paging.
+                    if (event.type == CrawlerEventType.PLATFORM_DONE) run.listings.removeIf { it.platformId.name == event.platform }
+                    run.listings += event.listings
+                    if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
+                }
+            }
+        }
+        runs[run.id] = run
+        // The user sees what is being talked about: the same search opens on their screens.
+        Live.show(savedId?.let { "/saved/${it.encodeURLPathPart()}" } ?: "/search/${words.encodeURLPathPart()}")
+        return run
+    }
 
     private fun Server.registerTools() {
         tool("list_saved_searches", "Every saved search with its id, words, markets, and how many new offers it found since last opened.") {
@@ -111,71 +229,27 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
-            "search", "Search the markets now and list the offers, cheapest first, each with an id for other tools.",
+            "search",
+            "Search the markets now and list the offers, cheapest first, each with an id for other tools. Answers with what " +
+                "has arrived within about half a minute and names the markets still searching; call again with the search_id " +
+                "it gives to get the rest.",
             props = {
                 string("words", "What to search for, as the user would type it")
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
+                string("search_id", "A search already running, to get what has arrived since")
                 integer("limit", "How many offers to list (default 40)")
                 number("max_price_eur", "Leave out offers above this landed price")
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
+                boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
             },
         ) { args ->
-            val saved = args.str("saved_search_id")?.let { getJson<TrackedProduct>("/api/products/${it.encodeURLPathPart()}") }
-            val words = args.str("words") ?: saved?.searchQuery?.text ?: return@tool "Name the words or a saved search."
-            val q = saved?.searchQuery
-            val listings = mutableListOf<Listing>()
-            val problems = mutableListOf<String>()
-            // Arbay's crawl throttle answers 429 with Retry-After when searches arrive together, as
-            // they do when an LLM runs several tool calls at once; the search waits its turn instead
-            // of reporting the throttle as every market failing.
-            var throttled = true
-            while (throttled) http.prepareGet("$base/api/crawler/search/stream") {
-                parameter("q", words)
-                q?.platforms?.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
-                q?.excludeKeywords?.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
-                q?.aliases?.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
-                q?.location?.let { parameter("near", it) }
-                q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
-                // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
-                // sent as the app sends them, so the markets are asked for the same vans the app shows.
-                q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
-                q?.reach?.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
-            }.execute { response ->
-                throttled = response.status == HttpStatusCode.TooManyRequests
-                if (throttled) return@execute delay((response.headers[HttpHeaders.RetryAfter]?.toLongOrNull() ?: 1) * 1000)
-                if (!response.status.isSuccess()) return@execute problems.add(response.bodyAsText())
-                val channel = response.bodyAsChannel()
-                while (true) {
-                    val line = channel.readUTF8Line() ?: break
-                    if (line.isBlank()) continue
-                    val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
-                    listings += event.listings
-                    if (event.type == CrawlerEventType.PLATFORM_ERROR) problems += "${event.platformName.ifEmpty { event.platform }}: ${event.error ?: event.errorType}"
-                    if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
-                }
-            }
-            val hidden = hiddenOffers()
-            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
-            val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
-            // The saved market and country picks narrow what was fetched, adding up as in the app.
-            val markets = q?.showOnlyMarkets.orEmpty()
-            val countries = q?.showOnlyCountries.orEmpty()
-            val shown = listings.distinctBy { it.id }
-                .filter { it.id !in hidden }
-                .filter { (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets || MarketSets.countryOf(it.platformId) in countries }
-                .filter { max == null || it.effectivePrice.amount / 100.0 <= max }
-                .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
-                .sortedBy { it.effectivePrice.amount }
-                .take(args.int("limit") ?: 40)
-            shown.forEach { seen[it.id] = it }
-            val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
-            // The user sees what is being talked about: the same search opens on their screens.
-            Live.show(args.str("saved_search_id")?.let { "/saved/${it.encodeURLPathPart()}" } ?: "/search/${words.encodeURLPathPart()}")
-            buildString {
-                appendLine("${shown.size} of ${listings.distinctBy { it.id }.size} offers for \"$words\":")
-                shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
-                if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; "))
-            }
+            val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }
+                ?: startSearch(args) ?: return@tool "Name the words or a saved search."
+            // A tool call has a time limit of its own, and a search on a busy server can take
+            // minutes: waiting for every market lost the whole answer to that limit. What has
+            // arrived goes back, the rest keeps coming in, and the next call picks it up.
+            withTimeoutOrNull(ANSWER_WITHIN) { run.job.join() }
+            run.describe(args)
         }
 
         tool(
