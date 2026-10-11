@@ -60,6 +60,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -185,7 +186,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
             if (!detail.status.isSuccess() || detail.status.value == 204) return@tool l.line() + "\nThe market gave no more than this."
-            l.line() + "\n" + detail.bodyAsText()
+            // A detail carries a vehicle block for every listing; for anything but a vehicle it is
+            // all empty and only buries the description, so it is left out.
+            val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()
+                ?: return@tool l.line() + "\n" + detail.bodyAsText()
+            val vehicle = body["vehicle"] as? JsonObject
+            val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
+            l.line() + "\n" + (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
         tool("whats_on_screen", "Which page of Arbay each of the user's devices shows right now, newest first: a search, an offer in it, a conversation.") {
