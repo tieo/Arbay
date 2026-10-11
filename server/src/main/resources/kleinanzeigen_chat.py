@@ -34,6 +34,7 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "read", "id": ".."}                        -> {"ok": true}
   {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
   {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
+  {"op": "shipping_options", "adId": ".."}          -> {"ok": true, "data": <gateway payload>}; the ways the ad ships through "Sicher bezahlen", priced as at payment
   {"op": "offer", "id": "..", "price": 425.0, "toDoor": true, "most": 450.0, "send": false}
                                                     -> {"ok": true, "price": .., "fee": .., "shippingFrom": .., "shipping": [{"name", "eur"}],
                                                         "shippingEur": .., "paid": .., "sent": bool, "picture": ..}; a price offer through
@@ -248,7 +249,18 @@ class Chat:
         """ % (json.dumps(url), json.dumps(method), json.dumps(headers or {}), json.dumps(body))
         started = time.monotonic()
         try:
-            raw = await self.tab.evaluate(script, await_promise=True)
+            try:
+                raw = await self.tab.evaluate(script, await_promise=True)
+            except Exception as e:
+                if "ConnectionClosed" not in type(e).__name__:
+                    raise
+                # The page this sidecar works in was closed or crashed; every call after would fail
+                # the same way, so a new one is opened and the call made again.
+                log(f"page lost ({type(e).__name__}); opening a new one")
+                self.tab = await self.browser.get(ROOT + "/", new_tab=True)
+                self.origin = None
+                await asyncio.sleep(3)
+                raw = await self.tab.evaluate(script, await_promise=True)
         except Exception as e:
             # A fetch that cannot leave the page says nothing about why; where the page is does.
             raise RuntimeError(f"fetch {url} failed on {await self.where()}: {str(e).splitlines()[0] if str(e) else type(e).__name__}")
@@ -707,6 +719,11 @@ class Chat:
         await self.tab.get(ROOT + "/")
         return {"ok": False, "signedOut": False, "error": "the offer was sent but does not show in the conversation", "detail": detail}
 
+    async def shipping_options(self, ad_id: str) -> dict:
+        """The ways an ad ships through "Sicher bezahlen", each priced as the buyer pays it at payment."""
+        _, uid = await self.session()
+        return {"ok": True, "data": await self.gateway(f"/pay/api/users/{uid}/payment-and-shipping/ad/{ad_id}/shipping-options")}
+
     async def find_conversation(self, uid: int, ad_id: str) -> str | None:
         data = await self.gateway(f"/messagebox/api/users/{uid}/conversations?page=0&size=50")
         for c in (data or {}).get("conversations") or []:
@@ -743,6 +760,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.read(req["id"])
     if op == "contact_preview":
         return await chat.contact_preview(str(req["adId"]))
+    if op == "shipping_options":
+        return await chat.shipping_options(str(req["adId"]))
     if op == "offer":
         most = req.get("most")
         return await chat.offer(req["id"], float(req["price"]), bool(req.get("toDoor", True)),
