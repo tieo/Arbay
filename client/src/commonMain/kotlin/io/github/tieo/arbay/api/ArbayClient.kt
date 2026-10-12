@@ -325,6 +325,15 @@ class ArbayClient(
         if (response.status == HttpStatusCode.NoContent) null else response.body<ListingDetail>()
     }
 
+    /** The ad as its page has it now, uncached: for an offer about to be written. */
+    suspend fun adNow(listing: Listing): io.github.tieo.arbay.model.AdNow? = orElse(null) {
+        val response = client.get("$baseUrl/api/crawler/listing-state") {
+            parameter("url", listing.url)
+            parameter("platform", listing.platformId.name)
+        }
+        if (response.status == HttpStatusCode.NoContent) null else response.body<io.github.tieo.arbay.model.AdNow>()
+    }
+
     suspend fun getMarketSettings(): MarketSettings =
         client.get("$baseUrl/api/settings/markets").body()
 

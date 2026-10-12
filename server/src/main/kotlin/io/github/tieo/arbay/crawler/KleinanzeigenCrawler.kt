@@ -429,6 +429,18 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
         }
     }
 
+    override suspend fun adNow(url: String): io.github.tieo.arbay.model.AdNow? = try {
+        val html = fetchWithFallback(client, url, "Kleinanzeigen")
+        io.github.tieo.arbay.model.AdNow(
+            state = KleinanzeigenDetailParser.adState(html),
+            price = KleinanzeigenDetailParser.askingPrice(html),
+            shipping = KleinanzeigenDetailParser.shipping(Jsoup.parse(html)),
+        ).takeIf { it.state != null || it.price != null }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        log.debug("ad unreadable for {}: {}", url, e.message?.take(60))
+        null
+    }
+
     override suspend fun adState(url: String): AdState? = try {
         KleinanzeigenDetailParser.adState(fetchWithFallback(client, url, "Kleinanzeigen"))
     } catch (e: CancellationException) { throw e } catch (e: Exception) {

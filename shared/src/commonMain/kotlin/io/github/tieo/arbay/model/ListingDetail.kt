@@ -38,3 +38,16 @@ data class ListingDetail(
 @Serializable
 enum class AdState { LIVE, PAUSED, DELETED }
 
+/**
+ * An ad as its own page has it right now, read for an offer about to be written: a seller changes
+ * the price, pauses the ad or turns shipping off between a search and the message, and an offer
+ * worked out from what the search saw went out above a lowered ask or to a pickup-only ad.
+ */
+@Serializable
+data class AdNow(
+    val state: AdState? = null,
+    /** The asking price the page shows. */
+    val price: Money? = null,
+    val shipping: Shipping? = null,
+)
+

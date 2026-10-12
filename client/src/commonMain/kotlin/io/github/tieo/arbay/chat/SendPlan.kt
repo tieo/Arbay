@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.chat
 
+import io.github.tieo.arbay.model.AdNow
+import io.github.tieo.arbay.model.AdState
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SendRequest
@@ -42,14 +44,21 @@ fun planSend(
     toDoor: Boolean = true,
     /** The fee as the server last read it from the market. */
     costs: ChatCosts? = null,
+    /** Each ad as its page has it now, which beats what the search saw. */
+    adsNow: Map<String, AdNow> = emptyMap(),
 ): List<SendLine> =
     listings.map { listing ->
         val title = listing.title.tidyTitle()
         if (!listing.platformId.canMessage) {
             return@map SendLine(listing, null, null, "", edited = false, unreachable = "Only Kleinanzeigen sellers can be written to from Arbay")
         }
-        val shipping = pageShipping[listing.id] ?: listing.shipping
-        val asking = listing.price.takeIf { it.currency == Currency.EUR }?.amount?.div(100)?.toInt()
+        val now = adsNow[listing.id]
+        now?.state?.takeIf { it != AdState.LIVE }?.let { state ->
+            return@map SendLine(listing, null, null, "", edited = false, unreachable = "The ad is ${state.name.lowercase()}")
+        }
+        val shipping = now?.shipping ?: pageShipping[listing.id] ?: listing.shipping
+        val ask = now?.price ?: listing.price
+        val asking = ask.takeIf { it.currency == Currency.EUR }?.amount?.div(100)?.toInt()
         val offer = offerFor(listing.platformId, asking, shipping, allInEur, toDoor, costs)
         val shippingText = when {
             shipping?.free == true -> "kostenlos"

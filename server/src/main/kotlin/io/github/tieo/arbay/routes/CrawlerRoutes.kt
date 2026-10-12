@@ -510,8 +510,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 ?: throw BadRequestException("Missing or unknown platform")
             val crawler = CrawlerRegistry.crawlerFor(platform) as? io.github.tieo.arbay.crawler.KnowsAdState
                 ?: return@get call.respond(HttpStatusCode.NoContent)
-            val state = crawler.adState(url) ?: return@get call.respond(HttpStatusCode.NoContent)
-            call.respond(kotlinx.serialization.json.buildJsonObject { put("state", kotlinx.serialization.json.JsonPrimitive(state.name)) })
+            // The price and shipping come with the state, off the same fetch, for an offer about to
+            // be written.
+            val now = crawler.adNow(url) ?: return@get call.respond(HttpStatusCode.NoContent)
+            call.respond(now)
         }
 
         // Error snapshots — list, view, resolve

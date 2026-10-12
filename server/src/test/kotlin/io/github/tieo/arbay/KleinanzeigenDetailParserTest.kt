@@ -68,5 +68,11 @@ class KleinanzeigenDetailParserTest {
         )
         assertEquals(null, KleinanzeigenDetailParser.adState("<html><body>nothing here</body></html>"))
     }
-}
 
+    @Test
+    fun `the asking price comes from the page's own settings`() {
+        assertEquals(990_000, KleinanzeigenDetailParser.askingPrice(html)?.amount)
+        assertEquals(13_500, KleinanzeigenDetailParser.askingPrice("adPriceType: 'FIXED', adPrice: 135.00,")?.amount)
+        assertEquals(null, KleinanzeigenDetailParser.askingPrice("adPriceType: 'GIVE_AWAY', adPrice: 0.00,"))
+    }
+}

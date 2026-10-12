@@ -75,6 +75,10 @@ interface ReadsAdsTogether {
 interface KnowsAdState {
     /** The ad's state now, or null when its page could not be read or does not say. */
     suspend fun adState(url: String): io.github.tieo.arbay.model.AdState?
+
+    /** The ad's state, price and shipping now, read off one fetch of its page. */
+    suspend fun adNow(url: String): io.github.tieo.arbay.model.AdNow? =
+        adState(url)?.let { io.github.tieo.arbay.model.AdNow(state = it) }
 }
 
 /** Lists prices in a currency other than the euro, so amounts must be converted before they are

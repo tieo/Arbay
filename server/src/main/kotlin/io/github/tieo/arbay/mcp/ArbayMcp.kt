@@ -481,16 +481,21 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val blocks = args.strs("text_ids").map { id -> all.firstOrNull { it.id == id } ?: return@tool "No text block $id." }
             val text = composeBlocks(blocks)
             val allIn = args.num("all_in_eur")
-            // Each ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
+            // Each ad's own page as it is now: its price, its shipping and whether it is still up.
+            // What a search saw goes stale, and an offer worked out from it went above a lowered ask.
             val drafted = args.strs("listing_ids").mapNotNull { offer(it) }.associateBy { it.id }
-            val pageShipping = drafted.values.associate { l -> l.id to pageShipping(l) }
+            val now = drafted.values.associate { l -> l.id to adNow(l) }
+            val pageShipping = drafted.values.associate { l -> l.id to (now[l.id]?.shipping ?: pageShipping(l)) }
             val toDoor = getJson<ChatSettings>("/api/chat/settings").toDoor
             val costs = io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = drafted[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
+                now[id]?.state?.takeIf { it != io.github.tieo.arbay.model.AdState.LIVE }
+                    ?.let { return@joinToString "$id ${l.title.tidyTitle()}: the ad is ${it.name.lowercase()}." }
                 val shipping = pageShipping[id] ?: l.shipping
-                val offer = offerFor(l.platformId, (l.price.amount / 100).toInt().takeIf { l.price.currency == io.github.tieo.arbay.model.Currency.EUR }, shipping, allIn, toDoor, costs)
+                val ask = now[id]?.price ?: l.price
+                val offer = offerFor(l.platformId, (ask.amount / 100).toInt().takeIf { ask.currency == io.github.tieo.arbay.model.Currency.EUR }, shipping, allIn, toDoor, costs)
                 val price = offer.price
                 val note = offer.note?.let { " ($it)" } ?: offer.shippingEur?.takeIf { it > 0 }?.let { " (shipping %.2f €)".format(it) } ?: ""
                 "$id ${l.title.tidyTitle()} → offer ${price ?: "?"} €$note\n" + fillIn(text, price, l.title.tidyTitle(), offer.shippingEur?.takeIf { it > 0 }?.let { "%.2f €".format(it) }, offer.direct)
@@ -640,6 +645,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Every device takes $next within a minute."
         }
     }
+
+    private suspend fun adNow(l: Listing): io.github.tieo.arbay.model.AdNow? = runCatching {
+        val r = http.get("$base/api/crawler/listing-state") { parameter("url", l.url); parameter("platform", l.platformId.name) }
+        if (!r.status.isSuccess() || r.status.value == 204) null
+        else json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText())
+    }.getOrNull()
 
     private suspend fun pageShipping(l: Listing): io.github.tieo.arbay.model.Shipping? = runCatching {
         val r = http.get("$base/api/crawler/listing-detail") { parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id) }

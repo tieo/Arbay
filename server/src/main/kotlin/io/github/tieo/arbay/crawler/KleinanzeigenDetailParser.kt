@@ -17,6 +17,14 @@ object KleinanzeigenDetailParser {
 
     private val deletedVeil = Regex("""\bshowDeletedVeil:\s*(true|false)\b""")
     private val pausedVeil = Regex("""\bshowPausedVeil:\s*(true|false)\b""")
+    private val adPrice = Regex("""\badPrice:\s*([0-9]+(?:\.[0-9]{1,2})?)""")
+
+    /** The asking price from the page's own settings (`adPrice: 135.00`), which the price line
+     *  shows with "VB" and formatting around it. Null where the page has none, as on a gift. */
+    fun askingPrice(html: String): io.github.tieo.arbay.model.Money? =
+        adPrice.find(html)?.groupValues?.get(1)?.toBigDecimal()
+            ?.let { io.github.tieo.arbay.model.Money((it * 100.toBigDecimal()).toLong(), io.github.tieo.arbay.model.Currency.EUR) }
+            ?.takeIf { it.amount > 0 }
 
     /**
      * The ad's state from the page's own settings: `showDeletedVeil: true` puts "Gelöscht" over the

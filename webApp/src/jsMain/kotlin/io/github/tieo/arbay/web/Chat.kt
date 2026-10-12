@@ -304,15 +304,19 @@ fun WritePanel(app: WebApp, route: Route.Results, state: ResultsState) {
     val edits = remember { mutableStateMapOf<String, String>() }
     var openLine by remember { mutableStateOf<String?>(null) }
     val limit = allIn.replace(',', '.').toDoubleOrNull()
-    // Each picked ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
+    // Each picked ad's own page: the shipping its card leaves out ("Versand ab 6,19 €"), and its
+    // price and state now, since a seller who lowered the ask or paused the ad since the search
+    // must not be offered what the search saw.
     val pageShipping = remember { mutableStateMapOf<String, io.github.tieo.arbay.model.Shipping>() }
+    val adsNow = remember { mutableStateMapOf<String, io.github.tieo.arbay.model.AdNow>() }
     LaunchedEffect(listings.map { it.id }) {
-        listings.filter { it.id !in pageShipping }.forEach { l ->
-            app.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
+        listings.filter { it.id !in adsNow }.forEach { l ->
+            app.client.adNow(l)?.let { adsNow[l.id] = it }
+            if (adsNow[l.id]?.shipping == null) app.client.listingDetail(l)?.shipping?.let { pageShipping[l.id] = it }
         }
     }
     val costs by chat.costs.collectAsState()
-    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor, costs)
+    val lines = planSend(listings, limit, text, edits, picked, pageShipping, settings.toDoor, costs, adsNow)
     val sendable = lines.filter { it.unreachable == null }
     val ready = account?.signedIn == true && sendable.isNotEmpty() && sendable.none { it.text.isBlank() || it.hasOpenFillIn }
 
