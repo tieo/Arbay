@@ -30,12 +30,12 @@ class EbayDeCrawler(
      * browser tier, primed with a search page: it serves an item page to a browser that arrives
      * from its own search and a 403 to one that arrives cold.
      */
+    @Volatile private var plainRefusedAt = 0L
+
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        val html = fetchWithFallback(
-            client, listing.url, "eBay",
-            primeUrl = "https://$domain/sch/i.html?_nkw=vw+crafter",
-            browserOnly = true,
-        )
+        // Straight to the item page: arriving from a search page first loaded two pages for each
+        // one read, and an item page opens as well without one.
+        val html = fetchWithFallback(client, listing.url, "eBay", browserOnly = true)
         val doc = Jsoup.parse(html)
         ListingDetail(
             vehicle = EbayDetailParser.parse(html),
@@ -74,9 +74,14 @@ class EbayDeCrawler(
             if (!apiResults.isNullOrEmpty()) return apiResults
         }
 
+        // eBay refuses its search to the plain and the TLS-impersonating client alike, every search
+        // on ebay.de, and a refusal counts against this address as much as a burst does. After
+        // one, the search goes straight to the browser, and the two are tried again an hour on.
+        val plainTiers = System.currentTimeMillis() - plainRefusedAt >= PLAIN_RETRY_MS
+
         // Step 1: Plain HTTP
         emitter?.emit("HTTP")
-        val httpHtml = try {
+        val httpHtml = if (!plainTiers) null else try {
             val html = fetchHttp(client, firstUrl, "eBay")
             validateHtml(html, "eBay")
             html
@@ -88,7 +93,7 @@ class EbayDeCrawler(
 
         // Step 2: CurlCffi (Chrome TLS fingerprint — often bypasses eBay bot checks)
         emitter?.emit("CurlCffi")
-        val curlHtml = try {
+        val curlHtml = if (!plainTiers) null else try {
             val html = CurlCffiClient.fetch(firstUrl, primeUrl = "https://www.$domain")
             validateHtml(html, "eBay")
             html
@@ -98,6 +103,7 @@ class EbayDeCrawler(
         // soft block (eBay serves a 200 challenge/empty page), not a genuinely empty result — so
         // fall through to the real-Chrome tier, which primes cookies and clears most soft blocks.
         val curlFirstPage = curlHtml?.let { parseSearchResults(it) }
+        if (plainTiers) plainRefusedAt = if (curlFirstPage.isNullOrEmpty()) System.currentTimeMillis() else 0L
         if (curlFirstPage != null && curlFirstPage.isNotEmpty()) {
             val firstPage = curlFirstPage
             allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
@@ -614,6 +620,8 @@ class EbayDeCrawler(
     }
 
     companion object {
+        /** How long a refusal to the plain clients holds before they are tried again. */
+        private const val PLAIN_RETRY_MS = 60 * 60 * 1000L
         /** The text of eBay's description page, one line per paragraph or break the seller made. */
         internal fun descriptionText(page: String): String? {
             val doc = Jsoup.parse(page)
