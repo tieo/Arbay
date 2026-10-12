@@ -247,7 +247,7 @@ fun hiddenListings(
     if (byWord.isNotEmpty()) add(Hidden(HiddenKind.BlockedWords, "your blocked words",
         "Carrying one of your blocked words: " + blockedTerms.joinToString(", "), byWord))
     narrowed.newPrice?.takeIf { narrowed.aboveNew.isNotEmpty() }?.let { new ->
-        add(Hidden(HiddenKind.AboveNewPrice, "dearer than new",
+        add(Hidden(HiddenKind.AboveNewPrice, "above the new price",
             "Costing more than the thing new in a shop, ${new.format()}. The search named no price, so the markets were asked for nothing dearer.",
             narrowed.aboveNew))
     }

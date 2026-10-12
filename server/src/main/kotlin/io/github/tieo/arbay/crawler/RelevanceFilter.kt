@@ -1062,12 +1062,20 @@ object RelevanceFilter {
      *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a
      *  form factor or a lane count ("M.2", "x4"), which SATA drives carry as well. Sizes are what
      *  was asked, not which product it is. */
-    private fun modelWords(title: String): Set<String> =
-        normalize(gluedThousands(title.lowercase())).split(" ").filter { w ->
+    private fun modelWords(title: String): Set<String> {
+        val words = normalize(gluedThousands(title.lowercase())).split(" ")
+        return words.filterIndexed { i, w ->
             w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
                 (if (w.all { it.isDigit() }) w.length in 3..4 else w.length >= 3) &&
-                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w)
+                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) &&
+                // A number with its unit after it is a size written apart: "2000go" reads as
+                // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
+                // M.2 drive, because most listings saying 2000 GB were.
+                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in SIZE_UNITS)
         }.toSet()
+    }
+
+    private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
 
     /** Words a title states a spec in rather than names a product with: a card length, a bus
      *  generation, a lane count. A SATA drive is "M.2 2280" as much as an NVMe one is. */

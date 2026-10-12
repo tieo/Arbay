@@ -1263,4 +1263,22 @@ class RelevanceFilterTest {
         )
         assertEquals(listings.dropLast(1).map { it.title }, search("Pixel 10 Pro XL 256GB", listings).map { it.title })
     }
+
+    @Test
+    fun `a size written apart from its unit is no model word to learn the slot from`() {
+        // Most of what says 2000 GB here is an M.2 drive, and "2000go" reads as "2000 gb": taken
+        // for a model number, the hard disk inherited the slot from them.
+        val results = search("2TB M.2", listOf(
+            listing("Kingston 2000 GB M.2 NVMe"),
+            listing("Lexar 2000 GB M.2 SSD"),
+            listing("Crucial 2000 GB M.2 PCIe"),
+            listing("WD Elements 2TB externe Festplatte"),
+            listing("Seagate Expansion 2TB USB"),
+            listing("Toshiba Canvio 2TB"),
+            listing("Intenso 2TB Memory Case"),
+            listing("Disque dur 3.5\" 2to 2000go seagate"),
+        ))
+        assertTrue(results.none { it.title.startsWith("Disque dur") }, results.joinToString { it.title })
+        assertTrue(results.any { it.title.startsWith("Kingston") })
+    }
 }
