@@ -5,6 +5,7 @@ import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.BlockCooldown
 import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
 import io.github.tieo.arbay.crawler.CarFilterEngine
+import io.github.tieo.arbay.crawler.NewPriceCeiling
 import io.github.tieo.arbay.crawler.cannotAnswer
 import io.github.tieo.arbay.crawler.CarQueryResolver
 import io.github.tieo.arbay.crawler.CrawlThrottle
@@ -642,8 +643,16 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     }
 
                     val resultChannel = Channel<CrawlerSearchEvent>(Channel.UNLIMITED)
+                    // A search that names no price is for the cheapest offers: the price comparers
+                    // answer first, and the rest are asked up to what the thing costs new.
+                    val newPrice = if (searchQuery.maxPrice == null && !isCarQuery) NewPriceCeiling.forSearch(platforms) else null
+                    val askedUpTo = java.util.concurrent.ConcurrentHashMap<String, Money>()
                     val jobs = platforms.map { platformId ->
                         launch {
+                          // Waited for before taking a crawl slot, so the comparers always get one.
+                          val ceiling = if (newPrice != null && platformId !in newPrice.shops) newPrice.await() else null
+                          ceiling?.let { askedUpTo[platformId.name] = it }
+                          val marketQuery = ceiling?.let { searchQuery.copy(maxPrice = it) } ?: searchQuery
                           // The report this market finished with, kept so its listings can be placed
                           // on the map after the crawl slot and the crawl's budget are let go.
                           var finished: CrawlerSearchEvent? = null
@@ -666,7 +675,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             }
                             // A search this market cannot answer (a later page from a market that
                             // only has its first) says so instead of answering a different question.
-                            crawler.cannotAnswer(searchQuery)?.let { reason ->
+                            crawler.cannotAnswer(marketQuery)?.let { reason ->
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_ERROR,
                                     platform = platformId.name,
@@ -679,7 +688,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             // A market is asked in its own language only when the search carries a
                             // term for that language; the term is reported so the app shows what
                             // each site was actually asked.
-                            val pq = localizedQuery(searchQuery, platformId)
+                            val pq = localizedQuery(marketQuery, platformId)
                             // Set when the market says it answered from one of its own categories.
                             val answeredFromCategory = java.util.concurrent.atomic.AtomicBoolean(false)
                             val categoryEmitter = io.github.tieo.arbay.crawler.CategoryAnswerEmitter {
@@ -948,7 +957,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                   val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
                                   if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
                                       resultChannel.send(done.copy(
-                                          listings = asDelivered(placed, localizedQuery(searchQuery, platformId)),
+                                          listings = asDelivered(placed, localizedQuery(marketQuery, platformId)),
                                       ))
                                   }
                               } catch (e: CancellationException) {
@@ -957,6 +966,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                   routesLog.warn("Placing {} listings on the map failed: {}", platformId.displayName, e.message)
                               }
                           }
+                        }.also { job ->
+                            // A comparer that ended without a word still lets the others start.
+                            if (newPrice != null) job.invokeOnCompletion { newPrice.answered(platformId, emptyList()) }
                         }
                     }
                     // Close channel once all platform coroutines finish
@@ -972,9 +984,14 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                         val finishes = event.type == CrawlerEventType.PLATFORM_DONE ||
                             event.type == CrawlerEventType.PLATFORM_ERROR
                         if (finishes && alreadyCounted.add(event.platform)) completed++
+                        if (finishes && newPrice != null) {
+                            runCatching { PlatformId.valueOf(event.platform) }.getOrNull()
+                                ?.let { newPrice.answered(it, event.listings) }
+                        }
                         val eventToWrite = if (isProgress) event else event.copy(
                             completedPlatforms = completed,
                             totalPlatforms = platforms.size,
+                            askedUpTo = askedUpTo[event.platform],
                         )
                         synchronized(this@respondTextWriter) {
                             write(json.encodeToString(eventToWrite) + "\n")

@@ -118,6 +118,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val startedAt = kotlin.time.Clock.System.now()
         /** Set while the server's crawl throttle has it waiting for a free slot. */
         @Volatile var queued: String? = null
+        /** The new price the markets were asked up to, when the search named no price. */
+        @Volatile var askedUpTo: Money? = null
         lateinit var job: Job
 
         suspend fun describe(args: JsonObject): String {
@@ -142,6 +144,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
             return buildString {
                 appendLine("${shown.size} of ${all.size} offers for \"$words\":")
+                askedUpTo?.let { appendLine("No price was named, so the markets were asked up to ${it.amount / 100} €, what it costs new (the price comparers' third cheapest offer).") }
                 shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
                 synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
                 if (job.isActive) appendLine(
@@ -203,6 +206,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     if (line.isBlank()) continue
                     val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
                     val market = event.platformName.ifEmpty { event.platform }
+                    event.askedUpTo?.let { run.askedUpTo = it }
                     when (event.type) {
                         CrawlerEventType.PLATFORM_STARTED -> run.searching += market
                         CrawlerEventType.PLATFORM_DONE -> run.searching -= market
