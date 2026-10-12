@@ -136,7 +136,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
                 .sortedBy { it.effectivePrice.amount }
                 .take(args.int("limit") ?: 40)
-            shown.forEach { seen[it.id] = it }
+            // Every offer the search found can be asked about, not only the ones listed: a search
+            // read deep lists forty of a thousand.
+            all.forEach { seen[it.id] = it }
             val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
             return buildString {
                 appendLine("${shown.size} of ${all.size} offers for \"$words\":")
@@ -258,7 +260,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "offer_details", "The seller's full description and details of one offer from a search.",
             props = { string("listing_id", "An offer id from search", required = true) },
         ) { args ->
-            val l = seen[args.str("listing_id")] ?: return@tool "Unknown offer; search first."
+            val l = args.str("listing_id")?.let { offer(it) } ?: return@tool "Unknown offer; search first."
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
@@ -466,11 +468,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val text = composeBlocks(blocks)
             val allIn = args.num("all_in_eur")
             // Each ad's own page, for the shipping its card leaves out ("Versand ab 6,19 €").
-            val pageShipping = args.strs("listing_ids").mapNotNull { seen[it] }.associate { l -> l.id to pageShipping(l) }
+            val drafted = args.strs("listing_ids").mapNotNull { offer(it) }.associateBy { it.id }
+            val pageShipping = drafted.values.associate { l -> l.id to pageShipping(l) }
             val toDoor = getJson<ChatSettings>("/api/chat/settings").toDoor
             val costs = io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()
             args.strs("listing_ids").joinToString("\n\n") { id ->
-                val l = seen[id] ?: return@joinToString "$id: unknown offer; search first."
+                val l = drafted[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
                 val shipping = pageShipping[id] ?: l.shipping
                 val offer = offerFor(l.platformId, (l.price.amount / 100).toInt().takeIf { l.price.currency == io.github.tieo.arbay.model.Currency.EUR }, shipping, allIn, toDoor, costs)
