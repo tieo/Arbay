@@ -639,8 +639,24 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
-        condition?.name?.lowercase(), saleType?.name?.lowercase(), url,
+        condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(), url,
     ).joinToString(" | ")
+
+    /** What a vehicle's card states, so a van can be judged from the list: its age, mileage,
+     *  power, gearbox and size. The size is on the common scale (L1 short to L4 extra long, H1
+     *  normal roof to H3 super high), where a Crafter's mittellang Hochdach, VW's own L3H3, is L2H2. */
+    private fun io.github.tieo.arbay.model.VehicleInfo.summary(): String? {
+        fun range(a: Int?, b: Int?) = a?.let { if (b != null && b != a) "$a-$b" else "$a" }
+        return listOfNotNull(
+            firstRegYear?.let { y -> firstRegMonth?.let { "%02d/%d".format(it, y) } ?: "$y" },
+            mileageKm?.let { "%,d km".format(it).replace(',', '.') },
+            powerKw?.let { "${(it * 1.36).toInt()} PS" },
+            gearbox?.name?.lowercase(),
+            listOfNotNull(range(vanLength, vanLengthMax)?.let { "L$it" }, range(vanHeight, vanHeightMax)?.let { "H$it" })
+                .takeIf { it.isNotEmpty() }?.joinToString("", prefix = "size ", postfix = " (common scale)"),
+            wheelbaseMm?.let { "wheelbase $it mm" },
+        ).joinToString(", ").ifEmpty { null }
+    }
 
     private suspend fun outboxText(): String = (getJsonElement("/api/chat/outbox") as? JsonArray).orEmpty().takeLast(20).joinToString("\n") { m ->
         val o = m as JsonObject
