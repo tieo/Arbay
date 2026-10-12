@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.DisplayCurrency
+import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
@@ -36,10 +37,13 @@ data class PriceSummary(
     }
 }
 
-/** The price picture of what is on screen ([offers], for sale) and of what has sold ([sold]). */
+/** The price picture of what is on screen ([offers], for sale) and of what has sold ([sold]). A
+ *  thing sold for parts is not an offer of the thing: a broken drive at 50 € is not what a working
+ *  one costs, and marked cheapest it hid the cheapest drive that works. */
 fun priceSummary(offers: List<Listing>, sold: List<Listing> = emptyList()): PriceSummary {
     val currency = Currency.valueOf(DisplayCurrency.current)
-    val priced = offers.filter { !it.sold }.map { it to it.displayAmount() }.sortedBy { it.second }
+    val priced = offers.filter { !it.sold && it.condition != Condition.PARTS_ONLY }
+        .map { it to it.displayAmount() }.sortedBy { it.second }
     val amounts = priced.map { it.second }
     val low = amounts.firstOrNull()
     val high = amounts.lastOrNull()

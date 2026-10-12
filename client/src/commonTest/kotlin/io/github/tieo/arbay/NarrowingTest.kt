@@ -120,4 +120,23 @@ class NarrowingTest {
         assertEquals(false, seeded.unstatedCondition)
         assertNull(seeded.band)
     }
+
+    @Test
+    fun `what costs more than new is left out and said so, where the markets were asked up to it`() {
+        val newPrice = Money(25_000, Currency.EUR)
+        val narrowed = narrow(listings, Narrowing(), emptySet(), newPrice = newPrice)
+        assertEquals(listOf("a", "b"), narrowed.displayed.map { it.id })
+        assertEquals(listOf("c"), narrowed.aboveNew.map { it.id })
+        val hidden = hiddenListings(narrowed, Narrowing(), listings, listings, emptySet(), emptyList(), emptyList(), emptySet())
+        assertEquals(listOf(HiddenKind.AboveNewPrice), hidden.map { it.kind })
+        assertEquals(listOf("c"), hidden.single().listings.map { it.id })
+    }
+
+    @Test
+    fun `a broken one is not the cheapest offer of the thing`() {
+        val offers = listOf(listing("broken", 50, Condition.PARTS_ONLY), listing("working", 55, Condition.USED))
+        val summary = io.github.tieo.arbay.results.priceSummary(offers)
+        assertEquals(setOf("working"), summary.cheapestIds)
+        assertEquals(5_500, summary.cheapest?.amount)
+    }
 }

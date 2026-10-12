@@ -159,7 +159,7 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val current = narrowing ?: Narrowing()
     val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
     val scams = remember(fetched, views, money) { likelyScams(fetched, views) }
-    val narrowed = remember(listings, current, money, open.newListingIds, scams) { narrow(listings, current, open.newListingIds, scams.keys) }
+    val narrowed = remember(listings, current, money, open.newListingIds, scams, newPrice) { narrow(listings, current, open.newListingIds, scams.keys, newPrice) }
     val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
     val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped, scams, dealers) {
         hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds, scams, dealers)

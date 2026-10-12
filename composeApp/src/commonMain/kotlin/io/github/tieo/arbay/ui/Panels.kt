@@ -190,7 +190,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
                 HiddenKind.Condition -> TextButton(onClick = { state.showEveryCondition(products) }) { Text("Show every condition") }
                 HiddenKind.SaleType -> TextButton(onClick = { state.showBothSaleTypes(products) }) { Text("Show both") }
                 HiddenKind.NotNew -> TextButton(onClick = { state.toggleNewOnly() }) { Text("Show everything") }
-                HiddenKind.LikelyScam -> {}
+                HiddenKind.LikelyScam, HiddenKind.AboveNewPrice -> {}
                 is HiddenKind.Search -> if (kind.reason == DropReason.VEHICLE_CRITERIA) {
                     TextButton(onClick = { nav.replace(route.copy(panel = Panel.CRITERIA)) }) { Text("Edit the criteria") }
                 }

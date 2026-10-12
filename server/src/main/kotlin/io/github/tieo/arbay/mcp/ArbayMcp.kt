@@ -125,7 +125,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         suspend fun describe(args: JsonObject): String {
             val q = saved?.searchQuery
             val hidden = hiddenOffers()
-            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
+            // With no price named the markets were asked up to the new price, and what the price
+            // comparers list above it is left out here as it is in the app.
+            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0) ?: askedUpTo?.amount?.div(100.0)
             val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
             // The saved market and country picks narrow what was fetched, adding up as in the app.
             val markets = q?.showOnlyMarkets.orEmpty()
