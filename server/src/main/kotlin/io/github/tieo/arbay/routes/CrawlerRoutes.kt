@@ -207,8 +207,12 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
         // past the first pages is reachable only by asking for it.
         startPage = queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(1) ?: base.startPage,
         maxPages = queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 20) ?: base.maxPages,
+        maxResults = queryParameters["perMarket"]?.toIntOrNull()?.coerceIn(1, MAX_PER_MARKET) ?: base.maxResults,
     )
 }
+
+/** The most offers one search reads from one market: fifty pages of a market's usual size. */
+private const val MAX_PER_MARKET = 1000
 
 /** A price in EUR cents, converting from the listing's own currency so cross-border results
  *  (PLN/SEK/DKK/…) rank by real value instead of raw amount. */

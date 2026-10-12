@@ -177,6 +177,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
                 val reach = (q?.reach ?: SearchReach()).let { r -> if (args.bool("other_words") == true) r.copy(otherWords = true) else r }
                 reach.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
+                args.int("per_market")?.let { parameter("perMarket", it) }
             }.execute { response ->
                 throttled = response.status == HttpStatusCode.TooManyRequests
                 if (throttled) {
@@ -241,6 +242,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("max_price_eur", "Leave out offers above this landed price")
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
+                integer("per_market", "How many offers to read from each market (default 60, up to 1000): more finds the cheapest of a thing sold by the hundred, and takes longer")
             },
         ) { args ->
             val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }

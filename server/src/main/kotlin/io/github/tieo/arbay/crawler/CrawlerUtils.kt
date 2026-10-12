@@ -240,9 +240,17 @@ private suspend fun fetchPageWithRetry(
 }
 
 /** How many pages this search may fetch: the search's own limit when it set one, else the
- *  configured search depth, never more than [cap] for a site that blocks past a few pages. */
+ *  configured search depth, never more than [cap] for a site that blocks past a few pages. A
+ *  search that asks for more offers than usual ([SearchQuery.maxResults]) is not held to the
+ *  usual page count either: it reads until it has them, or the market runs dry. */
 internal fun SearchQuery.pageLimit(cap: Int = Int.MAX_VALUE): Int =
-    (maxPages ?: CrawlerConfig.current.maxPages).coerceAtMost(cap)
+    (maxPages ?: if (maxResults != null) DEEP_SEARCH_PAGES else CrawlerConfig.current.maxPages).coerceAtMost(cap)
+
+/** The most pages a search asking for more offers than usual reads from one market. */
+internal const val DEEP_SEARCH_PAGES = 50
+
+/** How many offers to read from each market for this search. */
+internal fun SearchQuery.resultCap(): Int = maxResults ?: CrawlerConfig.current.maxResultsPerPlatform
 
 internal suspend fun paginate(
     query: SearchQuery,
@@ -258,7 +266,7 @@ internal suspend fun paginate(
         val newIds = listings.count { it.externalId !in seen }
         listings.forEach { seen.putIfAbsent(it.externalId, it) }
         if (newIds == 0) break
-        if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+        if (seen.size >= query.resultCap()) break
     }
     return seen.values.toList()
 }

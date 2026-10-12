@@ -146,7 +146,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
     private suspend fun searchRegular(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        val maxPages = query.pageLimit()
 
         val locationStr = query.location
         val resolved = if (locationStr != null) resolveLocation(locationStr) else null
@@ -221,7 +221,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
             // number; asking for the next one would fetch the same page again.
             if (page > query.startPage && newResults.isEmpty()) break
             if (rawItemCount < 10) break
-            if (allResults.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            if (allResults.size >= query.resultCap()) break
         }
 
         return allResults

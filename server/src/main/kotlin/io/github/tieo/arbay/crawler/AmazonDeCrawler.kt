@@ -46,7 +46,7 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
             allResults.addAll(newResults)
 
             if (newResults.size < 10) break
-            if (allResults.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            if (allResults.size >= query.resultCap()) break
         }
 
         return allResults

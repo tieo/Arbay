@@ -17,7 +17,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val car = CarQueryResolver.resolveForCarSite(query.positiveText)
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
+        val maxPages = query.pageLimit()
         val seen = LinkedHashMap<String, Listing>()
         val categoryId = resolveCategory(car)
 
@@ -32,7 +32,7 @@ class SautoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
             val newIds = listings.count { it.externalId !in seen }
             listings.forEach { seen.putIfAbsent(it.externalId, it) }
             if (newIds == 0) break
-            if (seen.size >= CrawlerConfig.current.maxResultsPerPlatform) break
+            if (seen.size >= query.resultCap()) break
         }
 
         return seen.values.toList()

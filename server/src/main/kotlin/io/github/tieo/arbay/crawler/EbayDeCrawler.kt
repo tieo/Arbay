@@ -69,7 +69,7 @@ class EbayDeCrawler(
         if (EbayBrowseApi.isConfigured) {
             emitter?.emit("BrowseAPI")
             val apiResults = try {
-                EbayBrowseApi.search(client, query, platformId, domain, CrawlerConfig.current.maxResultsPerPlatform)
+                EbayBrowseApi.search(client, query, platformId, domain, query.resultCap())
             } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             if (!apiResults.isNullOrEmpty()) return apiResults
         }
@@ -106,7 +106,7 @@ class EbayDeCrawler(
             // nothing on page 2 that this search is going to keep. Asking for it anyway is not
             // free: eBay refuses every paged URL with a 403, which counts against this address
             // like any other refusal.
-            val cap = CrawlerConfig.current.maxResultsPerPlatform
+            val cap = query.resultCap()
             if (firstPage.size >= 20 && allResults.size < cap) {
                 for (page in 2..maxPages) {
                     val html = try {
@@ -198,7 +198,7 @@ class EbayDeCrawler(
         val firstPage = parseSearchResults(firstHtml)
         allResults.addAll(firstPage.filter { seenIds.add(it.externalId) })
         val maxPages = query.pageLimit()
-        val cap = CrawlerConfig.current.maxResultsPerPlatform
+        val cap = query.resultCap()
         if (firstPage.size >= 20 && allResults.size < cap) {
             for (page in 2..maxPages) {
                 val html = try {

@@ -268,6 +268,10 @@ data class SearchQuery(
     val userLon: Double? = null,
     val maxPages: Int? = null,      // override crawler's default page limit (null = use CrawlerConfig)
     val startPage: Int = 1,         // start from this page (for paginated batches)
+    // How many offers to read from each market, where the configured number is too few: a broad
+    // search for something sold by the hundred ("2TB NVMe") fills its first sixty with the newest
+    // ads, and the cheapest of the rest are only found by reading on. Null = CrawlerConfig.
+    val maxResults: Int? = null,
     // Vehicle criteria, read through carCriteria: crawlers turn what their site supports into
     // native URL parameters, and post-filtering enforces the rest.
     val carFilters: CarFilters? = null,

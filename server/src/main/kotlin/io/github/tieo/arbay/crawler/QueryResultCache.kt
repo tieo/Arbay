@@ -49,7 +49,7 @@ object QueryResultCache {
         query.condition?.sorted(),
         query.freeOnly,
         query.location?.lowercase()?.trim(), query.radiusKm,
-        query.maxPages, query.startPage,
+        query.maxPages, query.startPage, query.maxResults,
         query.carFilters,
         // The follow-up searches this decides are part of the answer that is stored.
         query.reach.otherWords, query.reach.extraTerms.map { it.lowercase().trim() }.sorted(),

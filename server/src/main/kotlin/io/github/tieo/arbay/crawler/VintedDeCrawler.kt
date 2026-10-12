@@ -38,9 +38,14 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
             ?.takeIf { it.isNotBlank() }
             ?.let { ListingDetail(description = it) }
 
-    override suspend fun search(query: SearchQuery): List<Listing> {
+    /** One page of the catalog, unless the search asked for more offers than usual: each page
+     *  is a fetch Vinted counts towards its challenge, so the rest are read only when wanted. */
+    override suspend fun search(query: SearchQuery): List<Listing> =
+        if (query.maxResults == null) searchPage(query, query.startPage) else paginate(query) { searchPage(query, it) }
+
+    private suspend fun searchPage(query: SearchQuery, page: Int): List<Listing> {
         val url = "https://www.vinted.de/catalog?search_text=${query.positiveText.encodeUrl()}" +
-            (if (query.startPage > 1) "&page=${query.startPage}" else "")
+            (if (page > 1) "&page=$page" else "")
         val html = fetchWithFallback(
             client, url, "Vinted",
             waitSelector = "[data-testid=grid-item]",

@@ -92,8 +92,14 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPag
         val makeId = carQuery?.makeSlug?.let { makeIds()[it] }
         if (carQuery != null && makeId != null) return searchCars(makeId, carQuery.modelSlug, query)
 
+        // One page, unless the search asked for more offers than usual.
+        return if (query.maxResults == null) marketplacePage(query, query.startPage)
+        else paginate(query) { marketplacePage(query, it) }
+    }
+
+    private suspend fun marketplacePage(query: SearchQuery, page: Int): List<Listing> {
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}" +
-            (if (query.startPage > 1) "&page=${query.startPage}" else "")
+            (if (page > 1) "&page=$page" else "")
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.
         val html = fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)

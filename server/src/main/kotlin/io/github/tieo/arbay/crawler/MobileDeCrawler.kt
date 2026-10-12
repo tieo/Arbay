@@ -51,7 +51,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         // Every page is a slow stealth browser navigation, so keep mobile.de deliberately shallow:
         // a few pages per category is already ~60-80 cars, and the result cap stops it early. A
         // deeper crawl here is what made a van search (two categories) take ~80 s.
-        val cap = CrawlerConfig.current.maxResultsPerPlatform
+        val cap = query.resultCap()
         val maxPages = (query.maxPages ?: CrawlerConfig.current.maxPages).coerceAtMost(3)
         val platform = platformId.displayName
         val seen = mutableSetOf<String>()
