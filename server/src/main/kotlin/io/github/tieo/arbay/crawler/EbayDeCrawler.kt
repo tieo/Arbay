@@ -112,7 +112,22 @@ class EbayDeCrawler(
                     val html = try {
                         val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
                         validateHtml(h, "eBay"); h
-                    } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
+                    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+                        // eBay refuses a later page to this tier while serving the first, so the
+                        // rest are read in a browser, for a search that asked for more offers than
+                        // usual: a browser session costs one of two workers for every search.
+                        if (query.maxResults == null) break
+                        emitter?.emit("Chromium")
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                HeadlessBrowser.withSession(
+                                    engine = BrowserEngine.CHROMIUM, primeUrl = "https://www.$domain",
+                                    waitSelector = "li.s-card, li.s-item", extraWaitMs = 1000,
+                                ) { fetchPage -> browserPages(query, page, fetchPage, allResults, seenIds) }
+                            }
+                        }.onFailure { if (it is CancellationException) throw it }
+                        break
+                    }
                     val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
                     allResults.addAll(results)
                     if (results.size < 20 || allResults.size >= cap) break
@@ -153,6 +168,51 @@ class EbayDeCrawler(
         return allResults
     }
 
+    /**
+     * Pages [from] onwards of a search, read in a browser session, until the search has as many
+     * offers as it wants, a page comes back short or holds nothing new, or eBay refuses one. The
+     * browser is the tier eBay lets through when it refuses plain requests, which it does for
+     * every page past the first; a search reading only page one never saw the offers past it.
+     */
+    private fun browserPages(
+        query: SearchQuery,
+        from: Int,
+        fetchPage: (url: String) -> FetchResult,
+        allResults: MutableList<Listing>,
+        seenIds: MutableSet<String>,
+    ) {
+        val cap = query.resultCap()
+        for (page in from..query.pageLimit()) {
+            if (allResults.size >= cap) break
+            val pageUrl = buildSearchUrl(query, page)
+            var pageHtml: String? = null
+            // eBay's edge answers one request in several with its error page and the next one
+            // goes through, so a page is asked for twice before it is believed refused.
+            fun read() = parseSearchResults(validateBrowserResult(fetchPage(pageUrl), "eBay").also { pageHtml = it })
+            val more = try {
+                try { read() } catch (e: CrawlerBlockedException) { if (e.isEdgeErrorPage) read() else throw e }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                // What eBay served instead of a later page, kept to look at: a search that stops
+                // paging otherwise just reads as one with fewer offers.
+                ErrorSnapshotStore.capture(
+                    platform = platformId.name, query = query.text, error = e,
+                    errorType = (e as? CrawlerBlockedException)?.errorType ?: ErrorType.UNKNOWN,
+                    url = pageUrl, fetchStage = "chromium page $page",
+                    html = (e as? CrawlerBlockedException)?.html,
+                )
+                break
+            }
+            val fresh = more.filter { seenIds.add(it.externalId) }
+            allResults.addAll(fresh)
+            if (fresh.isEmpty()) ErrorSnapshotStore.capture(
+                platform = platformId.name, query = query.text,
+                error = RuntimeException("$domain: page $page held ${more.size} offers, none new"),
+                errorType = ErrorType.EMPTY_RESULTS, url = pageUrl, fetchStage = "chromium page $page", html = pageHtml,
+            )
+            if (more.size < 20 || fresh.isEmpty()) break
+        }
+    }
+
     private suspend fun chromiumSearch(query: SearchQuery, allResults: MutableList<Listing>, seenIds: MutableSet<String>) {
         withContext(Dispatchers.IO) {
             HeadlessBrowser.withSession(
@@ -176,6 +236,8 @@ class EbayDeCrawler(
                     )
                 }
                 allResults.addAll(pageResults.filter { seenIds.add(it.externalId) })
+
+                if (pageResults.size >= 20) browserPages(query, 2, fetchPage, allResults, seenIds)
 
                 if (query.soldOnly) {
                     try {
@@ -238,7 +300,9 @@ class EbayDeCrawler(
         val keyword = carQuery?.modelSlug?.replace("-", " ") ?: query.text
         val params = buildList {
             add("_nkw=${keyword.encodeUrl()}")
-            add("_ipg=${CrawlerConfig.current.ebayItemsPerPage}")
+            // eBay lists up to 240 offers a page, and refuses its later pages to this server: a
+            // search wanting more than one page of the usual size asks for the largest one.
+            add("_ipg=${if ((query.maxResults ?: 0) > CrawlerConfig.current.ebayItemsPerPage) 240 else CrawlerConfig.current.ebayItemsPerPage}")
             // Cheapest first, always: the result cap decides which listings come back, and the
             // cheap end is the end a price comparison is about.
             add("_sop=15")
