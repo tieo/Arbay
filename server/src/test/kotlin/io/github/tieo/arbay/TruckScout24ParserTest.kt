@@ -51,4 +51,21 @@ class TruckScout24ParserTest {
         val listings = TruckScout24Crawler(dummyClient()).parse(html).associateBy { it.externalId }
         stated.forEach { (id, cents) -> assertEquals(cents, listings.getValue(id).price.amount, "listing $id") }
     }
+
+    @Test
+    fun `reads an ad page's description and technical rows`() {
+        val html = javaClass.getResource("/fixtures/truckscout24_detail.html")!!.readText()
+        val detail = assertNotNull(TruckScout24Crawler(dummyClient()).parseDetail(html))
+        val vehicle = assertNotNull(detail.vehicle)
+        assertEquals(150_000, vehicle.mileageKm)
+        assertEquals(130, vehicle.powerKw)
+        assertEquals(2021, vehicle.firstRegYear)
+        assertEquals(4, vehicle.firstRegMonth)
+        assertEquals(io.github.tieo.arbay.model.Transmission.AUTOMATIC, vehicle.gearbox)
+        assertEquals(3, vehicle.seats)
+        assertEquals(6, vehicle.emissionClassEuro)
+        val description = assertNotNull(detail.description)
+        assertTrue("VW Crafter Kasten L3H3\nTempomat" in description.replace("1.Hand\n", ""), description)
+        assertTrue("Laderaumlänge: 3.300 mm" in description, description)
+    }
 }

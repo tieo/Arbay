@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
+import kotlinx.coroutines.CancellationException
 import kotlin.time.Clock
 import org.jsoup.Jsoup
 
@@ -42,6 +43,60 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         }
         val html = fetchWithFallback(client, url, "TruckScout24")
         return parse(html)
+    }
+
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        parseDetail(fetchWithFallback(client, listing.url, "TruckScout24"))
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * An ad's page: the dealer's text under "Beschreibung", one line per `<br>`, and the site's
+     * technical rows ("Laderaumlänge: 3.300 mm", "Kilometerstand: 150.000 km"). The rows are
+     * values the site states, so they are taken as such; from the prose only the wheelbase is
+     * read, which no row carries. The load space measures are kept as a line of the description,
+     * since they tell an L2 from an L3 where a title only claims one.
+     */
+    internal fun parseDetail(html: String): ListingDetail? {
+        val doc = Jsoup.parse(html)
+        val text = doc.selectFirst(".beschreibung")?.let { body ->
+            // The page's own line breaks are layout; its <br>s are the dealer's lines.
+            body.html().split(Regex("""<br\s*/?>""")).joinToString("\n") { Jsoup.parse(it).text().trim() }
+                .replace(Regex("""\n{3,}"""), "\n\n").trim()
+        }?.takeIf { it.isNotBlank() }
+        val rows = doc.select(".technical-details-row").mapNotNull { row ->
+            val spans = row.select("span")
+            if (spans.size < 2) return@mapNotNull null
+            spans[0].text().trim().removeSuffix(":").trim() to spans[1].text().trim()
+        }.filter { (label, value) -> label.isNotBlank() && value.isNotBlank() }.toMap()
+        fun number(label: String) = rows[label]?.let { Regex("""\d[\d.]*""").find(it)?.value?.replace(".", "")?.toIntOrNull() }
+        val reg = rows["Erstzulassung"]?.let { Regex("""(\d{1,2})/(\d{4})""").find(it) }
+        val stated = VehicleTextParser.verifiedByPresence(VehicleInfo(
+            firstRegYear = reg?.groupValues?.get(2)?.toIntOrNull(),
+            firstRegMonth = reg?.groupValues?.get(1)?.toIntOrNull(),
+            mileageKm = number("Kilometerstand")?.takeIf { it in 1..2_000_000 },
+            powerKw = number("Leistung")?.takeIf { it in 20..1000 },
+            fuel = Fuel.parse(rows["Kraftstofftyp"]),
+            gearbox = rows["Getriebetyp"]?.lowercase()?.let {
+                when {
+                    it.startsWith("automat") -> Transmission.AUTOMATIC
+                    it.startsWith("mechani") || it.startsWith("schalt") || it.startsWith("manu") -> Transmission.MANUAL
+                    else -> null
+                }
+            },
+            seats = number("Anzahl der Sitzplätze")?.takeIf { it in 1..20 },
+            color = rows["Farbe"],
+            emissionClassEuro = rows["Emissionsklasse"]?.let { Regex("""euro\s*(\d)""", RegexOption.IGNORE_CASE).find(it) }
+                ?.groupValues?.get(1)?.toIntOrNull(),
+            wheelbaseMm = text?.let(VehicleTextParser::parseWheelbaseMm),
+        ))
+        val loadSpace = listOf("Laderaumlänge", "Laderaumbreite", "Laderaumhöhe", "Gesamtgewicht")
+            .mapNotNull { label -> rows[label]?.let { "$label: $it" } }
+            .joinToString(", ").takeIf { it.isNotBlank() }
+        val description = listOfNotNull(text, loadSpace).joinToString("\n\n").takeIf { it.isNotBlank() }
+        return ListingDetail(vehicle = stated.takeIf { it.verified.isNotEmpty() }, description = description)
+            .takeIf { it.vehicle != null || it.description != null }
     }
 
     /** Turns a lowercase slug into the display name the site's filters expect:
