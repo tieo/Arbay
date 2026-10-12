@@ -1,0 +1,23 @@
+package io.github.tieo.arbay.model
+
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class SoldAsDefectiveTest {
+
+    @Test
+    fun `a seller saying the thing is broken is read as that`() {
+        // Kleinanzeigen, live: a 1TB drive at 50 euro, broken by its own text only.
+        assertTrue(Condition.soldAsDefective("SSD M2 NVME 1TB 1000GB CRUCIAL", "Wird im mein pc nicht erkannt wird als defekt verkauft"))
+        assertTrue(Condition.soldAsDefective("WD_BLACK SN770 int. M.2 NVMe SSD 2TB DEFEKT", null))
+        assertTrue(Condition.soldAsDefective("Samsung 970 EVO 1TB", "Für Bastler, startet nicht"))
+    }
+
+    @Test
+    fun `a word that only mentions a defect does not make the thing broken`() {
+        assertFalse(Condition.soldAsDefective("Samsung 990 PRO 2TB nicht defekt", null))
+        assertFalse(Condition.soldAsDefective("SK hynix PC801 1TB", "Ausgebaut aus einem defekten Laptop, die SSD läuft einwandfrei."))
+        assertFalse(Condition.soldAsDefective("Lexar NM610 PRO 2TB", "Keine Defekte, SMART PASSED"))
+    }
+}

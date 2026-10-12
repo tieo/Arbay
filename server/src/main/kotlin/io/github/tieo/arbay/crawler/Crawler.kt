@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.PlatformId
@@ -83,7 +84,7 @@ suspend fun Crawler.searchAllSpellings(
             }
         }
     val terms = (picked + automatic).distinctBy { it.term.lowercase() }
-    if (terms.isEmpty()) return primary
+    if (terms.isEmpty()) return primary.markDefective()
 
     val extra = terms.flatMap { candidate ->
         // The follow-up carries its own related searches, so whether the market names this query
@@ -125,7 +126,14 @@ suspend fun Crawler.searchAllSpellings(
             platformId.displayName, query.text, candidate.term, added)
         followUp
     }
-    return (primary + extra).distinctBy { it.id }
+    return (primary + extra).distinctBy { it.id }.markDefective()
+}
+
+/** A listing whose title or text says it is sold broken carries that as its condition, the way
+ *  eBay's own "for parts" listings do: a Kleinanzeigen ad has no condition field, and its seller
+ *  says so in words ("wird im PC nicht erkannt, wird als defekt verkauft"). */
+internal fun List<Listing>.markDefective(): List<Listing> = map { l ->
+    if (l.condition != Condition.PARTS_ONLY && Condition.soldAsDefective(l.title, l.description)) l.copy(condition = Condition.PARTS_ONLY) else l
 }
 
 suspend fun Crawler.trackedSearch(

@@ -28,5 +28,26 @@ enum class Condition {
                 else -> null
             }
         }
+
+        // Negated, the word says the opposite: "nicht defekt", "kein Defekt", "keine Defekte".
+        private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekt|defect|kaputt|kapot|broken)\b""")
+        private val defectPhrase = Regex(
+            """als\s+defekt|defekt\s+verkauft|wird\s+nicht\s+(mehr\s+)?erkannt|nicht\s+(mehr\s+)?funktionsf(ä|ae)hig|""" +
+                """funktioniert\s+nicht\s+mehr|f(ü|ue)r\s+bastler|an\s+bastler|bastlerware|for\s+(parts|spares)|""" +
+                """not\s+working|spares\s+or\s+repair|pour\s+pi(è|e)ces|hors\s+service|ne\s+fonctionne\s+(pas|plus)|""" +
+                """non\s+funzionante|per\s+ricambi|voor\s+onderdelen|werkt\s+niet""",
+        )
+
+        /**
+         * Whether a listing says it is sold broken. Its title is the seller's headline, where a
+         * plain "defekt" is about the thing itself. Its text is held to phrases that say so
+         * outright ("wird als defekt verkauft", "wird im PC nicht erkannt"): a drive "aus einem
+         * defekten Laptop ausgebaut" works, and the word alone there would call it broken.
+         */
+        fun soldAsDefective(title: String, text: String?): Boolean {
+            val t = title.lowercase()
+            if (defectWord.containsMatchIn(t) || defectPhrase.containsMatchIn(t)) return true
+            return text != null && defectPhrase.containsMatchIn(text.lowercase())
+        }
     }
 }
