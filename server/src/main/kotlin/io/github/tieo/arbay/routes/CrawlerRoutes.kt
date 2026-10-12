@@ -513,7 +513,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // The price and shipping come with the state, off the same fetch, for an offer about to
             // be written.
             val now = crawler.adNow(url) ?: return@get call.respond(HttpStatusCode.NoContent)
-            call.respond(now)
+            // Door delivery as the detail answer carries it: an offer worked out from the cheapest
+            // carrier alone came out above the all-in limit by the difference.
+            val adId = url.substringAfterLast('/').substringBefore('-').takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+            call.respond(
+                if (platform != PlatformId.KLEINANZEIGEN) now
+                else now.copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(now.shipping) {
+                    adId?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
+                }),
+            )
         }
 
         // Error snapshots — list, view, resolve
