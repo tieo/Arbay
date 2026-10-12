@@ -39,10 +39,18 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage,
         val vehiclesOnly = car != null
         return paginate(query) { page ->
             val base = "https://www.ricardo.ch/de/s/${text.encodeUrl()}/"
-            val url = if (page <= 1) base else "$base?page=$page"
+            val params = listOfNotNull(priceBand(query), "page=$page".takeIf { page > 1 })
+            val url = if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
             parse(fetchWithFallback(client, url, "ricardo.ch"), vehiclesOnly)
         }
     }
+
+    /** ricardo's price ceiling, in francs, converted from the search's euro ceiling. ricardo
+     *  filters on the franc price before shipping and import VAT, which is below the landed price
+     *  the ceiling is set in, so it never leaves out an offer the landed ceiling would keep. The
+     *  floor is left to the landed price for the same reason, where it would cut the other way. */
+    internal fun priceBand(query: SearchQuery): String? =
+        query.maxPrice?.let { "range_filters.price.max=${ExchangeRates.convert(it.amount, it.currency.name, "CHF") / 100 + 1}" }
 
     /** Decode the RSC stream and map its `articles` array to listings. */
     internal fun parse(html: String, vehiclesOnly: Boolean = false): List<Listing> {

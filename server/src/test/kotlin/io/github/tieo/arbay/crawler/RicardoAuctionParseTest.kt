@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.withPriceRangeEur
 import io.github.tieo.arbay.testing.offlineClient
 import io.ktor.client.HttpClient
 import kotlin.test.Test
@@ -41,5 +42,16 @@ class RicardoAuctionParseTest {
         listings.filter { it.saleType == SaleType.FIXED_PRICE }.forEach {
             assertNull(it.auctionEndsAt, "a price someone is asking does not run out: ${it.title}")
         }
+    }
+
+    @Test
+    fun `a euro ceiling is asked in francs and the floor is left to the landed price`() {
+        val q = io.github.tieo.arbay.model.SearchQuery(text = "2tb nvme", category = io.github.tieo.arbay.model.MarketGroup.GENERAL)
+            .withPriceRangeEur(40, 216)
+        val band = crawler.priceBand(q)
+        assertNotNull(band)
+        assertTrue(band.startsWith("range_filters.price.max="), band)
+        assertTrue("min" !in band, band)
+        assertNull(crawler.priceBand(q.withPriceRangeEur(40, null)))
     }
 }

@@ -98,7 +98,10 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPag
     }
 
     private suspend fun marketplacePage(query: SearchQuery, page: Int): List<Listing> {
+        // The marketplace takes the same price band as the car vertical, in euro.
         val url = "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=${query.positiveText.encodeUrl()}" +
+            (query.minPrice?.let { "&PRICE_FROM=${it.amount / 100}" } ?: "") +
+            (query.maxPrice?.let { "&PRICE_TO=${it.amount / 100}" } ?: "") +
             (if (page > 1) "&page=$page" else "")
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
         // __NEXT_DATA__ page; the browser tiers remain as a fallback.

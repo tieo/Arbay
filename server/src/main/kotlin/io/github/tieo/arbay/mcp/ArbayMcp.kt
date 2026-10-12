@@ -176,7 +176,15 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
                 // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
                 // sent as the app sends them, so the markets are asked for the same vans the app shows.
-                q?.toCarFilters()?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
+                // A price band named for this search goes to the markets too, which filter on it
+                // themselves: a search for the cheapest of a thing reads the offers inside the band
+                // instead of every page of every price.
+                (q?.toCarFilters() ?: CarFilters()).let { f ->
+                    f.copy(
+                        minPriceEur = args.num("min_price_eur")?.let { kotlin.math.floor(it).toInt() } ?: f.minPriceEur,
+                        maxPriceEur = args.num("max_price_eur")?.let { kotlin.math.ceil(it).toInt() } ?: f.maxPriceEur,
+                    )
+                }.takeUnless { it.isEmpty }?.let { parameter("carFilters", json.encodeToString(CarFilters.serializer(), it)) }
                 val reach = (q?.reach ?: SearchReach()).let { r -> if (args.bool("other_words") == true) r.copy(otherWords = true) else r }
                 reach.takeUnless { it.isDefault }?.let { parameter("reach", json.encodeToString(SearchReach.serializer(), it)) }
                 args.int("per_market")?.let { parameter("perMarket", it) }
@@ -241,7 +249,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
                 string("search_id", "A search already running, to get what has arrived since")
                 integer("limit", "How many offers to list (default 40)")
-                number("max_price_eur", "Leave out offers above this landed price")
+                number("max_price_eur", "Leave out offers above this landed price. The markets are asked for nothing dearer, so a search for the cheapest reads far fewer pages")
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
                 integer("per_market", "How many offers to read from each market (default 60, up to 1000): more finds the cheapest of a thing sold by the hundred, and takes longer")

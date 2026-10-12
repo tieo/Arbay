@@ -44,7 +44,12 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
         if (query.maxResults == null) searchPage(query, query.startPage) else paginate(query) { searchPage(query, it) }
 
     private suspend fun searchPage(query: SearchQuery, page: Int): List<Listing> {
+        // Vinted's own price band, in euro: a search for the cheapest of a thing sold by the
+        // hundred reads only the pages inside the band instead of every page of it.
         val url = "https://www.vinted.de/catalog?search_text=${query.positiveText.encodeUrl()}" +
+            (query.minPrice?.let { "&price_from=${it.amount / 100}" } ?: "") +
+            (query.maxPrice?.let { "&price_to=${it.amount / 100}" } ?: "") +
+            (if (query.minPrice != null || query.maxPrice != null) "&currency=EUR" else "") +
             (if (page > 1) "&page=$page" else "")
         val html = fetchWithFallback(
             client, url, "Vinted",
