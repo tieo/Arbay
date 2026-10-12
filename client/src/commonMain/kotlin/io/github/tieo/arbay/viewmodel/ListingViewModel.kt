@@ -137,6 +137,11 @@ class ListingViewModel(
     private val _otherWords = MutableStateFlow(sampleOtherWords)
     val otherWords: StateFlow<List<SuggestedTerm>> = _otherWords
 
+    // What the thing costs new, when the search named no price: the server reads it off the price
+    // comparers and asks every other market for nothing dearer.
+    private val _newPrice = MutableStateFlow<Money?>(null)
+    val newPrice: StateFlow<Money?> = _newPrice
+
     /** The words this search is running with on top of the typed one. */
     val pickedWords: StateFlow<List<String>> get() = _pickedWords
     private val _pickedWords = MutableStateFlow(samplePicked)
@@ -446,6 +451,7 @@ class ListingViewModel(
         _completedPlatforms.value = 0
         _facets.value = emptyMap()
         _droppedBySearch.value = emptyList()
+        _newPrice.value = null
         _priceHistory.value = emptyList()
         _allListings.value = stored
     }
@@ -677,6 +683,7 @@ class ListingViewModel(
             _facets.value = emptyMap()
             _droppedBySearch.value = emptyList()
             _otherWords.value = emptyList()
+            _newPrice.value = null
 
             // Whether this search finished on its own terms, as against being cancelled by the
             // screen closing or by the next search starting.
@@ -704,6 +711,7 @@ class ListingViewModel(
 
                         CrawlerEventType.PLATFORM_DONE -> {
                             _completedPlatforms.value = event.completedPlatforms
+                            event.askedUpTo?.let { _newPrice.value = it }
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(
                                     status = PlatformSearchStatus.DONE,
@@ -743,6 +751,7 @@ class ListingViewModel(
 
                         CrawlerEventType.PLATFORM_ERROR -> {
                             _completedPlatforms.value = event.completedPlatforms
+                            event.askedUpTo?.let { _newPrice.value = it }
                             val errorStatus = when (event.errorType) {
                                 "CAPTCHA" -> PlatformSearchStatus.CAPTCHA
                                 "TIMEOUT" -> PlatformSearchStatus.TIMEOUT

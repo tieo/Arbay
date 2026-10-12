@@ -120,6 +120,10 @@ fun PricesPanel(app: WebApp, route: Route.Results, state: ResultsState) {
             Figure("Dearest", summary.dearest?.format())
             Figure("Offers", summary.count.toString())
         }
+        state.newPrice?.let { new ->
+            H3 { Text("What it costs new") }
+            Div({ classes("figures") }) { Figure("New, in a shop", new.format()) }
+        }
         H3 { Text("What it sold for") }
         val sold = summary.sold
         when {

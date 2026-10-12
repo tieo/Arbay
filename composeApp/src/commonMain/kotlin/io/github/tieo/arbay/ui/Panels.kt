@@ -130,6 +130,11 @@ private fun PricesPanel(session: Session, route: Route.Results, state: ResultsSt
         Figure("Middle", s.middle?.format() ?: "–", Modifier.weight(1f))
         Figure("Offers", "${s.count}", Modifier.weight(1f))
     }
+    state.newPrice?.let { new ->
+        HorizontalDivider(color = arbay.line)
+        Text("What it costs new", style = MaterialTheme.typography.titleMedium)
+        Figure("New, in a shop", new.format(), Modifier.fillMaxWidth())
+    }
     HorizontalDivider(color = arbay.line)
     Text("What it sold for", style = MaterialTheme.typography.titleMedium)
     val sold = s.sold
