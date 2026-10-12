@@ -316,8 +316,11 @@ class EbayDeCrawler(
             query.area(platformId.country ?: "DE")?.let { area ->
                 area.zip?.let { add("_stpos=$it&_sadis=${area.radiusKm}&_fspt=1") }
             }
-            query.minPrice?.let { add("_udlo=${it.amount / 100}") }
-            query.maxPrice?.let { add("_udhi=${it.amount / 100}") }
+            // In the site's own currency: ebay.com reads a band in dollars.
+            val currency = if (domain == "ebay.com") "USD" else "EUR"
+            fun units(m: Money) = ExchangeRates.convert(m.amount, m.currency.name, currency) / 100
+            query.minPrice?.let { add("_udlo=${units(it)}") }
+            query.maxPrice?.let { add("_udhi=${units(it) + 1}") }
             query.condition?.let { conditions ->
                 val conditionIds = conditions.mapNotNull { ebayConditionId(it) }
                 if (conditionIds.isNotEmpty()) add("LH_ItemCondition=${conditionIds.joinToString("|")}")

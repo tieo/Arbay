@@ -33,7 +33,11 @@ class SubitoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, 
         // the same query under /usato/ returns the machines.
         val category = if (car != null) "auto" else "usato"
         return paginate(query) { page ->
-            val base = "https://www.subito.it/annunci-italia/vendita/$category/?q=${text.encodeUrl()}"
+            // The cars category takes a price band (ps, pe, in euro); the used-goods one has none,
+            // and ignores both.
+            val band = if (car == null) "" else
+                (query.minPrice?.let { "&ps=${it.amount / 100}" } ?: "") + (query.maxPrice?.let { "&pe=${it.amount / 100}" } ?: "")
+            val base = "https://www.subito.it/annunci-italia/vendita/$category/?q=${text.encodeUrl()}$band"
             val url = if (page <= 1) base else "$base&o=$page"
             parse(fetchWithFallback(client, url, "Subito"))
         }

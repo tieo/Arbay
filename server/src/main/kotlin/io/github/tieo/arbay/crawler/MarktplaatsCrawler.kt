@@ -76,7 +76,17 @@ class MarktplaatsCrawler(
         else "$host/q/${text.encodeUrl()}/"
 
         val carsCategory = car != null && host.contains("marktplaats")
+        // A price band is taken only by the site's own search API, which its result pages are
+        // drawn from: the page ignores every price parameter, and "ssd 2tb" is 791 offers there
+        // against 123 up to 216 euro.
+        val band = query.minPrice != null || query.maxPrice != null
         return paginate(query) { page ->
+            if (band && !carsCategory) {
+                val range = "PriceCents:${query.minPrice?.amount ?: "null"}:${query.maxPrice?.amount ?: "null"}"
+                val api = "$host/lrp/api/search?query=${text.encodeUrl()}&limit=$API_PAGE&offset=${(page - 1) * API_PAGE}" +
+                    "&attributeRanges%5B%5D=${range.encodeUrl()}"
+                return@paginate parseApiAnswer(CurlCffiClient.fetch(api, primeUrl = if (page <= 1) host else null))
+            }
             val url = if (page <= 1) base else "${base}p/$page/"
             val html = CurlCffiClient.fetch(url, primeUrl = if (page <= 1) host else null)
             if (carsCategory) parseCarsCategory(html)
@@ -85,6 +95,12 @@ class MarktplaatsCrawler(
     }
 
     private companion object {
+        /** Offers per answer of the search API, the most it gives. */
+        const val API_PAGE = 100
+
+        /** The letter before an item's number: m for a private seller, a for a dealer. */
+        val ITEM_LETTER = Regex("""^[am](?=\d)""")
+
         /** A monthly instalment: "€373 p/mnd", "€597 p/m", or a bare "Leaseprijs: € 131". */
         val LEASE_PRICE = Regex(
             """(?:€\s?([\d.]{1,7})(?:,\d{2})?[,\-\s]*(?:p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand)""" +
@@ -127,6 +143,19 @@ class MarktplaatsCrawler(
         val island = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
         val root = runCatching { Json.parseToJsonElement(island) }
             .getOrNull() ?: return emptyList()
+        return listingsIn(root, itemIdAsIs = true)
+    }
+
+    /** The site's search API answer, the same listing objects its pages are drawn from. Listed
+     *  under the number the result page's links carry ("m2434800158" is 2434800158, a dealer's
+     *  "a1524104910" is 1524104910), so an offer
+     *  found with a price band is the same offer found without one. */
+    internal fun parseApiAnswer(body: String): List<Listing> {
+        val root = runCatching { Json.parseToJsonElement(body) }.getOrNull() ?: return emptyList()
+        return listingsIn(root, itemIdAsIs = false)
+    }
+
+    private fun listingsIn(root: JsonElement, itemIdAsIs: Boolean): List<Listing> {
         val listings = mutableListOf<JsonObject>()
         fun walk(element: JsonElement) {
             when (element) {
@@ -145,7 +174,8 @@ class MarktplaatsCrawler(
         walk(root)
         val now = Clock.System.now()
         return listings.distinctBy { it["itemId"]?.jsonPrimitive?.content }.mapNotNull { item ->
-            val id = item["itemId"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val id = item["itemId"]?.jsonPrimitive?.contentOrNull
+                ?.let { if (itemIdAsIs) it else it.replace(ITEM_LETTER, "") } ?: return@mapNotNull null
             val title = item["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val cents = item["priceInfo"]?.jsonObject?.get("priceCents")?.jsonPrimitive?.longOrNull
                 ?: return@mapNotNull null
