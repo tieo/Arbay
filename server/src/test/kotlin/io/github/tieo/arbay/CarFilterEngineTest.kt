@@ -252,6 +252,22 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun flatbedIsNeverTheRoofHeightAsked() {
+        // mobile.de, live: two Crafter flatbeds kept in a search for a high-roof van, their card
+        // saying only "Volkswagen Crafter" and their page "Ausstattungslinie: Pritsche 35 DOKA".
+        val filters = CarFilters(vanHeights = setOf(2))
+        val flatbed = carListing("p", PlatformId.MOBILE_DE, "Volkswagen Crafter").copy(
+            description = "Volkswagen Crafter Pritsche DSG 35 DOKA mittel FWD *DSG\n\nAusstattungslinie: Pritsche 35 DOKA mittellang FWD",
+        )
+        val van = carListing("k", PlatformId.MOBILE_DE, "Volkswagen Crafter").copy(
+            description = "Volkswagen Crafter Kasten L2H2\n\nAusstattungslinie: Kasten 35 Trendline mittellang Hochdach FWD\n\nDachträger, Pritsche fürs Dach",
+        )
+        assertEquals(listOf("MOBILE_DE:k"), CarFilterEngine.apply(listOf(flatbed, van), filters).map { it.id })
+        // Without a roof asked for, a flatbed is as good as any Crafter.
+        assertEquals(2, CarFilterEngine.apply(listOf(flatbed, van), CarFilters()).size)
+    }
+
+    @Test
     fun vanSoftPassesWhenNoSizeStated() {
         // A van that states no size at all (no code, no word) must not be dropped.
         val filters = CarFilters(vanHeights = setOf(2))
