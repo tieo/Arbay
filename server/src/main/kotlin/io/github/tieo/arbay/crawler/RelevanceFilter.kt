@@ -166,9 +166,15 @@ object RelevanceFilter {
         // A count followed by a length is a measurement: "M.2 22 x 80 mm" is the card's size.
         // A spaced count is at most three digits: "Ryzen 9 7950 X" is a processor. And what the search
         // itself names is never a count: "Surface Pro X 13" and a "ThinkBook 14x" are the machines.
+        // A spaced number after a short run of letters is the rest of a model name written apart,
+        // "WD Black SN 850 X" being the SN850X: read as a lot of 850, the drive was thrown away.
         val searched = (parsed.positiveTokens + parsed.orGroups.flatten()).toSet()
         val countBefore = Regex("""(?:^|\s)(?!1\s*x)(\d{2}x|\d{2,3}\s+x)(?:\s|$)(?!\s*\d+\s*(mm|cm)\b)""")
-            .findAll(titleNorm).any { it.groupValues[1].replace(" ", "") !in searched }
+            .findAll(titleNorm).any { m ->
+                val before = titleNorm.substring(0, m.range.first).trimEnd().substringAfterLast(' ')
+                val modelPrefix = before.length in 2..3 && before.all { it.isLetter() } && before !in COUNT_LEAD_WORDS
+                m.groupValues[1].replace(" ", "") !in searched && !(modelPrefix && ' ' in m.groupValues[1])
+            }
         val countAfter = "x" !in searched &&
             Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz|mm|cm))""").containsMatchIn(titleNorm)
         if (countBefore || countAfter) return -1.0
@@ -676,6 +682,10 @@ object RelevanceFilter {
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
             // what fits inside it.
             """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
+            // A heatsink is sold on a drive as often as on its own ("990 PRO mit Kühlkörper"), so
+            // it is the thing on offer only where the title says what it is for: "MSI SPATIUM
+            // Kühlkörper für M580 PCIe 5.0 NVMe M.2 2TB" is the cooler.
+            """\b(k(ü|ue)hlk(ö|oe)rper|heat\s?sinks?|cooler)(?=\s+(f(ü|ue)r|for|pour|per|para|voor)\b)|""" +
             """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|""" +
             """(é|e)tuis?|(back|flip|book|hard|soft)?covers?|case|charger|enclosure|caddy|docking\s?station|""" +
             """screen\s?protectors?|praxisbuch|handbuch|anleitung|""" +
@@ -1280,6 +1290,9 @@ object RelevanceFilter {
             .replace(Regex("\\s+"), " ")
             .trim()
     }
+
+    /** Short words that lead into a count rather than being the first half of a model name. */
+    private val COUNT_LEAD_WORDS = setOf("lot", "set", "ca", "je", "mit", "und", "für", "fur", "for", "of", "the", "von", "à", "par", "per", "con", "met", "en", "et", "and")
 
     private val PLACEHOLDER_TITLES = setOf(
         "neues angebot", "new listing", "nieuw", "nouveau",

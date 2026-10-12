@@ -749,6 +749,32 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a heatsink for a drive is not the drive, a drive with one is`() {
+        // eBay, live, for "2TB M.2": the cooler was kept as a 2TB drive.
+        val kept = search("2TB M.2", listOf(
+            listing("MSI SPATIUM Kühlkörper für M580 PCIe 5.0 NVMe M.2 2TB FROZR"),
+            listing("Seagate FireCuda 530 2TB M.2 NVMe PCIe Gen4 SSD mit Kühlkörper"),
+            listing("Fanxiang M.2 2280 2TB NVMe SSD Heatsink PCIe 4.0 PS5"),
+            listing("Samsung 990 PRO 2TB M.2 NVMe"),
+        )).map { it.title }
+        assertTrue(kept.none { it.startsWith("MSI SPATIUM") }, kept.toString())
+        assertTrue(kept.any { it.startsWith("Seagate") } && kept.any { it.startsWith("Fanxiang") }, kept.toString())
+    }
+
+    @Test
+    fun `a model name written apart is one drive, not a lot`() {
+        // Kleinanzeigen, live, for "2TB NVMe": "sn 850 x" was read as a lot of 850.
+        val kept = search("2TB NVMe", listOf(
+            listing("WD black sn 850 x 2tb nvme"),
+            listing("WD Black SN850X 2TB NVMe"),
+            listing("Samsung 990 PRO 2TB NVMe"),
+            listing("Lot 20 x Samsung 2TB NVMe"),
+        )).map { it.title }
+        assertTrue("WD black sn 850 x 2tb nvme" in kept, kept.toString())
+        assertTrue(kept.none { it.startsWith("Lot 20") }, kept.toString())
+    }
+
+    @Test
     fun `a drive is not a sanding sheet, a speed is not a size, and a card size is not a lot`() {
         val kept = search("4TB NVMe", listOf(
             listing("Patriot P400 V4 4TB interne SSD - NVMe PCIe Gen 4x4 - M.2 2280"),
