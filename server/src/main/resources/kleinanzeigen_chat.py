@@ -35,6 +35,10 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
   {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
   {"op": "shipping_options", "adId": ".."}          -> {"ok": true, "data": <gateway payload>}; the ways the ad ships through "Sicher bezahlen", priced as at payment
+  {"op": "post_ad", "categoryId": "173", "title": "..", "description": "..", "attributes": {"Marke": "Google", "Zustand": "Gut"},
+   "priceType": "VB", "price": 449, "shipping": true, "buyNow": true, "photos": [paths], "send": false}
+                                                    -> {"ok": true, "posted": bool, "adId": "..", "taken": {what the form holds}, "picture": ..};
+                                                       the market's post form filled in, posted with its own button only when "send" is true
   {"op": "offer", "id": "..", "price": 425.0, "toDoor": true, "most": 450.0, "send": false}
                                                     -> {"ok": true, "price": .., "fee": .., "shippingFrom": .., "shipping": [{"name", "eur"}],
                                                         "shippingEur": .., "paid": .., "sent": bool, "picture": ..}; a price offer through
@@ -49,6 +53,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 from urllib.parse import urlparse
@@ -82,6 +87,10 @@ async def within(what: str, call, seconds: float = 8):
 
 class SignedOut(Exception):
     pass
+
+
+class PostFormProblem(Exception):
+    """The post form does not offer what the ad asks for; worded for the user."""
 
 
 class Stuck(Exception):
@@ -739,6 +748,221 @@ class Chat:
         await self.tab.get(ROOT + "/")
         return {"ok": False, "signedOut": False, "error": "the offer was sent but does not show in the conversation", "detail": detail}
 
+    # The post form ("Anzeige aufgeben"), one page per category. Its details are dropdown buttons
+    # whose id is the detail's field ("handy_telekom.art") with a listbox "<id>-menu" of options,
+    # the condition is a dialog of its own, the carriers another, and the photos go in through a
+    # file field and show as thumbnails once uploaded.
+    POST_FORM = ROOT + "/p-anzeige-aufgeben-schritt2.html?categoryId={}"
+    POSTED_PHOTO = "img[alt='Bild zur Anzeige']"
+
+    async def post_ad(self, req: dict) -> dict:
+        """An ad put up for sale through the market's own post form, filled in as a person does and
+        posted with its own button only when "send" is true. What the form took is read back off it
+        and compared with what was asked before anything is posted."""
+        await self.session()
+        await self.tab.get(self.POST_FORM.format(int(req["categoryId"])))
+        await asyncio.sleep(random.uniform(3, 4.5))
+        await self.accept_cookies()
+        if not await self.visible("#ad-title"):
+            return await self.post_failed("the post form did not open")
+        price = req.get("price")
+        try:
+            await self.post_photos(req.get("photos") or [])
+            await self.press(*(await self.visible("#ad-title"))[0])
+            await self.hand.type(req["title"], fast=True)
+            for label, value in (req.get("attributes") or {}).items():
+                await self.pick_detail(label, value)
+            await self.press(*(await self.visible("#ad-description"))[0])
+            await asyncio.sleep(random.uniform(0.3, 0.7))
+            # A text this long goes in the way a pasted one does, in one go.
+            await within("description", self.tab.send(cdp.input_.insert_text(text=req["description"])))
+            await self.post_shipping(bool(req.get("shipping", True)), price)
+            await self.pick_option("#ad-price-type", req["priceType"])
+            if price is not None and req["priceType"] != "Zu verschenken":
+                await self.press(*(await self.visible("#ad-price-amount"))[0])
+                await self.hand.key("ctrl+a")
+                await self.hand.type(str(int(price)), fast=True)
+            buy_now = await self.visible("label[for='ad-buy-now-true']")
+            if buy_now:
+                target = "ad-buy-now-true" if req.get("buyNow") else "ad-buy-now-false"
+                await self.press(*(await self.visible(f"label[for='{target}']"))[0])
+        except PostFormProblem as e:
+            return await self.post_failed(str(e))
+        await asyncio.sleep(1)
+        taken = json.loads(await within("form values", self.tab.evaluate(self.FORM_VALUES)))
+        differs = self.form_differs(req, taken)
+        if differs:
+            return await self.post_failed("the form took " + "; ".join(differs), taken)
+        if not req.get("send"):
+            picture = (await self.page_detail()).get("picture")
+            await self.leave_form()
+            return {"ok": True, "posted": False, "taken": taken, "picture": picture}
+        sends = [(e, p) for e, p in await self.visible("button") if (e.text_all or "").strip() == "Anzeige aufgeben"]
+        if not sends:
+            return await self.post_failed("the form shows no post button", taken)
+        await self.press(*sends[-1])
+        for _ in range(20):
+            await asyncio.sleep(1.5)
+            here = await self.url()
+            m = re.search(r"[?&]adId=(\d+)", here)
+            if m:
+                await self.tab.get(ROOT + "/")
+                return {"ok": True, "posted": True, "adId": m.group(1), "taken": taken}
+        return await self.post_failed("the form was sent but no posted ad came back", taken)
+
+    async def post_failed(self, why: str, taken: dict | None = None) -> dict:
+        detail = await self.page_detail()
+        await self.leave_form()
+        return {"ok": False, "signedOut": False, "error": why, "taken": taken, "detail": detail}
+
+    async def leave_form(self) -> None:
+        """Back to the home page; a half filled form asks before it is left, and is left."""
+        try:
+            await within("leave", self.tab.send(cdp.page.navigate(ROOT + "/")), 5)
+        except Exception:
+            try:
+                await within("leave prompt", self.tab.send(cdp.page.handle_java_script_dialog(accept=True)), 5)
+            except Exception as e:
+                log(f"leaving the post form: {type(e).__name__}")
+        await asyncio.sleep(2)
+
+    async def post_photos(self, paths: list) -> None:
+        """Every photo through the form's file field, as a picked file is, and wait until each shows."""
+        if not paths:
+            return
+        doc = await within("document", self.tab.send(cdp.dom.get_document(depth=0)))
+        node = await within("file field", self.tab.send(cdp.dom.query_selector(doc.node_id, "input[type=file]")))
+        if not node:
+            raise PostFormProblem("the form has no photo field")
+        await within("photos", self.tab.send(cdp.dom.set_file_input_files(files=list(paths), node_id=node)))
+        shown = 0
+        for _ in range(90):
+            await asyncio.sleep(1)
+            shown = await within("photo count", self.tab.evaluate(f"document.querySelectorAll({json.dumps(self.POSTED_PHOTO)}).length"))
+            if shown >= len(paths):
+                return
+        raise PostFormProblem(f"{shown} of {len(paths)} photos uploaded")
+
+    async def pick_detail(self, label: str, value: str) -> None:
+        """The option [value] of the detail the form shows under [label]."""
+        if label == "Zustand":
+            return await self.pick_condition(value)
+        fields = json.loads(await within("details", self.tab.evaluate("""JSON.stringify([...document.querySelectorAll('button[id]')].map(b => {
+            const l = document.querySelector('label[for="' + CSS.escape(b.id) + '"]');
+            return [b.id, l ? l.innerText.replace(/\\(optional\\)/, '').trim() : null];
+        }).filter(f => f[1]))""")))
+        field = next((f for f, l in fields if l == label), None)
+        if field is None:
+            raise PostFormProblem(f"the form asks no detail {label}; it asks {', '.join(l for _, l in fields)}")
+        await self.pick_option(f"[id='{field}']", value)
+
+    async def pick_option(self, button: str, value: str) -> None:
+        """Opens the dropdown [button] and picks the option reading [value]."""
+        opener = await self.visible(button)
+        if not opener:
+            raise PostFormProblem(f"the form shows no {button}")
+        await self.press(*opener[0])
+        options = []
+        for _ in range(10):
+            await asyncio.sleep(0.4)
+            options = await self.visible("[role=listbox] [role=option]")
+            if options:
+                break
+        names = [(e.text_all or "").strip() for e, _ in options]
+        chosen = next(((e, p) for (e, p), n in zip(options, names) if n == value), None)
+        if chosen is None:
+            await self.hand.key("Escape")
+            raise PostFormProblem(f"{button} offers no {value}; it offers {', '.join(n for n in names if n != 'Bitte wählen')}")
+        await self.press(*chosen)
+        await asyncio.sleep(random.uniform(0.4, 0.8))
+
+    async def pick_condition(self, value: str) -> None:
+        openers = [(e, p) for e, p in await self.visible("button[aria-haspopup=dialog]") if "Zustand auswählen" in (e.text_all or "")]
+        if not openers:
+            raise PostFormProblem("the form asks no condition")
+        await self.press(*openers[0])
+        await asyncio.sleep(1)
+        labels = await self.visible("dialog[open] label")
+        names = [(e.text_all or "").strip() for e, _ in labels]
+        chosen = next(((e, p) for (e, p), n in zip(labels, names) if n == value), None)
+        if chosen is None:
+            await self.hand.key("Escape")
+            raise PostFormProblem(f"the condition has no {value}; it has {', '.join(names)}")
+        await self.press(*chosen)
+        await self.confirm_dialog()
+
+    async def confirm_dialog(self) -> None:
+        confirm = [(e, p) for e, p in await self.visible("dialog[open] button") if (e.text_all or "").strip() == "Bestätigen"]
+        if not confirm:
+            raise PostFormProblem("the dialog shows no Bestätigen")
+        await self.press(*confirm[0])
+        await asyncio.sleep(random.uniform(0.6, 1.0))
+
+    async def post_shipping(self, ships: bool, price) -> None:
+        """Shipping on or off; on, the carriers whose liability covers the price, the others left out:
+        a parcel lost on its way is the seller's loss up to what the carrier does not pay."""
+        await self.press(*(await self.visible(f"label[for='ad-shipping-enabled-{'yes' if ships else 'no'}']"))[0])
+        if not ships:
+            return
+        await asyncio.sleep(0.5)
+        await self.press(*(await self.visible("#ad-shipping-options"))[0])
+        await asyncio.sleep(1.2)
+        carriers = json.loads(await within("carriers", self.tab.evaluate("""JSON.stringify((() => {
+            const d = document.querySelector('dialog[open]');
+            const boxes = [...d.querySelectorAll('input[type=checkbox]')];
+            const text = d.innerText;
+            return boxes.map((b, i) => {
+                const name = (document.querySelector('label[for="' + CSS.escape(b.id) + '"]') || {}).innerText || '';
+                const next = i + 1 < boxes.length ? ((document.querySelector('label[for="' + CSS.escape(boxes[i + 1].id) + '"]') || {}).innerText || '') : null;
+                const from = text.indexOf(name), to = next ? text.indexOf(next, from + 1) : text.length;
+                const m = text.slice(from, to).match(/Haftung bis zu ([\\d.]+) €/);
+                return {id: b.id, name: name.trim(), checked: b.checked, liability: m ? Number(m[1].replace('.', '')) : null};
+            });
+        })())""")))
+        for c in carriers:
+            want = price is None or c["liability"] is None or c["liability"] >= price
+            if want != c["checked"]:
+                await self.press(*(await self.visible(f"label[for='{c['id']}']"))[0])
+                await asyncio.sleep(random.uniform(0.3, 0.6))
+        await self.confirm_dialog()
+
+    FORM_VALUES = """JSON.stringify((() => {
+        const v = n => { const e = document.querySelector('[name="' + n + '"]'); return e ? e.value : null; };
+        const details = {};
+        document.querySelectorAll('input[name^="attributeMap["]').forEach(e => {
+            if (e.type === 'radio' && !e.checked) return;
+            details[e.name.slice(13, -1)] = e.value;
+        });
+        return {
+            title: v('title'), description: v('description'), priceType: v('priceType'), price: v('priceAmount'),
+            buyNow: (document.getElementById('ad-buy-now-true') || {}).checked || false,
+            buyNowOffered: !!document.getElementById('ad-buy-now-true'),
+            shipping: [...document.querySelectorAll('input[name^="shippingOptions["]')].map(e => e.value),
+            details, photos: document.querySelectorAll("img[alt='Bild zur Anzeige']").length,
+        };
+    })())"""
+
+    @staticmethod
+    def form_differs(req: dict, taken: dict) -> list:
+        """What the form holds that is not what was asked."""
+        differs = []
+        if (taken.get("title") or "").strip() != req["title"].strip():
+            differs.append(f"the title as {taken.get('title')!r}")
+        if (taken.get("description") or "").replace("\r\n", "\n").strip() != req["description"].replace("\r\n", "\n").strip():
+            differs.append("another text")
+        if taken.get("photos") != len(req.get("photos") or []):
+            differs.append(f"{taken.get('photos')} photos")
+        price = req.get("price")
+        if req["priceType"] != "Zu verschenken" and price is not None and str(taken.get("price") or "").strip() != str(int(price)):
+            differs.append(f"the price as {taken.get('price')!r}")
+        empty = [k for k, v in (taken.get("details") or {}).items() if not v]
+        asked = len([k for k in (req.get("attributes") or {})])
+        if len([v for v in (taken.get("details") or {}).values() if v]) < asked:
+            differs.append(f"only some details (empty: {', '.join(empty)})")
+        if taken.get("buyNowOffered") and bool(req.get("buyNow")) != bool(taken.get("buyNow")):
+            differs.append("Direkt kaufen otherwise")
+        return differs
+
     async def shipping_options(self, ad_id: str) -> dict:
         """The ways an ad ships through "Sicher bezahlen", each priced as the buyer pays it at payment."""
         _, uid = await self.session()
@@ -786,6 +1010,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         most = req.get("most")
         return await chat.offer(req["id"], float(req["price"]), bool(req.get("toDoor", True)),
                                 float(most) if most is not None else None, bool(req.get("send")))
+    if op == "post_ad":
+        return await chat.post_ad(req)
     if op == "contact":
         return await chat.contact(str(req["adId"]), req["text"])
     return {"ok": False, "error": f"unknown op {op}"}

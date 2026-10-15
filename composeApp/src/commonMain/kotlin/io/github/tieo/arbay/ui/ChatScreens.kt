@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -129,6 +130,7 @@ fun InboxScreen(session: Session) {
                 items(review, key = { "review:" + it.blockId }) { ReviewRow(it) }
                 item { HorizontalDivider(color = arbay.line) }
             }
+            item { ForSaleRows(session) }
             if (account?.signedIn == true && conversations.isEmpty()) item { Nothing("No conversations yet.") }
             items(conversations, key = { it.id }) { c ->
                 ConversationRow(c) { nav.go(Route.Conversation(c.id)) }
@@ -202,6 +204,10 @@ fun ConversationScreen(session: Session, id: String) {
                     }
                 },
                 actions = {
+                    // A thing bought here can be sold again from its own ad.
+                    if (c?.buying == true) c.listingId?.let { listingId ->
+                        IconButton(onClick = { session.sell.startFrom(listingId) { nav.go(Route.Sell(it)) } }) { Icon(Icons.Outlined.Sell, "Sell one like this") }
+                    }
                     c?.listingId?.let(::kleinanzeigenAdUrl)?.let { url ->
                         IconButton(onClick = { openBrowser(url) }) { Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Open the ad") }
                     }

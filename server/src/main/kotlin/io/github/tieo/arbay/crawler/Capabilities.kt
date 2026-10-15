@@ -81,6 +81,26 @@ interface KnowsAdState {
         adState(url)?.let { io.github.tieo.arbay.model.AdNow(state = it) }
 }
 
+/** What an ad says, for putting one like it up for sale: [photos] are the addresses of its pictures
+ *  in the order it shows them, [attributes] the details its seller picked, by the label the market
+ *  shows them under. */
+data class AdCopy(
+    val title: String,
+    val description: String,
+    val categoryId: String,
+    val attributes: Map<String, String>,
+    val photos: List<String>,
+)
+
+/** Reads an ad whole, photos included, so the user can sell the same thing on the same market. */
+interface CopiesAds {
+    /** The ad behind [url], or null when its page could not be read. */
+    suspend fun adCopy(url: String): AdCopy?
+
+    /** One of the ad's photos at the largest size the market serves. */
+    suspend fun photo(url: String): ByteArray
+}
+
 /** Lists prices in a currency other than the euro, so amounts must be converted before they are
  *  compared or shown. */
 interface PricesInOwnCurrency {

@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 
-class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState {
+class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState, CopiesAds {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
@@ -439,6 +439,20 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         log.debug("ad unreadable for {}: {}", url, e.message?.take(60))
         null
+    }
+
+    override suspend fun adCopy(url: String): AdCopy? = try {
+        KleinanzeigenDetailParser.adCopy(fetchWithFallback(client, url, "Kleinanzeigen"))
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        log.debug("ad unreadable for {}: {}", url, e.message?.take(60))
+        null
+    }
+
+    /** The photo at 1200 by 1600, the largest rule the image server answers ($_57). */
+    override suspend fun photo(url: String): ByteArray {
+        val response = client.get("${url.substringBefore('?')}?rule=\$_57.JPG")
+        check(response.status.value == 200) { "photo answered ${response.status.value}" }
+        return response.bodyAsBytes()
     }
 
     override suspend fun adState(url: String): AdState? = try {

@@ -35,6 +35,8 @@ sealed interface Route {
     data object Settings : Route
     data object Inbox : Route
     data class Conversation(val id: String) : Route
+    /** An ad for sale, as a draft until the user posts it. */
+    data class Sell(val draftId: String) : Route
 
     fun path(): String = when (this) {
         Home -> "/"
@@ -51,6 +53,7 @@ sealed interface Route {
         Settings -> "/settings"
         Inbox -> "/inbox"
         is Conversation -> "/inbox/${id.encodeURLPathPart()}"
+        is Sell -> "/sell/${draftId.encodeURLPathPart()}"
     }
 
     companion object {
@@ -66,6 +69,7 @@ sealed interface Route {
                 "free" -> FreeItems
                 "settings" -> Settings
                 "inbox" -> parts.getOrNull(1)?.let { Conversation(it) } ?: Inbox
+                "sell" -> parts.getOrNull(1)?.let { Sell(it) } ?: Inbox
                 else -> Home
             }
         }

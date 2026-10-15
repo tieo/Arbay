@@ -33,6 +33,7 @@ import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.SellViewModel
 
 /** One client and one view model of each kind, for the whole session, as the browser holds them. */
 class Session(
@@ -41,6 +42,7 @@ class Session(
     val listings: ListingViewModel,
     val freeItems: FreeItemViewModel,
     val chat: ChatViewModel,
+    val sell: SellViewModel,
 )
 
 private data class Place(val route: Route, val label: String, val icon: ImageVector)
@@ -90,6 +92,7 @@ fun ArbayApp(session: Session, navigator: Navigator = remember { Navigator() }) 
                             Route.Settings -> SettingsScreen(session)
                             Route.Inbox -> InboxScreen(session)
                             is Route.Conversation -> ConversationScreen(session, route.id)
+                            is Route.Sell -> SellScreen(session, route.draftId)
                         }
                     }
                 }

@@ -9,6 +9,7 @@ import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.auctionReminderRoutes
 import io.github.tieo.arbay.routes.chatRoutes
+import io.github.tieo.arbay.routes.sellingRoutes
 import io.github.tieo.arbay.routes.signInProxyRoutes
 import io.github.tieo.arbay.routes.userStateRoutes
 import io.github.tieo.arbay.routes.liveRoutes
@@ -45,6 +46,7 @@ fun Application.configureRouting() {
         importSettingsRoutes()
         auctionReminderRoutes()
         chatRoutes()
+        sellingRoutes()
         signInProxyRoutes(Chat.signInProxy)
         userStateRoutes()
         liveRoutes()

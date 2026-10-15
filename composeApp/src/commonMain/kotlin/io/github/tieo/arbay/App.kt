@@ -21,6 +21,7 @@ import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.SellViewModel
 import kotlinx.serialization.encodeToString
 
 @Composable
@@ -33,6 +34,7 @@ fun App() {
             listings = viewModel { ListingViewModel(client) },
             freeItems = viewModel { FreeItemViewModel(client) },
             chat = viewModel { ChatViewModel(client) },
+            sell = viewModel { SellViewModel(client) },
         )
 
         // The debug dump (see debug/DebugRegistry.kt): the view models live for the whole session,
@@ -61,6 +63,7 @@ fun App() {
                     LiveKind.SAVED_SEARCHES -> session.products.reloadProducts()
                     LiveKind.STATE -> SharedState.refresh()
                     LiveKind.CHAT -> { session.chat.refresh(); session.chat.loadReview() }
+                    LiveKind.SELLING -> session.sell.load()
                     LiveKind.SHOW -> event.path?.let { path ->
                         val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
                         if (route != navigator.current) navigator.go(route)

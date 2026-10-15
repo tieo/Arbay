@@ -92,13 +92,15 @@ fun InboxScreen(app: WebApp, route: Route) {
             H3({ classes("group-title") }) { Text("How your texts do") }
             review.forEach { ReviewEntry(it) }
         }
+        ForSaleList(app, (route as? Route.Sell)?.draftId)
         Div({ classes("rows") }) {
             if (account?.signedIn == true && conversations.isEmpty()) Div({ classes("empty") }) { Text("No conversations yet.") }
             conversations.forEach { c -> ConversationRow(c, c.id == openId) }
         }
     }
     if (!signedOut) Aside({ classes("inspector") }) {
-        if (openId != null) ConversationPane(app, openId)
+        if (route is Route.Sell) SellPane(app, route.draftId)
+        else if (openId != null) ConversationPane(app, openId)
         else Div({ classes("empty") }) { Text(if (conversations.isEmpty()) "" else "${conversations.sumOf { it.unread }} unread") }
     }
 }
@@ -153,6 +155,10 @@ private fun ConversationPane(app: WebApp, id: String) {
             Div({ classes("title-text") }) {
                 H2 { Text(c?.adTitle ?: "") }
                 c?.partner?.let { Span({ classes("muted", "small") }) { Text(it) } }
+            }
+            // A thing bought here can be sold again from its own ad.
+            if (c?.buying == true) c.listingId?.let { listingId ->
+                IconButton(Glyph.Tag, "Sell one like this") { app.sell.startFrom(listingId) { Router.go(Route.Sell(it)) } }
             }
             c?.listingId?.let(::kleinanzeigenAdUrl)?.let { url ->
                 A(href = url, attrs = { classes("icon-button"); attr("target", "_blank"); attr("rel", "noopener noreferrer"); attr("title", "Open the ad") }) { Icon(Glyph.External) }

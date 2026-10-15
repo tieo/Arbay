@@ -3,6 +3,12 @@ package io.github.tieo.arbay.mcp
 import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.ChatSettings
+import io.github.tieo.arbay.model.AdDraft
+import io.github.tieo.arbay.model.AdPriceType
+import io.github.tieo.arbay.model.NewAdDraft
+import io.github.tieo.arbay.model.PostAdResult
+import io.github.tieo.arbay.model.postedUrl
+import io.github.tieo.arbay.model.problem
 import io.github.tieo.arbay.model.dealerNameKey
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
@@ -300,6 +306,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("words", "Open a search for these words")
                 string("listing_id", "Open this offer, inside the search it came from (give saved_search_id or words too)")
                 string("conversation_id", "Open this conversation")
+                string("ad_draft_id", "Open this ad for sale")
                 string("place", "Or one of: searches, messages, free_items, settings, vehicle_search")
             },
         ) { args ->
@@ -307,6 +314,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 ?: args.str("words")?.let { "/search/${it.encodeURLPathPart()}" }
             val path = when {
                 args.str("conversation_id") != null -> "/inbox/${args.str("conversation_id")!!.encodeURLPathPart()}"
+                args.str("ad_draft_id") != null -> "/sell/${args.str("ad_draft_id")!!.encodeURLPathPart()}"
                 search != null -> search + (args.str("listing_id")?.let { "/${it.encodeURLPathPart()}" } ?: "")
                 else -> when (args.str("place")) {
                     "messages" -> "/inbox"; "free_items" -> "/free"; "settings" -> "/settings"; "vehicle_search" -> "/vehicle"
@@ -625,6 +633,70 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             (if (offer.sent) "Sent. " else "Not sent. ") + offer.describe()
         }
 
+        // ── Selling ──
+
+        tool("ads_for_sale", "The user's ads for sale on Kleinanzeigen: drafts not posted yet, and the ones posted.") {
+            getJson<List<AdDraft>>("/api/selling/drafts").joinToString("\n\n") { it.describe() }.ifEmpty { "No ads for sale." }
+        }
+
+        tool(
+            "draft_ad",
+            "Start an ad for sale like a Kleinanzeigen ad the user bought from: its photos (each cropped a little, so they are " +
+                "not the seller's files), its text, category and details. Nothing is posted; the user sees the draft in Arbay.",
+            props = { string("listing_id", "The Kleinanzeigen ad, as KLEINANZEIGEN:<ad id>", required = true) },
+        ) { args ->
+            val r = http.post("$base/api/selling/drafts") {
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(NewAdDraft.serializer(), NewAdDraft(args.str("listing_id")!!)))
+            }
+            if (!r.status.isSuccess()) return@tool "No draft: ${r.bodyAsText()}"
+            val draft = json.decodeFromString(AdDraft.serializer(), r.bodyAsText())
+            Live.show("/sell/${draft.id}")
+            draft.describe()
+        }
+
+        tool(
+            "change_ad",
+            "Change a draft ad for sale: what is given replaces what it had. Title and text only as the user worded or approved them.",
+            props = {
+                string("id", "The draft", required = true)
+                string("title", "The ad's title"); string("text", "The ad's text")
+                integer("price_eur", "The asking price in whole euros"); string("price_type", "FIXED, NEGOTIABLE (VB) or GIVE_AWAY")
+                boolean("shipping", "Whether it ships; false is pickup only"); boolean("buy_now", "Offer Kleinanzeigen's Direkt kaufen")
+                stringArray("photos", "The photos to keep, in the order the ad shows them (names from the draft)")
+                stringArray("details", "Details to set, each as \"Label: option\" the way the post form words them (\"Farbe: Grau\"); an empty option drops that detail")
+            },
+        ) { args ->
+            val d = getJson<AdDraft>("/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}")
+            val details = args.strs("details").map { it.substringBefore(':').trim() to it.substringAfter(':', "").trim() }
+            val next = d.copy(
+                title = args.str("title") ?: d.title,
+                description = args.str("text") ?: d.description,
+                priceEur = args.int("price_eur") ?: d.priceEur,
+                priceType = args.str("price_type")?.let { AdPriceType.valueOf(it.uppercase()) } ?: d.priceType,
+                shipping = args.bool("shipping") ?: d.shipping,
+                buyNow = args.bool("buy_now") ?: d.buyNow,
+                photos = args.strs("photos").takeIf { "photos" in args } ?: d.photos,
+                attributes = (d.attributes + details.toMap()).filterValues { it.isNotEmpty() },
+            )
+            val r = http.put("$base/api/selling/drafts/${d.id.encodeURLPathPart()}") {
+                contentType(ContentType.Application.Json); setBody(json.encodeToString(AdDraft.serializer(), next))
+            }
+            if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
+            json.decodeFromString(AdDraft.serializer(), r.bodyAsText()).describe()
+        }
+
+        tool(
+            "post_ad", "Post a draft ad on Kleinanzeigen through the user's account, now. Only a draft the user approved as it stands.",
+            destructive = true,
+            props = { string("id", "The draft", required = true) },
+        ) { args ->
+            val r = http.post("$base/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}/post")
+            if (!r.status.isSuccess()) return@tool "Not posted: ${r.bodyAsText()}"
+            val result = json.decodeFromString(PostAdResult.serializer(), r.bodyAsText())
+            result.error?.let { "Not posted: $it" } ?: "Posted: ${result.draft.postedUrl()}"
+        }
+
         // ── Settings every device shares ──
 
         tool(
@@ -778,6 +850,15 @@ private fun JsonObject.bool(k: String) = this[k]?.jsonPrimitive?.contentOrNull?.
 private fun JsonObject.strs(k: String) = (this[k] as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }
 
 /** An offer as its dialog added it up, in one line. */
+private fun AdDraft.describe(): String = listOfNotNull(
+    "$id: $title",
+    postedUrl()?.let { "posted: $it" } ?: problem()?.let { "not ready: $it" } ?: "ready to post",
+    "price: ${priceEur?.let { "$it €" } ?: "none"} ${priceType.label}" + (if (shipping) ", ships" else ", pickup only") + (if (buyNow) ", Direkt kaufen" else ""),
+    "category $categoryId; details: ${attributes.entries.joinToString(", ") { "${it.key}: ${it.value}" }.ifEmpty { "none" }}",
+    "photos: ${photos.joinToString(", ")}",
+    "text:\n$description",
+).joinToString("\n")
+
 private fun PriceOffer.describe(): String {
     fun eur(v: Double?) = v?.let { "%.2f €".format(it) } ?: "?"
     val ways = shipping.joinToString(", ") { "${it.name} ${eur(it.eur)}" }.ifEmpty { "not listed" }

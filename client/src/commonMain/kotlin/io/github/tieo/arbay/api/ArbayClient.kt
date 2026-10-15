@@ -298,6 +298,32 @@ class ArbayClient(
             setBody(settings)
         }.body()
 
+    /** The user's ads for sale, newest first. */
+    suspend fun adDrafts(): List<io.github.tieo.arbay.model.AdDraft> = client.get("$baseUrl/api/selling/drafts").body()
+
+    /** A draft of an ad like [listingId]'s, its photos cropped a little on the server. */
+    suspend fun newAdDraft(listingId: String): io.github.tieo.arbay.model.AdDraft =
+        client.post("$baseUrl/api/selling/drafts") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.NewAdDraft(listingId))
+        }.body()
+
+    suspend fun changeAdDraft(draft: io.github.tieo.arbay.model.AdDraft): io.github.tieo.arbay.model.AdDraft =
+        client.put("$baseUrl/api/selling/drafts/${draft.id.encodeURLPathPart()}") {
+            contentType(ContentType.Application.Json)
+            setBody(draft)
+        }.body()
+
+    suspend fun deleteAdDraft(id: String) {
+        client.delete("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}")
+    }
+
+    suspend fun postAd(id: String): io.github.tieo.arbay.model.PostAdResult =
+        client.post("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}/post").body()
+
+    /** The full address of a server path, for an image the app loads itself. */
+    fun address(path: String): String = baseUrl + path
+
     /** Where a place is, for measuring listings against a home town. Null when the server's index
      *  does not know it. */
     suspend fun geocode(place: String): Pair<Double, Double>? {

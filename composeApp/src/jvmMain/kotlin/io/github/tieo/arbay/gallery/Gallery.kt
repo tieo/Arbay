@@ -46,6 +46,7 @@ import kotlin.time.Duration.Companion.seconds
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.PlatformStatus
 import io.github.tieo.arbay.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.SellViewModel
 import java.io.File
 
 /**
@@ -102,6 +103,7 @@ private fun session(
     listings = ListingViewModel(sample = listings, sampleStatuses = statuses, sampleLoading = loading),
     freeItems = FreeItemViewModel(sampleProfile = PreviewData.freeItemProfile, sampleItems = PreviewData.active),
     chat = chat,
+    sell = SellViewModel(rendersASample = true),
 )
 
 /** The app as it stands at [route], with whatever steps lie under it. */

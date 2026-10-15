@@ -17,6 +17,7 @@ import io.github.tieo.arbay.viewmodel.ChatViewModel
 import io.github.tieo.arbay.viewmodel.FreeItemViewModel
 import io.github.tieo.arbay.viewmodel.ListingViewModel
 import io.github.tieo.arbay.viewmodel.ProductViewModel
+import io.github.tieo.arbay.viewmodel.SellViewModel
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.ContentBuilder
 import org.jetbrains.compose.web.dom.Div
@@ -35,6 +36,7 @@ class WebApp {
     val listings = ListingViewModel(client)
     val freeItems = FreeItemViewModel(client)
     val chat = ChatViewModel(client)
+    val sell = SellViewModel(client)
 }
 
 /**
@@ -57,6 +59,7 @@ fun ArbayWeb() {
                 LiveKind.SAVED_SEARCHES -> app.products.reloadProducts()
                 LiveKind.STATE -> SharedState.refresh()
                 LiveKind.CHAT -> { app.chat.refresh(); app.chat.loadReview() }
+                LiveKind.SELLING -> app.sell.load()
                 LiveKind.SHOW -> event.path?.let { path ->
                     val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
                     if (route != Router.route) Router.go(route)
@@ -82,7 +85,7 @@ fun ArbayWeb() {
             Route.VehicleForm -> VehicleScreen(app)
             Route.FreeItems -> FreeItemsScreen(app)
             Route.Settings -> SettingsScreen(app)
-            Route.Inbox, is Route.Conversation -> InboxScreen(app, route)
+            Route.Inbox, is Route.Conversation, is Route.Sell -> InboxScreen(app, route)
         }
     }
 }

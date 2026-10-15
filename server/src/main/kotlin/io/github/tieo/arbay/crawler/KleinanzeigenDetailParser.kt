@@ -43,6 +43,33 @@ object KleinanzeigenDetailParser {
         }
     }
 
+    private val categoryLink = Regex("""/c(\d+)(?:$|[/?])""")
+    private val photoAddress = Regex("""https://img\.kleinanzeigen\.de/api/v1/prod-ads/images/[0-9a-f]{2}/[0-9a-f-]{36}""")
+
+    /**
+     * The ad whole, for selling one like it: the title, the seller's text, the category its last
+     * breadcrumb links to (`/s-handy-telekom/c173`), the details list, and the gallery's photos in
+     * their order. The page also shows similar ads with photos of their own; only the gallery's count.
+     */
+    fun adCopy(html: String): io.github.tieo.arbay.crawler.AdCopy? {
+        val doc = Jsoup.parse(html)
+        val title = doc.selectFirst("#viewad-title")?.ownText()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val category = doc.select(".breadcrump a.breadcrump-link").mapNotNull { categoryLink.find(it.attr("href"))?.groupValues?.get(1) }.lastOrNull()
+            ?: return null
+        val attributes = doc.select("li.addetailslist--detail").mapNotNull { li ->
+            val value = li.selectFirst(".addetailslist--detail--value")?.text()?.trim() ?: return@mapNotNull null
+            li.ownText().trim().takeIf { it.isNotEmpty() && value.isNotEmpty() }?.let { it to value }
+        }.toMap()
+        val photos = doc.select(".galleryimage-element").flatMap { el -> photoAddress.findAll(el.outerHtml()).map { it.value } }.distinct()
+        return io.github.tieo.arbay.crawler.AdCopy(
+            title = title,
+            description = doc.selectFirst("#viewad-description-text")?.wholeText()?.trim().orEmpty(),
+            categoryId = category,
+            attributes = attributes,
+            photos = photos,
+        )
+    }
+
     private val months = mapOf(
         "januar" to 1, "februar" to 2, "märz" to 3, "maerz" to 3, "april" to 4, "mai" to 5,
         "juni" to 6, "juli" to 7, "august" to 8, "september" to 9, "oktober" to 10,

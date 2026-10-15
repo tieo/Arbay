@@ -25,6 +25,8 @@ enum class LiveKind {
     STATE,
     /** Conversations, the outbox or the texts changed. */
     CHAT,
+    /** The user's ads for sale changed: a draft, or one posted. */
+    SELLING,
     /** Open this place on the screens in use; what an assistant is talking about. */
     SHOW,
     /** Nothing happened; keeps the line open through whatever sits in between. */
