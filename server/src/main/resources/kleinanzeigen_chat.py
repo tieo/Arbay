@@ -84,6 +84,10 @@ class SignedOut(Exception):
     pass
 
 
+class Stuck(Exception):
+    """The browser no longer answers, and only a new one will."""
+
+
 class Hand:
     """The mouse and keyboard of the browser's X display, moved the way a person moves them.
 
@@ -250,26 +254,42 @@ class Chat:
         started = time.monotonic()
         try:
             try:
-                raw = await self.tab.evaluate(script, await_promise=True)
+                raw = await within("fetch", self.tab.evaluate(script, await_promise=True), 20)
             except Exception as e:
-                if "ConnectionClosed" not in type(e).__name__:
+                if "ConnectionClosed" not in type(e).__name__ and "did not answer" not in str(e):
                     raise
-                # The page this sidecar works in was closed or crashed; every call after would fail
-                # the same way, so a new one is opened and the call made again.
+                # The page this sidecar works in was closed, crashed, or froze: a page left alone
+                # for a day stopped answering even 1+1 while its connection stayed open. Every call
+                # after would fail the same way, so it is replaced and the call made again.
                 log(f"page lost ({type(e).__name__}); opening a new one")
-                self.tab = await self.browser.get(ROOT + "/", new_tab=True)
-                self.origin = None
-                await asyncio.sleep(3)
-                raw = await self.tab.evaluate(script, await_promise=True)
+                try:
+                    await self.replace_page()
+                    raw = await within("fetch", self.tab.evaluate(script, await_promise=True), 20)
+                except Exception as again:
+                    raise Stuck(f"a new page did not answer either: {type(again).__name__}: {again}")
+        except Stuck:
+            raise
         except Exception as e:
             # A fetch that cannot leave the page says nothing about why; where the page is does.
             raise RuntimeError(f"fetch {url} failed on {await self.where()}: {str(e).splitlines()[0] if str(e) else type(e).__name__}")
         log(f"fetch {method} {url} {time.monotonic() - started:.1f}s")
         return json.loads(raw)
 
+    async def replace_page(self) -> None:
+        """Work in a new page and close the old one. The new one opens first: the browser quits
+        with its last page."""
+        old = self.tab
+        self.tab = await self.browser.get(ROOT + "/", new_tab=True)
+        self.origin = None
+        try:
+            await within("close page", self.browser.connection.send(cdp.target.close_target(target_id=old.target.target_id)), 5)
+        except Exception as e:
+            log(f"closing the old page failed: {type(e).__name__}")
+        await asyncio.sleep(3)
+
     async def where(self) -> str:
         try:
-            return await self.tab.evaluate("location.href + ' (' + document.title + ')'")
+            return await within("location", self.tab.evaluate("location.href + ' (' + document.title + ')'"), 5)
         except Exception as e:
             return f"an unreadable page ({type(e).__name__})"
 
@@ -789,7 +809,10 @@ async def main() -> None:
             # A page call that never returns would hold every request after it.
             answer = await asyncio.wait_for(handle(chat, req), timeout=float(req.get("timeout") or 50))
         except asyncio.TimeoutError:
-            answer = {"ok": False, "signedOut": False, "error": f"{req.get('op')} took too long"}
+            # The server starts a new sidecar on a stuck answer: whatever held this one holds the next.
+            answer = {"ok": False, "signedOut": False, "stuck": True, "error": f"{req.get('op')} took too long"}
+        except Stuck as e:
+            answer = {"ok": False, "signedOut": False, "stuck": True, "error": str(e)}
         except SignedOut as e:
             chat.token = None
             answer = {"ok": False, "signedOut": True, "error": str(e)}

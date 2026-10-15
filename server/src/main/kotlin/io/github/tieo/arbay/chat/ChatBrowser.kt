@@ -74,6 +74,8 @@ object ChatBrowser {
             throw ChatFailure("Arbay's browser did not answer", signedOut = false)
         }
         if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
+            // A sidecar that ran out of time on a request is stuck on its page; the next starts afresh.
+            if (answer["stuck"]?.jsonPrimitive?.booleanOrNull == true) stop()
             throw ChatFailure(
                 answer["error"]?.jsonPrimitive?.contentOrNull ?: "failed",
                 signedOut = answer["signedOut"]?.jsonPrimitive?.booleanOrNull == true,
