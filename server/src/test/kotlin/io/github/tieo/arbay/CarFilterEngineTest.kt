@@ -263,6 +263,9 @@ class CarFilterEngineTest {
             description = "Volkswagen Crafter Kasten L2H2\n\nAusstattungslinie: Kasten 35 Trendline mittellang Hochdach FWD\n\nDachträger, Pritsche fürs Dach",
         )
         assertEquals(listOf("MOBILE_DE:k"), CarFilterEngine.apply(listOf(flatbed, van), filters).map { it.id })
+        // TruckScout24, live: a box body on a Crafter chassis, size unstated, kept as a high-roof van.
+        val box = carListing("b", PlatformId.TRUCKSCOUT24, "Transporter mit Koffer VWCrafter 35 Automat *KAMERA+NAVI+KLIMA* (8318)")
+        assertEquals(emptyList(), CarFilterEngine.apply(listOf(box), filters).map { it.id })
         // Without a roof asked for, a flatbed is as good as any Crafter.
         assertEquals(2, CarFilterEngine.apply(listOf(flatbed, van), CarFilters()).size)
     }

@@ -191,8 +191,8 @@ object CarFilterEngine {
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
         if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return "emission"
         if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return "colour"
-        // A flatbed, a tipper or a bare chassis cab has no van roof, so it is never the roof height
-        // asked for. What it is shows in its title or in the model line a dealer page states
+        // A flatbed, a tipper, a box body or a bare chassis cab has no van roof, so it is never the
+        // roof height asked for. What it is shows in its title or in the model line a dealer page states
         // ("Ausstattungslinie: Pritsche 35 DOKA mittellang FWD"), never in the equipment prose,
         // where "Pritsche" can be the ladder rack of a box van.
         if (filters.vanHeights.isNotEmpty() && isOpenBody(listing)) return "body"
@@ -211,9 +211,9 @@ object CarFilterEngine {
         return null
     }
 
-    private val openBody = Regex("""\b(pritsche|pritschenwagen|doka-?pritsche|kipper|dreiseitenkipper|fahrgestell|plane|planenaufbau)\b""")
+    private val openBody = Regex("""\b(pritsche|pritschenwagen|doka-?pritsche|kipper|dreiseitenkipper|fahrgestell|plane|planenaufbau|koffer|kofferaufbau|kühlkoffer)\b""")
 
-    /** Whether the listing names its body as open or bare: in the title, the headline that opens
+    /** Whether the listing names its body as open, bare or a box built on a chassis: in the title, the headline that opens
      *  a dealer page's text, or that page's model line. */
     internal fun isOpenBody(listing: Listing): Boolean {
         val lines = listing.description.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
