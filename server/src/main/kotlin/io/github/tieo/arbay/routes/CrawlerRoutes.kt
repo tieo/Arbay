@@ -213,6 +213,14 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
     )
 }
 
+/**
+ * How many of a market's removed offers a search is told about. Capped where somebody waits: a
+ * market can return hundreds, and they ride the same stream as the results. A search nobody waits
+ * for hears of every one, since the saved-search watch tells an offer the search removed apart
+ * from one the market stopped sending by finding it among them.
+ */
+private fun droppedSent(query: SearchQuery): Int = if (query.unattended) Int.MAX_VALUE else 80
+
 /** The most offers one search reads from one market: fifty pages of a market's usual size. */
 private const val MAX_PER_MARKET = 1000
 
@@ -770,7 +778,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     dropped = (
                                         partitioned.dropped + done.criteriaDropped +
                                             done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
-                                        ).take(80),
+                                        ).take(droppedSent(pq)),
                                     fromCache = true,
                                     facets = done.facets,
                                 ))
@@ -910,11 +918,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = results.size,
                                     rawCount = rawResults.size,
                                     listings = results,
-                                    // Capped: a market can return hundreds, and this rides the same
-                                    // stream as the results themselves. Kept in the order the
-                                    // market ranked them, so the ones it thought most relevant —
-                                    // the ones a wrong filter would be hiding — are the ones sent.
-                                    dropped = dropped.take(80),
+                                    // Kept in the order the market ranked them, so the ones it
+                                    // thought most relevant, the ones a wrong filter would be
+                                    // hiding, are the ones sent ([droppedSent]).
+                                    dropped = dropped.take(droppedSent(pq)),
                                     termsUsed = termsUsed.toList(),
                                     suggestedTerms = verdicts.values.toList(),
                                     facets = facets,

@@ -20,6 +20,8 @@ class QueryResultCacheKeyTest {
         assertNotEquals(key(base), key(base.copy(carFilters = CarFilters(minMileageKm = 50_000))))
         assertNotEquals(key(base), key(base.copy(startPage = 2)))
         assertNotEquals(key(base), key(base.copy(reach = base.reach.copy(otherWords = true))))
+        // The watch reads mobile.de once per gearbox; a search somebody waits for reads one.
+        assertNotEquals(key(base), key(base.copy(unattended = true)))
     }
 
     @Test

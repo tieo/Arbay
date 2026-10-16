@@ -51,6 +51,8 @@ object QueryResultCache {
         query.location?.lowercase()?.trim(), query.radiusKm,
         query.maxPages, query.startPage, query.maxResults,
         query.carFilters,
+        // An unattended search reads more of some markets (mobile.de once per gearbox).
+        query.unattended,
         // The follow-up searches this decides are part of the answer that is stored.
         query.reach.otherWords, query.reach.extraTerms.map { it.lowercase().trim() }.sorted(),
     ).joinToString("|") { it?.toString() ?: "" }
