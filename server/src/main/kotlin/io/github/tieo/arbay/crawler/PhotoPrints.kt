@@ -132,11 +132,14 @@ object PhotoPrints {
 
     // ── recording ────────────────────────────────────────────────────────────────────────────
 
-    /** Prints [photos] of [listing] unless as many are printed already; the first may come from [firstFile]. */
-    suspend fun record(listing: Listing, photos: List<String>, firstFile: File? = null) {
-        if (photos.isEmpty()) return
+    /**
+     * Prints [photos] of [listing] unless as many are printed already; the first may come from
+     * [firstFile]. Answers whether any of them is printed, false when not one could be fetched.
+     */
+    suspend fun record(listing: Listing, photos: List<String>, firstFile: File? = null): Boolean {
+        if (photos.isEmpty()) return false
         val known = synchronized(this) { entries[listing.id] }
-        if (known != null && known.prints.size >= photos.size) return
+        if (known != null && known.prints.size >= photos.size) return true
         val prints = coroutineScope {
             photos.take(30).mapIndexed { index, url ->
                 async {
@@ -145,7 +148,7 @@ object PhotoPrints {
                 }
             }.awaitAll().filterNotNull()
         }
-        if (prints.isEmpty()) return
+        if (prints.isEmpty()) return false
         val location = listing.location
         val entry = Entry(
             id = listing.id, url = listing.url,
@@ -153,6 +156,7 @@ object PhotoPrints {
             seller = listing.seller?.name, prints = (known?.prints.orEmpty() + prints).distinct(),
         )
         synchronized(this) { put(entry); dirty = true }
+        return true
     }
 
     /** [record] in the background, for a listing just archived. */

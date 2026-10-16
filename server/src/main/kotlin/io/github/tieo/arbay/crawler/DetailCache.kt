@@ -61,6 +61,10 @@ object DetailCache {
         return e.detail
     }
 
+    fun remove(listingId: String) {
+        if (entries.remove(listingId) != null) schedulePersist()
+    }
+
     fun put(listingId: String, detail: ListingDetail) {
         entries[listingId] = Entry(detail, Clock.System.now().toEpochMilliseconds())
         schedulePersist()

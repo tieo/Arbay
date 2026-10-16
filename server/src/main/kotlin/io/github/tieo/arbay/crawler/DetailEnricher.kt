@@ -57,7 +57,7 @@ object DetailEnricher {
         // crawler's order. Cached details are free and always applied; the rest fill in on a
         // re-run from cache.
         val toFetch = listings
-            .filter { needsDetail(it, needed) && DetailCache.get(it.id) == null }
+            .filter { needsDetail(it, needed) && DetailCache.get(it.id) == null || galleryUnread(it, crawler) }
             .sortedBy { priceEurCents(it) }
             .take(MAX_FETCHES_PER_PLATFORM)
             .mapTo(HashSet()) { it.id }
@@ -68,19 +68,28 @@ object DetailEnricher {
         }
 
         return listings.map { listing ->
-            if (!needsDetail(listing, needed)) return@map listing.also { printGallery(it) }
-            DetailCache.get(listing.id)?.let { return@map listing.withDetail(it).also { l -> printGallery(l) } }
-            if (listing.id !in toFetch || crawler is ReadsAdsTogether) return@map listing // beyond budget or unread → stays inferred, badged unverified
-            val detail = gate.withPermit { crawler.fetchDetail(listing) } ?: return@map listing
-            DetailCache.put(listing.id, detail)
-            listing.withDetail(detail).also { printGallery(it) }
+            val detail = if (listing.id in toFetch && crawler !is ReadsAdsTogether)
+                gate.withPermit { crawler.fetchDetail(listing) }?.also { DetailCache.put(listing.id, it) } ?: DetailCache.get(listing.id)
+            else DetailCache.get(listing.id)
+            // Beyond the budget or unread, a listing stays inferred and badged unverified.
+            val read = if (detail != null && needsDetail(listing, needed)) listing.withDetail(detail) else listing
+            read.also { printGallery(it, detail, crawler) }
         }
     }
 
-    /** The whole gallery of an ad whose page has been read, printed so its photos can be found in other ads. */
-    private suspend fun printGallery(listing: Listing) {
-        val photos = DetailCache.get(listing.id)?.photos?.takeIf { it.isNotEmpty() } ?: return
-        runCatching { PhotoPrints.record(listing, photos) }
+    /** A listing whose page holds a gallery that was never read: read before galleries were, or replaced since. */
+    private fun galleryUnread(listing: Listing, crawler: Crawler): Boolean =
+        crawler is ReadsGalleries && DetailCache.get(listing.id)?.photos.isNullOrEmpty()
+
+    /**
+     * The whole gallery of an ad whose page has been read, printed so its photos can be found in
+     * other ads. A gallery of which no photo can be fetched any more was replaced by the seller,
+     * so the page is forgotten and read again.
+     */
+    private suspend fun printGallery(listing: Listing, detail: io.github.tieo.arbay.model.ListingDetail?, crawler: Crawler) {
+        val photos = detail?.photos?.takeIf { it.isNotEmpty() } ?: return
+        val printed = runCatching { PhotoPrints.record(listing, photos) }.getOrDefault(true)
+        if (!printed && crawler is ReadsGalleries) DetailCache.remove(listing.id)
     }
 
     /** The page's answers laid over the card's: its specs win where it has one, its own text

@@ -33,6 +33,13 @@ interface FetchesEveryPage {
  */
 interface SortsByPrice
 
+/**
+ * Reads an ad's whole photo gallery with its page ([io.github.tieo.arbay.model.ListingDetail.photos]),
+ * so [PhotoPrints] can find the ad's photos in other ads. A page read before galleries were, or
+ * whose photos the market has since replaced, is read again.
+ */
+interface ReadsGalleries
+
 /** Starts a search at any page asked for, so the listings past the first pages can be fetched with
  *  a search of their own. A market that does not declare this answers every page with its first. */
 interface StartsAtAnyPage
