@@ -409,12 +409,10 @@ class SavedSearchMonitor(
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
         val fresh = record(product, shown)
-        // What the top of the search scores today, every offer counted once: a dealer that lists
-        // the same van on two markets would otherwise push a new one out of the top twice over.
-        val scores = shown.values
-            .mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } }
-            .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
-            .sortedByDescending { it.second.score }
+        // What the top of the search scores today, every offer counted once.
+        val scores = bestCopyEach(
+            shown.values.mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } },
+        ) { it.score }
         // Every run, quiet ones included: the best offers it ever ranked are looked for again.
         if (shown.isNotEmpty()) TopOffers.update(product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState)
         if (firstFitRun) {
@@ -615,3 +613,13 @@ class SavedSearchMonitor(
         }
     }
 }
+
+/**
+ * Each offer once, best first: a dealer that lists the same van on two markets would otherwise
+ * push a new one out of the top twice over. The copy kept is the one that scores best, the one
+ * whose market says most about it: a Schrobenhausen van at 88 % on mobile.de ranked as its 79 %
+ * Kleinanzeigen copy.
+ */
+internal fun <F> bestCopyEach(scored: List<Pair<Listing, F>>, score: (F) -> Double): List<Pair<Listing, F>> =
+    scored.sortedByDescending { score(it.second) }
+        .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }

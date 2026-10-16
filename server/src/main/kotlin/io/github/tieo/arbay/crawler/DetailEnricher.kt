@@ -19,6 +19,12 @@ object DetailEnricher {
     // 50 vans unchecked against a wheelbase, which is a filter that hardly narrows anything.
     // Each of these is one page on a market that answers a plain client, three at a time.
     private const val MAX_FETCHES_PER_PLATFORM = 25
+
+    // How long one market's pages may wait for its request window ([RequestMonitor]): a search
+    // reading a whole price band spends the window on its result pages, and a page read refused
+    // there left every Kleinanzeigen van of a watch run unread. Half the market's crawl budget,
+    // so the wait never costs the market its whole answer.
+    private const val MAX_WAIT_FOR_BUDGET_MS = 90_000L
     private val gate = Semaphore(3)
 
     /** Fields the given filters constrain and that a detail page could verify. */
@@ -67,8 +73,11 @@ object DetailEnricher {
                 .forEach { (id, detail) -> DetailCache.put(id, detail) }
         }
 
+        val deadline = kotlin.time.Clock.System.now().toEpochMilliseconds() + MAX_WAIT_FOR_BUDGET_MS
         return listings.map { listing ->
-            val detail = if (listing.id in toFetch && crawler !is ReadsAdsTogether)
+            val fetch = listing.id in toFetch && crawler !is ReadsAdsTogether &&
+                RequestMonitor.awaitBudget(crawler.platformId.displayName, deadline)
+            val detail = if (fetch)
                 gate.withPermit { crawler.fetchDetail(listing) }?.also { DetailCache.put(listing.id, it) } ?: DetailCache.get(listing.id)
             else DetailCache.get(listing.id)
             // Beyond the budget or unread, a listing stays inferred and badged unverified.

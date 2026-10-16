@@ -72,6 +72,20 @@ object RequestMonitor {
         }
     }
 
+    /**
+     * Waits until [platform] is under its request ceiling again, as long as that is before
+     * [deadlineMs]. Answers false when it would not be, without waiting.
+     */
+    suspend fun awaitBudget(platform: String, deadlineMs: Long): Boolean {
+        while (overBudget(platform)) {
+            val c = byPlatform[platform] ?: return true
+            val freeAt = (synchronized(c.recentMs) { c.recentMs.firstOrNull() } ?: return true) + WINDOW_MS
+            if (freeAt > deadlineMs) return false
+            kotlinx.coroutines.delay((freeAt - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(50))
+        }
+        return true
+    }
+
     fun recordTier(platform: String, tier: String) {
         val c = counters(platform)
         when (tier) {

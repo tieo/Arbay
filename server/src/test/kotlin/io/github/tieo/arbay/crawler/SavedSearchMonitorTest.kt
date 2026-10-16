@@ -158,4 +158,23 @@ class SavedSearchMonitorTest {
         assertFalse(SavedSearchMonitor.worthInterrupting(auction(120), intervalMinutes = 30, now = now))
         assertTrue(SavedSearchMonitor.worthInterrupting(auction(120), intervalMinutes = 360, now = now))
     }
+
+    @Test
+    fun `the same van on two markets counts once, as its best scored copy`() {
+        fun van(id: String) = Listing(
+            id = id, platformId = io.github.tieo.arbay.model.PlatformId.valueOf(id.substringBefore(':')), externalId = id, url = "https://example.invalid/$id",
+            title = "Volkswagen Crafter", price = Money(18_950_00, Currency.EUR), scrapedAt = Instant.fromEpochSeconds(0),
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(firstRegYear = 2023, mileageKm = 88_999),
+        )
+        val ranked = bestCopyEach(listOf(van("KLEINANZEIGEN:1") to 0.79, van("MOBILE_DE:2") to 0.88)) { it }
+        assertEquals(listOf("MOBILE_DE:2" to 0.88), ranked.map { it.first.id to it.second })
+    }
+
+    @Test
+    fun `a market over its request window is waited for only while that ends before the deadline`() = kotlinx.coroutines.runBlocking {
+        val market = "budget-test-${System.nanoTime()}"
+        assertTrue(RequestMonitor.awaitBudget(market, 0))
+        repeat(45) { RequestMonitor.recordRequest(market) }
+        assertFalse(RequestMonitor.awaitBudget(market, kotlin.time.Clock.System.now().toEpochMilliseconds() + 1_000))
+    }
 }
