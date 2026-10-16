@@ -69,6 +69,9 @@ class SavedSearchMonitor(
     // five-minute crawl loop — the flag risk the anti-block work manages is per-crawl, not per-search.
     private val MIN_INTERVAL_MIN = 30
 
+    /** Prefix of the [seen] entry that marks a fit alert's first run as done. */
+    private val FIT_KEY = "fit:"
+
     // Subfilter matches found since the phone last polled. Held rather than sent: the notification
     // is raised on the device, so this waits for the device to ask.
     private val pendingSubfilterMatches = mutableListOf<SubfilterMatch>()
@@ -394,7 +397,7 @@ class SavedSearchMonitor(
         // A fit alert's own first run only learns what is there. The search may have run before
         // without it, on a plain crawl that never opened the ads, and everything this richer run
         // finds would count as new: switching the alert on once pushed four offers at once.
-        val fitKey = "fit:${product.id}"
+        val fitKey = "$FIT_KEY${product.id}"
         val firstFitRun = synchronized(stateLock) {
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
@@ -574,7 +577,8 @@ class SavedSearchMonitor(
             unopened.keys.retainAll(live)
             lastNew.keys.retainAll(live)
             lastRun.keys.retainAll(live)
-            seen.keys.retainAll(live)
+            // A fit alert's own mark sits beside its search's ids and goes only with the search.
+            seen.keys.retainAll { it.removePrefix(FIT_KEY) in live }
             SearchState(
                 unopened = unopened.mapValues { it.value.toSet() },
                 lastNew = lastNew.mapValues { it.value.toSet() },
