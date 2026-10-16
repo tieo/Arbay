@@ -79,13 +79,13 @@ object DetailEnricher {
 
     /** The page's answers laid over the card's: its specs win where it has one, its own text
      *  replaces the site's one-line summary, and a location it states fills in a missing one. */
-    private fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = copy(
+    private fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = SellersWords.apply(copy(
         vehicle = VehicleTextParser.merge(detail.vehicle, vehicle),
         description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
         location = location ?: detail.location,
         listingDate = listingDate ?: detail.listedAt,
         seller = detail.sellerReviews?.let { reviews -> seller?.copy(reviewCount = reviews) } ?: seller,
-    )
+    ))
 
     private fun priceEurCents(listing: Listing): Long =
         if (listing.price.currency == io.github.tieo.arbay.model.Currency.EUR) listing.price.amount

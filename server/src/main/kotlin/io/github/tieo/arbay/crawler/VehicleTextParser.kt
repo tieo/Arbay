@@ -189,7 +189,7 @@ object VehicleTextParser {
     fun enrich(listing: Listing): Listing {
         val fromText = parse("${listing.title} ${listing.description ?: ""}")
         val merged = merge(listing.vehicle, fromText) ?: return listing
-        return listing.copy(vehicle = merged)
+        return SellersWords.apply(listing.copy(vehicle = merged))
     }
 
     /**
