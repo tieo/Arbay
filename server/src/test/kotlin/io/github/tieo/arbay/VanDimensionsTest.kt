@@ -91,6 +91,21 @@ class VanDimensionsTest {
     }
 
     @Test
+    fun `a stated load length settles a Crafter's length and with it the scale of its code`() {
+        // TruckScout24, live: "Kastenwagen hoch VWCrafter 35*L3H3*", its page "Laderaumlänge: 3.300 mm".
+        // L3H3 alone is VW's mittellang Hochdach or the common scale's long Superhochdach.
+        val text = "Kastenwagen hoch VWCrafter 35*L3H3*Autom*Navi*Kamera*\nLaderaumlänge: 3.300 mm, Laderaumbreite: 1.800 mm, Laderaumhöhe: 2.000 mm"
+        val d = VanDimensions.read(text)
+        assertEquals(VanSize.MEDIUM, d.length); assertTrue(d.lengthSure)
+        assertEquals(VanSize.HIGH_ROOF, d.height); assertTrue(d.heightSure)
+        val bare = VanDimensions.read("Kastenwagen hoch VWCrafter 35*L3H3*Autom*Navi*Kamera*")
+        assertFalse(bare.lengthSure)
+        // A long van's load space says long or longer; a length between the bands says nothing.
+        assertEquals(VanSize.LONG, VanDimensions.read("VW Crafter Kasten Laderaumlänge: 4.300 mm").length)
+        assertFalse(VanDimensions.read("VW Crafter Kasten Laderaumlänge: 3.800 mm").lengthSure)
+    }
+
+    @Test
     fun `words and a code narrow each other`() {
         // Hochdach is high or higher; L3H2 is normal or high on its two scales: together, high.
         val d = VanDimensions.read("Volkswagen Crafter 2.0 TDI 35 Lang Hochdach DSG L3H2")

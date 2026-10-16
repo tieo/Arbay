@@ -66,7 +66,8 @@ object VanDimensions {
         return if (isCrafter(text, modelHint)) readCrafter(text, wheelbaseMm) else readCommon(text)
     }
 
-    private val crafterWord = Regex("""\bcrafter\b""", RegexOption.IGNORE_CASE)
+    // TruckScout24 writes make and model as one word: "VWCrafter".
+    private val crafterWord = Regex("""\b(vw)?crafter\b""", RegexOption.IGNORE_CASE)
     private val otherVanModel = Regex(
         """\b(sprinter|transit|ducato|boxer|jumper|master|movano|daily|tge|vito|vivaro|trafic|proace|transporter)\b""",
         RegexOption.IGNORE_CASE,
@@ -129,6 +130,22 @@ object VanDimensions {
     private val longWords = Regex("""\b(langer radstand|lang|lr)\b""", RegexOption.IGNORE_CASE)
     private val mediumWords = Regex("""\b(mittlere[rn]? radstand|mittellang|mittel lang|mittel|mr|mlh|mittelhoch|mittellanghoch)\b""", RegexOption.IGNORE_CASE)
 
+    // The load space's length as a dealer page states it ("Laderaumlänge: 3.300 mm"). Dealers give a
+    // 3640 mm Crafter 3,390 to 3,450 mm and a 4490 mm one 4,000 to 4,300; the old Crafter's mittel is
+    // about 3,300 too. So 3,000 to 3,700 says medium, 3,900 to 4,400 long or longer, 4,700 and more
+    // the extended overhang, and anything between says nothing.
+    private val loadLength = Regex("""laderaum(?:länge|laenge)\W{0,3}(\d[\d.]{2,5})\s*mm""", RegexOption.IGNORE_CASE)
+
+    private fun loadLengths(text: String): Set<Int>? {
+        val mm = loadLength.find(text)?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull() ?: return null
+        return when (mm) {
+            in 3000..3700 -> setOf(VanSize.MEDIUM)
+            in 3900..4400 -> setOf(VanSize.LONG, VanSize.EXTRA_LONG)
+            in 4700..5200 -> setOf(VanSize.EXTRA_LONG)
+            else -> null
+        }
+    }
+
     /** The sizes every source allows, taken in the order given; a source that would leave none is
      *  passed over, so a seller's slip does not erase what a surer source said. */
     private fun narrowed(sources: List<Set<Int>>): Set<Int>? =
@@ -155,6 +172,7 @@ object VanDimensions {
         val surerLengths = narrowed(listOfNotNull(
             setOf(VanSize.EXTRA_LONG).takeIf { overhang.containsMatchIn(text) },
             setOf(VanSize.MEDIUM).takeIf { wheelbaseMm in 3500..3800 },
+            loadLengths(text),
             setOf(VanSize.LONG, VanSize.EXTRA_LONG).takeIf { wheelbaseMm in 4300..4600 },
             setOf(VanSize.MEDIUM).takeIf { mediumWords.containsMatchIn(text) },
         ))
