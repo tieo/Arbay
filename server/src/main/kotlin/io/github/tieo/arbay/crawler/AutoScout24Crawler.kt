@@ -15,9 +15,7 @@ class AutoScout24Crawler(
 ) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
-        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
-        FiltersAtTheSource.Criterion.GEARBOX, FiltersAtTheSource.Criterion.FUEL,
-        FiltersAtTheSource.Criterion.SELLER,
+        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
     )
 
 
@@ -173,7 +171,7 @@ class AutoScout24Crawler(
 
     /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
      *  only matching cars and far less needs scraping. Parameter names verified live. */
-    private fun filterParams(query: SearchQuery): String = buildString {
+    internal fun filterParams(query: SearchQuery): String = buildString {
         // Where the search is centred, as this site takes it: its own postcode field and a radius
         // in kilometres. Without it every search is nationwide and "near me" is only a label the
         // app draws afterwards.
@@ -183,9 +181,10 @@ class AutoScout24Crawler(
         query.area(isoCountry(countries.firstOrNull()))?.let { area ->
             area.zip?.let { append("&zip=$it&zipr=${area.radiusKm}") }
         }
-        query.carCriteria.firstRegFromYear?.let { append("&fregfrom=$it") }
-        query.carCriteria.firstRegToYear?.let { append("&fregto=$it") }
-        query.carCriteria.maxMileageKm?.let { append("&kmto=$it") }
+        val c = query.carCriteria.atTheSource()
+        c.firstRegFromYear?.let { append("&fregfrom=$it") }
+        c.firstRegToYear?.let { append("&fregto=$it") }
+        c.maxMileageKm?.let { append("&kmto=$it") }
         query.maxPrice?.let { max ->
             val eur = if (max.currency == Currency.EUR) max.amount / 100
             else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
@@ -196,10 +195,10 @@ class AutoScout24Crawler(
             else ExchangeRates.convert(min.amount, min.currency.name, "EUR") / 100
             append("&pricefrom=$eur")
         }
-        query.carCriteria.minMileageKm?.let { append("&kmfrom=$it") }
-        query.carCriteria.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
-        query.carCriteria.maxPowerKw?.let { append("&powertype=kw&powerto=$it") }
-        when (query.carCriteria.transmission) {
+        c.minMileageKm?.let { append("&kmfrom=$it") }
+        c.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
+        c.maxPowerKw?.let { append("&powertype=kw&powerto=$it") }
+        when (c.transmission) {
             Transmission.AUTOMATIC -> append("&gear=A")
             Transmission.MANUAL -> append("&gear=M")
             null -> {}
@@ -214,10 +213,13 @@ class AutoScout24Crawler(
         // asking for a range that excludes nothing, against 1625 Crafters: doors 1606, seats 1614,
         // fuel, mileage, power and seller all 1625 — but emission class only 1267 and body type
         // 446, so those two are filtered here rather than there.
-        query.carCriteria.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel=$it") } }
-        query.carCriteria.minDoors?.let { append("&doorfrom=$it") }
-        query.carCriteria.minSeats?.let { append("&seatsfrom=$it") }
-        query.carCriteria.sellerType?.let {
+        c.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel=$it") } }
+        // 19 of 1625 state no door count and 11 no seat count, so those go only with a strict search.
+        if (c.strictUnknown) {
+            c.minDoors?.let { append("&doorfrom=$it") }
+            c.minSeats?.let { append("&seatsfrom=$it") }
+        }
+        c.sellerType?.let {
             append(if (it == SellerType.PRIVATE) "&custtype=P" else "&custtype=D")
         }
     }

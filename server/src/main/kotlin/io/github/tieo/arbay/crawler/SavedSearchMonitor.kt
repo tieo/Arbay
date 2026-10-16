@@ -134,6 +134,7 @@ class SavedSearchMonitor(
                 lastRunAtMillis = lastRun[product.id],
                 newSinceOpened = unopened[product.id]?.size ?: 0,
                 newListingIds = unopened[product.id]?.toList().orEmpty(),
+                lostTopOffers = TopOffers.of(product.id).filter { it.state == io.github.tieo.arbay.model.TopOfferState.LOST },
             )
         }
     }
@@ -401,17 +402,19 @@ class SavedSearchMonitor(
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
         val fresh = record(product, shown)
-        if (firstFitRun) {
-            log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
-            return
-        }
-        if (fresh == null) return
         // What the top of the search scores today, every offer counted once: a dealer that lists
         // the same van on two markets would otherwise push a new one out of the top twice over.
         val scores = shown.values
             .mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } }
             .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
             .sortedByDescending { it.second.score }
+        // Every run, quiet ones included: the best offers it ever ranked are looked for again.
+        if (shown.isNotEmpty()) TopOffers.update(product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, TopOffers::adState)
+        if (firstFitRun) {
+            log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
+            return
+        }
+        if (fresh == null) return
         val bar = maxOf(settings.minScore, scores.getOrNull(settings.topN - 1)?.second?.score ?: settings.minScore)
         val freshIds = fresh.mapTo(HashSet()) { it.id }
         val online = scores.map { it.first }

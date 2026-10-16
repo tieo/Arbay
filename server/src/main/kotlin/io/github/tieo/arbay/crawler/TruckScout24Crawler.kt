@@ -13,7 +13,7 @@ import org.jsoup.Jsoup
  * location, and detail links under /tsp/.
  */
 class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, FetchesEveryPage, SortsByPrice {
-    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.PRICE)
 
     override val platformId = PlatformId.TRUCKSCOUT24
 
@@ -125,7 +125,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
      * /transporter/gebraucht (returns HTTP 500). The search() method switches base path
      * when any filter is present.
      */
-    private fun filterParams(query: SearchQuery): String = buildString {
+    internal fun filterParams(query: SearchQuery): String = buildString {
         // The build-year parameters are not usable: `manufacturedFrom` does not filter at all —
         // 2018 and 2030 both answer with the same 248 of 521 vans, which is every van that states
         // a year — and `manufacturedTo` answers 0 for any value, which is what made this market
@@ -142,10 +142,15 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         }
         // PHP bracket notation: properties[mileage][value to] and properties[power][value from].
         // Spaces in param names are encoded as + by standard form encoding.
-        query.carCriteria.minMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+from%5D=$it") }
-        query.carCriteria.maxMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+to%5D=$it") }
-        query.carCriteria.minPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+from%5D=$it") }
-        query.carCriteria.maxPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+to%5D=$it") }
+        val c = query.carCriteria.atTheSource()
+        // Two of 521 vans state no mileage and seven no fuel, which the site's filter would delete:
+        // those go only with a strict search, like the power and the gearbox.
+        if (c.strictUnknown) {
+            c.minMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+from%5D=$it") }
+            c.maxMileageKm?.let { append("&properties%5Bmileage%5D%5Bvalue+to%5D=$it") }
+            c.minPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+from%5D=$it") }
+            c.maxPowerKw?.let { append("&properties%5Bpower%5D%5Bvalue+to%5D=$it") }
+        }
         // The gearbox is stated by 358 of 521 vans here, so asking the site for it deletes a third
         // of the market — only worth it when the search excludes unstated specs anyway.
         if (query.carCriteria.strictUnknown) when (query.carCriteria.transmission) {
@@ -160,7 +165,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         // state a mileage and 514 a fuel, so those are asked at the source; 477 state a seat
         // count, 430 an emission class, and only 2 a wheelbase — those are filtered here, where
         // not stating one is not the same as failing it.
-        query.carCriteria.fuels.mapNotNull { siteFuel(it) }.distinct()
+        if (c.strictUnknown) c.fuels.mapNotNull { siteFuel(it) }.distinct()
             .forEach { append("&properties%5Bfuel+type%5D%5B%5D=$it") }
     }
 

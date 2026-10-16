@@ -130,6 +130,29 @@ object KleinanzeigenUrlBuilder {
     }
 
     /**
+     * The same vehicle in Nutzfahrzeuge & Anhänger (c276), where a van seller may file it instead of
+     * Autos. This category has none of the Autos attributes, so only the price narrows it, and the
+     * model's own word is the search: "volkswagen-crafter" answered 37 Crafters over four pages
+     * that "crafter" answered 100 different ones on, since sellers write "VW".
+     */
+    fun vanSearch(
+        modelWord: String,
+        page: Int,
+        locationId: String? = null,
+        radiusKm: Int? = null,
+        minPriceCents: Long? = null,
+        maxPriceCents: Long? = null,
+    ): String {
+        val segments = buildList {
+            if (minPriceCents != null || maxPriceCents != null) add("preis:${minPriceCents?.let { it / 100 } ?: ""}:${maxPriceCents?.let { it / 100 } ?: ""}")
+            if (page > 1) add("seite:$page")
+            add(modelWord.lowercase().replace(" ", "-"))
+        }
+        val area = if (locationId != null && radiusKm != null) "l${locationId}r$radiusKm" else ""
+        return "$BASE/s-nutzfahrzeuge-anhaenger/${segments.joinToString("/")}/k0c276$area"
+    }
+
+    /**
      * Kleinanzeigen's own car attribute filters, derived from the search's criteria.
      *
      * The site filters on all of these itself, which decides what the crawl is even made of:

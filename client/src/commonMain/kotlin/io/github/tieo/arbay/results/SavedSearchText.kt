@@ -23,6 +23,11 @@ fun savedSearchSubtitle(product: TrackedProduct): String {
     return if (termDiffers) "${product.searchQuery.text}  ·  $markets" else markets
 }
 
+/** How many of the search's best offers its last run no longer returned while their ads may still be up; null when none. */
+fun lostLabel(status: SavedSearchStatus): String? = status.lostTopOffers.size.takeIf { it > 0 }?.let { n ->
+    if (n == 1) "1 of its best offers no longer found" else "$n of its best offers no longer found"
+}
+
 /** When a saved search last ran, so an empty result reads as "nothing new" rather than as a search
  *  that never happened. */
 fun watchLabel(status: SavedSearchStatus): String {

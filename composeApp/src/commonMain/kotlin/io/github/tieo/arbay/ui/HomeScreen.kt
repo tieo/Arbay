@@ -47,6 +47,7 @@ import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
 import io.github.tieo.arbay.results.savedSearchSubtitle
 import io.github.tieo.arbay.results.watchLabel
+import io.github.tieo.arbay.results.lostLabel
 
 /**
  * Where the app opens: a search box, then the saved searches with what each found since it was last
@@ -111,7 +112,7 @@ fun HomeScreen(session: Session) {
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Muted(
-                        listOfNotNull(savedSearchSubtitle(product), found?.takeIf { it.watched }?.let { watchLabel(it) }).joinToString(" · "),
+                        listOfNotNull(savedSearchSubtitle(product), found?.takeIf { it.watched }?.let { watchLabel(it) }, found?.let { lostLabel(it) }).joinToString(" · "),
                         maxLines = 1,
                     )
                 }

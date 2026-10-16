@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
 
 class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState, CopiesAds {
     override val nativeCriteria = setOf(
-        FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.GEARBOX,
+        FiltersAtTheSource.Criterion.FUEL,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE,
     )
@@ -146,7 +146,6 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
     private suspend fun searchRegular(query: SearchQuery): List<Listing> {
         val allResults = mutableListOf<Listing>()
         val seenIds = mutableSetOf<String>()
-        val maxPages = query.pageLimit()
 
         val locationStr = query.location
         val resolved = if (locationStr != null) resolveLocation(locationStr) else null
@@ -156,11 +155,11 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
         // which surfaces real car ads instead of accessories and parts.
         val carQuery = CarQueryResolver.resolve(query.positiveText)
 
-        // Filter fuel + gearbox at the source via Kleinanzeigen's own attribute params. fuel_s is
-        // single-select, so only a single chosen fuel maps natively; multi-select falls back to
-        // post-filtering.
+        // The fuel, year and mileage are asked of the site itself ([atTheSource]): its car ads all
+        // state them. fuel_s is single-select, so only one chosen fuel maps natively; several fall
+        // back to the filter here.
         val cf = query.carFilters
-        val criteria = query.carCriteria
+        val criteria = query.carCriteria.atTheSource()
         val attrFilters = KleinanzeigenUrlBuilder.carAttrFilters(
             fuel = cf?.fuels?.singleOrNull()?.let { kleinanzeigenFuel(it) },
             gearbox = criteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
@@ -173,9 +172,11 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
             strictUnknown = criteria.strictUnknown,
         )
 
-        val endPage = query.startPage + maxPages - 1
-        for (page in query.startPage..endPage) {
-            val url = if (carQuery != null) {
+        // A car is searched in Autos with its make and model, and in Nutzfahrzeuge with its model's
+        // word, where van sellers file a good share of them: 50 Crafters in one price band there,
+        // none of which the Autos search had. Each reads its whole price band.
+        val passes: List<(Int) -> String> = if (carQuery != null) listOfNotNull(
+            { page: Int ->
                 KleinanzeigenUrlBuilder.carSearch(
                     query = listOfNotNull(carQuery.makeSlug, carQuery.modelSlug).joinToString(" "),
                     page = page,
@@ -185,21 +186,52 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
                     maxPriceCents = query.maxPrice?.amount,
                     attrFilters = attrFilters,
                 )
-            } else {
-                KleinanzeigenUrlBuilder.regularSearch(
-                    query = query.positiveText,
-                    page = page,
-                    locationId = locationId,
-                    radiusKm = if (locationId != null) query.radiusKm else null,
-                    minPriceCents = query.minPrice?.amount,
-                    maxPriceCents = query.maxPrice?.amount,
-                )
-            }
+            },
+            carQuery.modelSlug?.let { model ->
+                { page: Int ->
+                    KleinanzeigenUrlBuilder.vanSearch(
+                        modelWord = model.replace("-", " "),
+                        page = page,
+                        locationId = locationId,
+                        radiusKm = if (locationId != null) query.radiusKm else null,
+                        minPriceCents = query.minPrice?.amount,
+                        maxPriceCents = query.maxPrice?.amount,
+                    )
+                }
+            },
+        ) else listOf { page: Int ->
+            KleinanzeigenUrlBuilder.regularSearch(
+                query = query.positiveText,
+                page = page,
+                locationId = locationId,
+                radiusKm = if (locationId != null) query.radiusKm else null,
+                minPriceCents = query.minPrice?.amount,
+                maxPriceCents = query.maxPrice?.amount,
+            )
+        }
+        val band = if (carQuery != null) query.wholePriceBand() else query
+        for ((index, urlFor) in passes.withIndex()) {
+            readPages(band, urlFor, allResults, seenIds, firstPass = index == 0)
+        }
+        return allResults
+    }
 
+    /** Reads [query]'s pages from [urlFor] into [allResults], until the pages run out or the offers wanted are in. */
+    private suspend fun readPages(
+        query: SearchQuery,
+        urlFor: (Int) -> String,
+        allResults: MutableList<Listing>,
+        seenIds: MutableSet<String>,
+        firstPass: Boolean,
+    ) {
+        val start = allResults.size
+        val endPage = query.startPage + query.pageLimit() - 1
+        for (page in query.startPage..endPage) {
+            val url = urlFor(page)
             val html = try {
                 fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article[data-adid]")
             } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
+                if (page == query.startPage && firstPass) throw e
                 break
             }
 
@@ -207,7 +239,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
             val rawItemCount = doc.select("article[data-adid]").size
             if (rawItemCount == 0) break
 
-            if (page == query.startPage) emitSuggestedTerms(parseSuggestedTerms(doc))
+            if (page == query.startPage && firstPass) emitSuggestedTerms(parseSuggestedTerms(doc))
             val pageResults = parseSearchResults(html, freeOnly = false)
             // Cards on the page and none of them read is the parser no longer fitting the markup,
             // which would otherwise pass for a search nothing matched.
@@ -216,15 +248,14 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
             }
             val newResults = pageResults.filter { seenIds.add(it.externalId) }
             allResults.addAll(newResults)
+            if (newResults.isNotEmpty()) emitPartialResults(newResults)
 
             // A later page holding nothing the earlier ones did not is the site ignoring the page
             // number; asking for the next one would fetch the same page again.
             if (page > query.startPage && newResults.isEmpty()) break
             if (rawItemCount < 10) break
-            if (allResults.size >= query.resultCap()) break
+            if (allResults.size - start >= query.resultCap()) break
         }
-
-        return allResults
     }
 
     /** The related searches Kleinanzeigen prints under its own results ("Ähnliche Suchanfragen"):
