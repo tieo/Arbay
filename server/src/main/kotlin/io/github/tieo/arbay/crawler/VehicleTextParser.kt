@@ -240,8 +240,22 @@ object VehicleTextParser {
             mm.toInt().takeIf { it in 1500..7000 }
         }
 
+    // The gearbox field a dealer's export writes into the ad text, "Getriebe: Schaltgetriebe".
+    private val gearboxField = Regex("""\bgetriebe:\s*(halbautomatik|automatik|schaltgetriebe|manuell)""", RegexOption.IGNORE_CASE)
+
+    // Equipment that is automatic without being the gearbox: "Start-Stopp-Automatik",
+    // "Klimaautomatik", "Fahrlichtschaltung automatisch", "automatische Distanzregelung". Left in,
+    // each of them made a manual van read as an automatic.
+    private val notTheGearbox = Regex(
+        """start[\s/-]*stopp?[\s-]*automatik|klimaautomatik|automatisch\w*|automatische\w*""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun parseGearbox(text: String): Transmission? {
-        val s = text.lowercase()
+        gearboxField.find(text)?.groupValues?.get(1)?.lowercase()?.let {
+            return if (it == "schaltgetriebe" || it == "manuell") Transmission.MANUAL else Transmission.AUTOMATIC
+        }
+        val s = notTheGearbox.replace(text, " ").lowercase()
         return when {
             "automat" in s || "automatik" in s || "automatic" in s || "dsg" in s || "tiptronic" in s ||
                 "s tronic" in s || "s-tronic" in s || "pdk" in s -> Transmission.AUTOMATIC

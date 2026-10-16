@@ -148,6 +148,24 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun automaticEquipmentIsNotAnAutomaticGearbox() {
+        // A Hildesheim dealer's manual Crafter: its equipment list is full of automatic things.
+        val v = VehicleTextParser.parse(
+            "Volkswagen Crafter Kasten 2.0 TDI L2H2 FWD - Fahrlichtschaltung automatisch (Coming-Home) " +
+                "- Automatische Distanzregelung ACC - Start-Stopp-Automatik - Klimaautomatik",
+        )
+        assertNull(v?.gearbox)
+    }
+
+    @Test
+    fun statedGearboxFieldWins() {
+        val v = VehicleTextParser.parse("Crafter Start-Stop-Automatik, Erstzulassung: 10/2021 Getriebe: Schaltgetriebe Klimatisierung: Klimaanlage")!!
+        assertEquals(Transmission.MANUAL, v.gearbox)
+        val a = VehicleTextParser.parse("Crafter 35 TDI Kasten Getriebe: Automatik")!!
+        assertEquals(Transmission.AUTOMATIC, a.gearbox)
+    }
+
+    @Test
     fun priceInEurosIsNotYear() {
         // "2000 €" is the asking price; the bare year fallback must keep 1989.
         val v = VehicleTextParser.parse("Opel Kadett Oldtimer 1989, fester Preis 2000 €")!!
