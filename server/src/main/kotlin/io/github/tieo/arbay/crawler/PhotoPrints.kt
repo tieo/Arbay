@@ -78,6 +78,8 @@ object PhotoPrints {
 
     init {
         file.readStore(log) { json.decodeFromString<List<Entry>>(it) }?.forEach(::put)
+        // A deploy restarts the server between two saves; what was printed since the last is kept.
+        Runtime.getRuntime().addShutdownHook(Thread { if (dirty) save() })
         scope.launch {
             while (true) {
                 delay(5.minutes)
