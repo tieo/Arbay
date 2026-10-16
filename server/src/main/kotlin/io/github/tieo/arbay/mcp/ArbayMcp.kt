@@ -589,11 +589,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "read_conversation",
-            "Every message in one conversation, oldest first, with photo links, and whether its ad is still up (adState, read off the ad's page now).",
+            "Every message in one conversation, oldest first, with photo links, and whether its ad is still up (adState, read off the ad's page now). " +
+                "Marks the conversation read on Kleinanzeigen, as opening it in the app does.",
             props = { string("id", "Conversation id", required = true) },
         ) { args ->
-            val c = getJsonElement("/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}") as? JsonObject
+            val path = "/api/chat/conversations/${args.str("id")!!.encodeURLPathPart()}"
+            val c = getJsonElement(path) as? JsonObject
                 ?: return@tool "No such conversation."
+            // Read here is read: a conversation left unread after it was read reported its messages
+            // as new to the user, who had already been told what they said.
+            runCatching { http.post("$base$path/read") }
             JsonObject(c + ("adState" to JsonPrimitive(adState(c.str("listingId")) ?: "UNKNOWN"))).toString()
         }
 
@@ -857,7 +862,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private companion object {
-        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "read_conversation", "draft_messages")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages")
     }
 }
 
