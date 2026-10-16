@@ -36,6 +36,17 @@ class MobileDeParserTest {
     }
 
     @Test
+    fun `an ad page says whether the ad is still up`() {
+        val crawler = MobileDeCrawler(dummyClient())
+        val live = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText()
+        assertEquals(io.github.tieo.arbay.model.AdState.LIVE, crawler.adStateOf(live))
+        // Live, 2026-10-16: the Oldenburg Crafter's address answered with this page once it was sold.
+        val gone = "<html><head><title>Dieses Fahrzeug ist nicht verfügbar</title></head><body>" + "x".repeat(50_000) + "</body></html>"
+        assertEquals(io.github.tieo.arbay.model.AdState.DELETED, crawler.adStateOf(gone))
+        assertEquals(null, crawler.adStateOf("<html><title>mobile.de</title></html>"))
+    }
+
+    @Test
     fun `reads what an ad page adds to the card`() {
         val html = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText()
         val detail = assertNotNull(MobileDeCrawler(dummyClient()).parseAd(html))

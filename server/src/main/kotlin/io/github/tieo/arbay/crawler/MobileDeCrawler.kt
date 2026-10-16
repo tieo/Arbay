@@ -8,12 +8,11 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.TextNode
 import org.slf4j.LoggerFactory
 
-class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpecs, ReadsAdsTogether, SortsByPrice {
+class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpecs, ReadsAdsTogether, SortsByPrice, KnowsAdState {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
-        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
-        FiltersAtTheSource.Criterion.GEARBOX, FiltersAtTheSource.Criterion.FUEL,
-        FiltersAtTheSource.Criterion.BODY, FiltersAtTheSource.Criterion.SELLER,
+        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
+        FiltersAtTheSource.Criterion.BODY,
     )
 
     override val platformId = PlatformId.MOBILE_DE
@@ -100,6 +99,29 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             }
         }
         return all
+    }
+
+    /** Whether the ad is still up, off one fresh read of its page; null when the page could not be read. */
+    override suspend fun adState(url: String): io.github.tieo.arbay.model.AdState? = try {
+        var html: String? = null
+        StealthBrowserClient.fetchAds(listOf(url)) { page -> if (html == null) html = page }
+        html?.let(::adStateOf)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        log.debug("mobile.de ad state unreadable for {}: {}", url, e.message)
+        null
+    }
+
+    /**
+     * An ad page's state: its technical data box while it is up; a page titled "Dieses Fahrzeug ist
+     * nicht verfügbar" once the dealer has taken it down or sold it. The address keeps answering
+     * either way, so only the page says which.
+     */
+    internal fun adStateOf(html: String): io.github.tieo.arbay.model.AdState? = when {
+        "data-testid=\"vip-technical-data-box\"" in html -> io.github.tieo.arbay.model.AdState.LIVE
+        Regex("""<title>[^<]*nicht verfügbar""", RegexOption.IGNORE_CASE).containsMatchIn(html) -> io.github.tieo.arbay.model.AdState.DELETED
+        else -> null
     }
 
     /** Pages of twenty that hold [cap] offers, at most [limit]. */
@@ -211,10 +233,10 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
      *  everything (which then leaks unverifiable cards past the post-filter). Range params take
      *  `min:max`; either side may be empty. Names verified live against the search page: fr =
      *  first-registration year, ml = mileage, pw = power in kW, p = price in EUR, tr = gearbox. */
-    private fun filterParams(query: SearchQuery): String {
+    internal fun filterParams(query: SearchQuery): String {
         // The area is not a car criterion, so it is built even for a search that sets none.
         val area = query.area("DE")?.let { "&ll=${it.latitude}%2C${it.longitude}&rad=${it.radiusKm}" } ?: ""
-        val f = query.toCarFilters() ?: return area
+        val f = query.toCarFilters()?.atTheSource() ?: return area
         fun range(min: Any?, max: Any?): String? =
             if (min != null || max != null) "${min ?: ""}:${max ?: ""}" else null
         return buildString {

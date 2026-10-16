@@ -251,7 +251,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
                 ).joinToString(" · ") + ((s?.get("newListingIds") as? JsonArray).orEmpty()
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
-                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "")
+                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "") + ((s?.get("lostTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                    .joinToString("") { o ->
+                        "\n  LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " +
+                            (o.str("adState")?.lowercase() ?: "state unknown") + "): ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
+                            "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
+                    })
             }.ifEmpty { "No saved searches." }
         }
 
@@ -296,7 +301,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 ?: return@tool l.line() + "\n" + detail.bodyAsText()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
-            l.line() + "\n" + (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
+            // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
+            // is read now, where the market says it, so a sold van does not read as on offer.
+            val state = adNow(l)?.state?.let { "Ad now: $it (read just now). " } ?: "Ad now: not checked on this market. "
+            l.line() + "\n" + state + "The details below are the ad page as Arbay last read it.\n" +
+                (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
         tool("whats_on_screen", "Which page of Arbay each of the user's devices shows right now, newest first: a search, an offer in it, a conversation.") {
