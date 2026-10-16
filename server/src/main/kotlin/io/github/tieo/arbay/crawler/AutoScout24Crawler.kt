@@ -12,7 +12,7 @@ class AutoScout24Crawler(
     private val client: HttpClient,
     private val countries: List<String> = EUROPE,
     override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
-) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation {
+) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
@@ -129,13 +129,13 @@ class AutoScout24Crawler(
                 append("/eq_allrad")
         }
 
-        return paginate(query) { page ->
+        return paginate(query.wholePriceBand()) { page ->
             val pageParam = if (page <= 1) "" else "&page=$page"
             // A postcode radius is a statement about one country, and this site drops it when the
             // country list holds several. Centred on a place, the search asks that country.
             val cy = query.area(isoCountry(countries.firstOrNull()))
                 ?.let { siteCountry(it.country) } ?: countryParam
-            val url = "$basePath?atype=C&cy=$cy&desc=0&sort=standard&ustate=N%2CU${filterParams(query)}$pageParam"
+            val url = "$basePath?atype=C&cy=$cy&desc=0&sort=price&ustate=N%2CU${filterParams(query)}$pageParam"
             val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
             parseFromNextData(html) ?: parseFromHtml(html)
         }

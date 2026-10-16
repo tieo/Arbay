@@ -12,7 +12,7 @@ import org.jsoup.Jsoup
  * cards: section[data-listing-id] with data-grid slots for title, price and
  * location, and detail links under /tsp/.
  */
-class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation {
+class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, FetchesEveryPage, SortsByPrice {
     override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.GEARBOX)
 
     override val platformId = PlatformId.TRUCKSCOUT24
@@ -40,9 +40,17 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
                 car.modelSlug?.let { append("&models=").append(displayName(it).encodeUrl()) }
             }
             append(filterParams(query))
+            // Cheapest first, by the headline price the site caps at (net for a dealer).
+            append("&sort-field=preis&sort-direction=asc")
         }
-        val html = fetchWithFallback(client, url, "TruckScout24")
-        return parse(html)
+        // Twenty-five vans to a page. A page past the last answers 404, so a page short of full is
+        // the last one asked for.
+        var lastWasFull = true
+        return paginate(query.wholePriceBand()) { page ->
+            if (!lastWasFull) return@paginate emptyList()
+            parse(fetchWithFallback(client, if (page <= 1) url else "$url&page=$page", "TruckScout24"))
+                .also { lastWasFull = it.size >= PAGE_SIZE }
+        }
     }
 
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
@@ -238,5 +246,10 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
                 vehicle = vehicle,
             )
         }.distinctBy { it.externalId }
+    }
+
+    private companion object {
+        /** Vans on one page of the site's results. */
+        const val PAGE_SIZE = 25
     }
 }

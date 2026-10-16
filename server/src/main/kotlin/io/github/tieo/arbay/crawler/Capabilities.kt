@@ -24,6 +24,15 @@ interface FetchesEveryPage {
     val pageLimit: Int get() = Int.MAX_VALUE
 }
 
+/**
+ * Asks the market for its offers cheapest first and caps the price at the source, so a search with
+ * a price ceiling reads the whole band between its prices ([wholePriceBand]) and a list cut short
+ * anywhere loses only the dearest offers. Read in the market's own relevance order instead, the
+ * first pages held a different mix of offers on every run, and an offer the search had always
+ * matched turned up as new, or went missing, as the mix moved.
+ */
+interface SortsByPrice
+
 /** Starts a search at any page asked for, so the listings past the first pages can be fetched with
  *  a search of their own. A market that does not declare this answers every page with its first. */
 interface StartsAtAnyPage

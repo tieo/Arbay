@@ -8,7 +8,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.TextNode
 import org.slf4j.LoggerFactory
 
-class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpecs, ReadsAdsTogether {
+class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpecs, ReadsAdsTogether, SortsByPrice {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER,
@@ -48,11 +48,12 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             else -> query.positiveText.encodeUrl()
         }
 
-        // Every page is a slow stealth browser navigation, so keep mobile.de deliberately shallow:
-        // a few pages per category is already ~60-80 cars, and the result cap stops it early. A
-        // deeper crawl here is what made a van search (two categories) take ~80 s.
-        val cap = query.resultCap()
-        val maxPages = (query.maxPages ?: CrawlerConfig.current.maxPages).coerceAtMost(3)
+        // Every page is a slow stealth browser navigation, about 3 s, so the pages read follow the
+        // offers wanted, twenty to a page, and a search with a price ceiling reads its whole band
+        // cheapest first: the sidecar stops at the first page without ads.
+        val band = query.wholePriceBand()
+        val cap = band.resultCap()
+        val maxPages = pagesFor(cap, band.pageLimit())
         val platform = platformId.displayName
         val seen = mutableSetOf<String>()
         val all = mutableListOf<Listing>()
@@ -65,7 +66,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
             val model = selection?.let { "&ms=${it.replace(";", "%3B")}%3B%3B" } ?: ""
             val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true" +
-                "&s=Car&sb=rel&vc=$vc$model&q=$q${filterParams(query)}"
+                "&s=Car&sb=p&od=up&vc=$vc$model&q=$q${filterParams(query)}"
             RequestMonitor.recordTier(platform, "Browser")
             var pageNo = 0
             val vcStart = System.currentTimeMillis()
@@ -95,6 +96,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         }
         return all
     }
+
+    /** Pages of twenty that hold [cap] offers, at most [limit]. */
+    internal fun pagesFor(cap: Int, limit: Int): Int = ((cap + PAGE_SIZE - 1) / PAGE_SIZE).coerceIn(1, limit)
 
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = fetchDetails(listOf(listing))[listing.id]
 
@@ -465,5 +469,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
 
     private companion object {
         const val FLIGHT_PUSH = "self.__next_f.push([1,"
+        /** Offers on one page of mobile.de's results. */
+        const val PAGE_SIZE = 20
     }
 }

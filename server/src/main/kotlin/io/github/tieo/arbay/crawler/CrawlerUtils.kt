@@ -249,6 +249,15 @@ internal fun SearchQuery.pageLimit(cap: Int = Int.MAX_VALUE): Int =
 /** The most pages a search asking for more offers than usual reads from one market. */
 internal const val DEEP_SEARCH_PAGES = 50
 
+/** The most offers a search reads from one market when it reads the whole of its price band. */
+internal const val WHOLE_BAND_RESULTS = 1000
+
+/** This search reading every offer between its prices, for a market that sorts by price and caps
+ *  the price itself ([SortsByPrice]): where the search names a ceiling and no offer count of its
+ *  own, the count stops being the limit and the ceiling is. */
+internal fun SearchQuery.wholePriceBand(): SearchQuery =
+    if (maxPrice != null && maxResults == null) copy(maxResults = WHOLE_BAND_RESULTS) else this
+
 /** How many offers to read from each market for this search. */
 internal fun SearchQuery.resultCap(): Int = maxResults ?: CrawlerConfig.current.maxResultsPerPlatform
 
