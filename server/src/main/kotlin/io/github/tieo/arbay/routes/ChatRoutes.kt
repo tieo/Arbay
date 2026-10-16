@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.routes
 
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -49,6 +50,15 @@ fun Route.chatRoutes() {
         }
 
         get("/conversations") { call.chat { call.respond(Chat.conversations()) } }
+        // New messages from the other side, as the watch found them, after the one numbered
+        // `after`; waits up to `waitSeconds` (at most a minute) for one when there is none yet.
+        get("/incoming") {
+            val after = call.request.queryParameters["after"]?.toLongOrNull() ?: 0L
+            val wait = (call.request.queryParameters["waitSeconds"]?.toIntOrNull() ?: 0).coerceIn(0, 60)
+            call.respond(io.github.tieo.arbay.chat.ChatWatch.after(after, wait.seconds))
+        }
+        // Everything from the other side not yet read, read now; nothing is marked read.
+        get("/unread") { call.chat { call.respond(io.github.tieo.arbay.chat.ChatWatch.unreadNow()) } }
         get("/conversations/{id}") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
             call.chat { call.respond(Chat.conversation(id) ?: throw NotFoundException("No conversation $id")) }

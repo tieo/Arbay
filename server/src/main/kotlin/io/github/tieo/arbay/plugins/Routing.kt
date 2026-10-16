@@ -34,6 +34,7 @@ fun Application.configureRouting() {
     val savedSearches = SavedSearchMonitor(productRepo, listingRepo, selfUrl = "http://127.0.0.1:$SERVER_PORT")
     savedSearches.start()
     Chat.start()
+    io.github.tieo.arbay.chat.ChatWatch.start()
 
     routing {
         productRoutes(productRepo, savedSearches)
