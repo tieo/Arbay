@@ -109,7 +109,10 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
                 Number("Mileage up to km", filters.maxMileageKm, Modifier.weight(1f)) { filters = filters.copy(maxMileageKm = it) }
                 Number("Price up to €", filters.maxPriceEur, Modifier.weight(1f)) { filters = filters.copy(maxPriceEur = it) }
             }
-            Number("Power from kW", filters.minPowerKw, Modifier.fillMaxWidth()) { filters = filters.copy(minPowerKw = it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Number("Power from kW", filters.minPowerKw, Modifier.weight(1f)) { filters = filters.copy(minPowerKw = it) }
+                Number("Ideal power kW", filters.idealPowerKw, Modifier.weight(1f)) { filters = filters.copy(idealPowerKw = it) }
+            }
             Labelled("Gearbox") {
                 listOf(null to "Either", Transmission.MANUAL to "Manual", Transmission.AUTOMATIC to "Automatic").forEach { (v, l) ->
                     Choice(l, filters.transmission == v) { filters = filters.copy(transmission = v) }

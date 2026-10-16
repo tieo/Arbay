@@ -351,11 +351,9 @@ class SavedSearchMonitor(
      * well are pushed to the phone ([Ntfy]).
      *
      * The criteria the score weighs are left out of the search itself, since as a filter they
-     * would drop a van before it could be weighed: drive, wheelbase and seller type. What stays is
-     * what narrows the markets to candidates at all: price, year, mileage, power, gearbox, fuel,
-     * body and the van's size, which is also what makes the server open each ad. Power stays a
-     * limit because vans above it sell for the same money as vans below it, so one under it is
-     * never the better buy.
+     * would drop a van before it could be weighed: engine power, drive, wheelbase and seller type.
+     * What stays is what narrows the markets to candidates at all: price, year, mileage, gearbox,
+     * fuel, body and the van's size, which is also what makes the server open each ad.
      *
      * A new offer that one still online beats on price, power, age and mileage at once is not
      * pushed, however well it fits: the user would take the other one.
@@ -365,7 +363,8 @@ class SavedSearchMonitor(
         val q = product.searchQuery
         val wishes = q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
         val crawl = wishes.copy(
-            drivetrain = null, minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
+            minPowerKw = null, maxPowerKw = null, drivetrain = null,
+            minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
         )
         val home = settings.home?.let(::homePoint)
         val found = LinkedHashMap<String, Listing>()

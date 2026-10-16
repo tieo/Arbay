@@ -58,6 +58,7 @@ fun SearchHistoryEntry.summary(): String {
             }
             f.maxMileageKm?.let { add("≤${grouped(it)} km") }
             f.minPowerKw?.let { add("≥$it kW") }
+            f.idealPowerKw?.let { add("ideally $it kW") }
             f.transmission?.let { add(if (it == Transmission.AUTOMATIC) "Automatik" else "Schaltgetriebe") }
         }
         val price = listOfNotNull(q.minPrice?.format(), q.maxPrice?.format())

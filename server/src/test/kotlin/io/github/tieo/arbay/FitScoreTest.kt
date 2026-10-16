@@ -1,5 +1,6 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.FitScore
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
@@ -110,5 +111,17 @@ class FitScoreTest {
         // A number unknown on the other side never beats.
         val unknownKm = van(title = "unknown", euros = 20_000, vehicle = VehicleInfo(firstRegYear = 2023, powerKw = 130))
         assertNull(FitScore.beatenBy(salzgitter, listOf(unknownKm)))
+    }
+    @Test
+    fun `an ideal power fits fully and less power ranks lower without being ruled out`() {
+        // The user on the Crafter: "177 very fitting score (not filter though)".
+        val ideal = wishes.copy(minPowerKw = null, idealPowerKw = 130)
+        fun withPower(kw: Int) = van(vehicle = van().vehicle!!.copy(powerKw = kw))
+        fun fitOf(kw: Int) = assertNotNull(FitScore.score(withPower(kw), ideal, 23_950.0, softDriveHours = 4.0))
+        assertEquals(emptyList(), fitOf(130).misses)
+        val weaker = fitOf(103)
+        assertTrue(weaker.score < fitOf(130).score)
+        assertEquals(listOf("103 kW of 130"), weaker.misses)
+        assertTrue(CarFilterEngine.apply(listOf(withPower(80)), ideal).isNotEmpty())
     }
 }

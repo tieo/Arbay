@@ -137,7 +137,7 @@ private suspend fun finishedResults(
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
         io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
-    val listings = asDelivered(inside, query)
+    val listings = withFit(asDelivered(inside, query), query, isCarQuery)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(
@@ -326,6 +326,23 @@ private fun asDelivered(listings: List<Listing>, query: SearchQuery): List<Listi
             distanceKm = if (lat != null && lon != null)
                 Geocoder.haversine(lat, lon, coords.first, coords.second) else l.distanceKm,
         )
+    }
+}
+
+/**
+ * Every vehicle scored as a whole against the search's criteria ([FitScore]), as the saved-search
+ * watch scores it, so "Best match" in the app and the website orders by the same fit. A
+ * description of the ideal vehicle, where one was given, counts half. A vehicle the score rules
+ * out keeps no fit and sorts last.
+ */
+private fun withFit(listings: List<Listing>, query: SearchQuery, isCarQuery: Boolean): List<Listing> {
+    if (!isCarQuery) return listings
+    val wishes = query.toCarFilters() ?: return listings
+    val softDriveHours = io.github.tieo.arbay.model.FitAlertSettings().softDriveHours
+    return listings.map { l ->
+        val fit = io.github.tieo.arbay.crawler.FitScore.score(l, wishes, io.github.tieo.arbay.crawler.FitScore.priceEur(l), softDriveHours)
+            ?: return@map l
+        l.copy(matchScore = l.matchScore?.let { (it + fit.score) / 2 } ?: fit.score)
     }
 }
 
@@ -581,9 +598,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                         else crawler.trackedSearch(pq, corpusBackground(listingRepo))
                             .also { QueryResultCache.put(platformId, pq, it) }
                     val classified = RelevanceFilter.filter(answer, pq).map { SoldDetector.classify(it) }
-                    val result = asDelivered(
+                    val result = withFit(asDelivered(
                         carPostFilter(classified, pq, isCarQuery, crawler).first, pq,
-                    )
+                    ), pq, isCarQuery)
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }

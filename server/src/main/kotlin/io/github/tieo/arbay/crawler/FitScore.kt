@@ -109,7 +109,11 @@ object FitScore {
         val km = wishes.maxMileageKm?.let { linear(v?.mileageKm?.toDouble(), it * 0.4, it * 1.33) }
         val thisYear = Clock.System.now().toString().take(4).toInt()
         val year = wishes.firstRegFromYear?.let { linear(v?.firstRegYear?.toDouble(), thisYear - 4.0, it - 2.0) }
-        val power = wishes.minPowerKw?.let { want ->
+        // The ideal power fits fully and 50 kW below it not at all; a bare minimum fits fully 20 kW
+        // above it and not at all 35 kW below.
+        val power = wishes.idealPowerKw?.let { ideal ->
+            linear(v?.powerKw?.toDouble(), ideal.toDouble(), ideal - 50.0)?.also { if (it < 0.9) misses += "${v?.powerKw} kW of $ideal" }
+        } ?: wishes.minPowerKw?.let { want ->
             linear(v?.powerKw?.toDouble(), want + 20.0, want - 35.0)?.also { if (it < 0.7) misses += "${v?.powerKw} kW" }
         }
         val dealer = when {
@@ -135,7 +139,7 @@ object FitScore {
 
         val parts = listOf(
             size to .26, price to .22, gear to .12, km to .11, year to .09, drive to .07,
-            dealer to .05, where to .03, power to .03, age to .01, (ac?.let { if (it) 1.0 else 0.3 }) to .01,
+            dealer to .05, where to .03, power to .08, age to .01, (ac?.let { if (it) 1.0 else 0.3 }) to .01,
         )
         // A wish the offer does not answer counts a little under half.
         val score = parts.sumOf { (s, w) -> (s ?: 0.45) * w } / parts.sumOf { it.second }

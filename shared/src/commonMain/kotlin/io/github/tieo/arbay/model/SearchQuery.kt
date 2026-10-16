@@ -33,6 +33,9 @@ data class CarFilters(
     val maxPriceEur: Int? = null,
     val minPowerKw: Int? = null,
     val maxPowerKw: Int? = null,
+    // The power that fits fully. A wish, not a filter: a weaker vehicle is still shown, and the
+    // further below this it is, the lower it ranks.
+    val idealPowerKw: Int? = null,
     val transmission: Transmission? = null,
     // Multi-select: a listing matches if its value is in the set (empty = no constraint).
     val fuels: Set<Fuel> = emptySet(),
@@ -100,7 +103,7 @@ data class CarFilters(
         firstRegFromYear == null && firstRegToYear == null &&
             minMileageKm == null && maxMileageKm == null &&
             minPriceEur == null && maxPriceEur == null &&
-            minPowerKw == null && maxPowerKw == null && transmission == null &&
+            minPowerKw == null && maxPowerKw == null && idealPowerKw == null && transmission == null &&
             fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null &&

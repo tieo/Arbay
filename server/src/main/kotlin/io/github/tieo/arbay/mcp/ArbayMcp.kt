@@ -144,7 +144,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 .filter { (markets.isEmpty() && countries.isEmpty()) || it.platformId in markets || MarketSets.countryOf(it.platformId) in countries }
                 .filter { max == null || it.effectivePrice.amount / 100.0 <= max }
                 .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
-                .sortedBy { it.effectivePrice.amount }
+                // Vehicles carry their fit to the search as a whole and come best fit first, as in
+                // the app's "Best match"; everything else comes cheapest first.
+                .sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
                 .take(args.int("limit") ?: 40)
             // Every offer the search found can be asked about, not only the ones listed: a search
             // read deep lists forty of a thousand.
@@ -235,7 +237,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private fun Server.registerTools() {
-        tool("list_saved_searches", "Every saved search with its id, words, markets, and how many new offers it found since last opened.") {
+        tool("list_saved_searches", "Every saved search with its id, words, markets, and the ids of the new offers it found since last opened.") {
             val products = getJson<List<TrackedProduct>>("/api/products")
             val status = getJsonElement("/api/products/status").let { it as? JsonArray }.orEmpty()
                 .associateBy({ (it as JsonObject)["productId"]?.jsonPrimitive?.contentOrNull }, { it as JsonObject })
@@ -247,13 +249,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     "${p.searchQuery.platforms.size} markets",
                     p.searchQuery.maxPrice?.let { "up to ${it.amount / 100} €" },
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
-                ).joinToString(" · ")
+                ).joinToString(" · ") + ((s?.get("newListingIds") as? JsonArray).orEmpty()
+                    .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
+                    ?.joinToString(", ", prefix = "\n  new: ") ?: "")
             }.ifEmpty { "No saved searches." }
         }
 
         tool(
             "search",
-            "Search the markets now and list the offers, cheapest first, each with an id for other tools. Answers with what " +
+            "Search the markets now and list the offers, vehicles best fit first and everything else cheapest first, each " +
+                "with an id for other tools. Answers with what " +
                 "has arrived within about half a minute and names the markets still searching; call again with the search_id " +
                 "it gives to get the rest.",
             props = {
@@ -736,7 +741,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
-        condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(), url,
+        condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
+        matchScore?.let { "fit ${Math.round(it * 100)}%" }, url,
     ).joinToString(" | ")
 
     /** What a vehicle's card states, so a van can be judged from the list: its age, mileage,

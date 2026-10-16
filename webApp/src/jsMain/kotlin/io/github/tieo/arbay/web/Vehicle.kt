@@ -138,6 +138,7 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
             Div({ classes("field-row") }) {
                 NumberField("Price up to (€)", filters.maxPriceEur) { filters = filters.copy(maxPriceEur = it) }
                 NumberField("Power from (kW)", filters.minPowerKw) { filters = filters.copy(minPowerKw = it) }
+                NumberField("Ideal power (kW)", filters.idealPowerKw) { filters = filters.copy(idealPowerKw = it) }
             }
             Div({ classes("chips") }) {
                 Span({ classes("chips-label") }) { Text("Gearbox") }
