@@ -13,10 +13,27 @@ import kotlin.time.Duration.Companion.days
  * search for a Pixel 9 Pro XL, offers saw 5 to 25 views a day, and the one at 400 € with 2,053 views
  * after 59 days had five times the views of the other ad posted that day.
  *
+ * Also offers whose photos show up in other people's ads ([showsOtherAdsPhotos]).
+ *
  * Returns each such offer with the sentence saying why.
  */
 fun likelyScams(listings: List<Listing>, views: Map<String, Int>, now: kotlin.time.Instant = Clock.System.now()): Map<String, String> {
     val forSale = listings.filter { !it.sold }.distinctBy { it.id }
+    return seenTooOften(forSale, views, now) + showsOtherAdsPhotos(forSale)
+}
+
+/**
+ * Offers that show photos of other people's ads: the server found one of their photos in an ad
+ * placed elsewhere or by someone else. A gallery put together that way shows a vehicle the seller
+ * does not have.
+ */
+private fun showsOtherAdsPhotos(forSale: List<Listing>): Map<String, String> =
+    forSale.filter { it.photosAlsoIn.isNotEmpty() }.associate { l ->
+        val places = l.photosAlsoIn.map { it.place ?: "another ad" }.distinct()
+        l.id to "Shows photos from ${l.photosAlsoIn.size} other ad${if (l.photosAlsoIn.size == 1) "" else "s"} (${places.joinToString(", ")})."
+    }
+
+private fun seenTooOften(forSale: List<Listing>, views: Map<String, Int>, now: kotlin.time.Instant): Map<String, String> {
     if (forSale.size < 5) return emptyMap()
     val prices = forSale.map { it.displayAmount() }.sorted()
     val middlePrice = prices[prices.size / 2]

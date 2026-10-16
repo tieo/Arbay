@@ -28,6 +28,8 @@ data class ListingDetail(
     /** How many reviews the dealer's stars rest on, where only the page has the whole number:
      *  a mobile.de result card counts some of them (12 where the page says 474). */
     val sellerReviews: Int? = null,
+    /** Every photo of the ad's gallery, where the card carried only the first. */
+    val photos: List<String> = emptyList(),
 )
 
 /**

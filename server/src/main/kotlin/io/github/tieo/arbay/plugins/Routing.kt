@@ -35,6 +35,7 @@ fun Application.configureRouting() {
     savedSearches.start()
     Chat.start()
     io.github.tieo.arbay.chat.ChatWatch.start()
+    io.github.tieo.arbay.repo.ListingArchive.printArchive()
 
     routing {
         productRoutes(productRepo, savedSearches)

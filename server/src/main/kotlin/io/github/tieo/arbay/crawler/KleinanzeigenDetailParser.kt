@@ -51,6 +51,10 @@ object KleinanzeigenDetailParser {
      * breadcrumb links to (`/s-handy-telekom/c173`), the details list, and the gallery's photos in
      * their order. The page also shows similar ads with photos of their own; only the gallery's count.
      */
+    /** The gallery's photos in their order; the similar ads below it, with photos of their own, are not part of it. */
+    fun gallery(doc: org.jsoup.nodes.Document): List<String> =
+        doc.select(".galleryimage-element").flatMap { el -> photoAddress.findAll(el.outerHtml()).map { it.value } }.distinct()
+
     fun adCopy(html: String): io.github.tieo.arbay.crawler.AdCopy? {
         val doc = Jsoup.parse(html)
         val title = doc.selectFirst("#viewad-title")?.ownText()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
@@ -60,7 +64,7 @@ object KleinanzeigenDetailParser {
             val value = li.selectFirst(".addetailslist--detail--value")?.text()?.trim() ?: return@mapNotNull null
             li.ownText().trim().takeIf { it.isNotEmpty() && value.isNotEmpty() }?.let { it to value }
         }.toMap()
-        val photos = doc.select(".galleryimage-element").flatMap { el -> photoAddress.findAll(el.outerHtml()).map { it.value } }.distinct()
+        val photos = gallery(doc)
         return io.github.tieo.arbay.crawler.AdCopy(
             title = title,
             description = doc.selectFirst("#viewad-description-text")?.wholeText()?.trim().orEmpty(),

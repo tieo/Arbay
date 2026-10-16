@@ -42,4 +42,14 @@ class ScamTest {
     fun `without view counts nothing is called a scam`() {
         assertEquals(emptyMap(), likelyScams(search.map { it.first }, emptyMap(), now))
     }
+
+    @Test
+    fun `an offer showing another ad's photos is a likely scam whatever its views`() {
+        val copier = offer("koerne", 12_000, 6).copy(photosAlsoIn = listOf(
+            io.github.tieo.arbay.model.PhotoCopy("KLEINANZEIGEN:1", "https://example.invalid/1", "Gönnheim"),
+            io.github.tieo.arbay.model.PhotoCopy("KLEINANZEIGEN:2", "https://example.invalid/2", "Mayen"),
+        ))
+        val scams = likelyScams(listOf(copier), emptyMap(), now)
+        assertEquals("Shows photos from 2 other ads (Gönnheim, Mayen).", scams[copier.id])
+    }
 }

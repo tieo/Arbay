@@ -76,6 +76,12 @@ object ListingArchive {
         listingsDir.mkdirs()
         File(listingsDir, "${listing.id}.json").writeTextAtomically(json.encodeToString(archived))
         log.debug("Archived {} ({} of {} images saved)", listing.id, localNames.size, listing.imageUrls.size)
+        io.github.tieo.arbay.crawler.PhotoPrints.recordAsync(listing, localNames.firstOrNull()?.let { File(dir, it) })
+    }
+
+    /** Prints the first photo of every listing archived before photos were printed ([io.github.tieo.arbay.crawler.PhotoPrints]). */
+    fun printArchive() = io.github.tieo.arbay.crawler.PhotoPrints.backfill(listingsDir, imagesDir) { f ->
+        json.decodeFromString<Listing>(f.readText())
     }
 
     private suspend fun downloadImage(url: String, dir: File, index: Int): String? = try {

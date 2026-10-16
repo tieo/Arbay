@@ -137,7 +137,7 @@ private suspend fun finishedResults(
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
         io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
-    val listings = withFit(asDelivered(inside, query), query, isCarQuery)
+    val listings = withFit(withPhotoCopies(asDelivered(inside, query)), query, isCarQuery)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(
@@ -328,6 +328,11 @@ private fun asDelivered(listings: List<Listing>, query: SearchQuery): List<Listi
                 Geocoder.haversine(lat, lon, coords.first, coords.second) else l.distanceKm,
         )
     }
+}
+
+/** Each listing with the ads elsewhere that show one of its photos ([io.github.tieo.arbay.crawler.PhotoPrints]). */
+private fun withPhotoCopies(listings: List<Listing>): List<Listing> = listings.map { l ->
+    io.github.tieo.arbay.crawler.PhotoPrints.copiesOf(l).takeIf { it.isNotEmpty() }?.let { l.copy(photosAlsoIn = it) } ?: l
 }
 
 /**
@@ -599,9 +604,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                         else crawler.trackedSearch(pq, corpusBackground(listingRepo))
                             .also { QueryResultCache.put(platformId, pq, it) }
                     val classified = RelevanceFilter.filter(answer, pq).map { SoldDetector.classify(it) }
-                    val result = withFit(asDelivered(
+                    val result = withFit(withPhotoCopies(asDelivered(
                         carPostFilter(classified, pq, isCarQuery, crawler).first, pq,
-                    ), pq, isCarQuery)
+                    )), pq, isCarQuery)
                     result.forEach { listingRepo.upsert(it) }
                     result
                 }

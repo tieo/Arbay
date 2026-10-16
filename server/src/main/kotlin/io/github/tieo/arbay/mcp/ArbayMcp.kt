@@ -751,7 +751,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
-        matchScore?.let { "fit ${Math.round(it * 100)}%" }, url,
+        matchScore?.let { "fit ${Math.round(it * 100)}%" },
+        photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
+        url,
     ).joinToString(" | ")
 
     /** What a vehicle's card states, so a van can be judged from the list: its age, mileage,

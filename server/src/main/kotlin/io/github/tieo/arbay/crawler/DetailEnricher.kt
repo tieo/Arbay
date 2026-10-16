@@ -68,13 +68,19 @@ object DetailEnricher {
         }
 
         return listings.map { listing ->
-            if (!needsDetail(listing, needed)) return@map listing
-            DetailCache.get(listing.id)?.let { return@map listing.withDetail(it) }
+            if (!needsDetail(listing, needed)) return@map listing.also { printGallery(it) }
+            DetailCache.get(listing.id)?.let { return@map listing.withDetail(it).also { l -> printGallery(l) } }
             if (listing.id !in toFetch || crawler is ReadsAdsTogether) return@map listing // beyond budget or unread → stays inferred, badged unverified
             val detail = gate.withPermit { crawler.fetchDetail(listing) } ?: return@map listing
             DetailCache.put(listing.id, detail)
-            listing.withDetail(detail)
+            listing.withDetail(detail).also { printGallery(it) }
         }
+    }
+
+    /** The whole gallery of an ad whose page has been read, printed so its photos can be found in other ads. */
+    private suspend fun printGallery(listing: Listing) {
+        val photos = DetailCache.get(listing.id)?.photos?.takeIf { it.isNotEmpty() } ?: return
+        runCatching { PhotoPrints.record(listing, photos) }
     }
 
     /** The page's answers laid over the card's: its specs win where it has one, its own text

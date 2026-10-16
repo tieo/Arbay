@@ -45,6 +45,8 @@ data class Listing(
     val modelScores: Map<String, Double>? = null,
     val isExploration: Boolean = false,
     val vehicle: VehicleInfo? = null,
+    /** Other ads, placed elsewhere or by someone else, that show one of this ad's photos. */
+    val photosAlsoIn: List<PhotoCopy> = emptyList(),
 ) {
     /** All-in price including shipping and platform fees. A delivery charge in another currency
      *  than the price is left out rather than added as if it were the same one. */
@@ -75,3 +77,7 @@ enum class SaleType(val label: String) {
     /** A price that is only the highest bid so far, and rises until the auction ends. */
     AUCTION("Auction"),
 }
+
+/** An ad that shows a photo another ad shows too: where it is and where it was placed. */
+@Serializable
+data class PhotoCopy(val listingId: String, val url: String, val place: String? = null)

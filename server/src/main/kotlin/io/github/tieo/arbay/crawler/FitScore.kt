@@ -15,8 +15,8 @@ import kotlin.time.Clock
  * and weighed against the others, because a buyer trades them off: a van over budget can still be
  * the best one if everything else is right, and one that scrapes past every filter with several
  * small misses is not. Only a few things rule an offer out entirely: it is not the kind of vehicle
- * wanted at all, it is offered to traders or for export only, or its dealer has under four stars
- * on the market's own reviews.
+ * wanted at all, it is offered to traders or for export only, its dealer has under four stars
+ * on the market's own reviews, or it shows another ad's photos.
  *
  * The weights were set with the user on a real search (a Crafter): the van's size first, then the
  * price, where every euro counts, then gearbox, mileage, age and drive; the drive to the seller
@@ -63,6 +63,8 @@ object FitScore {
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
         if (wantsAVan && notAClosedVan.containsMatchIn(headline)) return null
         if (tradeOnly.containsMatchIn(text)) return null
+        // Another ad's photos in this one: the van shown is not the one sold.
+        if (listing.photosAlsoIn.isNotEmpty()) return null
         val fuel = listing.vehicle?.fuel
         if (wishes.fuels.isNotEmpty() && fuel != null && fuel !in wishes.fuels) return null
         val seller = listing.seller
