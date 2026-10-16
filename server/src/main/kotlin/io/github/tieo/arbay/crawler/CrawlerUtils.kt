@@ -282,13 +282,24 @@ internal suspend fun paginate(
 
 /** Validate HTML — throws if it's a block/captcha page */
 internal fun validateHtml(html: String, platformName: String) {
-    if (html.length < 500)
+    // A short answer is a refusal when it is a page, and an answer when it is an API's JSON: Sauto
+    // says "no more ads" in 117 bytes ({"pagination":…,"results":[]}), and read as a block that
+    // threw away the vans of the pages before it and put the market on a block cooldown.
+    val apiAnswer = isJsonDocument(html)
+    if (html.length < 500 && !apiAnswer)
         throw CrawlerBlockedException("$platformName: empty response", ErrorType.BLOCKED_403, html = html)
     if (detectCaptcha(html))
         throw CrawlerBlockedException("$platformName captcha", ErrorType.CAPTCHA, html = html)
-    if (html.length < 1000 && (html.contains("bot") || html.contains("challenge") || html.contains("blocked")))
+    if (html.length < 1000 && !apiAnswer && (html.contains("bot") || html.contains("challenge") || html.contains("blocked")))
         throw CrawlerBlockedException("$platformName likely blocked (small response)", ErrorType.BLOCKED_403, html = html)
     detectBlockPage(html, platformName)?.let { throw it.withEvidence(html = html) }
+}
+
+/** Whether the body is one whole JSON object or array, as an API answers. */
+internal fun isJsonDocument(body: String): Boolean {
+    val trimmed = body.trim()
+    if (!(trimmed.startsWith("{") && trimmed.endsWith("}")) && !(trimmed.startsWith("[") && trimmed.endsWith("]"))) return false
+    return runCatching { kotlinx.serialization.json.Json.parseToJsonElement(trimmed) }.isSuccess
 }
 
 internal const val EDGE_ERROR_PAGE = "error page in place of results"

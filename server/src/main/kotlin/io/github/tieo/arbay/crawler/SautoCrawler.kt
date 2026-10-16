@@ -32,6 +32,8 @@ class SautoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
             val newIds = listings.count { it.externalId !in seen }
             listings.forEach { seen.putIfAbsent(it.externalId, it) }
             if (newIds == 0) break
+            // A page short of full is the last one; asking past it costs a request for nothing.
+            if (listings.size < PAGE_SIZE) break
             if (seen.size >= query.resultCap()) break
         }
 
