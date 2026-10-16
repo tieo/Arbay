@@ -4,6 +4,9 @@ import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.SearchQuery
@@ -51,6 +54,20 @@ class AtTheSourceTest {
         val as24 = AutoScout24Crawler(client).filterParams(crafter)
         listOf("&fregfrom=2018", "&kmto=150000", "&fuel=").forEach { assertTrue(it in as24, "$it in $as24") }
         listOf("&gear=", "&powerfrom=", "&custtype=").forEach { assertFalse(it in as24, "$it in $as24") }
+    }
+
+    @Test
+    fun `mobile_de is asked for the wished gearbox while somebody waits, for every gearbox in turn for the watch`() {
+        val mobile = MobileDeCrawler(client)
+        assertEquals(listOf("AUTOMATIC_GEAR"), mobile.gearboxPasses(crafter))
+        assertEquals(listOf("AUTOMATIC_GEAR", "SEMIAUTOMATIC_GEAR", "MANUAL_GEAR"), mobile.gearboxPasses(crafter.copy(unattended = true)))
+        assertEquals(listOf(null), mobile.gearboxPasses(crafter.copy(carFilters = wishes.copy(transmission = null), unattended = true)))
+        assertTrue("&tr=MANUAL_GEAR" in mobile.filterParams(crafter, "MANUAL_GEAR"))
+        val card = Listing(id = "MOBILE_DE:1", platformId = PlatformId.MOBILE_DE, externalId = "1", url = "https://suchen.mobile.de/1", title = "VW Crafter", price = Money(20_000_00, Currency.EUR), scrapedAt = kotlin.time.Instant.fromEpochSeconds(0))
+        val manual = mobile.filedUnder(card, "MANUAL_GEAR").vehicle!!
+        assertEquals(Transmission.MANUAL, manual.gearbox); assertTrue(manual.isVerified(VehicleField.GEARBOX))
+        assertEquals(Transmission.AUTOMATIC, mobile.filedUnder(card, "SEMIAUTOMATIC_GEAR").vehicle?.gearbox)
+        assertEquals(card, mobile.filedUnder(card, null))
     }
 
     @Test

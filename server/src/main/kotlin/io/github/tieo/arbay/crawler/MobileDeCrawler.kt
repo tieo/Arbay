@@ -57,7 +57,8 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         val seen = mutableSetOf<String>()
         val all = mutableListOf<Listing>()
 
-        for (vc in categories) {
+        val passes = gearboxPasses(query)
+        for (vc in categories) for (gearbox in passes) {
             if (all.size >= cap) break // first category already filled the budget — skip the rest
             // mobile.de bypasses fetchWithFallback (dedicated stealth browser), so instrument and
             // enforce the request cutoff here too — it's the most block-sensitive platform.
@@ -65,7 +66,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 throw CrawlerBlockedException("$platform: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
             val model = selection?.let { "&ms=${it.replace(";", "%3B")}%3B%3B" } ?: ""
             val url = "https://suchen.mobile.de/fahrzeuge/search.html?dam=0&isSearchRequest=true" +
-                "&s=Car&sb=p&od=up&vc=$vc$model&q=$q${filterParams(query)}"
+                "&s=Car&sb=p&od=up&vc=$vc$model&q=$q${filterParams(query, gearbox)}"
             RequestMonitor.recordTier(platform, "Browser")
             var pageNo = 0
             val vcStart = System.currentTimeMillis()
@@ -80,10 +81,10 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 ) { html ->
                     pageNo++
                     RequestMonitor.recordRequest(platform)
-                    val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }
+                    val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }.map { filedUnder(it, gearbox) }
                     // Per-page trickle timing, so the stealth-browser cadence is visible in the log.
-                    log.info("mobile.de {} page {} +{} (total {}, {}ms in)",
-                        vc, pageNo, fresh.size, all.size + fresh.size, System.currentTimeMillis() - vcStart)
+                    log.info("mobile.de {}{} page {} +{} (total {}, {}ms in)",
+                        vc, gearbox?.let { " $it" } ?: "", pageNo, fresh.size, all.size + fresh.size, System.currentTimeMillis() - vcStart)
                     emitPartialResults(fresh)
                     all.addAll(fresh)
                     // Past its last page mobile.de answers with ads already read, and the van
@@ -122,6 +123,31 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         "data-testid=\"vip-technical-data-box\"" in html -> io.github.tieo.arbay.model.AdState.LIVE
         Regex("""<title>[^<]*nicht verfügbar""", RegexOption.IGNORE_CASE).containsMatchIn(html) -> io.github.tieo.arbay.model.AdState.DELETED
         else -> null
+    }
+
+    /**
+     * The gearboxes asked for, one search each; null asks for none.
+     *
+     * The result cards never state a gearbox, so a search that weighs one learns it only from the
+     * site's own filter. A search somebody waits for asks for the wished gearbox alone and loses
+     * the vans that miss it. One nobody waits for ([SearchQuery.unattended], a saved search's
+     * watch) asks for every gearbox in turn, so each van comes back filed under its own and a
+     * manual one is ranked as manual rather than as unknown. Only the ads that state no gearbox at
+     * all fall outside every pass: five of 631 Crafters, measured.
+     */
+    internal fun gearboxPasses(query: SearchQuery): List<String?> {
+        val f = query.toCarFilters()
+        val wish = f?.transmission ?: return listOf(null)
+        return if (query.unattended && !f.strictUnknown) listOf(AUTOMATIC_GEAR, SEMIAUTOMATIC_GEAR, MANUAL_GEAR)
+        else listOf(if (wish == Transmission.AUTOMATIC) AUTOMATIC_GEAR else MANUAL_GEAR)
+    }
+
+    /** [listing] with the gearbox the site's filter found it under, where its card states none. */
+    internal fun filedUnder(listing: Listing, gearbox: String?): Listing {
+        val v = listing.vehicle ?: VehicleInfo()
+        if (gearbox == null || v.gearbox != null) return listing
+        val box = if (gearbox == MANUAL_GEAR) Transmission.MANUAL else Transmission.AUTOMATIC
+        return listing.copy(vehicle = v.copy(gearbox = box, verified = v.verified + VehicleField.GEARBOX))
     }
 
     /** Pages of twenty that hold [cap] offers, at most [limit]. */
@@ -233,7 +259,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
      *  everything (which then leaks unverifiable cards past the post-filter). Range params take
      *  `min:max`; either side may be empty. Names verified live against the search page: fr =
      *  first-registration year, ml = mileage, pw = power in kW, p = price in EUR, tr = gearbox. */
-    internal fun filterParams(query: SearchQuery): String {
+    internal fun filterParams(query: SearchQuery, gearbox: String? = null): String {
         // The area is not a car criterion, so it is built even for a search that sets none.
         val area = query.area("DE")?.let { "&ll=${it.latitude}%2C${it.longitude}&rad=${it.radiusKm}" } ?: ""
         val f = query.toCarFilters()?.atTheSource() ?: return area
@@ -245,11 +271,7 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             range(f.minMileageKm, f.maxMileageKm)?.let { append("&ml=$it") }
             range(f.minPowerKw, f.maxPowerKw)?.let { append("&pw=$it") }
             range(f.minPriceEur, f.maxPriceEur)?.let { append("&p=$it") }
-            when (f.transmission) {
-                Transmission.AUTOMATIC -> append("&tr=AUTOMATIC_GEAR")
-                Transmission.MANUAL -> append("&tr=MANUAL_GEAR")
-                null -> {}
-            }
+            gearbox?.let { append("&tr=$it") }
             // Names and values taken from this site's own filter definition, which it ships inside
             // the search page: `dt` Antriebsart, `ft` Kraftstoffart, `c` Fahrzeugtyp, `door`,
             // `sc` Sitzplätze, `emc` Schadstoffklasse, `st` Anbieter. Everything the site can
@@ -501,5 +523,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         const val FLIGHT_PUSH = "self.__next_f.push([1,"
         /** Offers on one page of mobile.de's results. */
         const val PAGE_SIZE = 20
+        // The gearbox values of the site's own filter definition; a semi-automatic is an automatic here.
+        const val AUTOMATIC_GEAR = "AUTOMATIC_GEAR"
+        const val SEMIAUTOMATIC_GEAR = "SEMIAUTOMATIC_GEAR"
+        const val MANUAL_GEAR = "MANUAL_GEAR"
     }
 }

@@ -287,6 +287,10 @@ data class SearchQuery(
     // someone turns it on: a search that quietly asks a market something other than what was typed
     // makes a wrong answer unexplainable, since the two sides can no longer be compared.
     val reach: SearchReach = SearchReach(),
+    // Whether nobody is waiting for the answer, as for a saved search's watch: a market whose
+    // results never state a weighed field, and that can only be asked for one value of it at a
+    // time, is then asked for every value in turn instead of the wished one alone.
+    val unattended: Boolean = false,
 ) {
     /** The one phrase to hand a platform search box that only takes a single term — [text] itself,
      *  or the most descriptive of [aliases] when [text] is less specific than one of them. */

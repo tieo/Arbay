@@ -376,6 +376,7 @@ class SavedSearchMonitor(
             q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
             parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
             home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }
+            parameter("unattended", true)
         }.execute { response ->
             if (!response.status.isSuccess()) return@execute
             val channel = response.bodyAsChannel()

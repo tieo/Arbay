@@ -209,6 +209,7 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
         startPage = queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(1) ?: base.startPage,
         maxPages = queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 20) ?: base.maxPages,
         maxResults = queryParameters["perMarket"]?.toIntOrNull()?.coerceIn(1, MAX_PER_MARKET) ?: base.maxResults,
+        unattended = queryParameters["unattended"]?.toBooleanStrictOrNull() ?: base.unattended,
     )
 }
 

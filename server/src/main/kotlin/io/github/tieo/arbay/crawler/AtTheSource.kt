@@ -10,7 +10,9 @@ import io.github.tieo.arbay.model.CarFilters
  * weighs a wish against the others. So the markets are asked only for the limits of the search
  * (year, mileage, price, fuel, body), and only on the fields their sellers must fill in. Gearbox,
  * power, drive, seller type and wheelbase are wishes the fit score weighs: a van that misses one
- * can still be the best one, and a market filter would delete it unseen.
+ * can still be the best one, and a market filter would delete it unseen. mobile.de is the one
+ * market still asked for the gearbox, since its result cards never state one: see
+ * [MobileDeCrawler.gearboxPasses].
  *
  * A search that excludes unstated specs itself ([CarFilters.strictUnknown]) loses nothing to a
  * market filter that Arbay would not drop anyway, so it still asks for everything.
