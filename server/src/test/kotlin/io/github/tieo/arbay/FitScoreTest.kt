@@ -91,4 +91,24 @@ class FitScoreTest {
         // Stuttgart to Hamburg: 534 km apart, under seven hours on the road.
         assertEquals(6.7, FitScore.driveHours(534.0)!!, 0.1)
     }
+    @Test
+    fun `a van beaten on price, power, age and mileage by one still online is beaten`() {
+        // Live, 2026-10-16: a 140 PS Crafter from 06/2021 at 25,990 € against a 177 PS one from
+        // 04/2021 at 19,971 € with 150,000 km: cheaper and stronger, but older and further driven.
+        fun crafter(euros: Long, year: Int, month: Int, km: Int, kw: Int, title: String) = van(
+            title = title, euros = euros,
+            vehicle = VehicleInfo(firstRegYear = year, firstRegMonth = month, mileageKm = km, powerKw = kw),
+        )
+        val salzgitter = crafter(25_990, 2021, 6, 88_141, 103, "Salzgitter")
+        val moenchengladbach = crafter(19_971, 2021, 4, 150_000, 130, "Mönchengladbach")
+        assertNull(FitScore.beatenBy(salzgitter, listOf(salzgitter, moenchengladbach)))
+        val better = crafter(24_500, 2021, 9, 80_000, 130, "better")
+        assertEquals(better, FitScore.beatenBy(salzgitter, listOf(salzgitter, moenchengladbach, better)))
+        // The same van on a second market, same numbers, beats nothing.
+        val twin = crafter(25_990, 2021, 6, 88_141, 103, "twin")
+        assertNull(FitScore.beatenBy(salzgitter, listOf(twin)))
+        // A number unknown on the other side never beats.
+        val unknownKm = van(title = "unknown", euros = 20_000, vehicle = VehicleInfo(firstRegYear = 2023, powerKw = 130))
+        assertNull(FitScore.beatenBy(salzgitter, listOf(unknownKm)))
+    }
 }

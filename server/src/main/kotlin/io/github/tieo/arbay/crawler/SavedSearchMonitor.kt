@@ -348,17 +348,21 @@ class SavedSearchMonitor(
      * well are pushed to the phone ([Ntfy]).
      *
      * The criteria the score weighs are left out of the search itself, since as a filter they
-     * would drop a van before it could be weighed: engine power, drive, wheelbase and seller type.
-     * What stays is what narrows the markets to candidates at all: price, year, mileage, gearbox,
-     * fuel, body and the van's size, which is also what makes the server open each ad.
+     * would drop a van before it could be weighed: drive, wheelbase and seller type. What stays is
+     * what narrows the markets to candidates at all: price, year, mileage, power, gearbox, fuel,
+     * body and the van's size, which is also what makes the server open each ad. Power stays a
+     * limit because vans above it sell for the same money as vans below it, so one under it is
+     * never the better buy.
+     *
+     * A new offer that one still online beats on price, power, age and mileage at once is not
+     * pushed, however well it fits: the user would take the other one.
      */
     private suspend fun runFit(product: TrackedProduct, selfUrl: String) {
         val settings = product.fitAlert
         val q = product.searchQuery
         val wishes = q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
         val crawl = wishes.copy(
-            minPowerKw = null, maxPowerKw = null, drivetrain = null,
-            minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
+            drivetrain = null, minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
         )
         val home = settings.home?.let(::homePoint)
         val found = LinkedHashMap<String, Listing>()
@@ -408,7 +412,12 @@ class SavedSearchMonitor(
             .sortedByDescending { it.second.score }
         val bar = maxOf(settings.minScore, scores.getOrNull(settings.topN - 1)?.second?.score ?: settings.minScore)
         val freshIds = fresh.mapTo(HashSet()) { it.id }
-        val worth = scores.filter { (l, fit) -> l.id in freshIds && fit.score >= bar }
+        val online = scores.map { it.first }
+        val worth = scores.filter { (l, fit) -> l.id in freshIds && fit.score >= bar }.filter { (l, _) ->
+            val better = FitScore.beatenBy(l, online) ?: return@filter true
+            log.info("fit alert {}: {} beaten by {}", product.name, l.url, better.url)
+            false
+        }
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return

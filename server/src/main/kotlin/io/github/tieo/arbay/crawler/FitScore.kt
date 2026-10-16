@@ -142,6 +142,30 @@ object FitScore {
         return Fit(score = score, driveHours = hours, misses = misses, airConditioning = ac)
     }
 
+    /**
+     * An offer among [others] that is at least as good as [listing] on price, power, age and
+     * mileage and better on one of them, or null when none is. Each of the four has to be known on
+     * both sides; a registration month missing on either side compares the years alone.
+     */
+    fun beatenBy(listing: Listing, others: List<Listing>): Listing? {
+        val v = listing.vehicle ?: return null
+        val kw = v.powerKw ?: return null
+        val km = v.mileageKm ?: return null
+        val year = v.firstRegYear ?: return null
+        val price = priceEur(listing)
+        return others.firstOrNull { other ->
+            val o = other.vehicle ?: return@firstOrNull false
+            val oKw = o.powerKw ?: return@firstOrNull false
+            val oKm = o.mileageKm ?: return@firstOrNull false
+            val oYear = o.firstRegYear ?: return@firstOrNull false
+            val oPrice = priceEur(other)
+            val months = if (v.firstRegMonth != null && o.firstRegMonth != null) o.firstRegMonth!! - v.firstRegMonth!! else 0
+            val newer = (oYear - year) * 12 + months
+            other.id != listing.id && oPrice <= price && oKw >= kw && oKm <= km && newer >= 0 &&
+                (oPrice < price || oKw > kw || oKm < km || newer > 0)
+        }
+    }
+
     /** The landed price in euros, as the rest of the app compares prices. */
     fun priceEur(listing: Listing): Double =
         if (listing.price.currency == Currency.EUR) listing.price.amount / 100.0
