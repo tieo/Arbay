@@ -23,12 +23,18 @@ object VehicleTextParser {
     private val kwRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
     // "km" is NOT a power unit — including it read the odometer's last digits as PS.
     private val psRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?(?:ps|hp|hk)\b""", RegexOption.IGNORE_CASE)
-    private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
+    // The label may introduce a whole date ("EZ. 10.07.2014"), whose day and month come before
+    // the year.
+    private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:(?:0?[1-9]|[12]\d|3[01])[/.\-])?(?:0?[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
+    // A whole date with its day ("Service am 20.01.2026") marks something that happened to the
+    // van, a service, an inspection, a sale; unlabeled, it never names the first registration.
+    private val fullDateYearRegex = Regex("""\b(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.((?:19|20)\d{2})\b""")
     private val bareYearRegex = Regex("""\b(19[89]\d|20[0-3]\d)\b""")
-    // Inspection validity ("APK tot 2027", "TÜV 06/2026", "HU bis 2025") names a deadline,
-    // never the first registration; matched year positions are barred from the bare fallback.
+    // Inspection validity ("APK tot 2027", "TÜV 06/2026", "HU bis 2025", a private seller's bare
+    // "gültig für 2025") names a deadline, never the first registration; matched year positions
+    // are barred from the bare fallback.
     private val inspectionYearRegex = Regex(
-        """\b(?:t[üÜu]v|tuev|apk|hu|au|keuring|gekeurd|hauptuntersuchung)\b\D{0,16}(?:(?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""",
+        """\b(?:t[üÜu]v|tuev|apk|hu|au|keuring|gekeurd|hauptuntersuchung|g[üÜu]ltig|gueltig)\b\D{0,16}(?:(?:0[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""",
         RegexOption.IGNORE_CASE,
     )
     // A year-shaped number next to a currency mark is a price ("Preis 2000 €"), not a year.
@@ -165,10 +171,11 @@ object VehicleTextParser {
 
     private fun parseYear(text: String): Int? {
         yearRegex.find(text)?.groupValues?.get(2)?.toIntOrNull()?.let { return it }
-        // Positions of inspection years and euro prices; those digits never count as a
+        // Positions of inspection years, dated events and euro prices; those digits never count as a
         // registration year in the unlabeled fallback.
         val excludedStarts = buildSet {
             inspectionYearRegex.findAll(text).forEach { m -> m.groups[1]?.let { add(it.range.first) } }
+            fullDateYearRegex.findAll(text).forEach { m -> m.groups[1]?.let { add(it.range.first) } }
             priceYearRegex.findAll(text).forEach { m ->
                 m.groups[1]?.let { add(it.range.first) }
                 m.groups[2]?.let { add(it.range.first) }

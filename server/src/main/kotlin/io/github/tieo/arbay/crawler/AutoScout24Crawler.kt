@@ -320,8 +320,13 @@ class AutoScout24Crawler(
                 // AutoScout24 carries structured vehicle attributes in the listing's `vehicle`
                 // object (fuel, transmission, displacement) — authoritative, so verified.
                 val v = obj["vehicle"]?.jsonObject
+                val details = cardDetails(obj)
                 val structured = VehicleInfo(
                     firstRegYear = yearText?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() },
+                    firstRegMonth = details["calendar"]?.let { Regex("""^(0?[1-9]|1[0-2])/(19|20)\d{2}$""").find(it.trim()) }
+                        ?.groupValues?.get(1)?.toIntOrNull(),
+                    powerKw = details["speedometer"]?.let { Regex("""(\d{2,3})\s?kW""").find(it) }
+                        ?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 20..1000 },
                     mileageKm = mileageText?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
                     fuel = Fuel.parse(v?.get("fuel")?.jsonPrimitive?.contentOrNull),
                     gearbox = Transmission.parse(v?.get("transmission")?.jsonPrimitive?.contentOrNull),
@@ -352,6 +357,21 @@ class AutoScout24Crawler(
             null
         }
     }
+
+    /**
+     * The card's spec line, `vehicleDetails`, keyed by its icon name: "speedometer" holds the
+     * power ("130 kW (177 PS)"), "calendar" the first registration ("06/2019"). The card's
+     * `vehicle` object has no power at all, so without this line every van whose title does not
+     * name its power was scored as if it had none. An entry marked a placeholder states nothing.
+     */
+    internal fun cardDetails(card: JsonObject): Map<String, String> =
+        (card["vehicleDetails"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val entry = el as? JsonObject ?: return@mapNotNull null
+            if (entry["isPlaceholder"]?.jsonPrimitive?.contentOrNull == "true") return@mapNotNull null
+            val icon = entry["iconName"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val data = entry["data"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            icon to data
+        }.toMap()
 
     /**
      * Who sells it, from the card's `seller` object: the site's own account number, which every

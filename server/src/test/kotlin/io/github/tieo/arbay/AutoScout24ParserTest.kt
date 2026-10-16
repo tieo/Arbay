@@ -46,6 +46,17 @@ class AutoScout24ParserTest {
     }
 
     @Test
+    fun `a card's spec line gives the power and the month of first registration`() {
+        val results = assertNotNull(AutoScout24Crawler(dummyClient()).parseFromNextData(fixture()))
+        val first = assertNotNull(results.first().vehicle)
+        assertEquals(130, first.powerKw)
+        assertEquals(6, first.firstRegMonth)
+        assertEquals(2019, first.firstRegYear)
+        assertTrue(first.isVerified(io.github.tieo.arbay.model.VehicleField.POWER))
+        assertTrue(results.count { it.vehicle?.powerKw != null } >= results.size - 2)
+    }
+
+    @Test
     fun `a dealer card carries the dealer's stars and review count`() {
         val results = assertNotNull(AutoScout24Crawler(dummyClient()).parseFromNextData(fixture()))
         val first = results.first()

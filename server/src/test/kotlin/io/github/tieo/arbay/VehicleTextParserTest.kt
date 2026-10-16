@@ -124,6 +124,30 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun serviceDateIsNotFirstRegYear() {
+        // A Remscheid dealer's Crafter (EZ 10/2019) lists its service history; the last entry's
+        // year is no registration year.
+        val v = VehicleTextParser.parse(
+            "Volkswagen Crafter Kasten 35 mittellang Hochdach FWD Kamera Servicehistorie: " +
+                "1. Service am 03.11.2021 bei 19.339 Km 4. Service am 20.01.2026 bei 66.031 Km",
+        )
+        assertNull(v?.firstRegYear)
+    }
+
+    @Test
+    fun labeledFullDateGivesFirstRegYear() {
+        val v = VehicleTextParser.parse("Volkswagen Crafter 2.0 TDI - 1. Hand - EZ. 10.07.2014 - Kilometerstand: 214253 - HU bis 08/28")!!
+        assertEquals(2014, v.firstRegYear)
+    }
+
+    @Test
+    fun validForYearIsInspectionNotFirstRegYear() {
+        // A private eBay seller's Euro 5 Crafter: "gültig für 2025" is the TÜV, not the build year.
+        val v = VehicleTextParser.parse("volkswagen crafter 2L Euro 5 Wolkswagen craftar, Motor 2 l, Heckantrieb, 6 Gänge, Euro 5, hat keine Roststellen, gültig für 2025.")
+        assertNull(v?.firstRegYear)
+    }
+
+    @Test
     fun priceInEurosIsNotYear() {
         // "2000 €" is the asking price; the bare year fallback must keep 1989.
         val v = VehicleTextParser.parse("Opel Kadett Oldtimer 1989, fester Preis 2000 €")!!
