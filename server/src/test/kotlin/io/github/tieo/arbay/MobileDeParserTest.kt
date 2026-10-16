@@ -36,6 +36,14 @@ class MobileDeParserTest {
     }
 
     @Test
+    fun `a search page states its hit count, and an empty one says zero`() {
+        val crawler = MobileDeCrawler(dummyClient())
+        assertEquals(922, crawler.resultsTotal(fixture()))
+        assertEquals(0, crawler.resultsTotal("""<script>self.__next_f.push([1,"{\"numResultsTotal\":0}"])</script>"""))
+        assertEquals(null, crawler.resultsTotal("<html><body>Bitte warten</body></html>"))
+    }
+
+    @Test
     fun `an ad page says whether the ad is still up`() {
         val crawler = MobileDeCrawler(dummyClient())
         val live = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText()

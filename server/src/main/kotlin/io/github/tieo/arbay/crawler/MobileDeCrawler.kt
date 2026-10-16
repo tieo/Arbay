@@ -81,7 +81,19 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                 ) { html ->
                     pageNo++
                     RequestMonitor.recordRequest(platform)
-                    val fresh = parseSearchResults(html).filter { seen.add(it.externalId) }.map { filedUnder(it, gearbox) }
+                    val parsed = parseSearchResults(html)
+                    if (pageNo == 1 && parsed.isEmpty() && resultsTotal(html) != 0) {
+                        val error = CrawlerBlockedException(
+                            "$platform: first page held no ads and does not say the search has none",
+                            ErrorType.EMPTY_RESULTS, url = url, html = html,
+                        )
+                        ErrorSnapshotStore.capture(
+                            platform = platformId.name, query = query.text, error = error,
+                            errorType = error.errorType, url = url, fetchStage = "stealth page 1", html = html,
+                        )
+                        throw error
+                    }
+                    val fresh = parsed.filter { seen.add(it.externalId) }.map { filedUnder(it, gearbox) }
                     // Per-page trickle timing, so the stealth-browser cadence is visible in the log.
                     log.info("mobile.de {}{} page {} +{} (total {}, {}ms in)",
                         vc, gearbox?.let { " $it" } ?: "", pageNo, fresh.size, all.size + fresh.size, System.currentTimeMillis() - vcStart)
@@ -358,6 +370,20 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
 
     /** The place line of a card's seller box, whole: "21244 Buchholz in der Nordheide". */
     private val sellerBoxPlace = Regex("""(?:DE-)?(\d{5})\s+(\S.*)""")
+
+    // The search's own hit count in the page's state, "numResultsTotal":922, escaped inside the
+    // streamed data.
+    private val numResultsTotal = Regex("""numResultsTotal\\?"\s*:\s*(\d+)""")
+
+    /**
+     * How many offers the page says the search has, or null when it does not say.
+     *
+     * A first page without ads is an empty search only when the page states zero hits: right after
+     * a server restart one stealth crawl read a page with no ads on it for a Crafter search whose
+     * other runs return dozens, and taken as an answer it dropped every mobile.de van silently.
+     */
+    internal fun resultsTotal(html: String): Int? =
+        numResultsTotal.find(html)?.groupValues?.get(1)?.toIntOrNull()
 
     internal fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
