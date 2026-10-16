@@ -251,7 +251,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
                 ).joinToString(" · ") + ((s?.get("newListingIds") as? JsonArray).orEmpty()
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
-                    ?.joinToString(", ", prefix = "\n  new: ") ?: "")
+                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "")
             }.ifEmpty { "No saved searches." }
         }
 
