@@ -40,6 +40,17 @@ class TruckScout24ParserTest {
     /** Dealers headline the net price ("14.900 € Festpreis zzgl. MwSt.") and add the gross in
      *  brackets; a private buyer pays the gross, so that is the listing's price. */
     @Test
+    fun `a card's place is its town and country, not the site's distance`() {
+        val results = TruckScout24Crawler(dummyClient()).parse(fixture())
+        val places = results.mapNotNull { it.location }
+        assertTrue(places.isNotEmpty())
+        places.forEach { place ->
+            assertFalse(place.city.orEmpty().contains(Regex("""\d+\s*km""")), "distance read as the town: ${place.city}")
+            assertTrue(place.country?.length == 2, "no country: $place")
+        }
+    }
+
+    @Test
     fun `a dealer's net price is read as the gross a buyer pays`() {
         val html = fixture()
         val stated = org.jsoup.Jsoup.parse(html).select("section[data-listing-id]").mapNotNull { card ->

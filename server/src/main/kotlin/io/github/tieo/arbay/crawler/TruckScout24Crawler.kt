@@ -205,7 +205,12 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
             } else {
                 "https://www.truckscout24.de$href"
             }
-            val locationText = card.selectFirst("[data-grid=location]")?.text()?.trim()
+            // The cell holds the town, a flag naming the country ("flag24-de") and the site's own
+            // distance from the reader ("393 km"), which made the whole cell no place at all.
+            val locationCell = card.selectFirst("[data-grid=location]")
+            val locationText = (locationCell?.selectFirst(".country-name") ?: locationCell)?.text()?.trim()
+            val country = locationCell?.selectFirst("img[class*=flag24-]")?.classNames()
+                ?.firstNotNullOfOrNull { Regex("""^flag24-([a-z]{2})$""").find(it)?.groupValues?.get(1)?.uppercase() }
             val imageUrl = card.selectFirst("[data-grid=image] img")?.let { img ->
                 img.attr("data-src").ifBlank { img.attr("src") }
             }?.takeIf { it.startsWith("http") }
@@ -240,7 +245,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
                 title = title,
                 price = price,
                 imageUrls = listOfNotNull(imageUrl),
-                location = locationText?.takeIf { it.isNotBlank() }?.let { Location(city = it) },
+                location = locationText?.takeIf { it.isNotBlank() }?.let { Location(city = it, country = country) },
                 description = null,
                 scrapedAt = now,
                 vehicle = vehicle,
