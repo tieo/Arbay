@@ -87,7 +87,12 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
                         vc, pageNo, fresh.size, all.size + fresh.size, System.currentTimeMillis() - vcStart)
                     emitPartialResults(fresh)
                     all.addAll(fresh)
+                    // Past its last page mobile.de answers with ads already read, and the van
+                    // category of a model search answers with the car category's ads: a page with
+                    // nothing new ends this category rather than paging on to the page limit.
+                    if (fresh.isEmpty()) throw NothingNew()
                 }
+            } catch (_: NothingNew) {
             } catch (e: CrawlerBlockedException) {
                 // A block with nothing collected yet is a real failure; otherwise keep what streamed
                 // in — e.g. the Car category returned before the Van category got challenged.
@@ -466,6 +471,9 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         }
         return found
     }
+
+    /** Ends a category's paging from inside the page stream, which stops its browser. */
+    private class NothingNew : Exception()
 
     private companion object {
         const val FLIGHT_PUSH = "self.__next_f.push([1,"
