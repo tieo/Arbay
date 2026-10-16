@@ -148,6 +148,33 @@ object VehicleTextParser {
         )
     }
 
+    /**
+     * The record with only what a market stated in a field: every value read off text is dropped.
+     * Used where a longer text is about to be read, so the guess from a card's one-line summary
+     * does not outrank what the whole ad says.
+     */
+    fun verifiedOnly(v: VehicleInfo?): VehicleInfo? {
+        if (v == null) return null
+        fun <T> keep(field: VehicleField, value: T?): T? = value.takeIf { v.isVerified(field) }
+        return v.copy(
+            firstRegYear = keep(VehicleField.FIRST_REG_YEAR, v.firstRegYear),
+            firstRegMonth = keep(VehicleField.FIRST_REG_YEAR, v.firstRegMonth),
+            mileageKm = keep(VehicleField.MILEAGE, v.mileageKm),
+            powerKw = keep(VehicleField.POWER, v.powerKw),
+            displacementCc = keep(VehicleField.DISPLACEMENT, v.displacementCc),
+            fuel = keep(VehicleField.FUEL, v.fuel),
+            bodyType = keep(VehicleField.BODY_TYPE, v.bodyType),
+            gearbox = keep(VehicleField.GEARBOX, v.gearbox),
+            drivetrain = keep(VehicleField.DRIVETRAIN, v.drivetrain),
+            doors = keep(VehicleField.DOORS, v.doors),
+            seats = keep(VehicleField.SEATS, v.seats),
+            condition = keep(VehicleField.CONDITION, v.condition),
+            color = keep(VehicleField.COLOR, v.color),
+            emissionClassEuro = keep(VehicleField.EMISSION, v.emissionClassEuro),
+            wheelbaseMm = keep(VehicleField.WHEELBASE, v.wheelbaseMm),
+        )
+    }
+
     private fun digits(s: String): Int? = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
 
     private fun parseMileage(text: String): Int? {

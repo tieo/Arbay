@@ -59,4 +59,18 @@ Laufleistung: 297000"""
         assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, read.gearbox)
         assertEquals(io.github.tieo.arbay.model.Fuel.DIESEL, read.fuel)
     }
+
+    @Test
+    fun `the ad's own words outrank the guess from its card`() {
+        // Nienburg Crafter, live 2026-10-16: the card's summary named its Start-Stop-Automatik.
+        val card = van("", euros = 24_999, km = null).copy(
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(gearbox = io.github.tieo.arbay.model.Transmission.AUTOMATIC),
+        )
+        val text = "Technik\n- Start-Stop-Automatik\nErstzulassung: 10/2021\nKilometerstand: 78.750 km\n" +
+            "Leistung: 103 kW/140 PS\nGetriebe: Schaltgetriebe"
+        val read = with(DetailEnricher) { card.withDetail(io.github.tieo.arbay.model.ListingDetail(description = text)) }.vehicle!!
+        assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, read.gearbox)
+        assertEquals(78_750, read.mileageKm)
+        assertEquals(103, read.powerKw)
+    }
 }

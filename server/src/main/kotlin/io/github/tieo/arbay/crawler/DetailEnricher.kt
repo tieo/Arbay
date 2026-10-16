@@ -105,9 +105,20 @@ object DetailEnricher {
      *  replaces the site's one-line summary, and a location it states fills in a missing one.
      *  The full text is read again for what the fields leave out: a Kleinanzeigen commercial
      *  vehicle's page has no field but its type, and states its year, mileage and gearbox only
-     *  in the seller's words. */
+     *  in the seller's words. Those words outrank the guess made from the card's summary: a
+     *  Nienburg Crafter's page says "Getriebe: Schaltgetriebe", and the card's "Start-Stop-
+     *  Automatik" had made it an automatic. */
     internal fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = VehicleTextParser.enrich(copy(
-        vehicle = VehicleTextParser.merge(detail.vehicle, vehicle),
+        vehicle = VehicleTextParser.merge(
+            VehicleTextParser.merge(
+                detail.vehicle,
+                VehicleTextParser.merge(
+                    VehicleTextParser.verifiedOnly(vehicle),
+                    detail.description?.let { VehicleTextParser.parse("$title $it") },
+                ),
+            ),
+            vehicle,
+        ),
         description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
         location = location ?: detail.location,
         listingDate = listingDate ?: detail.listedAt,
