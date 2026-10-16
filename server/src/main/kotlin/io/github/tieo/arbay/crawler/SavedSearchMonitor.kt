@@ -134,7 +134,7 @@ class SavedSearchMonitor(
                 lastRunAtMillis = lastRun[product.id],
                 newSinceOpened = unopened[product.id]?.size ?: 0,
                 newListingIds = unopened[product.id]?.toList().orEmpty(),
-                lostTopOffers = TopOffers.of(product.id).filter { it.state == io.github.tieo.arbay.model.TopOfferState.LOST },
+                missingTopOffers = TopOffers.missing(product.id),
             )
         }
     }
@@ -369,6 +369,9 @@ class SavedSearchMonitor(
         )
         val home = settings.home?.let(::homePoint)
         val found = LinkedHashMap<String, Listing>()
+        // The rule that removed each offer the markets sent, so a best offer that stops coming back
+        // is told apart: removed by the search, or not sent at all.
+        val ruledOut = HashMap<String, String>()
         loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
             parameter("q", q.text)
             q.platforms.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
@@ -384,7 +387,10 @@ class SavedSearchMonitor(
                 val line = channel.readUTF8Line() ?: break
                 if (line.isBlank()) continue
                 val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
-                if (event.type == CrawlerEventType.PLATFORM_DONE) event.listings.forEach { found[it.id] = it }
+                if (event.type == CrawlerEventType.PLATFORM_DONE) {
+                    event.listings.forEach { found[it.id] = it }
+                    event.dropped.forEach { d -> ruledOut[d.listing.id] = listOfNotNull(d.reason.name.lowercase().replace('_', ' '), d.detail).joinToString(": ") }
+                }
                 if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
             }
         }
@@ -410,7 +416,7 @@ class SavedSearchMonitor(
             .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
             .sortedByDescending { it.second.score }
         // Every run, quiet ones included: the best offers it ever ranked are looked for again.
-        if (shown.isNotEmpty()) TopOffers.update(product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, TopOffers::adState)
+        if (shown.isNotEmpty()) TopOffers.update(product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState)
         if (firstFitRun) {
             log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
             return

@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.model.SavedSearchStatus
+import io.github.tieo.arbay.model.TopOfferState
 import io.github.tieo.arbay.model.TrackedProduct
 import kotlin.time.Clock
 
@@ -23,9 +24,14 @@ fun savedSearchSubtitle(product: TrackedProduct): String {
     return if (termDiffers) "${product.searchQuery.text}  ·  $markets" else markets
 }
 
-/** How many of the search's best offers its last run no longer returned while their ads may still be up; null when none. */
-fun lostLabel(status: SavedSearchStatus): String? = status.lostTopOffers.size.takeIf { it > 0 }?.let { n ->
-    if (n == 1) "1 of its best offers no longer found" else "$n of its best offers no longer found"
+/** How many of the search's best offers it is losing, and how many its last run ruled out; null when none. */
+fun lostLabel(status: SavedSearchStatus): String? {
+    val lost = status.missingTopOffers.count { it.state == TopOfferState.LOST }
+    val ruledOut = status.missingTopOffers.count { it.state == TopOfferState.RULED_OUT }
+    return listOfNotNull(
+        lost.takeIf { it > 0 }?.let { "$it of its best offers no longer found" },
+        ruledOut.takeIf { it > 0 }?.let { "$it of its best offers ruled out" },
+    ).joinToString(", ").ifEmpty { null }
 }
 
 /** When a saved search last ran, so an empty result reads as "nothing new" rather than as a search

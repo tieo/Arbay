@@ -21,14 +21,23 @@ data class SavedSearchStatus(
     // Which listings those are, so opening the search can show just them instead of only counting
     // them. Carried with the count rather than fetched separately: the count is this list's size.
     val newListingIds: List<String> = emptyList(),
-    // Offers that once ranked in this search's top ten and its last run did not return, while
-    // their ad is up or its market cannot say: the search is losing them.
-    val lostTopOffers: List<TopOffer> = emptyList(),
+    // Offers that once ranked in this search's top ten and its last run did not return: lost while
+    // their ad is up or its market cannot say, and ruled out by one of the search's own rules on
+    // the run that first did so, with the rule named. A best offer leaves silently in neither way.
+    val missingTopOffers: List<TopOffer> = emptyList(),
 )
 
 /** Whether a saved search's last run still returned an offer it once ranked among its best. */
 @Serializable
-enum class TopOfferState { FOUND, LOST, GONE }
+enum class TopOfferState {
+    FOUND,
+    /** Not returned, its ad up or its market unable to say: the search is losing it. */
+    LOST,
+    /** Returned by its market and removed by a rule of the search, named in [TopOffer.ruledOutBy]. */
+    RULED_OUT,
+    /** Not returned, and its page says it was taken down. */
+    GONE,
+}
 
 /** An offer that ranked in a saved search's top ten, as it was then and where it stands now. */
 @Serializable
@@ -44,4 +53,6 @@ data class TopOffer(
     val checkedAt: kotlin.time.Instant? = null,
     /** What the ad's own page said when it was last looked for, where the market says. */
     val adState: AdState? = null,
+    /** The search's rule that removed it, "vehicle criteria: mileage", while [state] is RULED_OUT. */
+    val ruledOutBy: String? = null,
 )

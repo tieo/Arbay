@@ -20,7 +20,9 @@ import kotlin.time.Clock
  * offer it ever ranked that high. One that did not come back is checked on its own page where the
  * market can say: taken down, it is [TopOfferState.GONE]; still up, or on a market that cannot
  * say, it is [TopOfferState.LOST], and reported until it comes back, since then the search itself
- * is losing it.
+ * is losing it. One its market did return and a rule of the search removed is
+ * [TopOfferState.RULED_OUT], reported with the rule on the run that removed it: the rule may be
+ * right about it, or wrong in the way that once dropped the best van of all.
  */
 object TopOffers {
     private val log = LoggerFactory.getLogger(TopOffers::class.java)
@@ -40,13 +42,16 @@ object TopOffers {
     }
 
     /**
-     * One run's outcome: [ranked] is what it scored, best first, and [found] every offer it
-     * returned. [stateOf] reads an ad's page, or answers null where the market cannot say.
+     * One run's outcome: [ranked] is what it scored, best first, [found] every offer it returned,
+     * and [ruledOut] the rule that removed each offer its markets sent and it did not return.
+     * [stateOf] reads an ad's page, or answers null where the market cannot say. Answers what the
+     * run reports missing: the lost, and the newly ruled out.
      */
     suspend fun update(
         productId: String,
         ranked: List<Pair<Listing, Double>>,
         found: Set<String>,
+        ruledOut: Map<String, String>,
         stateOf: suspend (TopOffer) -> AdState?,
     ): List<TopOffer> {
         val now = Clock.System.now()
@@ -64,8 +69,15 @@ object TopOffers {
             known.values.filter { it.listingId !in found && it.state != TopOfferState.GONE }
         }
         val checked = missing.map { o ->
-            val state = runCatching { stateOf(o) }.getOrNull()
-            o.copy(state = if (state == AdState.DELETED) TopOfferState.GONE else TopOfferState.LOST, checkedAt = now, adState = state)
+            val rule = ruledOut[o.listingId]
+            when {
+                rule == null -> {
+                    val state = runCatching { stateOf(o) }.getOrNull()
+                    o.copy(state = if (state == AdState.DELETED) TopOfferState.GONE else TopOfferState.LOST, checkedAt = now, adState = state, ruledOutBy = null)
+                }
+                o.state == TopOfferState.RULED_OUT && o.ruledOutBy == rule -> o
+                else -> o.copy(state = TopOfferState.RULED_OUT, checkedAt = now, adState = null, ruledOutBy = rule)
+            }
         }
         synchronized(this) {
             val known = remembered.getValue(productId)
@@ -73,9 +85,19 @@ object TopOffers {
             runCatching { file.writeTextAtomically(json.encodeToString(remembered.mapValues { it.value.toMap() })) }
                 .onFailure { log.error("could not write the remembered top offers: {}", it.message) }
         }
-        val lost = checked.filter { it.state == TopOfferState.LOST }
-        lost.forEach { log.warn("top offer lost from {}: {} {} (ad {})", productId, it.title, it.url, it.adState ?: "state unknown") }
-        return lost
+        val reported = checked.filter { it.state == TopOfferState.LOST || it.state == TopOfferState.RULED_OUT && it.checkedAt == now }
+        reported.forEach {
+            if (it.state == TopOfferState.LOST) log.warn("top offer lost from {}: {} {} (ad {})", productId, it.title, it.url, it.adState ?: "state unknown")
+            else log.warn("top offer ruled out of {} by {}: {} {}", productId, it.ruledOutBy, it.title, it.url)
+        }
+        return reported
+    }
+
+    /** What the search's latest run reported missing: every lost offer, and those it ruled out. */
+    fun missing(productId: String): List<TopOffer> {
+        val all = of(productId)
+        val latest = all.maxOfOrNull { maxOf(it.lastSeenAt, it.checkedAt ?: it.lastSeenAt) } ?: return emptyList()
+        return all.filter { it.state == TopOfferState.LOST || it.state == TopOfferState.RULED_OUT && it.checkedAt == latest }
     }
 
     /** Reads an offer's ad page through its market, where the market says whether an ad is up. */

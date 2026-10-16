@@ -251,10 +251,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
                 ).joinToString(" · ") + ((s?.get("newListingIds") as? JsonArray).orEmpty()
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
-                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "") + ((s?.get("lostTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
                     .joinToString("") { o ->
-                        "\n  LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " +
-                            (o.str("adState")?.lowercase() ?: "state unknown") + "): ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
+                        val why = if (o.str("state") == "RULED_OUT") "RULED OUT of its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} by the search's rule \"${o.str("ruledOutBy")}\" (check the ad really breaks it)"
+                            else "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")"
+                        "\n  $why: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
                             "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
                     })
             }.ifEmpty { "No saved searches." }
