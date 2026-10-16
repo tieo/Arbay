@@ -84,8 +84,11 @@ object DetailEnricher {
     }
 
     /** The page's answers laid over the card's: its specs win where it has one, its own text
-     *  replaces the site's one-line summary, and a location it states fills in a missing one. */
-    private fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = SellersWords.apply(copy(
+     *  replaces the site's one-line summary, and a location it states fills in a missing one.
+     *  The full text is read again for what the fields leave out: a Kleinanzeigen commercial
+     *  vehicle's page has no field but its type, and states its year, mileage and gearbox only
+     *  in the seller's words. */
+    internal fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = VehicleTextParser.enrich(copy(
         vehicle = VehicleTextParser.merge(detail.vehicle, vehicle),
         description = detail.description?.takeIf { it.length > (description?.length ?: 0) } ?: description,
         location = location ?: detail.location,

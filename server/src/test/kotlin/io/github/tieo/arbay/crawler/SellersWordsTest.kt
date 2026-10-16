@@ -46,4 +46,17 @@ Laufleistung: 297000"""
         val priced = van("Laufleistung: 12.000 €", km = 80_000)
         assertEquals(80_000, SellersWords.apply(priced).vehicle?.mileageKm)
     }
+
+    @Test
+    fun `a page with no fields but the seller's words is read from its words`() {
+        // A Kleinanzeigen commercial vehicle, live 2026-10-16: the page's only field is "Art: Transporter".
+        val text = "Volkswagen Crafter 2.0 TDI\n- 1. Hand\n- HSN/TSN: 0603/BEV\n- EZ. 10.07.2014\n" +
+            "- Kilometerstand: 214253\n- Schaltgetriebe\n- L2H2\n- Zahnriemen erneuert bei 203.000 Km\n- HU bis 08/28"
+        val card = van("", euros = 13_900, km = null).copy(vehicle = null)
+        val read = with(DetailEnricher) { card.withDetail(io.github.tieo.arbay.model.ListingDetail(description = text)) }.vehicle!!
+        assertEquals(2014, read.firstRegYear)
+        assertEquals(214_253, read.mileageKm)
+        assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, read.gearbox)
+        assertEquals(io.github.tieo.arbay.model.Fuel.DIESEL, read.fuel)
+    }
 }

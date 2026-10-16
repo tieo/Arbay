@@ -63,8 +63,13 @@ object VehicleTextParser {
     private val displacementCcRegex = Regex("""([0-9]{3,4})\s?(?:cm³|ccm|cc)\b""", RegexOption.IGNORE_CASE)
     private val displacementLRegex = Regex("""\b([0-9])[.,]([0-9])\s?(?:l|liter|litre)\b""", RegexOption.IGNORE_CASE)
 
-    fun parse(text: String?): VehicleInfo? {
-        if (text.isNullOrBlank()) return null
+    // A type approval key, "HSN/TSN: 0603/BEV": its letters are a code, and "BEV" there is no
+    // battery electric van.
+    private val typeKey = Regex("""\b(?:hsn|tsn)\b[\s/:.]*(?:(?:hsn|tsn)\b[\s/:.]*)?\w{3,4}(?:[\s/:,.]+(?:(?:zu\s*)?(?:2|tsn)\b[\s/:.]*)?\w{3}\b)?""", RegexOption.IGNORE_CASE)
+
+    fun parse(raw: String?): VehicleInfo? {
+        if (raw.isNullOrBlank()) return null
+        val text = typeKey.replace(raw, " ")
         val info = VehicleInfo(
             firstRegYear = parseYear(text),
             mileageKm = parseMileage(text),
