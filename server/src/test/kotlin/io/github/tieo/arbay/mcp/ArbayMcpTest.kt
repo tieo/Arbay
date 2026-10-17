@@ -4,6 +4,7 @@ import io.github.tieo.arbay.plugins.configureSerialization
 import io.github.tieo.arbay.plugins.configureStatusPages
 import io.github.tieo.arbay.routes.chatRoutes
 import io.github.tieo.arbay.routes.mcpRoutes
+import io.github.tieo.arbay.routes.productRoutes
 import io.github.tieo.arbay.routes.userStateRoutes
 import io.ktor.client.plugins.sse.SSE as ClientSSE
 import io.ktor.server.application.install
@@ -96,5 +97,26 @@ class ArbayMcpTest {
         assertEquals(200, reply.status.value, reply.bodyAsText())
         val body = Json.parseToJsonElement(reply.bodyAsText()).jsonObject
         assertTrue("error" !in body, reply.bodyAsText())
+    }
+
+    @Test
+    fun aSearchSavedOverMcpIsKept() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        routing {
+            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            mcpRoutes("", client)
+        }
+        val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
+        val saved = mcp.callTool(name = "save_search", arguments = mapOf("words" to "mcp saved search test"))
+        val text = (saved.content.single() as TextContent).text
+        assertTrue(text.startsWith("Saved: "), text)
+        val id = text.removePrefix("Saved: ").substringBefore(':')
+        products.delete(id)
+        mcp.close()
     }
 }

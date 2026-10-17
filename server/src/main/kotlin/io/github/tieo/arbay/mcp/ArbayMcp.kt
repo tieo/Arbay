@@ -18,6 +18,7 @@ import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.SearchReach
 import io.github.tieo.arbay.model.toCarFilters
 import io.github.tieo.arbay.model.MessageTemplate
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.OfferNote
 import io.github.tieo.arbay.model.Verdict
@@ -347,7 +348,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val words = args.str("words")!!
             val body = buildJsonObject {
                 put("id", ""); put("name", args.str("name") ?: words); put("createdAt", Clock.System.now().toString())
-                putJsonObject("searchQuery") { put("text", words) }
+                // A search typed in words reaches the general marketplaces, as the app's own search box does.
+                putJsonObject("searchQuery") { put("text", words); put("category", MarketGroup.GENERAL.name) }
             }
             val r = http.post("$base/api/products") { contentType(ContentType.Application.Json); setBody(body.toString()) }
             if (r.status.isSuccess()) "Saved: " + json.decodeFromString<TrackedProduct>(r.bodyAsText()).let { "${it.id}: ${it.name}" } else "Not saved: ${r.bodyAsText()}"
