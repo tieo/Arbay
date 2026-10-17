@@ -186,6 +186,7 @@ class SavedSearchMonitorTest {
         assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 130), learned))
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf()))
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf().copy(learnUntil = Instant.fromEpochMilliseconds(0))))
+        assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe for parts", 20, Condition.PARTS_ONLY), learned))
     }
 
     @Test

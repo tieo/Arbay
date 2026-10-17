@@ -670,7 +670,7 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .reply .control { flex: 1; min-height: 44px; }
 
 /* An ad for sale. */
-.sale-photos { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.sale-photos { display: flex; flex-wrap: wrap; gap: 8px; }
 .sale-photo { position: relative; flex: none; }
 .sale-photo img { display: block; width: 96px; height: 128px; object-fit: cover; border-radius: var(--radius-small); background: var(--raised); }
 .sale-photo .icon-button { position: absolute; top: 2px; right: 2px; background: var(--surface); }

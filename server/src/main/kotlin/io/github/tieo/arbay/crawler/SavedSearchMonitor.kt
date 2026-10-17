@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
+import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.learning
 import io.github.tieo.arbay.model.SavedSearchStatus
@@ -454,14 +455,15 @@ class SavedSearchMonitor(
      * The search with each learning rule's [NotificationSubfilter.bestSeenEur] lowered to the
      * cheapest of [found] the rule passes, kept when it changed. Everything the markets answer
      * counts, not only what is new: the market as it stands is what a later find has to beat. An
-     * auction's price is a bid so far, so it teaches nothing.
+     * auction's price is a bid so far, and a thing sold for parts is not the thing, so neither
+     * teaches anything.
      */
     private fun learn(product: TrackedProduct, found: Collection<Listing>): TrackedProduct {
         val now = Clock.System.now()
         val rules = product.notificationSubfilters.map { sf ->
             if (!sf.enabled || !sf.learning(now)) return@map sf
             val cheapest = found
-                .filter { it.saleType != SaleType.AUCTION && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
+                .filter { it.saleType != SaleType.AUCTION && it.condition != Condition.PARTS_ONLY && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
                 .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
                 .minByOrNull { it.second }
                 ?: return@map sf
@@ -591,8 +593,10 @@ class SavedSearchMonitor(
             sf: NotificationSubfilter,
             importSettings: ImportSettings = ImportSettingsStore.current,
         ): Boolean {
-            val best = sf.bestSeenEur ?: return true
             if (sf.learnUntil == null) return true
+            // Cheaper than the best working one is no news about a broken one.
+            if (listing.condition == Condition.PARTS_ONLY) return false
+            val best = sf.bestSeenEur ?: return true
             val cents = eurCents(listing.landedPrice(importSettings)) ?: return false
             return cents < best * 100L
         }

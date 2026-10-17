@@ -64,7 +64,7 @@ fun copyLabel(copy: Listing, of: Listing): String =
 
 /** How often a watched search may look again, and the words for each. */
 val WATCH_INTERVALS: List<Pair<Int, String>> =
-    listOf(30 to "30 min", 60 to "1 hour", 180 to "3 hours", 360 to "6 hours", 720 to "12 hours", 1440 to "a day")
+    listOf(30 to "30 min", 60 to "1 hour", 180 to "3 hours", 360 to "6 hours", 720 to "12 hours", 1440 to "day")
 
 /**
  * A new notification rule from what the form holds; [words] is comma separated. With [learnDays],

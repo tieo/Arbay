@@ -125,6 +125,14 @@ fun SellScreen(session: Session, draftId: String) {
 @Composable
 private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onAdd: (() -> Unit)?, onRemove: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // First, where a row of many photos still shows it without scrolling.
+        if (!posted && onAdd != null) item(key = "add") {
+            Box(
+                Modifier.size(width = 96.dp, height = 128.dp).clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onAdd),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.AddAPhoto, "Add your own photos", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
         items(d.photos, key = { it }) { p ->
             Box {
                 Photo(photo(p), Modifier.size(width = 96.dp, height = 128.dp).clip(MaterialTheme.shapes.small), "Photo $p")
@@ -132,13 +140,6 @@ private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onAdd
                     Icon(Icons.Outlined.Close, "Leave this photo out", tint = MaterialTheme.colorScheme.onPrimary)
                 }
             }
-        }
-        if (!posted && onAdd != null) item(key = "add") {
-            Box(
-                Modifier.size(width = 96.dp, height = 128.dp).clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onAdd),
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Outlined.AddAPhoto, "Add your own photos", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
