@@ -167,7 +167,13 @@ class EbayDeCrawler(
             chromiumSearch(query, allResults, seenIds)
             break
         } catch (e: CrawlerBlockedException) {
-            if (attempt == 2 || !e.isEdgeErrorPage) throw e
+            if (!e.isEdgeErrorPage) throw e
+            // The same page twice in a row is no passing hiccup: on 2026-10-17 eBay served it to
+            // every client from this address, its home page included, and searches kept asking.
+            // As a refusal it starts the cooldown and the watches leave eBay alone for a while.
+            if (attempt == 2) throw CrawlerBlockedException(
+                "eBay: error page twice in a row, taken as a block", ErrorType.BLOCKED_403, url = e.url, html = e.html,
+            )
             allResults.clear()
             seenIds.clear()
         }
