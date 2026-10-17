@@ -122,7 +122,7 @@ class NarrowingTest {
     }
 
     @Test
-    fun `what costs more than new is left out and said so, where the markets were asked up to it`() {
+    fun `what costs more than new is left out and said so where the markets were asked up to it`() {
         val newPrice = Money(25_000, Currency.EUR)
         val narrowed = narrow(listings, Narrowing(), emptySet(), newPrice = newPrice)
         assertEquals(listOf("a", "b"), narrowed.displayed.map { it.id })

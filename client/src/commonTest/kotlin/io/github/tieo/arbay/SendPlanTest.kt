@@ -26,7 +26,7 @@ class SendPlanTest {
     )
 
     @Test
-    fun `an ask lowered since the search caps the offer, never the one the search saw`() {
+    fun `an ask lowered since the search caps the offer and never the one the search saw`() {
         val line = planSend(listOf(drive), allInEur = 999.0, template = "{preis}", edits = emptyMap(),
             costs = ChatCosts(BuyerProtection(fixedEur = 0.49, share = 0.06)),
             adsNow = mapOf(drive.id to AdNow(AdState.LIVE, Money(13_500, Currency.EUR), Shipping(cost = Money(99, Currency.EUR), available = true)))).single()
