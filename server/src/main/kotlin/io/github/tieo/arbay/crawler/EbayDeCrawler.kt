@@ -342,21 +342,28 @@ class EbayDeCrawler(
     }
 
 
-    // eBay says on the card whether a price is a bid and how long is left, in whatever wording and
-    // class names the current layout uses. Read from the card's own text rather than a class, since
-    // the class names have changed under this parser before and the words have not.
-    private val BID_MARKER = Regex("""\b(\d+)\s*(gebote?|bids?)\b""", RegexOption.IGNORE_CASE)
+    // eBay says on the card whether a price is a bid and how long is left. The time left sits in
+    // its own s-card__time-left element on every eBay domain, whatever the language, so that is
+    // what marks an auction; the words are read as well for layouts without the class. Read by
+    // words alone, every auction on eBay.it, .es and .fr would pass as a price someone is asking.
+    private val BID_MARKER = Regex("""\b(\d+)\s*(gebote?|bids?|offert[ae])\b""", RegexOption.IGNORE_CASE)
+    /** "3 Gebote", "19 offerte": a count and one word, the shape the bid line has in any language. */
+    private val COUNT_AND_WORD = Regex("""^(\d+)\s+\p{L}+$""")
     private val TIME_LEFT = Regex(
-        """(?:noch|left|restzeit)?\s*(?:(\d+)\s*(?:t|d|tage?|days?)\b)?\s*""" +
+        """(?:noch|left|restzeit)?\s*(?:(\d+)\s*(?:t|d|g|j|tage?|days?)\b)?\s*""" +
             """(?:(\d+)\s*(?:std|h|hours?|hrs?)\b)?\s*(?:(\d+)\s*(?:min|m|mins?)\b)?""",
         RegexOption.IGNORE_CASE,
     )
 
     /** The card's own words about bidding: how many bids, and when it ends. */
     internal fun parseAuction(item: org.jsoup.nodes.Element, now: kotlin.time.Instant): Triple<SaleType?, kotlin.time.Instant?, Int?> {
+        val timeLeft = item.selectFirst(".s-card__time-left")
         val texts = item.select("span, div").filter { it.children().isEmpty() }.map { it.text().trim() }
+        val bidRowTexts = timeLeft?.parents()?.firstOrNull { it.hasClass("s-card__attribute-row") }
+            ?.select("span")?.filter { it.children().isEmpty() }?.map { it.text().trim() }
         val bids = texts.firstNotNullOfOrNull { BID_MARKER.find(it) }?.groupValues?.get(1)?.toIntOrNull()
-        val timeText = texts.firstOrNull { t ->
+            ?: bidRowTexts?.firstNotNullOfOrNull { COUNT_AND_WORD.find(it) }?.groupValues?.get(1)?.toIntOrNull()
+        val timeText = timeLeft?.text()?.trim() ?: texts.firstOrNull { t ->
             (t.contains("Noch", true) || t.contains("left", true) || t.contains("Restzeit", true)) &&
                 Regex("""\d""").containsMatchIn(t)
         }
@@ -369,13 +376,13 @@ class EbayDeCrawler(
             if (seconds <= 0L) null else now.plus(kotlin.time.Duration.parse("${seconds}s"))
         }
         val type = when {
-            bids != null || endsAt != null -> SaleType.AUCTION
+            timeLeft != null || bids != null || endsAt != null -> SaleType.AUCTION
             else -> SaleType.FIXED_PRICE
         }
         return Triple(type, endsAt, bids)
     }
 
-    private fun parseSearchResults(html: String): List<Listing> {
+    internal fun parseSearchResults(html: String): List<Listing> {
         val doc = Jsoup.parse(html)
         val now = Clock.System.now()
 
@@ -435,7 +442,8 @@ class EbayDeCrawler(
                     val t = el.text()
                     el.children().isEmpty() && // leaf element only
                     (t.contains("Versand", true) || t.contains("shipping", true) ||
-                     t.contains("Lieferung", true) || t.contains("postage", true)) &&
+                     t.contains("Lieferung", true) || t.contains("postage", true) ||
+                     t.contains("consegna", true) || t.contains("spedizione", true)) &&
                     saysWhatDeliveryCosts(t)
                 }?.text()
             val shipping = parseShipping(shippingText, price.currency)
@@ -541,17 +549,18 @@ class EbayDeCrawler(
     private fun saysWhatDeliveryCosts(text: String): Boolean {
         val lower = text.lowercase()
         return "€" in text || "eur" in lower || "$" in text || "£" in text ||
-            "kostenlos" in lower || "free" in lower || "gratis" in lower ||
-            "not specified" in lower || "nicht angegeben" in lower
+            "kostenlos" in lower || "free" in lower || "gratis" in lower || "gratuit" in lower ||
+            "not specified" in lower || "nicht angegeben" in lower || "non indicat" in lower
     }
 
     private fun parseShipping(text: String?, marketCurrency: Currency): Shipping? {
         if (text == null || !saysWhatDeliveryCosts(text)) return null
         val lower = text.lowercase()
         return when {
-            lower.contains("kostenlos") || lower.contains("free") || lower.contains("gratis") ->
-                Shipping(free = true)
-            lower.contains("not specified") || lower.contains("nicht angegeben") -> null
+            lower.contains("kostenlos") || lower.contains("free") || lower.contains("gratis") ||
+                lower.contains("gratuit") -> Shipping(free = true)
+            lower.contains("not specified") || lower.contains("nicht angegeben") ||
+                lower.contains("non indicat") -> null
             else -> {
                 val cost = Money.parseAtMarket(text, marketCurrency)
                 if (cost != null) Shipping(cost = cost)
