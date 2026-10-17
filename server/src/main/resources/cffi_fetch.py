@@ -53,6 +53,48 @@ def _http_exit_code(status: int) -> int:
     return 5
 
 
+_INTERSTITIAL_I = re.compile(r'var i = (\d+); var j = i \+ Number\("(\d+)" \+ "(\d+)"\)')
+_INTERSTITIAL_TOKEN = re.compile(r'"bm-verify":\s*"([^"]+)"')
+
+
+def interstitial_answer(html):
+    """
+    Akamai's interstitial page, served as HTTP 200 in place of the page, posts a token and a
+    proof of work to /_sec/verify and reloads. The work is one sum written into the page
+    (j = i + Number("9448" + "98178")). Returns the JSON body to post, or None for any other page.
+    """
+    if '/_sec/verify?provider=interstitial' not in html:
+        return None
+    m_i = _INTERSTITIAL_I.search(html)
+    m_token = _INTERSTITIAL_TOKEN.search(html)
+    if not m_i or not m_token:
+        return None
+    return {'bm-verify': m_token.group(1), 'pow': int(m_i.group(1)) + int(m_i.group(2) + m_i.group(3))}
+
+
+def get_through_interstitial(s, url, timeout=30):
+    """GET url, answering Akamai's interstitial with the same session up to twice."""
+    r = s.get(url, timeout=timeout)
+    for _ in range(2):
+        if r.status_code != 200:
+            return r
+        answer = interstitial_answer(r.text)
+        if answer is None:
+            return r
+        sys.stderr.write('answering an Akamai interstitial\n')
+        origin = re.match(r'https?://[^/]+', url).group(0)
+        verify = s.post(
+            origin + '/_sec/verify?provider=interstitial', json=answer, timeout=timeout,
+            headers={'Content-Type': 'application/json', 'Referer': r.url, 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Site': 'same-origin'},
+        )
+        try:
+            location = verify.json().get('location')
+        except Exception:
+            location = None
+        r = s.get(origin + location if location and location.startswith('/') else (location or url), timeout=timeout)
+    return r
+
+
 def cmd_fetch(url, prime_url=None):
     """Fetch URL, optionally priming with homepage first. Writes raw HTML bytes to stdout."""
     s = make_session()
@@ -64,7 +106,7 @@ def cmd_fetch(url, prime_url=None):
             pass
         s.headers['Sec-Fetch-Site'] = 'same-origin'
         s.headers['Referer'] = prime_url.rstrip('/') + '/'
-    r = s.get(url, timeout=30)
+    r = get_through_interstitial(s, url)
     if r.status_code not in (200,):
         sys.stderr.write(f'HTTP {r.status_code}\n')
         sys.exit(_http_exit_code(r.status_code))
