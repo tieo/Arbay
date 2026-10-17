@@ -9,7 +9,7 @@ import java.util.Locale
  * seller in the UK or China priced as if the parcel crossed no border.
  *
  * The names come from the JDK's own country names in every language it carries, so a market in a
- * new language needs nothing added here.
+ * new language needs nothing added here; only a name a market spells unlike the JDK is listed.
  */
 object CountryNames {
     private val byName: Map<String, String> by lazy {
@@ -22,8 +22,19 @@ object CountryNames {
                 if (name.isNotEmpty()) map.putIfAbsent(name, code)
             }
         }
+        for ((name, code) in MARKET_NAMES) map.putIfAbsent(key(name), code)
         map
     }
+
+    /** Names the markets write that the JDK spells otherwise: eBay.de says "Großbritannien",
+     *  "Vereinigte Staaten von Amerika" and "Tschechische Republik" where the JDK has
+     *  "Vereinigtes Königreich", "Vereinigte Staaten" and "Tschechien". */
+    private val MARKET_NAMES = listOf(
+        "Großbritannien" to "GB", "Great Britain" to "GB", "Gran Bretagna" to "GB",
+        "Grande-Bretagne" to "GB", "Gran Bretaña" to "GB", "Groot-Brittannië" to "GB",
+        "Vereinigte Staaten von Amerika" to "US", "USA" to "US",
+        "Tschechische Republik" to "CZ", "Czech Republic" to "CZ", "Repubblica Ceca" to "CZ",
+    )
 
     private fun key(name: String): String =
         Normalizer.normalize(name, Normalizer.Form.NFD).replace(Regex("\\p{M}"), "").lowercase().trim()
