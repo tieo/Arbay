@@ -396,13 +396,11 @@ class EbayDeCrawler(
         return parsed
     }
 
-    // eBay listings carry no location, and there is none to read: its card layout does not publish
-    // one. Checked against a page a crawl actually fetched (the parser's own HTML, kept through an
-    // error snapshot, since eBay answers both a plain client and curl_cffi with a challenge): its
-    // 130 attribute rows say "Sofort-Kaufen", "Kostenlose Abholung", "Marke: Volkswagen", a price,
-    // a watcher count and a seller rating. The old s-item layout had `.s-item__location` and the
-    // selector for it is still read above, for the pages that still come back that way. Getting a
-    // location for the rest would cost one item-page fetch per listing.
+    // An eBay card names no town. A seller in another country gets a line of its own naming that
+    // country ("da Regno Unito" on eBay.it), which is read as the listing's country; a seller at
+    // home gets no such line on the home market's own domain, and the market's country stands. The
+    // old s-item layout had `.s-item__location` and the selector for it is still read below, for
+    // the pages that still come back that way. A town would cost one item-page fetch per listing.
 
     private fun parseNewLayout(items: org.jsoup.select.Elements, now: kotlin.time.Instant): List<Listing> {
         return items.mapNotNull { item ->
@@ -428,9 +426,14 @@ class EbayDeCrawler(
             val locationText = item.select("span.s-card__location, span.su-styled-text.secondary.large")
                 .firstOrNull { it.text().let { t -> t.contains("aus ") || t.contains("from ") || Regex("\\d{5}").containsMatchIn(t) } }
                 ?.text()
+            // A seller abroad is named by country on its own line ("da Regno Unito", "aus China"),
+            // which is what decides import VAT.
+            val origin = item.select("span.su-styled-text.secondary.large")
+                .firstNotNullOfOrNull { el -> CountryNames.fromOriginLine(el.text())?.let { it to el.text() } }
             val location = locationText?.let {
                 Location.parse(it.removePrefix("aus ").removePrefix("from "))
-            }
+            }?.let { it.copy(country = it.country ?: origin?.first) }
+                ?: origin?.let { (country, line) -> Location(country = country, raw = line) }
 
             val imageUrl = item.selectFirst("img.s-card__image")?.attr("src")
                 ?: item.selectFirst("img")?.attr("src")
@@ -717,7 +720,7 @@ class EbayDeCrawler(
             val parsed = Location.parse(place)
             return parsed.copy(
                 city = parsed.city ?: place.takeIf { it.isNotBlank() },
-                country = country,
+                country = CountryNames.iso(country) ?: country,
                 raw = text,
             )
         }

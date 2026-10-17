@@ -41,7 +41,7 @@ class ListingPlaceTest {
             """Deutschland"}]}]},"getRates":{}}"""
         val place = EbayDeCrawler.itemLocation(html)
         assertEquals("Hamburg", place?.city)
-        assertEquals("Deutschland", place?.country)
+        assertEquals("DE", place?.country)
     }
 
     @Test

@@ -97,4 +97,11 @@ class EbayAuctionParseTest {
         )
         assertEquals(now.plus(kotlin.time.Duration.parse("48h")), endsAt)
     }
+
+    @Test
+    fun `an Italian card names the seller's country, which decides import VAT`() {
+        // "da Regno Unito" and "da Germania", each on a line of its own.
+        assertEquals("GB", italian.getValue("940017781488").location?.country)
+        assertEquals("DE", italian.getValue("206625228353").location?.country)
+    }
 }
