@@ -361,12 +361,13 @@ private fun RuleForm(onAdd: (NotificationSubfilter) -> Unit) {
     var max by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf<String?>(null) }
     var words by remember { mutableStateOf("") }
+    var learnDays by remember { mutableStateOf("") }
     Form(attrs = {
         classes("rule-form")
         addEventListener("submit") { event ->
             event.preventDefault()
-            onAdd(newRule(max.toIntOrNull(), condition, words))
-            max = ""; condition = null; words = ""
+            onAdd(newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull()))
+            max = ""; condition = null; words = ""; learnDays = ""
         }
     }) {
         Input(InputType.Number) {
@@ -381,6 +382,10 @@ private fun RuleForm(onAdd: (NotificationSubfilter) -> Unit) {
         Input(InputType.Text) {
             classes("control"); placeholder("Has one of these words"); attr("aria-label", "Has one of these words")
             value(words); onInput { words = it.value }
+        }
+        Input(InputType.Number) {
+            classes("control"); placeholder("Beats the best of the first … days"); attr("aria-label", "Beats the best of the first this many days")
+            value(learnDays); onInput { learnDays = it.value?.toString().orEmpty() }
         }
         PrimaryButton("Add", Glyph.Bell) {}
     }

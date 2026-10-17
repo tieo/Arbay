@@ -42,7 +42,19 @@ data class NotificationSubfilter(
     // empty means the search's own text is already specific enough.
     val mustContainAnyOf: List<String> = emptyList(),
     val excludeKeywords: List<String> = emptyList(),
+    /**
+     * Watch the market until then and tell nothing: the search learns the lowest price anything
+     * this rule passes is offered at ([bestSeenEur]), and from then on a find is only worth a push
+     * when it costs less than that. Buying the first good offer after looking at the first 37 % of
+     * the time there is, without buying, is the best a buyer who cannot go back can do.
+     */
+    val learnUntil: Instant? = null,
+    /** The lowest landed price, whole euros, of what the rule passed while it was learning. */
+    val bestSeenEur: Int? = null,
 )
+
+/** Whether the rule is still learning the market at [now] rather than telling about finds. */
+fun NotificationSubfilter.learning(now: Instant): Boolean = learnUntil != null && now < learnUntil
 
 /** The criteria in one line, in the order they'd narrow a listing down: price, condition, words.
  *  Used as the notification/list display whenever [NotificationSubfilter.name] is blank — the
@@ -61,6 +73,9 @@ fun NotificationSubfilter.summaryText(): String {
         }
         if (mustContainAnyOf.isNotEmpty()) add("has " + mustContainAnyOf.joinToString(" or "))
         if (excludeKeywords.isNotEmpty()) add("not " + excludeKeywords.joinToString(", "))
+        if (learnUntil != null) add(
+            "cheaper than the best until ${learnUntil.toString().take(10)}" + (bestSeenEur?.let { " (€$it so far)" } ?: ""),
+        )
     }
     return if (parts.isEmpty()) "Any find in this search" else parts.joinToString(" · ")
 }

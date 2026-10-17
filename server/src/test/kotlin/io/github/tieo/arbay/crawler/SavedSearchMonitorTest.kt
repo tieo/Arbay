@@ -5,6 +5,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
+import io.github.tieo.arbay.model.learning
 import io.github.tieo.arbay.model.SaleType
 import kotlin.time.Instant
 import kotlin.test.Test
@@ -176,5 +177,22 @@ class SavedSearchMonitorTest {
         assertTrue(RequestMonitor.awaitBudget(market, 0))
         repeat(45) { RequestMonitor.recordRequest(market) }
         assertFalse(RequestMonitor.awaitBudget(market, kotlin.time.Clock.System.now().toEpochMilliseconds() + 1_000))
+    }
+
+    @Test
+    fun `a learning rule tells only about finds below the best it saw`() {
+        val learned = sf().copy(learnUntil = Instant.fromEpochMilliseconds(0), bestSeenEur = 130)
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 129), learned))
+        assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 130), learned))
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf()))
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf().copy(learnUntil = Instant.fromEpochMilliseconds(0))))
+    }
+
+    @Test
+    fun `a rule learns until its date and tells after it`() {
+        val rule = sf().copy(learnUntil = Instant.fromEpochMilliseconds(1_000))
+        assertTrue(rule.learning(Instant.fromEpochMilliseconds(999)))
+        assertFalse(rule.learning(Instant.fromEpochMilliseconds(1_000)))
+        assertFalse(sf().learning(Instant.fromEpochMilliseconds(0)))
     }
 }

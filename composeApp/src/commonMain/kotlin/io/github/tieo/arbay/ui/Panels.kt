@@ -332,13 +332,18 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     var max by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf<String?>(null) }
     var words by remember { mutableStateOf("") }
+    var learnDays by remember { mutableStateOf("") }
     Panel {
         OutlinedTextField(max, { max = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Up to €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         Choices { listOf(null to "Any condition", "NEW" to "New", "USED" to "Used").forEach { (v, l) -> Choice(l, condition == v) { condition = v } } }
         OutlinedTextField(words, { words = it }, Modifier.fillMaxWidth(), label = { Text("Has one of these words") }, singleLine = true)
-        TextButton(enabled = max.isNotEmpty() || condition != null || words.isNotBlank(), onClick = {
-            session.products.setNotificationSubfilters(bookmark, bookmark.notificationSubfilters + newRule(max.toIntOrNull(), condition, words))
-            max = ""; condition = null; words = ""
+        OutlinedTextField(
+            learnDays, { learnDays = it.filter(Char::isDigit).take(3) }, Modifier.fillMaxWidth(),
+            label = { Text("Beats the best of the first … days") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        )
+        TextButton(enabled = max.isNotEmpty() || condition != null || words.isNotBlank() || learnDays.isNotEmpty(), onClick = {
+            session.products.setNotificationSubfilters(bookmark, bookmark.notificationSubfilters + newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull()))
+            max = ""; condition = null; words = ""; learnDays = ""
         }) { Text("Add this rule") }
     }
 }

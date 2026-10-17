@@ -7,6 +7,7 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.learning
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.SubfilterMatch
 import io.github.tieo.arbay.model.TrackedProduct
@@ -236,13 +237,15 @@ class SavedSearchMonitor(
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
         }
 
-        val freshListings = record(product, found) ?: return
+        val learned = learn(product, found.values)
+        val freshListings = record(learned, found) ?: return
 
         // Named notification subfilters someone set on this search specifically — a listing can
         // match more than one, and each match is worth its own notification since each names a
         // different reason the person cared enough to ask for it.
-        val subfilterMatches = product.notificationSubfilters
-            .filter { it.enabled }
+        val now = Clock.System.now()
+        val subfilterMatches = learned.notificationSubfilters
+            .filter { it.enabled && !it.learning(now) }
             .flatMap { sf ->
                 freshListings
                     .filter {
@@ -252,7 +255,7 @@ class SavedSearchMonitor(
                         // market sends is kept for the screen — and none of it is worth waking
                         // someone for.
                         RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) &&
-                            matchesSubfilter(it, sf) && worthInterrupting(
+                            matchesSubfilter(it, sf) && beatsTheBestSeen(it, sf) && worthInterrupting(
                             it,
                             product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN),
                         )
@@ -448,6 +451,36 @@ class SavedSearchMonitor(
     }
 
     /**
+     * The search with each learning rule's [NotificationSubfilter.bestSeenEur] lowered to the
+     * cheapest of [found] the rule passes, kept when it changed. Everything the markets answer
+     * counts, not only what is new: the market as it stands is what a later find has to beat. An
+     * auction's price is a bid so far, so it teaches nothing.
+     */
+    private fun learn(product: TrackedProduct, found: Collection<Listing>): TrackedProduct {
+        val now = Clock.System.now()
+        val rules = product.notificationSubfilters.map { sf ->
+            if (!sf.enabled || !sf.learning(now)) return@map sf
+            val cheapest = found
+                .filter { it.saleType != SaleType.AUCTION && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
+                .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
+                .minByOrNull { it.second }
+                ?: return@map sf
+            val eur = ((cheapest.second + 99) / 100).toInt()
+            if ((sf.bestSeenEur ?: Int.MAX_VALUE) <= eur) return@map sf
+            log.info("saved-search {}: rule {} learned €{} from {}", product.name, sf.displayName, eur, cheapest.first.url)
+            sf.copy(bestSeenEur = eur)
+        }
+        if (rules == product.notificationSubfilters) return product
+        // The user may have changed the search while it ran; only the learned prices are written.
+        val current = productRepo.getById(product.id) ?: return product
+        val byId = rules.associateBy { it.id }
+        val next = current.copy(notificationSubfilters = current.notificationSubfilters.map { sf ->
+            byId[sf.id]?.bestSeenEur?.takeIf { sf.learnUntil != null && (sf.bestSeenEur ?: Int.MAX_VALUE) > it }?.let { sf.copy(bestSeenEur = it) } ?: sf
+        })
+        return productRepo.update(next) ?: product
+    }
+
+    /**
      * Subfilter matches to the phone through ntfy as well as the app: one message per run, the
      * cheapest in full and a tap away, the next ones as lines and buttons. Nothing is sent while
      * no topic is set.
@@ -550,6 +583,18 @@ class SavedSearchMonitor(
             if (sf.mustContainAnyOf.isNotEmpty() && sf.mustContainAnyOf.none { title.contains(it.lowercase()) }) return false
             if (sf.excludeKeywords.any { title.contains(it.lowercase()) }) return false
             return true
+        }
+
+        /** Whether a find costs less than the cheapest a learning rule saw; true for a rule that never learned. */
+        internal fun beatsTheBestSeen(
+            listing: Listing,
+            sf: NotificationSubfilter,
+            importSettings: ImportSettings = ImportSettingsStore.current,
+        ): Boolean {
+            val best = sf.bestSeenEur ?: return true
+            if (sf.learnUntil == null) return true
+            val cents = eurCents(listing.landedPrice(importSettings)) ?: return false
+            return cents < best * 100L
         }
 
         /** The same plain New/Used/Any split the results screen filters by — "NEW", "USED" or null. */
