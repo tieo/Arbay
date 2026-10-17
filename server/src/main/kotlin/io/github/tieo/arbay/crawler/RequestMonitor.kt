@@ -77,6 +77,14 @@ object RequestMonitor {
      * [deadlineMs]. Answers false when it would not be, without waiting.
      */
     suspend fun awaitBudget(platform: String, deadlineMs: Long): Boolean {
+        if (!overBudget(platform)) return true
+        // The window was spent by other searches as much as by this one, so the wait does not
+        // count against this market's time limit.
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock] ?: return waitForWindow(platform, deadlineMs)
+        return clock.waitingOnOthers { waitForWindow(platform, deadlineMs) }
+    }
+
+    private suspend fun waitForWindow(platform: String, deadlineMs: Long): Boolean {
         while (overBudget(platform)) {
             val c = byPlatform[platform] ?: return true
             val freeAt = (synchronized(c.recentMs) { c.recentMs.firstOrNull() } ?: return true) + WINDOW_MS

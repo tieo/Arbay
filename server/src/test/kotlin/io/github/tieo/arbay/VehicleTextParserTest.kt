@@ -211,5 +211,39 @@ class VehicleTextParserTest {
         val v = VehicleTextParser.parse("Crafter Kasten lang plus HD, Elektronisches Stabilitätsprogramm, Elektronik geprüft, 2.0 TDI")
         assertEquals(io.github.tieo.arbay.model.Fuel.DIESEL, v?.fuel)
     }
+
+    @Test
+    fun `a service date written as month and year is not the first registration`() {
+        val v = VehicleTextParser.parse(
+            "Volkswagen Crafter 2.0 TDI mittellang verglast Klima, Navi VW Crafter 2.0 TDI mittellang 140PS\n" +
+                "- Fahrzeug aus 1. Hand\n- Scheckheftgepflegt bei VW\n- Letzter Service in 07.2026 bei 140.547 Km\n- Guter Zustand",
+        )
+        assertNull(v?.firstRegYear)
+        assertEquals(140_547, v?.mileageKm)
+    }
+
+    @Test
+    fun `a year closing a sentence is not a mileage the next sentence names`() {
+        val v = VehicleTextParser.parse(
+            "Volkswagen Crafter Zum Verkauf steht ein VW Crafter, Baujahr September 2018.\n\nKilometerleistung 144.035.\n" +
+                "Turbolader bei 140.000 gewechselt.",
+        )
+        assertEquals(2018, v?.firstRegYear)
+        assertEquals(144_035, v?.mileageKm)
+    }
+
+    @Test
+    fun `dated services and oil changes name no registration year`() {
+        val history = VehicleTextParser.parse(
+            "Volkswagen Crafter Kasten 35 mittellang Hochdach FWD Kamera Servicehistorie:\n1. Service am 03.11.2021 bei 19.339 Km\n" +
+                "2. Service am 02.12.2022 bei 33.215 Km\n3. Service am 06.02.2025 bei 50.611 Km\n4. Service am 20.01.2026 bei 66.031 Km",
+        )
+        assertNull(history?.firstRegYear)
+        val oil = VehicleTextParser.parse(
+            "Volkswagen CRAFTER FLACHDACH AHK PIONEER-SOUNDSYSTEM 140-PS VOLKSWAGEN CRAFTER FLACHDACH\n" +
+                "LETZTE ÖLWECHSEL BEI 107.800 KM AM 15.05.2024\nANHÄNGERKUPPLUNG MIT TRITTBRETT",
+        )
+        assertNull(oil?.firstRegYear)
+    }
 }
 

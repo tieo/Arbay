@@ -152,26 +152,44 @@ internal suspend fun emitCaptchaInteractive() {
 
 /**
  * The clock of one market's time limit, which stands still while a person is solving that
- * market's captcha in the live browser. The limit is there for a crawl that never answers; a
- * person working through a challenge is not that, and counting their time cut off a solve in
- * progress. How long a person is given is the captcha gate's own limit in the sidecar.
+ * market's captcha in the live browser, and while the crawl waits for the market's request window
+ * ([RequestMonitor.awaitBudget]) that other searches have spent. The limit is there for a crawl
+ * that never answers; a person working through a challenge is not that, and counting their time
+ * cut off a solve in progress. Neither is a crawl queued behind other searches: a Crafter search
+ * reading Kleinanzeigen while three others did found the window spent, waited for it to open the
+ * vans' ads, and was given up on with none of them read. How long a person is given is the
+ * captcha gate's own limit in the sidecar; how long a crawl waits is the waiter's own limit.
  */
 class CrawlClock internal constructor(private val limitMs: Long) : CoroutineContext.Element {
     companion object Key : CoroutineContext.Key<CrawlClock>
     override val key: CoroutineContext.Key<*> = Key
 
-    private val personSolving = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private var solving = false
+    private var waits = 0
+    private val standingStill = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    private fun settle() { standingStill.value = solving || waits > 0 }
 
     /** Stop the clock while a person is solving ([solving] true), run it again once they are done. */
-    fun personSolving(solving: Boolean) { personSolving.value = solving }
+    fun personSolving(solving: Boolean) = synchronized(this) { this.solving = solving; settle() }
 
-    /** Returns once [limitMs] have passed with nobody solving a captcha. */
+    /** Runs [block] with the clock standing still, for time spent waiting on other searches. */
+    suspend fun <T> waitingOnOthers(block: suspend () -> T): T {
+        synchronized(this) { waits++; settle() }
+        try {
+            return block()
+        } finally {
+            synchronized(this) { waits--; settle() }
+        }
+    }
+
+    /** Returns once [limitMs] have passed with the clock running. */
     internal suspend fun runOut() {
         var left = limitMs
         while (left > 0) {
-            personSolving.first { !it }
+            standingStill.first { !it }
             val from = System.currentTimeMillis()
-            kotlinx.coroutines.withTimeoutOrNull(left) { personSolving.first { it } }
+            kotlinx.coroutines.withTimeoutOrNull(left) { standingStill.first { it } }
             left -= System.currentTimeMillis() - from
         }
     }
