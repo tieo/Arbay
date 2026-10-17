@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.await
+import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.AdDraft
 import io.github.tieo.arbay.model.AdPriceType
 import io.github.tieo.arbay.model.postedUrl
@@ -62,6 +65,7 @@ fun SellPane(app: WebApp, draftId: String) {
     val account by app.chat.account.collectAsState()
     LaunchedEffect(draftId) { sell.open(draftId) }
     val d = open?.takeIf { it.id == draftId }
+    val scope = rememberCoroutineScope()
 
     Div({ classes("panel", "sell") }) {
         Div({ classes("panel-head") }) {
@@ -81,6 +85,19 @@ fun SellPane(app: WebApp, draftId: String) {
                 Div({ classes("sale-photo") }) {
                     Img(src = sell.photoAddress(d, p), alt = "Photo $p")
                     if (!posted) IconButton(Glyph.Close, "Leave this photo out") { sell.change(d.copy(photos = d.photos - p)) }
+                }
+            }
+            if (!posted && busy == null) Label(attrs = { classes("sale-photo-add"); attr("title", "Add your own photos") }) {
+                Icon(Glyph.ImagePlus, 28)
+                Input(InputType.File) {
+                    attr("accept", "image/*"); attr("multiple", "")
+                    onChange { e ->
+                        val input = e.target
+                        val files = input.files ?: return@onChange
+                        val picked = (0 until files.length).mapNotNull { files.item(it) }
+                        input.value = ""
+                        scope.launch { sell.addPhotos(picked.map { it.bytes() }) }
+                    }
                 }
             }
         }
@@ -143,4 +160,10 @@ private fun DetailField(d: AdDraft, label: String, value: String, posted: Boolea
             onInput { e -> onChange(d.copy(attributes = if (e.value.isEmpty()) d.attributes - label else d.attributes + (label to e.value))) }
         }
     }
+}
+
+/** The file's bytes, read in the browser. */
+private suspend fun org.w3c.files.File.bytes(): ByteArray {
+    val buffer = asDynamic().arrayBuffer().unsafeCast<kotlin.js.Promise<org.khronos.webgl.ArrayBuffer>>().await()
+    return org.khronos.webgl.Int8Array(buffer).unsafeCast<ByteArray>()
 }

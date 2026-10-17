@@ -32,3 +32,10 @@ expect fun schedulePolling(intervalMinutes: Int)
 
 /** Cancel background polling. No-op on non-Android. */
 expect fun cancelPolling()
+
+/**
+ * A trigger that lets the user pick photos of their own and hands their bytes to [onPicked], in the
+ * order picked; null where the platform has no picker, so no control offers one.
+ */
+@Composable
+expect fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): (() -> Unit)?

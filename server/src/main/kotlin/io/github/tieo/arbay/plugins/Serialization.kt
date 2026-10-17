@@ -4,6 +4,7 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.bodylimit.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 
@@ -22,8 +23,9 @@ fun Application.configureSerialization() {
         }
     }
     // Everything the app sends is a small JSON document (a search, a setting, a verdict on one
-    // listing); a body far past that is refused before it is read into memory.
+    // listing), apart from a photo for an ad, which comes off a phone camera at several megabytes;
+    // a body far past that is refused before it is read into memory.
     install(RequestBodyLimit) {
-        bodyLimit { 1024L * 1024L }
+        bodyLimit { call -> if (call.request.path().endsWith("/photos")) 25L * 1024L * 1024L else 1024L * 1024L }
     }
 }

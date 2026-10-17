@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
@@ -45,6 +47,7 @@ import io.github.tieo.arbay.model.AdPriceType
 import io.github.tieo.arbay.model.postedUrl
 import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.openBrowser
+import io.github.tieo.arbay.rememberPhotoPicker
 import io.github.tieo.arbay.model.problem
 import io.github.tieo.arbay.model.saleLine
 
@@ -64,6 +67,7 @@ fun SellScreen(session: Session, draftId: String) {
     LaunchedEffect(draftId) { sell.open(draftId) }
     val d = open?.takeIf { it.id == draftId }
     val posted = d?.postedAdId != null
+    val pickPhotos = rememberPhotoPicker { sell.addPhotos(it) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -101,7 +105,11 @@ fun SellScreen(session: Session, draftId: String) {
         ) {
             busy?.let { item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted(it) } } }
             error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
-            item { Photos(d, posted, photo = { sell.photoAddress(d, it) }) { sell.change(d.copy(photos = d.photos - it)) } }
+            item {
+                Photos(d, posted, photo = { sell.photoAddress(d, it) }, onAdd = pickPhotos.takeIf { busy == null }) {
+                    sell.change(d.copy(photos = d.photos - it))
+                }
+            }
             item {
                 OutlinedTextField(d.title, { sell.change(d.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true, readOnly = posted)
             }
@@ -115,7 +123,7 @@ fun SellScreen(session: Session, draftId: String) {
 }
 
 @Composable
-private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onRemove: (String) -> Unit) {
+private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onAdd: (() -> Unit)?, onRemove: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(d.photos, key = { it }) { p ->
             Box {
@@ -124,6 +132,13 @@ private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onRem
                     Icon(Icons.Outlined.Close, "Leave this photo out", tint = MaterialTheme.colorScheme.onPrimary)
                 }
             }
+        }
+        if (!posted && onAdd != null) item(key = "add") {
+            Box(
+                Modifier.size(width = 96.dp, height = 128.dp).clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onAdd),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.AddAPhoto, "Add your own photos", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }

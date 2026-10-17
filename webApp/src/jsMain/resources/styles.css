@@ -674,6 +674,12 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .sale-photo { position: relative; flex: none; }
 .sale-photo img { display: block; width: 96px; height: 128px; object-fit: cover; border-radius: var(--radius-small); background: var(--raised); }
 .sale-photo .icon-button { position: absolute; top: 2px; right: 2px; background: var(--surface); }
+.sale-photo-add {
+    flex: none; display: flex; align-items: center; justify-content: center; width: 96px; height: 128px;
+    border-radius: var(--radius-small); background: var(--raised); color: var(--muted); cursor: pointer;
+}
+.sale-photo-add:hover { color: var(--text); }
+.sale-photo-add input { display: none; }
 .sale-details { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 
 /* The user's texts in Settings. */

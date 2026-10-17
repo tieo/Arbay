@@ -112,6 +112,24 @@ class SellViewModel(
         }
     }
 
+    /** The user's own [photos], added to the open draft in the order given. */
+    fun addPhotos(photos: List<ByteArray>) {
+        val id = _open.value?.id ?: return
+        if (rendersASample || photos.isEmpty()) return
+        viewModelScope.launch {
+            _busy.value = "Adding ${if (photos.size == 1) "the photo" else "${photos.size} photos"}"
+            attempt {
+                photos.forEach { photo ->
+                    val kept = client.addAdPhoto(id, photo)
+                    _drafts.value = _drafts.value.map { if (it.id == kept.id) kept else it }
+                    // Typed changes not kept yet stay; only the photos come from the server.
+                    _open.value = _open.value?.takeIf { it.id == kept.id }?.copy(photos = kept.photos) ?: _open.value
+                }
+            }
+            _busy.value = null
+        }
+    }
+
     fun delete(id: String, done: () -> Unit = {}) {
         if (rendersASample) return
         viewModelScope.launch {

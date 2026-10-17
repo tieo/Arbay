@@ -314,6 +314,13 @@ class ArbayClient(
             setBody(draft)
         }.body()
 
+    /** [jpeg], a photo of the user's own, as the draft's last; the server turns it upright and drops its metadata. */
+    suspend fun addAdPhoto(id: String, jpeg: ByteArray): io.github.tieo.arbay.model.AdDraft =
+        client.post("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}/photos") {
+            contentType(ContentType.Image.JPEG)
+            setBody(jpeg)
+        }.body()
+
     suspend fun deleteAdDraft(id: String) {
         client.delete("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}")
     }

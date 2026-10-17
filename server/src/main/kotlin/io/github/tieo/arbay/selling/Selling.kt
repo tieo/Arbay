@@ -37,7 +37,8 @@ import kotlin.time.Clock
  * A draft starts from an ad the user bought from. Its photos are the seller's, so each is cropped a
  * little at the edges, by a different margin on every side, and saved anew: the ad then shows the
  * same thing without carrying the seller's files, which a market or a reader could match to the
- * original ad. Nothing is posted until the user presses post.
+ * original ad. The user's own photos join it whole, turned upright and without their metadata,
+ * which on a phone photo names the place it was taken. Nothing is posted until the user presses post.
  */
 object Selling {
     private val log = LoggerFactory.getLogger(Selling::class.java)
@@ -87,6 +88,23 @@ object Selling {
         synchronized(drafts) { drafts += draft }
         persist()
         return draft
+    }
+
+    /** [image] as the draft's last photo, upright, at most [MAX_PHOTO_SIDE] on its longer side. */
+    fun addPhoto(id: String, image: ByteArray): AdDraft {
+        val name = synchronized(drafts) {
+            val old = drafts.firstOrNull { it.id == id } ?: throw SellingFailure("No draft $id")
+            if (old.postedAdId != null) throw SellingFailure("This ad is posted already")
+            val taken = old.photos.toSet() + DataDir.file("selling/$id").list().orEmpty().map { it.substringBefore('.') }
+            generateSequence(1) { it + 1 }.map { "p$it" }.first { it !in taken }
+        }
+        DataDir.file("selling/$id/$name.jpg").writeBytesAtomically(ownPhoto(image))
+        val now = synchronized(drafts) {
+            val current = drafts.firstOrNull { it.id == id } ?: throw SellingFailure("No draft $id")
+            current.copy(photos = current.photos + name).also { drafts[drafts.indexOf(current)] = it }
+        }
+        persist()
+        return now
     }
 
     /**
@@ -189,10 +207,93 @@ object Selling {
         fun cut(size: Int) = (size * random.nextDouble(0.05, 0.09)).toInt()
         val left = cut(image.width); val right = cut(image.width)
         val top = cut(image.height); val bottom = cut(image.height)
-        val cropped = image.getSubimage(left, top, image.width - left - right, image.height - top - bottom)
+        return jpeg(image.getSubimage(left, top, image.width - left - right, image.height - top - bottom))
+    }
+
+    /** The longest side a photo of the user's is kept at; Kleinanzeigen shows far less. */
+    const val MAX_PHOTO_SIDE = 2400
+
+    /**
+     * A photo of the user's, turned as its EXIF orientation says (a phone stores it as the sensor
+     * saw it and leaves the turning to the viewer), scaled to [MAX_PHOTO_SIDE], and saved anew as a
+     * JPEG, which leaves its metadata and the position in it behind.
+     */
+    internal fun ownPhoto(bytes: ByteArray): ByteArray {
+        val image = ImageIO.read(bytes.inputStream()) ?: throw SellingFailure("A photo could not be read")
+        val upright = turned(image, exifOrientation(bytes))
+        val scale = minOf(1.0, MAX_PHOTO_SIDE.toDouble() / maxOf(upright.width, upright.height))
+        if (scale == 1.0) return jpeg(upright)
+        val w = (upright.width * scale).toInt(); val h = (upright.height * scale).toInt()
+        val scaled = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        scaled.createGraphics().apply {
+            setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+            setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY)
+            drawImage(upright, 0, 0, w, h, null); dispose()
+        }
+        return jpeg(scaled)
+    }
+
+    /**
+     * The EXIF orientation of a JPEG, 1 (as stored) to 8, read from its APP1 segment; 1 where it
+     * has none. ImageIO reads the pixels and ignores the tag.
+     */
+    internal fun exifOrientation(jpeg: ByteArray): Int {
+        fun u16(at: Int, little: Boolean) = if (little) (jpeg[at].toInt() and 0xff) or ((jpeg[at + 1].toInt() and 0xff) shl 8)
+            else ((jpeg[at].toInt() and 0xff) shl 8) or (jpeg[at + 1].toInt() and 0xff)
+        fun u32(at: Int, little: Boolean) = if (little) u16(at, true) or (u16(at + 2, true) shl 16) else (u16(at, false) shl 16) or u16(at + 2, false)
+        if (jpeg.size < 4 || u16(0, false) != 0xFFD8) return 1
+        var at = 2
+        while (at + 4 <= jpeg.size && (jpeg[at].toInt() and 0xff) == 0xFF) {
+            val marker = jpeg[at + 1].toInt() and 0xff
+            val length = u16(at + 2, false)
+            if (marker == 0xDA) break
+            val body = at + 4
+            if (marker == 0xE1 && body + 14 <= jpeg.size && String(jpeg, body, 4, Charsets.ISO_8859_1) == "Exif") {
+                val tiff = body + 6
+                val little = jpeg[tiff].toInt() == 'I'.code
+                val ifd = tiff + u32(tiff + 4, little)
+                if (ifd + 2 > jpeg.size) return 1
+                for (i in 0 until u16(ifd, little)) {
+                    val entry = ifd + 2 + i * 12
+                    if (entry + 12 > jpeg.size) return 1
+                    if (u16(entry, little) == 0x0112) return u16(entry + 8, little).takeIf { it in 1..8 } ?: 1
+                }
+                return 1
+            }
+            at = body + length - 2
+        }
+        return 1
+    }
+
+    /** [image] drawn the way EXIF [orientation] says it is to be seen. */
+    internal fun turned(image: BufferedImage, orientation: Int): BufferedImage {
+        if (orientation !in 2..8) return image
+        val w = image.width; val h = image.height
+        val sideways = orientation >= 5
+        val outW = if (sideways) h else w; val outH = if (sideways) w else h
+        val source = image.getRGB(0, 0, w, h, null, 0, w)
+        val pixels = IntArray(outW * outH)
+        for (y in 0 until outH) for (x in 0 until outW) {
+            // The stored pixel shown at (x, y).
+            val (sx, sy) = when (orientation) {
+                2 -> w - 1 - x to y
+                3 -> w - 1 - x to h - 1 - y
+                4 -> x to h - 1 - y
+                5 -> y to x
+                6 -> y to h - 1 - x
+                7 -> w - 1 - y to h - 1 - x
+                else -> w - 1 - y to x
+            }
+            pixels[y * outW + x] = source[sy * w + sx]
+        }
+        return BufferedImage(outW, outH, BufferedImage.TYPE_INT_RGB).also { it.setRGB(0, 0, outW, outH, pixels, 0, outW) }
+    }
+
+    /** [image] as a JPEG with no metadata. */
+    private fun jpeg(image: BufferedImage): ByteArray {
         // A plain RGB copy: a subimage shares the original's raster, and the writer wants no alpha.
-        val rgb = BufferedImage(cropped.width, cropped.height, BufferedImage.TYPE_INT_RGB)
-        rgb.createGraphics().apply { drawImage(cropped, 0, 0, null); dispose() }
+        val rgb = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_RGB)
+        rgb.createGraphics().apply { drawImage(image, 0, 0, null); dispose() }
         val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
         val out = ByteArrayOutputStream()
         ImageIO.createImageOutputStream(out).use { stream ->

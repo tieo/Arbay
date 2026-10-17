@@ -18,3 +18,6 @@ actual fun rememberCoordDetector(onCoords: (Double?, Double?) -> Unit): () -> Un
 
 @Composable
 actual fun ReadPositionIfAllowed(onCoords: (Double?, Double?) -> Unit) { }
+
+@Composable
+actual fun rememberPhotoPicker(onPicked: (List<ByteArray>) -> Unit): (() -> Unit)? = null

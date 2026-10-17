@@ -25,6 +25,8 @@ fun Route.sellingRoutes() {
             call.selling { call.respond(Selling.change(draft)) }
         }
         delete("/{id}") { Selling.delete(call.id()); call.respond(HttpStatusCode.NoContent) }
+        // One photo of the user's own as the request body, added as the draft's last.
+        post("/{id}/photos") { call.selling { call.respond(Selling.addPhoto(call.id(), call.receive<ByteArray>())) } }
         get("/{id}/photos/{photo}") {
             val file = Selling.photoFile(call.id(), call.parameters["photo"].orEmpty()) ?: throw NotFoundException("No such photo")
             call.respondFile(file)
