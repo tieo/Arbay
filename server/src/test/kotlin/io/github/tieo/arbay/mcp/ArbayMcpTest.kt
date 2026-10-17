@@ -116,7 +116,11 @@ class ArbayMcpTest {
         val text = (saved.content.single() as TextContent).text
         assertTrue(text.startsWith("Saved: "), text)
         val id = text.removePrefix("Saved: ").substringBefore(':')
+        assertTrue(id.isNotBlank(), text)
+        val other = (mcp.callTool(name = "save_search", arguments = mapOf("words" to "another mcp test")).content.single() as TextContent).text
+        assertNotEquals(id, other.removePrefix("Saved: ").substringBefore(':'))
         products.delete(id)
+        products.delete(other.removePrefix("Saved: ").substringBefore(':'))
         mcp.close()
     }
 }
