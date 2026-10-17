@@ -34,7 +34,7 @@ object FitScore {
     )
 
     private val notAClosedVan = Regex(
-        """(?i)pritsche|kipper|koffer|plane|autotransporter|abschlepp|kühl|frigo|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine""",
+        """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine""",
     )
     private val tradeOnly = Regex("""(?i)nur\W{0,3}(an\W)?gewe|nur für gewe|nur export|export only|nur händler""")
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")

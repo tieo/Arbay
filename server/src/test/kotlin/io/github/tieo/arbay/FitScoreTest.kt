@@ -71,6 +71,13 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a box with a tail lift, a car transporter and a sewer jetter are not closed vans`() {
+        assertNull(fit(van(title = "Volkswagen Crafter", description = "Transportfahrzeug mit Ladebordwand zu verkaufen\nLaderaum ca. 22 m³")))
+        assertNull(fit(van(title = "Volkswagen Crafter Algema Top Zustand Blitzlader")))
+        assertNull(fit(van(title = "Spülwagen VW Crafter")))
+    }
+
+    @Test
     fun `every miss costs something and is named`() {
         val perfect = fit(van())!!.score
         val noAc = fit(van(description = "Keine Klimaanlage oder -automatik"))!!
