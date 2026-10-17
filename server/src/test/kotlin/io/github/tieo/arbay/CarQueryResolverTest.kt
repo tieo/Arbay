@@ -36,4 +36,17 @@ class CarQueryResolverTest {
     fun `returns null for non-car query`() {
         assertNull(CarQueryResolver.resolve("Sony WH-1000XM5"))
     }
+
+    @Test
+    fun `a make followed by a part is not a car search`() {
+        assertNull(CarQueryResolver.resolve("Ford Alufelgen 17 Zoll Sommerreifen 5x108"))
+        assertNull(CarQueryResolver.resolve("BMW Felgen 16 Zoll"))
+    }
+
+    @Test
+    fun `a model with its engine letter or a year still is`() {
+        assertEquals("320d", CarQueryResolver.resolve("BMW 320d Touring")?.modelSlug)
+        assertEquals("2019", CarQueryResolver.resolve("Ford 2019")?.modelSlug)
+        assertNotNull(CarQueryResolver.resolve("Ford"))
+    }
 }

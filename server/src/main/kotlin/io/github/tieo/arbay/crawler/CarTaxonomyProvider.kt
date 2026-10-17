@@ -46,6 +46,9 @@ object CarTaxonomyProvider {
     var current: CarTaxonomy = loadPersisted() ?: CarTaxonomySeed.taxonomy
         private set
 
+    /** Whether [current] is still the bundled seed rather than the live catalogue. */
+    val isSeed: Boolean get() = current === CarTaxonomySeed.taxonomy
+
     private fun loadPersisted(): CarTaxonomy? =
         persistFile.readStore(log) { json.decodeFromString<CarTaxonomy>(it) }
 

@@ -54,7 +54,10 @@ object CarQueryResolver {
     /**
      * Matches a make only at the start of the query, so common words that are also
      * brand names ("man", "smart", "mini") cannot trigger mid-sentence.
-     * Returns null when the query does not start with a known make.
+     * Returns null when the query does not start with a known make, and when the word after the
+     * make is neither one of its models nor a year: "Ford Alufelgen 17 Zoll" is a search for
+     * wheels, and asked as a car search the car sites answer with no page at all and the general
+     * markets look in their car category.
      */
     fun resolve(text: String): CarQuery? {
         val tokens = text.split(" ")
@@ -69,6 +72,7 @@ object CarQueryResolver {
                     tokens.subList(0, aliasTokens.size) == aliasTokens
                 ) {
                     val model = tokens.getOrNull(aliasTokens.size)
+                    if (model != null && !isModelOrYear(slug, model)) return null
                     val remainder = tokens.drop(aliasTokens.size + (if (model != null) 1 else 0))
                         .joinToString(" ")
                     return CarQuery(makeSlug = slug, modelSlug = model, remainder = remainder)
@@ -76,6 +80,28 @@ object CarQueryResolver {
             }
         }
         return null
+    }
+
+    /**
+     * Whether [token], the word after a make, names one of that make's models ("crafter",
+     * "320d" for the 320, "c220" for the C 220, "t6" for a model named "T6 ...") or a year.
+     */
+    private fun isModelOrYear(makeSlug: String, token: String): Boolean {
+        if (token.length == 4 && token.all(Char::isDigit) && token.toInt() in 1900..2100) return true
+        fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val t = norm(token)
+        if (t.isEmpty()) return false
+        val make = CarTaxonomyProvider.current.makes.firstOrNull { it.id == makeSlug } ?: return true
+        // A make the catalogue lists without models cannot be checked, and stays a car search.
+        if (make.models.isEmpty()) return true
+        val named = make.models.any { model ->
+            val forms = listOf(norm(model.id), norm(model.name), norm(model.name.substringBefore(' ')))
+            forms.any { f -> f.isNotEmpty() && (f == t || (f.length >= 2 && t.startsWith(f) && t.length - f.length <= 2 && t.drop(f.length).all(Char::isLetter))) }
+        }
+        // The bundled seed, served until the live catalogue first arrives, lists model lines
+        // ("3er") rather than the type numbers people search by ("320d"), so a number cannot be
+        // ruled out against it.
+        return named || (CarTaxonomyProvider.isSeed && t.any(Char::isDigit))
     }
 
     /**
