@@ -238,6 +238,9 @@ class SavedSearchMonitor(
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
         }
 
+        // An offer the user put away is a judgement on it: a fake or a scam priced below
+        // everything real would otherwise set the price every later find has to beat.
+        found.keys.removeAll(io.github.tieo.arbay.repo.UserStateStore.hiddenOffers())
         val learned = learn(product, found.values)
         val freshListings = record(learned, found) ?: return
 

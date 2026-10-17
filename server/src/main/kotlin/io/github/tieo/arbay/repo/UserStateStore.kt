@@ -42,6 +42,13 @@ object UserStateStore {
             runCatching { lenient.decodeFromJsonElement(BlockedDealer.serializer(), it) }.getOrNull()
         }
 
+    /** The offers the user put away. A saved search neither shows them as new, learns a price
+     *  from them nor alerts on them, wherever they are put away from. */
+    fun hiddenOffers(): Set<String> =
+        (values["hiddenOffers"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            .toSet()
+
     fun put(key: String, value: JsonElement) {
         require(key in KEYS) { "No such state: $key" }
         values[key] = value
