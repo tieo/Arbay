@@ -18,8 +18,13 @@ import io.github.tieo.arbay.model.VehicleInfo
  */
 object VehicleTextParser {
     // The figure ends in a digit and stays on one line: "Baujahr September 2018.\n\nKilometerleistung
-    // 144.035" is a year closing one sentence and a label opening the next, not 2018 km.
-    private val mileageRegex = Regex("""([0-9][0-9. \u00a0]*[0-9])[ \u00a0]?(?:km|kilometer)""", RegexOption.IGNORE_CASE)
+    // 144.035" is a year closing one sentence and a label opening the next, not 2018 km. A separator
+    // only splits thousands, three digits each, and the figure starts where a number starts:
+    // "BJ 2018 185000Km" is a year and 185,000 km, not one figure of 2,018,185,000.
+    private val mileageRegex = Regex(
+        """(?<![0-9])([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{2,})[ \u00a0]?(?:km|kilometer)""",
+        RegexOption.IGNORE_CASE,
+    )
     // The label written before the figure: "Kilometerleistung 144.035", "Laufleistung: 98.000",
     // "km-Stand 120000".
     private val labeledMileageRegex = Regex(

@@ -166,6 +166,16 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun aYearBeforeTheMileageIsNotPartOfIt() {
+        // A Wrestedt seller's one-line ad.
+        val v = VehicleTextParser.parse("Vw Crafter 180 PS BJ 2018 185000Km Scheckheft Tüv Neu Sortimo Werkstattausrüstung")!!
+        assertEquals(185_000, v.mileageKm)
+        assertEquals(2018, v.firstRegYear)
+        assertEquals(125_000, VehicleTextParser.parse("Crafter EZ 2019 125 000 km")!!.mileageKm)
+        assertEquals(88_141, VehicleTextParser.parse("Crafter, 88.141 km, Automatik")!!.mileageKm)
+    }
+
+    @Test
     fun gearsAloneAreTheManual() {
         // A Cloppenburg dealer's Crafter: VW's equipment list names the manual by its gears only.
         val v = VehicleTextParser.parse("Crafter 35 Kasten, Radstand 3640 mm, Antriebsart: Frontantrieb, Getriebe 6-Gang, Über 150 Transporter")!!
