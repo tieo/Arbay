@@ -36,7 +36,12 @@ object FitScore {
     private val notAClosedVan = Regex(
         """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine""",
     )
-    private val tradeOnly = Regex("""(?i)nur\W{0,3}(an\W)?gewe|nur für gewe|nur export|export only|nur händler""")
+    // "Nur an Gewerbe", "nur Export", "Verkauf ausschließlich für Export oder an Gewerbetreibende";
+    // the buyer named, so a van "nur gewerblich genutzt" stays in.
+    private val tradeOnly = Regex(
+        """(?i)\b(nur|ausschlie(ß|ss)lich)\W{1,3}((an|für|fuer)\W+)?(den\W+)?""" +
+            """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""",
+    )
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
     private val noAirConditioning = Regex("""(?i)keine klimaanlage|(ohne|keine?)\s+klima""")
     private val airConditioning = Regex("""(?i)klimaanlage|klimaautomatik|climatronic|\bklima\b|airco|air ?con""")

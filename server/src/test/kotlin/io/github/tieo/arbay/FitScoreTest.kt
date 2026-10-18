@@ -71,6 +71,16 @@ class FitScoreTest {
     }
 
     @Test
+    fun `an offer to traders or for export only is ruled out`() {
+        assertNull(fit(van(description = "Verkauf ausschließlich für Export oder an Gewerbetreibende")))
+        assertNull(fit(van(description = "Nur an Gewerbe!")))
+        assertNull(fit(van(description = "nur Export")))
+        assertNotNull(fit(van(description = "Wir verkaufen bevorzugt an Gewerbetreibende oder für den Export.")))
+        assertNotNull(fit(van(description = "Das Fahrzeug wurde nur gewerblich genutzt, scheckheftgepflegt.")))
+        assertNull(fit(van(description = "Verkauf nur an gewerbliche Kunden")))
+    }
+
+    @Test
     fun `a box with a tail lift, a car transporter and a sewer jetter are not closed vans`() {
         assertNull(fit(van(title = "Volkswagen Crafter", description = "Transportfahrzeug mit Ladebordwand zu verkaufen\nLaderaum ca. 22 m³")))
         assertNull(fit(van(title = "Volkswagen Crafter Algema Top Zustand Blitzlader")))
