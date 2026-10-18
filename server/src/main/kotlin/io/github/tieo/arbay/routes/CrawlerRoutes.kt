@@ -829,8 +829,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     )
                                 else classified
                                 // Scored as the final answer is, so a market given up on before it
-                                // finished still ranks by fit what it had sent.
-                                val fresh = withFit(asDelivered(card.filter { emittedIds.add(it.id) }, pq), pq, isCarQuery)
+                                // finished still ranks by fit what it had sent, and a copied gallery
+                                // is named from the first answer on.
+                                val fresh = withFit(withPhotoCopies(asDelivered(card.filter { emittedIds.add(it.id) }, pq)), pq, isCarQuery)
                                 if (fresh.isNotEmpty()) {
                                     fresh.forEach { listingRepo.upsert(it) }
                                     resultChannel.send(CrawlerSearchEvent(
