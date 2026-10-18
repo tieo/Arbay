@@ -64,6 +64,16 @@ object VehicleTextParser {
     // A single-decimal figure before "km" is an engine size artifact ("2.0 km-Stand"), never
     // an odometer reading.
     private val engineSizeArtifactRegex = Regex("""^\d[.,]\d$""")
+    // A service log written as odometer readings without a unit, one line each: "237000 Zahnriemen
+    // mit Wasserpumpe", "249000 Ölwechsel mit Durchsicht". The work was done at that reading, so the
+    // van has at least as many kilometres; a Huchting Crafter whose ad says nothing else ranked with
+    // no mileage at all while its log ends at 249,000 km.
+    private val serviceLogMileageRegex = Regex(
+        """(?m)^[ \t\-*•]*(?:bei[ \t]+)?([0-9]{2,3}[. ]?[0-9]{3})[ \t]*(?:km)?[ \t]*[:\-–]?[ \t]*""" +
+            """(?:zahnriemen|steuerkette|(?:ö|oe)lwechsel|inspektion|durchsicht|service|wartung|kupplung|""" +
+            """wasserpumpe|lichtmaschine|klima\w*|bremsen|getriebe\w*|turbo\w*|injektor\w*|anlasser|batterie)""",
+        RegexOption.IGNORE_CASE,
+    )
     // Text right after a km figure that marks it as a lease's annual allowance, not an odometer.
     private val annualKmSuffixRegex = Regex(
         """^\s*(?:/\s?(?:jahr|year|jaar)|pro\s+jahr|per\s+jaar|p\.\s?a\.|im\s+jahr|j[äÄa]hrlich|frei\b)""",
@@ -203,7 +213,8 @@ object VehicleTextParser {
             .filterNot { annualKmSuffixRegex.containsMatchIn(text.substring(it.range.last + 1)) }
             .map { it.groupValues[1] }
         val labelBefore = labeledMileageRegex.findAll(text).map { it.groupValues[1] }
-        return (unitAfter + labelBefore)
+        val serviceLog = serviceLogMileageRegex.findAll(text).map { it.groupValues[1] }
+        return (unitAfter + labelBefore + serviceLog)
             .mapNotNull { digits(it) }
             .filter { it in 1..2_000_000 }
             .maxOrNull()

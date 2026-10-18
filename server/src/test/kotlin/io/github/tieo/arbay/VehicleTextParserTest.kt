@@ -242,6 +242,18 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun `a service log of odometer readings is at least the mileage`() {
+        val v = VehicleTextParser.parse(
+            "VW Crafter L2 H2, Led Scheinwerfer, AHK Zum Verkauf steht ein schöner VW Crafter L2 H2\nim super Zustand\n" +
+                "Alle Wartungsarbeiten wurden regelmäßig durchgeführt , hier die letzte Arbeiten :\n" +
+                "237000 Zahnriemen mit Wasserpumpe + große Inspektion\n242000 Lichtmaschine (Bosch) erneut\n" +
+                "244000 Klimakompressor erneut\n249000 Ölwechsel mit Durchsicht\nBremsen rundum neuwertig",
+        )
+        assertEquals(249_000, v?.mileageKm)
+        assertNull(VehicleTextParser.parse("VW Crafter\n2018 Zahnriemen neu\nTÜV neu")?.mileageKm)
+    }
+
+    @Test
     fun `a year closing a sentence is not a mileage the next sentence names`() {
         val v = VehicleTextParser.parse(
             "Volkswagen Crafter Zum Verkauf steht ein VW Crafter, Baujahr September 2018.\n\nKilometerleistung 144.035.\n" +
