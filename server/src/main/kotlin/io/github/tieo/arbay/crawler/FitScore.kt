@@ -36,6 +36,11 @@ object FitScore {
     private val notAClosedVan = Regex(
         """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine""",
     )
+    // A workshop fit-out is shelving inside a closed van, "Würth Ausbau", "Sortimo-Ausbau",
+    // "Werkstattausbau"; a bare "Ausbau" in a van's headline is a camper conversion.
+    private val workshopFitOut = Regex(
+        """(?i)(werkstatt|regal|sortimo|w(?:ü|ue)rth|bott|orsy|aluca)[\s-]*ausbau""",
+    )
     // "Nur an Gewerbe", "nur Export", "Verkauf ausschließlich für Export oder an Gewerbetreibende";
     // the buyer named, so a van "nur gewerblich genutzt" stays in.
     private val tradeOnly = Regex(
@@ -66,7 +71,7 @@ object FitScore {
         // A mobile.de card's title is only make and model; the seller's headline opens the text.
         val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
-        if (wantsAVan && notAClosedVan.containsMatchIn(headline)) return null
+        if (wantsAVan && notAClosedVan.containsMatchIn(workshopFitOut.replace(headline, " "))) return null
         if (tradeOnly.containsMatchIn(text)) return null
         // Another ad's photos in this one: the van shown is not the one sold.
         if (listing.photosAlsoIn.isNotEmpty()) return null

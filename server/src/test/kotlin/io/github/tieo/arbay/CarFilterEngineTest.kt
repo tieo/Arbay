@@ -14,8 +14,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class CarFilterEngineTest {
 
@@ -396,6 +394,14 @@ class CarFilterEngineTest {
         val part = carListing("nl", PlatformId.MARKTPLAATS, "Koplamp VW Crafter links origineel",
             priceCents = 8_000, vehicle = VehicleInfo())
         assertEquals(0, CarFilterEngine.apply(listOf(part), CarFilters()).size)
+    }
+
+    @Test
+    fun headlightNamedAsEquipmentIsNoPart() {
+        val van = carListing("ka", PlatformId.KLEINANZEIGEN, "VW Crafter L2 H2, Led Scheinwerfer, AHK", vehicle = VehicleInfo())
+        assertFalse(CarFilterEngine.namesAVehiclePart(van))
+        val part = carListing("kp", PlatformId.KLEINANZEIGEN, "H7 Scheinwerfer für VW Crafter 2", vehicle = VehicleInfo())
+        assertTrue(CarFilterEngine.namesAVehiclePart(part))
     }
 
     @Test

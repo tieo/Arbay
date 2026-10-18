@@ -88,6 +88,15 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a workshop fit-out is a closed van, a camper conversion is not`() {
+        // Kolkwitz: a Würth demonstrator with Orsy shelving, sold as a Kastenwagen.
+        assertNotNull(fit(van(title = "VW Crafter / 177 PS / 132 TKM / Würth Ausbau / HU 05/2028")))
+        assertNotNull(fit(van(title = "VW Crafter 2.0 TDI Sortimo-Ausbau AHK")))
+        assertNotNull(fit(van(title = "VW Crafter Kasten Werkstattausbau Klima")))
+        assertNull(fit(van(title = "VW Crafter mit Ausbau, Bett und Küche")))
+    }
+
+    @Test
     fun `a dealer's text sent as one line is no headline`() {
         // TruckScout24 sends a Cloppenburg dealer's equipment and terms as a single line; the retrofits
         // it offers ("Nachrüstung einer LBW (Ladebordwand)") are not the van's body.

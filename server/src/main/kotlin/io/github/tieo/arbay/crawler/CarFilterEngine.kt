@@ -254,7 +254,9 @@ object CarFilterEngine {
     private val partAccessory = Regex(
         """\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
             """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
-            """\bwindschott\b|\bspiegelglas\b|\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
+            // A headlight named by its light, "Led Scheinwerfer", is a van's equipment in its title
+            // ("VW Crafter L2 H2, Led Scheinwerfer, AHK"); a headlight on its own is the part.
+            """\bwindschott\b|\bspiegelglas\b|(?<!led[\s-])(?<!xenon[\s-])(?<!matrix[\s-])\bscheinwerfer\b|\brück(leuchte|licht)\b|\bkotflügel\b|""" +
             """\bzierleiste\b|\bschriftzug\b|\bersatzteile?\b|steuerger(ä|ae)t|""" +
             // Bodies of parts an eBay vehicle search floats up: brake components, glass, a parcel
             // shelf, a radio, a catalytic converter, filters — none the subject of a car-for-sale ad.
