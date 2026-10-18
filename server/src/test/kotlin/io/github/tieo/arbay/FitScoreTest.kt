@@ -85,6 +85,9 @@ class FitScoreTest {
             "Radstand 3640 mm, Antriebsart: Frontantrieb, Über 150 Transporter und Busse auf Lager. Nachrüstung von: " +
             "Anhängerkupplungen, Standheizungen, Werkstatteinrichtungen, Nachrüstung einer LBW (Ladebordwand) gegen Aufpreis möglich."
         assertNotNull(fit(van(title = "Kastenwagen hoch VWCrafter 35 Kasten L3H3 AHK KLIMA HOLZBODEN", description = text)))
+        // A private seller in Kettig names the body in the opening words of a text written as one line.
+        assertNull(fit(van(title = "vw crafter", description = "vw crafter 3,5 t Pritsche mit grade mal 139733 km runter und frischen TÜV " +
+            "und im top Zustand rein setzen und los fahren ich bin der zweite Besitzer. Ich verkaufe den lkw weil ich ihn nicht mehr benötige")))
     }
 
     @Test
