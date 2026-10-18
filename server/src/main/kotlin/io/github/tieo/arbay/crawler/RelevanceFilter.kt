@@ -48,8 +48,24 @@ object RelevanceFilter {
             token.endsWith(u) && token.dropLast(u.length).let { pre -> pre.isNotEmpty() && pre.all { c -> c.isDigit() || c == 'x' } }
         }
 
-    private fun tokenize(phrase: String): List<String> =
-        phrase.split(" ").filter { it.isNotBlank() }.map { normalizeToken(it) }
+    /** The words of a phrase, with a storage size typed apart ("2 TB", "1x32 GB") joined back into
+     *  the one size it names. Apart, "2" matched the "M 2" of any M.2 drive and "tb" could be
+     *  implied by the rest of the answer, so a 256 GB drive passed as the 2 TB one asked for. */
+    private fun tokenize(phrase: String): List<String> {
+        val words = phrase.split(" ").filter { it.isNotBlank() }.map { normalizeToken(it) }
+        val joined = mutableListOf<String>()
+        for (w in words) {
+            val prev = joined.lastOrNull()
+            if (w in storageUnits && prev != null && prev.isNotEmpty() && prev.all { it.isDigit() || it == 'x' } && prev.first().isDigit()) {
+                joined[joined.lastIndex] = prev + w
+            } else {
+                joined += w
+            }
+        }
+        return joined
+    }
+
+    private val storageUnits = setOf("gb", "tb", "mb")
 
     private fun normalizeToken(token: String): String {
         val n = normalize(token.lowercase()).replace(" ", "")

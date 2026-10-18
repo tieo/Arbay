@@ -1281,4 +1281,17 @@ class RelevanceFilterTest {
         assertTrue(results.none { it.title.startsWith("Disque dur") }, results.joinToString { it.title })
         assertTrue(results.any { it.title.startsWith("Kingston") })
     }
+
+    @Test
+    fun `a size typed apart in an alias is still the size asked for`() {
+        // The 2 TB and 1 TB SSD watches learned their lowest price from a 256 GB and a 250 GB drive:
+        // the alias "2 TB NVMe" read as the words "2" and "tb", "2" matched the "M 2" of the slot,
+        // and "tb" was implied by the rest of the answer.
+        val q2 = RelevanceFilter.parseQuery(SearchQuery(text = "2TB NVMe", aliases = listOf("2 TB NVMe", "2000GB NVMe"), category = MarketGroup.GENERAL))
+        val q1 = RelevanceFilter.parseQuery(SearchQuery(text = "1TB NVMe", aliases = listOf("1 TB NVMe", "1000GB NVMe"), category = MarketGroup.GENERAL))
+        assertEquals(0.0, RelevanceFilter.score(listing("EN680E 256 Go SSD PCle 3,0x4 NVMe M 2 2280 Cache SLC 1400 Mo/s en Lecture"), q2, setOf("tb")))
+        assertEquals(0.0, RelevanceFilter.score(listing("Intenso 250GB M.2 SSD PCIe Premium, bis zu 2100 MB/s, (PCI Express Gen.3x4 NVMe 1.3, Solid State Drive)"), q1, setOf("tb")))
+        assertEquals(1.0, RelevanceFilter.score(listing("WD Blue SN550 2TB NVMe SSD inkl. USB Case"), q2))
+        assertEquals(1.0, RelevanceFilter.score(listing("Crucial P310 SSD 2 To M.2 2280 PCIe Gen4 NVMe"), q2))
+    }
 }
