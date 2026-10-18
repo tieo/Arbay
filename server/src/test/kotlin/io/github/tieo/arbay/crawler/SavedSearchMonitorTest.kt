@@ -187,6 +187,9 @@ class SavedSearchMonitorTest {
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf()))
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 500), sf().copy(learnUntil = Instant.fromEpochMilliseconds(0))))
         assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe for parts", 20, Condition.PARTS_ONLY), learned))
+        assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("Fanxiang M.2 NVME SSD 1To 2To 4To PS5 avec Dissipateur", 50), learned))
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("Samsung 990 PRO 2TB (2000GB) Nur 5GB geschrieben", 120), learned))
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("M.2 SSD 2TB (2x 1TB) NVMe", 120), learned))
     }
 
     @Test

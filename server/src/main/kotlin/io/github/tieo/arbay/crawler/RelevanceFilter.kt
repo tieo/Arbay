@@ -527,6 +527,21 @@ object RelevanceFilter {
         return !addsUpToTheAskedSize(listing.title, asked.min())
     }
 
+    /**
+     * Whether the title offers more than one size under its one price: "M.2 NVME SSD 1To 2To 4To".
+     * The price is the cheapest variant's, which may be a size the title never names, so it says
+     * nothing about what any one size costs. Kept on screen when the asked-for size is the
+     * smallest named (see [isOneOfSeveralSizes]), and still no price a watch can learn or beat.
+     * A drive stating its size twice ("2TB (2048GB)"), in pieces ("2TB (2x 1TB)"), or beside a
+     * figure fifty times smaller ("Nur 5GB geschrieben") states one size.
+     */
+    fun namesSeveralSizes(title: String): Boolean {
+        val offered = sizesIn(title.replace(memorySize, " "))
+        val largest = offered.maxOrNull() ?: return false
+        val others = offered.filter { !sameSize(it, largest) && it >= largest / 50 }
+        return others.isNotEmpty() && !addsUpToTheAskedSize(title, largest)
+    }
+
     /** A size stated as working memory: "16 GB RAM", "32GB DDR5", or joined to the storage with a plus, "16GB+256GB"
      *  and "256GB + 16GB". What the device runs on, beside what it stores. A phone's memory tier
      *  written straight beside its storage is the same: "256GB-16GB", "16GB 256GB", "512GB 16GB". */

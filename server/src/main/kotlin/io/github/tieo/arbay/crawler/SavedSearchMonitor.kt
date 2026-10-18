@@ -458,15 +458,15 @@ class SavedSearchMonitor(
      * The search with each learning rule's [NotificationSubfilter.bestSeenEur] lowered to the
      * cheapest of [found] the rule passes, kept when it changed. Everything the markets answer
      * counts, not only what is new: the market as it stands is what a later find has to beat. An
-     * auction's price is a bid so far, and a thing sold for parts is not the thing, so neither
-     * teaches anything.
+     * auction's price is a bid so far, a thing sold for parts is not the thing, and one listing
+     * selling several sizes is priced at whichever is cheapest, so none of them teaches anything.
      */
     private fun learn(product: TrackedProduct, found: Collection<Listing>): TrackedProduct {
         val now = Clock.System.now()
         val rules = product.notificationSubfilters.map { sf ->
             if (!sf.enabled || !sf.learning(now)) return@map sf
             val cheapest = found
-                .filter { it.saleType != SaleType.AUCTION && it.condition != Condition.PARTS_ONLY && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
+                .filter { it.saleType != SaleType.AUCTION && it.condition != Condition.PARTS_ONLY && !RelevanceFilter.namesSeveralSizes(it.title) && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
                 .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
                 .minByOrNull { it.second }
                 ?: return@map sf
@@ -599,6 +599,8 @@ class SavedSearchMonitor(
             if (sf.learnUntil == null) return true
             // Cheaper than the best working one is no news about a broken one.
             if (listing.condition == Condition.PARTS_ONLY) return false
+            // Nor is the price of the smallest variant in a row of sizes.
+            if (RelevanceFilter.namesSeveralSizes(listing.title)) return false
             val best = sf.bestSeenEur ?: return true
             val cents = eurCents(listing.landedPrice(importSettings)) ?: return false
             return cents < best * 100L
