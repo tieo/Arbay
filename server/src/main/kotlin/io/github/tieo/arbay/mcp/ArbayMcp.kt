@@ -398,7 +398,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val now = hiddenOffers()
             val next = if (args.bool("bring_back") == true) now - ids.toSet() else now + ids
             http.put("$base/api/state/hiddenOffers") { contentType(ContentType.Application.Json); setBody(JsonArray(next.sorted().map(::JsonPrimitive)).toString()) }
-            "${next.size} offers put away."
+            if (args.bool("bring_back") == true) "${now.size - next.size} brought back; ${next.size} put away in all."
+            else "${next.size - now.size} put away; ${next.size} in all."
         }
 
         tool(
