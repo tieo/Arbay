@@ -17,8 +17,18 @@ enum class Condition {
         fun parse(text: String): Condition? {
             val lower = text.lowercase().trim()
             return when {
-                lower in listOf("neu", "new", "nieuw", "neuf") -> NEW
-                lower.contains("wie neu") || lower.contains("like new") || lower.contains("als nieuw") -> LIKE_NEW
+                // eBay's own label for a broken item, in each language its sites write: "Per ricambi
+                // o non funzionante", "Pour pièces détachées", "Para piezas o no funciona". Read
+                // first, since these labels also carry words of the other conditions.
+                partsLabel.containsMatchIn(lower) -> PARTS_ONLY
+                lower in listOf("neu", "new", "brand new", "nieuw", "neuf", "nuovo", "nuevo") -> NEW
+                lower.contains("wie neu") || lower.contains("like new") || lower.contains("als nieuw") ||
+                    lower.contains("come nuovo") || lower.contains("comme neuf") || lower.contains("como nuevo") -> LIKE_NEW
+                // "Nuovo (altro)", "Neuf (autre)", "Nuevo: otro": new, out of its packaging.
+                Regex("""^(nuovo|neuf|nuevo)\b""").containsMatchIn(lower) -> NEW
+                lower.contains("ricondizionat") || lower.contains("reconditionn") || lower.contains("reacondicionad") -> REFURBISHED
+                lower.contains("usato") || lower.contains("occasion") || lower.contains("usado") ||
+                    lower.contains("segunda mano") || lower.contains("pre-owned") -> USED
                 lower.contains("sehr gut") || lower.contains("very good") || lower.contains("exzellent") -> VERY_GOOD
                 lower.contains("gut") || lower.contains("good") || lower.contains("nette staat") -> GOOD
                 lower.contains("akzeptabel") || lower.contains("acceptable") -> ACCEPTABLE
@@ -28,6 +38,8 @@ enum class Condition {
                 else -> null
             }
         }
+
+        private val partsLabel = Regex("""ricambi|non\s+funzionante|pi(è|e)ces\s+d(é|e)tach|para\s+piezas|no\s+funciona""")
 
         // Negated, the word says the opposite: "nicht defekt", "kein Defekt", "keine Defekte".
         private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekt|defect|kaputt|kapot|broken)\b""")
