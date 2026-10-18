@@ -187,6 +187,7 @@ object Chat {
      * Sends [text] in conversation [id] and reads the conversation back until the reply shows in it.
      * The gateway answers a post it accepted with success whatever then becomes of the message, so
      * only the read back counts as sent; a reply that does not show fails with the gateway's answer.
+     * A conversation answered is a conversation read, as it is after answering in the app.
      */
     suspend fun reply(id: String, text: String) {
         val before = runCatching { conversation(id) }.getOrNull()?.messages.orEmpty().map { it.id }.toSet()
@@ -195,7 +196,10 @@ object Chat {
         Live.changed(LiveKind.CHAT)
         repeat(3) { attempt ->
             if (attempt > 0) delay(2.seconds)
-            if (replyShows(conversation(id), before, text, sentAt)) return
+            if (replyShows(conversation(id), before, text, sentAt)) {
+                runCatching { markRead(id) }
+                return
+            }
         }
         throw ChatBrowser.ChatFailure("the reply was sent but does not show in the conversation; Kleinanzeigen answered: $answer", signedOut = false)
     }
