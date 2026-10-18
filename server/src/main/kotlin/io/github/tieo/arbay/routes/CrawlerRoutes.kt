@@ -823,7 +823,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val classified = relevant.map { SoldDetector.classify(it) }
                                 val card = if (isCarQuery)
                                     CarFilterEngine.apply(
-                                        classified.map { VehicleTextParser.enrich(it) }, partialFilters,
+                                        classified.map { DetailEnricher.withCachedDetail(VehicleTextParser.enrich(it)) }, partialFilters,
                                         keepNonVehicles = partsIntent,
                                         modelHint = CarQueryResolver.resolve(pq.positiveText)?.modelSlug,
                                     )

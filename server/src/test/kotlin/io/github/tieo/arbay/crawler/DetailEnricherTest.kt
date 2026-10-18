@@ -38,4 +38,14 @@ class DetailEnricherTest {
         // forgotten, so the next search reads them again.
         assertEquals(null, DetailCache.get(galleryLess.id)); assertEquals(null, DetailCache.get(withGallery.id))
     }
+
+    @Test
+    fun `a page read before is laid over the card for free`() {
+        val listing = van("cached-${System.nanoTime()}")
+        assertEquals(null, DetailEnricher.withCachedDetail(listing).vehicle?.mileageKm)
+        DetailCache.put(listing.id, ListingDetail(description = "Erstzulassung: 11/2015\nKilometerstand: 375.572 km\nGetriebe: Schaltgetriebe"))
+        val read = DetailEnricher.withCachedDetail(listing)
+        assertEquals(375_572, read.vehicle?.mileageKm)
+        assertEquals(2015, read.vehicle?.firstRegYear)
+    }
 }

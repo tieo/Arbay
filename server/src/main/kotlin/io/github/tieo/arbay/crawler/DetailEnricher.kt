@@ -86,6 +86,12 @@ object DetailEnricher {
         }
     }
 
+    /** [listing] with the page read for it before laid over its card, where one was: free, so a
+     *  search's first answer already knows what an earlier read found (a 2015 van with 375,000 km
+     *  ranked at 74 % on its bare card while the search was still reading pages). */
+    fun withCachedDetail(listing: Listing): Listing =
+        DetailCache.get(listing.id)?.let { listing.withDetail(it) } ?: listing
+
     /** A listing whose page holds a gallery that was never read: read before galleries were, or replaced since. */
     private fun galleryUnread(listing: Listing, crawler: Crawler): Boolean =
         crawler is ReadsGalleries && DetailCache.get(listing.id)?.photos.isNullOrEmpty()
