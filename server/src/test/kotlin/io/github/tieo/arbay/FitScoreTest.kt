@@ -78,6 +78,16 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a dealer's text sent as one line is no headline`() {
+        // TruckScout24 sends a Cloppenburg dealer's equipment and terms as a single line; the retrofits
+        // it offers ("Nachrüstung einer LBW (Ladebordwand)") are not the van's body.
+        val text = "AHK bis 3.5 to (gegen Aufpreis)Karosserievariante: Hochdach in Wagenfarbe, Klimaanlage Climatic, " +
+            "Radstand 3640 mm, Antriebsart: Frontantrieb, Über 150 Transporter und Busse auf Lager. Nachrüstung von: " +
+            "Anhängerkupplungen, Standheizungen, Werkstatteinrichtungen, Nachrüstung einer LBW (Ladebordwand) gegen Aufpreis möglich."
+        assertNotNull(fit(van(title = "Kastenwagen hoch VWCrafter 35 Kasten L3H3 AHK KLIMA HOLZBODEN", description = text)))
+    }
+
+    @Test
     fun `every miss costs something and is named`() {
         val perfect = fit(van())!!.score
         val noAc = fit(van(description = "Keine Klimaanlage oder -automatik"))!!

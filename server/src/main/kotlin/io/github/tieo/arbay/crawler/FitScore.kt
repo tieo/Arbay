@@ -59,7 +59,7 @@ object FitScore {
     fun score(listing: Listing, wishes: CarFilters, priceEur: Double, softDriveHours: Double): Fit? {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
         // A mobile.de card's title is only make and model; the seller's headline opens the text.
-        val headline = "${listing.title} ${listing.description.orEmpty().lineSequence().firstOrNull().orEmpty()}"
+        val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
         if (wantsAVan && notAClosedVan.containsMatchIn(headline)) return null
         if (tradeOnly.containsMatchIn(text)) return null

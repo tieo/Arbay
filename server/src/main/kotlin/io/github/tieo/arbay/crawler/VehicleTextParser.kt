@@ -296,6 +296,10 @@ object VehicleTextParser {
         RegexOption.IGNORE_CASE,
     )
 
+    // A gearbox named by its gears alone, as VW's equipment lists name the manual ("Getriebe
+    // 6-Gang", "6-Gang-Getriebe"); an automatic's line says so ("8-Gang-Automatik"), read first.
+    private val gearsOnly = Regex("""\bgetriebe:?\s*\d-gang\b|\b\d-gang-?getriebe\b""", RegexOption.IGNORE_CASE)
+
     private fun parseGearbox(text: String): Transmission? {
         gearboxField.find(text)?.groupValues?.get(1)?.lowercase()?.let {
             return if (it == "schaltgetriebe" || it == "manuell") Transmission.MANUAL else Transmission.AUTOMATIC
@@ -304,7 +308,7 @@ object VehicleTextParser {
         return when {
             "automat" in s || "automatik" in s || "automatic" in s || "dsg" in s || "tiptronic" in s ||
                 "s tronic" in s || "s-tronic" in s || "pdk" in s -> Transmission.AUTOMATIC
-            "schaltg" in s || "manuell" in s || "manual" in s || "handgeschakeld" in s -> Transmission.MANUAL
+            "schaltg" in s || "manuell" in s || "manual" in s || "handgeschakeld" in s || gearsOnly.containsMatchIn(s) -> Transmission.MANUAL
             else -> null
         }
     }

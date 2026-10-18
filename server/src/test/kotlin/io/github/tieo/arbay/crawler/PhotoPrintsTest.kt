@@ -29,9 +29,14 @@ class PhotoPrintsTest {
         val r = java.util.Random(seed.toLong())
         g.color = Color(120 + r.nextInt(100), 160 + r.nextInt(60), 230); g.fillRect(0, 0, width, height / 2)
         g.color = Color(90 + r.nextInt(60), 90, 80); g.fillRect(0, height / 2, width, height / 2)
+        // A real photo is busy all over: a few large shapes and many small ones.
         repeat(6) {
             g.color = Color(r.nextInt(256), r.nextInt(256), r.nextInt(256))
             g.fillRect(r.nextInt(width), r.nextInt(height), width / 4 + r.nextInt(width / 3), height / 5 + r.nextInt(height / 3))
+        }
+        repeat(60) {
+            g.color = Color(r.nextInt(256), r.nextInt(256), r.nextInt(256))
+            g.fillRect(r.nextInt(width), r.nextInt(height), width / 12 + r.nextInt(width / 10), height / 10 + r.nextInt(height / 8))
         }
         g.dispose()
         return image
@@ -57,8 +62,35 @@ class PhotoPrintsTest {
         val original = PhotoPrints.print(jpeg(photo(1), 0.95f))!!
         val copy = PhotoPrints.print(jpeg(photo(1), 0.5f, scale = 0.4))!!
         val other = PhotoPrints.print(jpeg(photo(2), 0.95f))!!
-        assertTrue(bits(original, copy) <= 6, "copy ${bits(original, copy)} bits apart")
+        assertTrue(bits(original, copy) <= 3, "copy ${bits(original, copy)} bits apart")
         assertTrue(bits(original, other) > 12, "other photo only ${bits(original, other)} bits apart")
+    }
+
+    /** A nearly flat picture: a soft left-to-right shade with [seed]'s small object somewhere in it. */
+    private fun flat(seed: Int, width: Int = 640, height: Int = 480): BufferedImage {
+        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val r = java.util.Random(seed.toLong())
+        for (x in 0 until width) for (y in 0 until height) {
+            val v = 250 - x * 40 / width
+            image.setRGB(x, y, Color(v, v, v).rgb)
+        }
+        image.createGraphics().apply {
+            color = Color(r.nextInt(256), r.nextInt(256), r.nextInt(256))
+            fillRect(r.nextInt(width - 60), r.nextInt(height - 40), 40, 25)
+            dispose()
+        }
+        return image
+    }
+
+    @Test
+    fun `two flat photos of different things are not taken for the same photo`() = runBlocking {
+        val dir = File("build/test-data/photo-prints").apply { mkdirs() }
+        fun file(name: String, bytes: ByteArray) = File(dir, name).apply { writeBytes(bytes) }
+        val ssd = ad("pp-flat-ssd", "Tempelhof", "Kai")
+        val van = ad("pp-flat-van", "Köln", "Jo")
+        PhotoPrints.record(ssd, listOf("local"), file("flat-ssd.jpg", jpeg(flat(1), 0.9f)))
+        PhotoPrints.record(van, listOf("local"), file("flat-van.jpg", jpeg(flat(2), 0.9f)))
+        assertEquals(emptyList(), PhotoPrints.copiesOf(van).map { it.listingId })
     }
 
     @Test

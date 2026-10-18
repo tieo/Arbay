@@ -213,11 +213,24 @@ object CarFilterEngine {
 
     private val openBody = Regex("""\b(pritsche|pritschenwagen|doka-?pritsche|kipper|dreiseitenkipper|fahrgestell|plane|planenaufbau|koffer|kofferaufbau|kühlkoffer)\b""")
 
+    /**
+     * The headline that opens a listing's text, where it opens with one: a mobile.de page sets the
+     * seller's headline first, a private seller often starts with one. A first line longer than any
+     * market lets a title run is the text itself (TruckScout24 sends a dealer's whole equipment list
+     * and terms as one line, "Nachrüstung einer LBW (Ladebordwand)" among them) and names no body.
+     */
+    internal fun headline(listing: Listing): String? =
+        listing.description.orEmpty().lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
+            ?.takeIf { it.length <= HEADLINE_CHARS }
+
+    /** Longer than any title a market allows: AutoScout24 and mobile.de stop near 100 characters. */
+    private const val HEADLINE_CHARS = 120
+
     /** Whether the listing names its body as open, bare or a box built on a chassis: in the title, the headline that opens
      *  a dealer page's text, or that page's model line. */
     internal fun isOpenBody(listing: Listing): Boolean {
         val lines = listing.description.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
-        val named = listOfNotNull(listing.title, lines.firstOrNull(), lines.firstOrNull { it.startsWith("Ausstattungslinie:") })
+        val named = listOfNotNull(listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") })
         return named.any { openBody.containsMatchIn(it.lowercase()) }
     }
 

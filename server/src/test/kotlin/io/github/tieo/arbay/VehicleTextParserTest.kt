@@ -166,6 +166,15 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun gearsAloneAreTheManual() {
+        // A Cloppenburg dealer's Crafter: VW's equipment list names the manual by its gears only.
+        val v = VehicleTextParser.parse("Crafter 35 Kasten, Radstand 3640 mm, Antriebsart: Frontantrieb, Getriebe 6-Gang, Über 150 Transporter")!!
+        assertEquals(Transmission.MANUAL, v.gearbox)
+        val a = VehicleTextParser.parse("Crafter 35 Kasten, Getriebe 8-Gang-Automatik, Start-Stopp-Automatik")!!
+        assertEquals(Transmission.AUTOMATIC, a.gearbox)
+    }
+
+    @Test
     fun priceInEurosIsNotYear() {
         // "2000 €" is the asking price; the bare year fallback must keep 1989.
         val v = VehicleTextParser.parse("Opel Kadett Oldtimer 1989, fester Preis 2000 €")!!

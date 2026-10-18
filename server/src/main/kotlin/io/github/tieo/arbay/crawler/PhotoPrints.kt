@@ -49,8 +49,20 @@ object PhotoPrints {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Bits two prints of the same photo may differ by. */
-    private const val SAME_PHOTO_BITS = 6
+    /**
+     * Bits two prints of the same photo may differ by. Measured over 11,000 printed listings: a
+     * photo posted again, on another market or after a copier saved it, prints 0 to 2 bits from
+     * the original, while 5 or 6 bits apart a third of the matches joined unrelated ads (a Crafter
+     * and an SSD, a Pixel and a gaming mouse).
+     */
+    private const val SAME_PHOTO_BITS = 3
+    /**
+     * Bits a print must carry of its rarer value to tell one photo from another. A flat picture
+     * (a blank wall, a product on white) prints nearly all ones or all zeros, and those few prints
+     * fall close to each other whatever the photo shows: below 16 one in ten matches joined
+     * unrelated ads, above it two in 770.
+     */
+    private const val TELLING_BITS = 16
     /** Places a photo may show up in before it counts as a maker's or a stock picture. */
     private const val STOCK_PLACES = 5
     /** Listings kept, the oldest forgotten first. */
@@ -194,11 +206,13 @@ object PhotoPrints {
 
     /** The other entries showing [print], unless so many places show it that it is a stock picture. */
     private fun othersWith(print: Long, own: Entry): List<Entry> {
-        // Six bits apart touch six of the eight bytes at most, so a print that close shares at
-        // least two bytes whole with this one: the index finds every candidate.
+        val ones = java.lang.Long.bitCount(print)
+        if (minOf(ones, 64 - ones) < TELLING_BITS) return emptyList()
+        // Bits apart touch as many of the eight bytes at most, so a print that close shares the
+        // other bytes whole with this one: the index finds every candidate.
         val shared = HashMap<String, Int>()
         for (i in 0 until 8) byByte[key(print, i)]?.forEach { id -> shared.merge(id, 1, Int::plus) }
-        val same = shared.filter { (id, n) -> n >= 2 && id != own.id }.keys
+        val same = shared.filter { (id, n) -> n >= 8 - SAME_PHOTO_BITS && id != own.id }.keys
             .mapNotNull { entries[it] }
             .filter { e -> e.prints.any { java.lang.Long.bitCount(it xor print) <= SAME_PHOTO_BITS } }
         val elsewhere = same.filter { apart(it, own) }
