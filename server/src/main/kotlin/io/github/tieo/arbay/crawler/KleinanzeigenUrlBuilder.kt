@@ -12,11 +12,23 @@ import java.net.URLEncoder
  * - Location+radius: `k0l{locationId}r{radiusKm}`
  * - Poster type: `anbieter:privat` or `anbieter:gewerblich`
  * - Category slug: `zu-verschenken` (after all filters, before `k0...`)
- * - Sort: `?sortingField=SORTING_DATE` (query parameter)
+ * - Sort: `sortierung:preis` (path segment), or `?sortingField=SORTING_DATE` for the free items
  */
 object KleinanzeigenUrlBuilder {
 
     private const val BASE = "https://www.kleinanzeigen.de"
+
+    /**
+     * Cheapest first, the one order in which a category search pages through its results once each.
+     *
+     * Left to its own order, Autos and Nutzfahrzeuge deal every page from a reshuffled pool: seven
+     * pages of "volkswagen-crafter" in Nutzfahrzeuge held 175 cards and only 47 different ads, and
+     * five pages of Crafters in Autos 83 cards and 28 ads, so an ad sat on whichever page the
+     * shuffle put it and a crawl missed it at random. Sorted by price the same pages held 175
+     * different ads, and the 28 Autos ads filled one page and three cards of the next. Measured
+     * live 2026-10-19; a keyword search outside a category pages cleanly either way.
+     */
+    private const val PRICE_ORDER = "sortierung:preis"
 
     /**
      * Build a URL for the "zu verschenken" (free items) category.
@@ -113,6 +125,7 @@ object KleinanzeigenUrlBuilder {
             }
             // Pagination
             if (page > 1) add("seite:$page")
+            add(PRICE_ORDER)
             // Search query as a slug
             add(query.lowercase().replace(" ", "-"))
         }
@@ -146,6 +159,7 @@ object KleinanzeigenUrlBuilder {
         val segments = buildList {
             if (minPriceCents != null || maxPriceCents != null) add("preis:${minPriceCents?.let { it / 100 } ?: ""}:${maxPriceCents?.let { it / 100 } ?: ""}")
             if (page > 1) add("seite:$page")
+            add(PRICE_ORDER)
             add(modelWord.lowercase().replace(" ", "-"))
         }
         val area = if (locationId != null && radiusKm != null) "l${locationId}r$radiusKm" else ""

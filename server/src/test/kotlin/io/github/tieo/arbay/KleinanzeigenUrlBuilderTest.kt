@@ -157,7 +157,7 @@ class KleinanzeigenUrlBuilderTest {
             page = 1,
         )
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/volkswagen-crafter/k0c216",
+            "https://www.kleinanzeigen.de/s-autos/sortierung:preis/volkswagen-crafter/k0c216",
             url,
         )
     }
@@ -169,7 +169,7 @@ class KleinanzeigenUrlBuilderTest {
             page = 3,
         )
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/seite:3/volkswagen-crafter/k0c216",
+            "https://www.kleinanzeigen.de/s-autos/seite:3/sortierung:preis/volkswagen-crafter/k0c216",
             url,
         )
     }
@@ -183,7 +183,7 @@ class KleinanzeigenUrlBuilderTest {
             radiusKm = 50,
         )
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/volkswagen-crafter/k0c216l1234r50",
+            "https://www.kleinanzeigen.de/s-autos/sortierung:preis/volkswagen-crafter/k0c216l1234r50",
             url,
         )
     }
@@ -197,7 +197,7 @@ class KleinanzeigenUrlBuilderTest {
             maxPriceCents = 1500000L,
         )
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/preis:5000:15000/volkswagen-crafter/k0c216",
+            "https://www.kleinanzeigen.de/s-autos/preis:5000:15000/sortierung:preis/volkswagen-crafter/k0c216",
             url,
         )
     }
@@ -230,7 +230,7 @@ class KleinanzeigenUrlBuilderTest {
         assertEquals(listOf("autos.fuel_s:diesel", "autos.shift_s:automatik"), attrs)
         val url = KleinanzeigenUrlBuilder.carSearch("vw golf", page = 1, attrFilters = attrs)
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/vw-golf/k0c216+autos.fuel_s:diesel+autos.shift_s:automatik",
+            "https://www.kleinanzeigen.de/s-autos/sortierung:preis/vw-golf/k0c216+autos.fuel_s:diesel+autos.shift_s:automatik",
             url,
         )
     }
@@ -238,7 +238,7 @@ class KleinanzeigenUrlBuilderTest {
     @Test
     fun `car search without attr filters is unchanged`() {
         assertEquals(
-            "https://www.kleinanzeigen.de/s-autos/vw-golf/k0c216",
+            "https://www.kleinanzeigen.de/s-autos/sortierung:preis/vw-golf/k0c216",
             KleinanzeigenUrlBuilder.carSearch("vw golf", page = 1),
         )
     }

@@ -83,7 +83,7 @@ class AtTheSourceTest {
     @Test
     fun `Kleinanzeigen's commercial vehicles are searched by the model's word and the price`() {
         assertEquals(
-            "https://www.kleinanzeigen.de/s-nutzfahrzeuge-anhaenger/preis:10000:30990/seite:2/crafter/k0c276",
+            "https://www.kleinanzeigen.de/s-nutzfahrzeuge-anhaenger/preis:10000:30990/seite:2/sortierung:preis/crafter/k0c276",
             KleinanzeigenUrlBuilder.vanSearch("crafter", 2, minPriceCents = 10_000_00, maxPriceCents = 30_990_00),
         )
     }
