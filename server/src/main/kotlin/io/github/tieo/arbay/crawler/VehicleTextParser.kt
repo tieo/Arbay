@@ -114,12 +114,30 @@ object VehicleTextParser {
             // In an ad's prose, no fuel word means the text does not say, not that the van runs on
             // something else: read as OTHER, every Crafter whose ad never wrote "Diesel" was
             // dropped by a diesel search.
-            fuel = Fuel.parse(text)?.takeIf { it != Fuel.OTHER },
+            fuel = parseFuel(text),
             bodyType = BodyType.parse(text),
             gearbox = parseGearbox(text),
             wheelbaseMm = parseWheelbaseMm(text),
         )
         return if (info == VehicleInfo()) null else info
+    }
+
+    // Equipment prose names electric parts, never the drive: "Servolenkung elektro-mechanisch",
+    // "Fensterheber elektrisch vorn", "Außenspiegel elektrisch verstellbar". Read as a fuel field,
+    // each of these made a 2.0 TDI Crafter electric, and a diesel search dropped three dealer vans
+    // that stated "Motor 2,0 Ltr. - 103 kW TDI" in the same text.
+    private val equipmentElectric = Regex("""\belektro-\w+|\belektrisch\b""", RegexOption.IGNORE_CASE)
+    // An engine a combustion fuel names outright; an ad that states one is not about an electric van.
+    private val combustionEngine = Regex(
+        """\b(?:diesel|tdi|cdi|hdi|dci|crdi|tdci|bluetec|bluehdi|benzin|tsi|tfsi)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** The fuel an ad's prose states, or null where it says none. */
+    fun parseFuel(text: String): Fuel? {
+        val fuel = Fuel.parse(equipmentElectric.replace(text, " "))?.takeIf { it != Fuel.OTHER }
+        if (fuel != Fuel.ELECTRIC || !combustionEngine.containsMatchIn(text)) return fuel
+        return Fuel.parse(combustionEngine.findAll(text).joinToString(" ") { it.value })
     }
 
     /** Marks a purely-structured record's present fields as verified — for crawlers that

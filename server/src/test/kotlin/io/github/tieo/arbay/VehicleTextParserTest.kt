@@ -80,6 +80,20 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun electricEquipmentIsNotElectricFuel() {
+        // mobile.de 456337184: a 103 kW TDI dealer van whose equipment list reads electric.
+        val text = "Ausstattung: Elektr. Fensterheber, Servolenkung elektro-mechanisch, " +
+            "Fensterheber elektrisch vorn, Motor 2,0 Ltr. - 103 kW TDI"
+        assertEquals(Fuel.DIESEL, VehicleTextParser.parse(text)!!.fuel)
+        assertNull(VehicleTextParser.parse("Crafter Kasten, Servolenkung elektro-mechanisch, Spiegel elektrisch")?.fuel)
+    }
+
+    @Test
+    fun electricWordsBesideANamedEngineReadAsThatEngine() {
+        assertEquals(Fuel.DIESEL, VehicleTextParser.parse("VW Crafter 2.0 TDI, Elektroinstallation 230V")!!.fuel)
+    }
+
+    @Test
     fun realElectricStillDetected() {
         assertEquals(Fuel.ELECTRIC, VehicleTextParser.parse("VW e-Crafter Elektro 2021")!!.fuel)
     }
