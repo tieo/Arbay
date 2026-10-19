@@ -226,6 +226,15 @@ object CarFilterEngine {
         return first.take(HEADLINE_CHARS).substringBeforeLast(' ')
     }
 
+    /**
+     * The kind of vehicle a dealer feed states in a Kleinanzeigen Nutzfahrzeuge ad, the line
+     * "Transporter oder Lkw bis 7,5 t, Rettungswagen" that opens its list of specs. The site keeps
+     * the kind in no field of its own there, and the headline seldom names it: "Volkswagen Crafter
+     * Autom . Rettungswagen / DSG / LED" does, its Kühlkastenwagen and Koffer neighbours often not.
+     */
+    internal fun vehicleKind(listing: Listing): String? =
+        listing.description.orEmpty().lineSequence().map { it.trim() }.firstOrNull { it.startsWith("Transporter oder Lkw bis 7,5 t,") }
+
     /** As long as the longest title a market allows: AutoScout24 and mobile.de stop near 100 characters. */
     private const val HEADLINE_CHARS = 120
 
@@ -233,7 +242,7 @@ object CarFilterEngine {
      *  a dealer page's text, or that page's model line. */
     internal fun isOpenBody(listing: Listing): Boolean {
         val lines = listing.description.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
-        val named = listOfNotNull(listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") })
+        val named = listOfNotNull(listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") }, vehicleKind(listing))
         return named.any { openBody.containsMatchIn(it.lowercase()) }
     }
 

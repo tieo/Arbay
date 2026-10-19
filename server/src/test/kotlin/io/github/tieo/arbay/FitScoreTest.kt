@@ -88,6 +88,14 @@ class FitScoreTest {
     }
 
     @Test
+    fun `an ambulance is no closed van, named in the title or only in the dealer's list of specs`() {
+        // Cölbe: a 2022 Crafter with a Strobel RTW box, filed in Kleinanzeigen Nutzfahrzeuge.
+        assertNull(fit(van(title = "Volkswagen Crafter Autom . Rettungswagen / DSG / LED")))
+        assertNull(fit(van(title = "Volkswagen Crafter Autom . DSG / LED", description = "Bei Fragen bitte anrufen\n\nTransporter oder Lkw bis 7,5 t, Rettungswagen\nGebrauchtfahrzeug")))
+        assertNotNull(fit(van(description = "Sonderausstattung: ...\n\nTransporter oder Lkw bis 7,5 t, Kastenwagen hoch + lang\nGebrauchtfahrzeug")))
+    }
+
+    @Test
     fun `a workshop fit-out is a closed van, a camper conversion is not`() {
         // Kolkwitz: a Würth demonstrator with Orsy shelving, sold as a Kastenwagen.
         assertNotNull(fit(van(title = "VW Crafter / 177 PS / 132 TKM / Würth Ausbau / HU 05/2028")))

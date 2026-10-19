@@ -42,6 +42,22 @@ class KleinanzeigenDetailParserTest {
     }
 
     @Test
+    fun readsANutzfahrzeugDealersSpecsFromItsText() {
+        // Cölbe, 2026-10-19: one attribute row ("Art: Transporter"), the specs as lines of the text.
+        val page = javaClass.getResource("/fixtures/kleinanzeigen_detail_nutzfahrzeug.html")!!.readText()
+        val v = KleinanzeigenDetailParser.parse(page)!!
+        assertEquals(2022, v.firstRegYear)
+        assertEquals(12, v.firstRegMonth)
+        assertEquals(84_534, v.mileageKm)
+        assertEquals(Fuel.DIESEL, v.fuel)
+        assertEquals(Transmission.AUTOMATIC, v.gearbox)
+        assertEquals(130, v.powerKw)
+        assertEquals(io.github.tieo.arbay.model.VehicleCondition.DAMAGED, v.condition)
+        assertTrue(v.isVerified(VehicleField.FIRST_REG_YEAR))
+        assertTrue(v.isVerified(VehicleField.MILEAGE))
+    }
+
+    @Test
     fun readsTheCheapestShippingBesideThePrice() {
         // As the page of a phone ad showed it, 2026-10-08.
         val page = org.jsoup.Jsoup.parse(

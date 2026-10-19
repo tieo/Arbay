@@ -34,7 +34,7 @@ object FitScore {
     )
 
     private val notAClosedVan = Regex(
-        """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine""",
+        """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine|rettungswagen|krankenwagen|\b[rk]tw\b""",
     )
     // A workshop fit-out is shelving inside a closed van, "Würth Ausbau", "Sortimo-Ausbau",
     // "Werkstattausbau"; a bare "Ausbau" in a van's headline is a camper conversion.
@@ -69,7 +69,7 @@ object FitScore {
     fun score(listing: Listing, wishes: CarFilters, priceEur: Double, softDriveHours: Double): Fit? {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
         // A mobile.de card's title is only make and model; the seller's headline opens the text.
-        val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()}"
+        val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()} ${CarFilterEngine.vehicleKind(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
         if (wantsAVan && notAClosedVan.containsMatchIn(workshopFitOut.replace(headline, " "))) return null
         if (tradeOnly.containsMatchIn(text)) return null

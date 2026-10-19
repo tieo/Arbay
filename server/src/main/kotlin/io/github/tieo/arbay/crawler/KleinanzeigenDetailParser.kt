@@ -106,6 +106,15 @@ object KleinanzeigenDetailParser {
             }
             if (label.isNotBlank() && value.isNotBlank()) attrs[label.lowercase()] = value
         }
+        // A van in Nutzfahrzeuge gets one row ("Art: Transporter"); its dealer's feed writes the
+        // rest into the seller's text as the same labels, one per line, and a damaged van as a bare
+        // "Beschädigt" line. Read without them, a 2015 Crafter with 375,572 km and a damaged
+        // ambulance from 2022 ranked among a search's best vans with every fact unknown.
+        doc.selectFirst("#viewad-description-text")?.wholeText()?.lineSequence()?.map { it.trim() }?.forEach { line ->
+            stateLine.matchEntire(line)?.let { attrs.putIfAbsent("fahrzeugzustand", it.value) }
+            val (label, value) = labelLine.matchEntire(line)?.destructured ?: return@forEach
+            if (value != "--") attrs.putIfAbsent(label.lowercase(), value)
+        }
         // The wheelbase is never one of the attribute rows here: where a seller states it at all,
         // it is a line of their own prose ("Radstand: 3.250 mm"), so it is read off the whole page
         // and stays inferred rather than verified.
@@ -149,11 +158,18 @@ object KleinanzeigenDetailParser {
         return VehicleTextParser.verifiedByPresence(info).copy(wheelbaseMm = wheelbase)
     }
 
-    /** "November 2012" -> (2012, 11); "2019" -> (2019, null). */
+    /** "November 2012" -> (2012, 11); "12/2022" -> (2022, 12); "2019" -> (2019, null). */
     private fun parseGermanMonthYear(text: String?): Pair<Int?, Int?> {
         if (text == null) return null to null
         val year = Regex("""(19|20)\d{2}""").find(text)?.value?.toIntOrNull()
         val month = months.entries.firstOrNull { text.contains(it.key, ignoreCase = true) }?.value
+            ?: Regex("""\b(0?[1-9]|1[0-2])/(19|20)\d{2}\b""").find(text)?.groupValues?.get(1)?.toIntOrNull()
         return year to month
     }
+
+    /** The labels a dealer feed writes into a Nutzfahrzeuge ad's text, as the attribute rows name them. */
+    private val labelLine = Regex(
+        """(Erstzulassung|Kilometerstand|Kraftstoffart|Leistung|Getriebe|Schadstoffklasse|Umweltplakette):\s*(.+)""",
+    )
+    private val stateLine = Regex("""Beschädigt|Unfallfahrzeug""")
 }
