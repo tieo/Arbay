@@ -173,8 +173,8 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
         )
 
         // A car is searched in Autos with its make and model, and in Nutzfahrzeuge with its model's
-        // word, where van sellers file a good share of them: 50 Crafters in one price band there,
-        // none of which the Autos search had. Each reads its whole price band.
+        // word, where van sellers file most of them: 1,390 Crafters between 10,000 and 30,990 €
+        // there against 28 in Autos. Each reads its price band cheapest first, up to the band's cap.
         val passes: List<(Int) -> String> = if (carQuery != null) listOfNotNull(
             { page: Int ->
                 KleinanzeigenUrlBuilder.carSearch(

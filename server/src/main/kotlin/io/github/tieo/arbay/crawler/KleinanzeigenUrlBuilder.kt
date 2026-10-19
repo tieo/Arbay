@@ -145,8 +145,8 @@ object KleinanzeigenUrlBuilder {
     /**
      * The same vehicle in Nutzfahrzeuge & Anhänger (c276), where a van seller may file it instead of
      * Autos. This category has none of the Autos attributes, so only the price narrows it, and the
-     * model's own word is the search: "volkswagen-crafter" answered 37 Crafters over four pages
-     * that "crafter" answered 100 different ones on, since sellers write "VW".
+     * model's own word is the search. Read cheapest first, "volkswagen-crafter" answered 1,390 ads
+     * between 10,000 and 30,990 € and "crafter" 1,482 (measured 2026-10-19), against 28 in Autos.
      */
     fun vanSearch(
         modelWord: String,
