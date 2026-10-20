@@ -45,4 +45,24 @@ class CrawlClockTest {
             "too late"
         })
     }
+
+    @Test
+    fun `a crawl that keeps answering pages is not given up on`() = runBlocking {
+        val answer = withCrawlLimitOrNull(300) {
+            val clock = coroutineContext[CrawlClock]!!
+            repeat(6) { delay(150); clock.answered() }
+            "every page"
+        }
+        assertEquals("every page", answer)
+    }
+
+    @Test
+    fun `a crawl that stops answering is given up on the limit after its last page`() = runBlocking {
+        assertNull(withCrawlLimitOrNull(300) {
+            val clock = coroutineContext[CrawlClock]!!
+            repeat(3) { delay(150); clock.answered() }
+            delay(1_000)
+            "too late"
+        })
+    }
 }

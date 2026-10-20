@@ -379,6 +379,10 @@ class SavedSearchMonitor(
         // The rule that removed each offer the markets sent, so a best offer that stops coming back
         // is told apart: removed by the search, or not sent at all.
         val ruledOut = HashMap<String, String>()
+        // What each market streamed before it finished, kept where it is given up on instead: a
+        // market that timed out after sending 275 vans otherwise counted as having sent none, and
+        // its best ones as lost.
+        val streamed = HashMap<String, MutableList<Listing>>()
         loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
             parameter("q", q.text)
             q.platforms.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
@@ -394,9 +398,15 @@ class SavedSearchMonitor(
                 val line = channel.readUTF8Line() ?: break
                 if (line.isBlank()) continue
                 val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
-                if (event.type == CrawlerEventType.PLATFORM_DONE) {
-                    event.listings.forEach { found[it.id] = it }
-                    event.dropped.forEach { d -> ruledOut[d.listing.id] = listOfNotNull(d.reason.name.lowercase().replace('_', ' '), d.detail).joinToString(": ") }
+                when (event.type) {
+                    CrawlerEventType.PLATFORM_PROGRESS -> streamed.getOrPut(event.platform) { mutableListOf() } += event.listings
+                    CrawlerEventType.PLATFORM_ERROR -> streamed.remove(event.platform)?.forEach { found.putIfAbsent(it.id, it) }
+                    CrawlerEventType.PLATFORM_DONE -> {
+                        streamed.remove(event.platform)
+                        event.listings.forEach { found[it.id] = it }
+                        event.dropped.forEach { d -> ruledOut[d.listing.id] = listOfNotNull(d.reason.name.lowercase().replace('_', ' '), d.detail).joinToString(": ") }
+                    }
+                    else -> {}
                 }
                 if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
             }

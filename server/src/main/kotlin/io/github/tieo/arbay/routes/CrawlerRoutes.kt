@@ -230,11 +230,12 @@ private fun priceEurCents(money: Money): Long =
     if (money.currency == Currency.EUR) money.amount
     else ExchangeRates.convert(money.amount, money.currency.name, "EUR")
 
-/** How long one market may take before the stream gives up on it. Every crawler runs inside this,
- *  so a hung browser costs one market's results rather than the server's ability to search at all:
- *  hung crawlers once kept their streams and scrape permits alive until every search was refused as
- *  busy for hours. The clock stands still while a person solves the market's captcha and while the
- *  crawl waits for a request window other searches spent (CrawlClock). */
+/** How long one market may go without answering a page before the stream gives up on it. Every
+ *  crawler runs inside this, so a hung browser costs one market's results rather than the server's
+ *  ability to search at all: hung crawlers once kept their streams and scrape permits alive until
+ *  every search was refused as busy for hours. The clock stands still while a person solves the
+ *  market's captcha and while the crawl waits for a request window other searches spent, and starts
+ *  over with every page answered (CrawlClock). */
 private const val PLATFORM_BUDGET_MS = 180_000L
 
 /**

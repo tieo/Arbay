@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -46,6 +47,7 @@ class PartialResultEmitter(val emit: suspend (listings: List<Listing>) -> Unit) 
  *  attached; a no-op otherwise. Crawlers call this after each page so results pipeline in. */
 internal suspend fun emitPartialResults(listings: List<Listing>) {
     if (listings.isEmpty()) return
+    coroutineContext[CrawlClock]?.answered()
     coroutineContext[PartialResultEmitter]?.emit(listings)
 }
 
@@ -153,12 +155,15 @@ internal suspend fun emitCaptchaInteractive() {
 /**
  * The clock of one market's time limit, which stands still while a person is solving that
  * market's captcha in the live browser, and while the crawl waits for the market's request window
- * ([RequestMonitor.awaitBudget]) that other searches have spent. The limit is there for a crawl
- * that never answers; a person working through a challenge is not that, and counting their time
- * cut off a solve in progress. Neither is a crawl queued behind other searches: a Crafter search
- * reading Kleinanzeigen while three others did found the window spent, waited for it to open the
- * vans' ads, and was given up on with none of them read. How long a person is given is the
- * captcha gate's own limit in the sidecar; how long a crawl waits is the waiter's own limit.
+ * ([RequestMonitor.awaitBudget]) that other searches have spent, and starts over with every page
+ * the market answers ([answered]). The limit is there for a crawl that never answers; a person
+ * working through a challenge is not that, and counting their time cut off a solve in progress.
+ * Neither is a crawl queued behind other searches: a Crafter search reading Kleinanzeigen while
+ * three others did found the window spent, waited for it to open the vans' ads, and was given up
+ * on with none of them read. Nor is one reading a long price band page after page: Kleinanzeigen's
+ * 1,390 Crafters between 10,000 and 30,990 € take longer than the limit, and the 275 vans streamed
+ * by then were thrown away with it. How long a person is given is the captcha gate's own limit in
+ * the sidecar; how long a crawl waits is the waiter's own limit.
  */
 class CrawlClock internal constructor(private val limitMs: Long) : CoroutineContext.Element {
     companion object Key : CoroutineContext.Key<CrawlClock>
@@ -167,6 +172,7 @@ class CrawlClock internal constructor(private val limitMs: Long) : CoroutineCont
     private var solving = false
     private var waits = 0
     private val standingStill = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val answers = kotlinx.coroutines.flow.MutableStateFlow(0L)
 
     private fun settle() { standingStill.value = solving || waits > 0 }
 
@@ -183,14 +189,23 @@ class CrawlClock internal constructor(private val limitMs: Long) : CoroutineCont
         }
     }
 
-    /** Returns once [limitMs] have passed with the clock running. */
+    /** The market answered a page: the clock starts over. */
+    fun answered() = answers.update { it + 1 }
+
+    /** Returns once [limitMs] have passed with the clock running and no page answered. */
     internal suspend fun runOut() {
         var left = limitMs
+        var seen = answers.value
         while (left > 0) {
             standingStill.first { !it }
             val from = System.currentTimeMillis()
-            kotlinx.coroutines.withTimeoutOrNull(left) { standingStill.first { it } }
-            left -= System.currentTimeMillis() - from
+            kotlinx.coroutines.withTimeoutOrNull(left) {
+                kotlinx.coroutines.flow.combine(standingStill, answers) { still, n -> still || n != seen }.first { it }
+            }
+            if (answers.value != seen) {
+                seen = answers.value
+                left = limitMs
+            } else left -= System.currentTimeMillis() - from
         }
     }
 }
