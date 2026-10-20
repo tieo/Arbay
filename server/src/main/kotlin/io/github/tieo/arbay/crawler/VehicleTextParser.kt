@@ -26,9 +26,9 @@ object VehicleTextParser {
         RegexOption.IGNORE_CASE,
     )
     // The label written before the figure: "Kilometerleistung 144.035", "Laufleistung: 98.000",
-    // "km-Stand 120000".
+    // "km-Stand 120000", or the unit alone as a field name, "Km: 212.000".
     private val labeledMileageRegex = Regex(
-        """\b(?:km|kilometer|lauf)[\s-]?(?:stand|leistung)\b[ \u00a0]*[:.]?[ \u00a0]*(?:ca\.?[ \u00a0]*)?([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{4,7})(?![0-9])""",
+        """\b(?:(?:km|kilometer|lauf)[\s-]?(?:stand|leistung)\b[ \u00a0]*[:.]?|(?:km|kilometer)[ \u00a0]*:)[ \u00a0]*(?:ca\.?[ \u00a0]*)?([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{4,7})(?![0-9])""",
         RegexOption.IGNORE_CASE,
     )
     // The digit lookbehind stops a longer figure's tail from posing as power ("1.200 PS" is
