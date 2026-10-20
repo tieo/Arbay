@@ -180,6 +180,15 @@ class SavedSearchMonitorTest {
     }
 
     @Test
+    fun `a fetch takes a request from its market's window and is refused only while the window stays spent`() = kotlinx.coroutines.runBlocking {
+        val market = "acquire-test-${System.nanoTime()}"
+        val later = kotlin.time.Clock.System.now().toEpochMilliseconds() + 1_000
+        repeat(45) { assertTrue(RequestMonitor.acquire(market, later)) }
+        assertTrue(RequestMonitor.overBudget(market))
+        assertFalse(RequestMonitor.acquire(market, later))
+    }
+
+    @Test
     fun `a learning rule tells only about finds below the best it saw`() {
         val learned = sf().copy(learnUntil = Instant.fromEpochMilliseconds(0), bestSeenEur = 130)
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("2TB NVMe", 129), learned))

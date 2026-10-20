@@ -389,14 +389,14 @@ internal suspend fun fetchWithFallback(
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
 
-    // Hard cutoff: refuse once a platform has hit the per-window request ceiling, so a runaway
-    // can't hammer a site into flagging our IP.
-    if (RequestMonitor.overBudget(platformName))
+    // Paced to the platform's per-window request ceiling, so neither a runaway nor a whole price
+    // band can hammer a site into flagging our IP; refused only when the window stays spent.
+    val windowDeadline = kotlin.time.Clock.System.now().toEpochMilliseconds() + RequestMonitor.MAX_WAIT_FOR_WINDOW_MS
+    if (!RequestMonitor.acquire(platformName, windowDeadline))
         throw CrawlerBlockedException("$platformName: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
 
     // Randomized pause before each page fetch. A fixed cadence across 11 platforms is itself
     // a bot signature; the jitter spreads the burst and varies the inter-request gap.
-    RequestMonitor.recordRequest(platformName)
     delay(fetchJitterMs())
 
     if (!browserOnly) {
