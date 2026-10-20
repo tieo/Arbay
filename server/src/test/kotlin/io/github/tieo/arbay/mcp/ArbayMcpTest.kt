@@ -123,4 +123,36 @@ class ArbayMcpTest {
         products.delete(other.removePrefix("Saved: ").substringBefore(':'))
         mcp.close()
     }
+
+    /** A watch reviewed over MCP needs the bar an alert rule learned and the whole list of new
+     *  offers, both of which only the app showed before. */
+    @Test
+    fun aSavedSearchShowsItsLearnedBarAndItsNewOffers() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        routing {
+            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            mcpRoutes("", client)
+        }
+        val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "",
+            name = "learned bar test",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "learned bar test", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = kotlin.time.Clock.System.now(),
+            notificationSubfilters = listOf(io.github.tieo.arbay.model.NotificationSubfilter(
+                id = "r1", maxPriceEur = 216, learnUntil = kotlin.time.Instant.parse("2026-10-22T12:34:56Z"), bestSeenEur = 140,
+            )),
+        ))
+        val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
+        val list = (mcp.callTool(name = "list_saved_searches", arguments = emptyMap()).content.single() as TextContent).text
+        assertContains(list, "alert rule r1: up to €216 · cheaper than the best until 2026-10-22 (€140 so far)")
+        val new = mcp.callTool(name = "new_offers", arguments = mapOf("saved_search_id" to saved.id))
+        assertEquals("Nothing new in this saved search.", (new.content.single() as TextContent).text)
+        products.delete(saved.id)
+        mcp.close()
+    }
 }

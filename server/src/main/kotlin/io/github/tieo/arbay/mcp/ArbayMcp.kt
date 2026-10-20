@@ -13,6 +13,9 @@ import io.github.tieo.arbay.model.dealerNameKey
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.DroppedListing
+import io.github.tieo.arbay.model.label
+import io.github.tieo.arbay.model.summaryText
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.SearchReach
@@ -122,6 +125,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val listings: MutableList<Listing> = java.util.Collections.synchronizedList(mutableListOf())
         val problems: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         val searching: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        /** Per market: what it sent that the search removed, with the reason for each. */
+        val dropped = java.util.concurrent.ConcurrentHashMap<String, List<DroppedListing>>()
+        /** Per market: how many offers it sent and how many the search kept. */
+        val counts = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Int>>()
         val startedAt = kotlin.time.Clock.System.now()
         /** Set while the server's crawl throttle has it waiting for a free slot. */
         @Volatile var queued: String? = null
@@ -152,12 +159,26 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // Every offer the search found can be asked about, not only the ones listed: a search
             // read deep lists forty of a thousand.
             all.forEach { seen[it.id] = it }
+            val removed = dropped.toSortedMap()
+            removed.values.flatten().forEach { seen[it.listing.id] = it.listing }
             val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
             return buildString {
                 appendLine("${shown.size} of ${all.size} offers for \"$words\":")
                 askedUpTo?.let { appendLine("No price was named, so the markets were asked up to ${it.amount / 100} €, what it costs new (the price comparers' third cheapest offer).") }
                 shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
                 synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
+                // What each market sent against what the search kept, with the reasons for the
+                // rest: a filter that is wrong shows up as a market whose answer went missing.
+                val sentAndKept = counts.toSortedMap().filterValues { (sent, kept) -> sent > kept }
+                if (sentAndKept.isNotEmpty()) appendLine("Removed by the search: " + sentAndKept.entries.joinToString("; ") { (market, n) ->
+                    "$market ${n.first - n.second} of ${n.first} (" +
+                        removed[market].orEmpty().groupingBy { it.why() }.eachCount().entries.sortedByDescending { it.value }
+                            .joinToString(", ") { "${it.key} ${it.value}" } + ")"
+                })
+                if (args.bool("dropped") == true) removed.forEach { (market, list) ->
+                    if (list.isNotEmpty()) appendLine("Removed from $market (${list.size} listed, in the market's order):")
+                    list.forEach { appendLine("  " + it.why() + " | " + it.listing.line()) }
+                }
                 if (job.isActive) appendLine(
                     (queued?.let { "Queued: $it. It starts when a running search finishes." }
                         ?: "Still searching: ${searching.joinToString(", ").ifEmpty { "the markets have not answered yet" }}.") +
@@ -225,7 +246,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                         else -> {}
                     }
                     // A market's final answer replaces what it streamed while still paging.
-                    if (event.type == CrawlerEventType.PLATFORM_DONE) run.listings.removeIf { it.platformId.name == event.platform }
+                    if (event.type == CrawlerEventType.PLATFORM_DONE) {
+                        run.listings.removeIf { it.platformId.name == event.platform }
+                        run.dropped[market] = event.dropped
+                        run.counts[market] = event.rawCount to event.resultCount
+                    }
                     run.listings += event.listings
                     if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
                 }
@@ -238,7 +263,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private fun Server.registerTools() {
-        tool("list_saved_searches", "Every saved search with its id, words, markets, and the ids of the new offers it found since last opened.") {
+        tool("list_saved_searches", "Every saved search with its id, words, markets, its alert rules with the price each has learned, and the ids of the new offers it found since last opened.") {
             val products = getJson<List<TrackedProduct>>("/api/products")
             val status = getJsonElement("/api/products/status").let { it as? JsonArray }.orEmpty()
                 .associateBy({ (it as JsonObject)["productId"]?.jsonPrimitive?.contentOrNull }, { it as JsonObject })
@@ -250,9 +275,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     "${p.searchQuery.platforms.size} markets",
                     p.searchQuery.maxPrice?.let { "up to ${it.amount / 100} €" },
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
-                ).joinToString(" · ") + ((s?.get("newListingIds") as? JsonArray).orEmpty()
+                ).joinToString(" · ") + p.notificationSubfilters.joinToString("") { r ->
+                    // The rule's criteria, and for one that learns the market, the lowest price it has
+                    // seen so far: the bar a find has to beat once learning ends.
+                    "\n  alert rule ${r.id}" + (if (r.name.isNotBlank()) " \"${r.name}\"" else "") + ": " + r.summaryText() + if (r.enabled) "" else " (off)"
+                } + ((s?.get("newListingIds") as? JsonArray).orEmpty()
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
-                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                    ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more (new_offers lists them all)" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
                     .joinToString("") { o ->
                         val why = if (o.str("state") == "RULED_OUT") "RULED OUT of its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} by the search's rule \"${o.str("ruledOutBy")}\" (check the ad really breaks it)"
                             else "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")"
@@ -260,6 +289,18 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                             "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
                     })
             }.ifEmpty { "No saved searches." }
+        }
+
+        tool(
+            "new_offers",
+            "Every offer a saved search found since it was last opened, as the watch found it, with its price and link. Opens nothing, so they stay new.",
+            props = { string("saved_search_id", "The saved search", required = true) },
+        ) { args ->
+            val id = args.str("saved_search_id")!!
+            val found = getJson<List<Listing>>("/api/products/${id.encodeURLPathPart()}/new")
+            found.forEach { seen[it.id] = it }
+            if (found.isEmpty()) "Nothing new in this saved search."
+            else "${found.size} new, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }).joinToString("\n") { it.line() }
         }
 
         tool(
@@ -277,6 +318,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
                 integer("per_market", "How many offers to read from each market (default 60, up to 1000): more finds the cheapest of a thing sold by the hundred, and takes longer")
+                boolean("dropped", "Also list the offers the search removed, per market with the reason for each, to check a filter took out only what it should")
             },
         ) { args ->
             val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }
@@ -752,6 +794,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         if (!r.status.isSuccess() || r.status.value == 204) null
         else json.decodeFromString(io.github.tieo.arbay.model.ListingDetail.serializer(), r.bodyAsText()).shipping
     }.getOrNull()
+
+    /** Why the search removed an offer: the reason, and which criterion or word when it names one. */
+    private fun DroppedListing.why(): String = reason.label + (detail?.let { ": $it" } ?: "")
 
     private fun Listing.line(): String = listOfNotNull(
         id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",
