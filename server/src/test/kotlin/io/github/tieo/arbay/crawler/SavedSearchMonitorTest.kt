@@ -22,9 +22,10 @@ class SavedSearchMonitorTest {
         title: String,
         priceEur: Int,
         condition: Condition? = null,
+        platform: io.github.tieo.arbay.model.PlatformId = io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN,
     ) = Listing(
         id = title.hashCode().toString(),
-        platformId = io.github.tieo.arbay.model.PlatformId.EBAY_DE,
+        platformId = platform,
         externalId = title.hashCode().toString(),
         url = "https://example.com/$title",
         title = title,
@@ -199,6 +200,18 @@ class SavedSearchMonitorTest {
         assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("Fanxiang M.2 NVME SSD 1To 2To 4To PS5 avec Dissipateur", 50), learned))
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("Samsung 990 PRO 2TB (2000GB) Nur 5GB geschrieben", 120), learned))
         assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("M.2 SSD 2TB (2x 1TB) NVMe", 120), learned))
+    }
+
+    @Test
+    fun `an eBay offer whose condition was not read neither sets nor beats a learned price`() {
+        val learned = sf().copy(learnUntil = Instant.fromEpochMilliseconds(0), bestSeenEur = 71)
+        val es = io.github.tieo.arbay.model.PlatformId.EBAY_ES
+        // The SN730 eBay.de calls for parts, as its eBay.es copy came in.
+        assertFalse(SavedSearchMonitor.pricesTheThing(listing("Western Digital SN730 1TB SSD NVME", 50, platform = es)))
+        assertFalse(SavedSearchMonitor.beatsTheBestSeen(listing("Western Digital SN730 1TB SSD NVME", 50, platform = es), learned))
+        assertTrue(SavedSearchMonitor.beatsTheBestSeen(listing("Western Digital SN730 1TB SSD NVME", 50, Condition.USED, es), learned))
+        // A Kleinanzeigen seller need not tick a condition, so none there is no sign of a misread.
+        assertTrue(SavedSearchMonitor.pricesTheThing(listing("Sabrent Rocket 1TB SSD", 45)))
     }
 
     @Test

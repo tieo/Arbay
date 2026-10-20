@@ -468,15 +468,15 @@ class SavedSearchMonitor(
      * The search with each learning rule's [NotificationSubfilter.bestSeenEur] lowered to the
      * cheapest of [found] the rule passes, kept when it changed. Everything the markets answer
      * counts, not only what is new: the market as it stands is what a later find has to beat. An
-     * auction's price is a bid so far, a thing sold for parts is not the thing, and one listing
-     * selling several sizes is priced at whichever is cheapest, so none of them teaches anything.
+     * auction's price is a bid so far, and what [pricesTheThing] turns away is not the thing at
+     * its price, so none of them teaches anything.
      */
     private fun learn(product: TrackedProduct, found: Collection<Listing>): TrackedProduct {
         val now = Clock.System.now()
         val rules = product.notificationSubfilters.map { sf ->
             if (!sf.enabled || !sf.learning(now)) return@map sf
             val cheapest = found
-                .filter { it.saleType != SaleType.AUCTION && it.condition != Condition.PARTS_ONLY && !RelevanceFilter.namesSeveralSizes(it.title) && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
+                .filter { it.saleType != SaleType.AUCTION && pricesTheThing(it) && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
                 .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
                 .minByOrNull { it.second }
                 ?: return@map sf
@@ -600,6 +600,18 @@ class SavedSearchMonitor(
             return true
         }
 
+        /**
+         * Whether a listing's price is what one working thing costs, so it can set or beat a learned
+         * price. A thing sold for parts is not the thing, and a row of sizes is priced at the
+         * smallest. eBay makes every seller state a condition, so an eBay offer with none was not
+         * read rather than not stated: the same for-parts drive read as for parts on eBay.de came
+         * without a condition on eBay.es and taught the 1 TB watch a bar of 50 €.
+         */
+        internal fun pricesTheThing(listing: Listing): Boolean =
+            listing.condition != Condition.PARTS_ONLY &&
+                !RelevanceFilter.namesSeveralSizes(listing.title) &&
+                !(listing.platformId.name.startsWith("EBAY_") && listing.condition == null)
+
         /** Whether a find costs less than the cheapest a learning rule saw; true for a rule that never learned. */
         internal fun beatsTheBestSeen(
             listing: Listing,
@@ -607,10 +619,7 @@ class SavedSearchMonitor(
             importSettings: ImportSettings = ImportSettingsStore.current,
         ): Boolean {
             if (sf.learnUntil == null) return true
-            // Cheaper than the best working one is no news about a broken one.
-            if (listing.condition == Condition.PARTS_ONLY) return false
-            // Nor is the price of the smallest variant in a row of sizes.
-            if (RelevanceFilter.namesSeveralSizes(listing.title)) return false
+            if (!pricesTheThing(listing)) return false
             val best = sf.bestSeenEur ?: return true
             val cents = eurCents(listing.landedPrice(importSettings)) ?: return false
             return cents < best * 100L
