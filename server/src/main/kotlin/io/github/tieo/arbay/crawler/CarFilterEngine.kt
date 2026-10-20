@@ -192,9 +192,9 @@ object CarFilterEngine {
         if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return "emission"
         if (drop(filters.colors.isNotEmpty(), v?.color != null) { val c = v!!.color!!; filters.colors.any { c.contains(it, ignoreCase = true) } }) return "colour"
         // A flatbed, a tipper, a box body or a bare chassis cab has no van roof, so it is never the
-        // roof height asked for. What it is shows in its title or in the model line a dealer page states
-        // ("Ausstattungslinie: Pritsche 35 DOKA mittellang FWD"), never in the equipment prose,
-        // where "Pritsche" can be the ladder rack of a box van.
+        // roof height asked for. What it is shows in its title or in the model or body line a page
+        // states ("Ausstattungslinie: Pritsche 35 DOKA mittellang FWD", "Aufbau: Pritsche mit Plane"),
+        // never in the equipment prose, where "Pritsche" can be the ladder rack of a box van.
         if (filters.vanHeights.isNotEmpty() && isOpenBody(listing)) return "body"
         // A van's size is judged on the sizes its listing could mean (see VanDimensions): it goes
         // only when none of them is wanted. One read as a mere hint bounds nothing and is kept,
@@ -239,10 +239,14 @@ object CarFilterEngine {
     private const val HEADLINE_CHARS = 120
 
     /** Whether the listing names its body as open, bare or a box built on a chassis: in the title, the headline that opens
-     *  a dealer page's text, or that page's model line. */
+     *  a dealer page's text, that page's model line, or the body line a seller's spec list states ("Aufbau: Pritsche mit
+     *  Plane und Spriegel", under a headline misspelt "Crafter Prtische mit DSG"). */
     internal fun isOpenBody(listing: Listing): Boolean {
         val lines = listing.description.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
-        val named = listOfNotNull(listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") }, vehicleKind(listing))
+        val named = listOfNotNull(
+            listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") },
+            lines.firstOrNull { it.startsWith("Aufbau:") }, vehicleKind(listing),
+        )
         return named.any { openBody.containsMatchIn(it.lowercase()) }
     }
 

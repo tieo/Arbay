@@ -264,6 +264,11 @@ class CarFilterEngineTest {
         // TruckScout24, live: a box body on a Crafter chassis, size unstated, kept as a high-roof van.
         val box = carListing("b", PlatformId.TRUCKSCOUT24, "Transporter mit Koffer VWCrafter 35 Automat *KAMERA+NAVI+KLIMA* (8318)")
         assertEquals(emptyList(), CarFilterEngine.apply(listOf(box), filters).map { it.id })
+        // mobile.de, live: a dropside with tarp under a misspelt headline, its body in its spec list.
+        val dropside = carListing("d", PlatformId.MOBILE_DE, "Volkswagen Crafter").copy(
+            description = "Volkswagen Crafter Prtische mit DSG\n\nFahrzeugdaten:\n\nGetriebe: Automatik\n\nAufbau: Pritsche mit Plane und Spriegel",
+        )
+        assertEquals(emptyList(), CarFilterEngine.apply(listOf(dropside), filters).map { it.id })
         // Without a roof asked for, a flatbed is as good as any Crafter.
         assertEquals(2, CarFilterEngine.apply(listOf(flatbed, van), CarFilters()).size)
     }
