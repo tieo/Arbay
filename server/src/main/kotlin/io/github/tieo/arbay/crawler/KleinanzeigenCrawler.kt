@@ -175,86 +175,110 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
         // A car is searched in Autos with its make and model, and in Nutzfahrzeuge with its model's
         // word, where van sellers file most of them: 1,390 Crafters between 10,000 and 30,990 €
         // there against 28 in Autos. Each reads its price band cheapest first, up to the band's cap.
-        val passes: List<(Int) -> String> = if (carQuery != null) listOfNotNull(
-            { page: Int ->
+        val passes: List<Pass> = if (carQuery != null) listOfNotNull(
+            Pass(byPrice = true) { page, floorCents ->
                 KleinanzeigenUrlBuilder.carSearch(
                     query = listOfNotNull(carQuery.makeSlug, carQuery.modelSlug).joinToString(" "),
                     page = page,
                     locationId = locationId,
                     radiusKm = if (locationId != null) query.radiusKm else null,
-                    minPriceCents = query.minPrice?.amount,
+                    minPriceCents = floorCents,
                     maxPriceCents = query.maxPrice?.amount,
                     attrFilters = attrFilters,
                 )
             },
             carQuery.modelSlug?.let { model ->
-                { page: Int ->
+                Pass(byPrice = true) { page, floorCents ->
                     KleinanzeigenUrlBuilder.vanSearch(
                         modelWord = model.replace("-", " "),
                         page = page,
                         locationId = locationId,
                         radiusKm = if (locationId != null) query.radiusKm else null,
-                        minPriceCents = query.minPrice?.amount,
+                        minPriceCents = floorCents,
                         maxPriceCents = query.maxPrice?.amount,
                     )
                 }
             },
-        ) else listOf { page: Int ->
-            KleinanzeigenUrlBuilder.regularSearch(
-                query = query.positiveText,
-                page = page,
-                locationId = locationId,
-                radiusKm = if (locationId != null) query.radiusKm else null,
-                minPriceCents = query.minPrice?.amount,
-                maxPriceCents = query.maxPrice?.amount,
-            )
-        }
+        ) else listOf(
+            Pass(byPrice = false) { page, floorCents ->
+                KleinanzeigenUrlBuilder.regularSearch(
+                    query = query.positiveText,
+                    page = page,
+                    locationId = locationId,
+                    radiusKm = if (locationId != null) query.radiusKm else null,
+                    minPriceCents = floorCents,
+                    maxPriceCents = query.maxPrice?.amount,
+                )
+            }
+        )
         val band = if (carQuery != null) query.wholePriceBand() else query
-        for ((index, urlFor) in passes.withIndex()) {
-            readPages(band, urlFor, allResults, seenIds, firstPass = index == 0)
+        for ((index, pass) in passes.withIndex()) {
+            readPages(band, pass, allResults, seenIds, firstPass = index == 0)
         }
         return allResults
     }
 
-    /** Reads [query]'s pages from [urlFor] into [allResults], until the pages run out or the offers wanted are in. */
+    /** One way of asking Kleinanzeigen for the search, as the URL of a page under a price floor;
+     *  [byPrice] when its answer comes cheapest first. */
+    private class Pass(val byPrice: Boolean, val urlFor: (page: Int, floorCents: Long?) -> String)
+
+    /** Reads [query]'s pages from [pass] into [allResults], until the pages run out or the offers wanted are in. */
     private suspend fun readPages(
         query: SearchQuery,
-        urlFor: (Int) -> String,
+        pass: Pass,
         allResults: MutableList<Listing>,
         seenIds: MutableSet<String>,
         firstPass: Boolean,
     ) {
         val start = allResults.size
-        val endPage = query.startPage + query.pageLimit() - 1
-        for (page in query.startPage..endPage) {
-            val url = urlFor(page)
-            val html = try {
-                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article[data-adid]")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage && firstPass) throw e
-                break
+        var floor = query.minPrice?.amount
+        var firstPage = query.startPage
+        var firstFetch = true
+        while (true) {
+            // The dearest offer on the last page read when the pages ended while still full.
+            var lastFullPageTop: Long? = null
+            val endPage = firstPage + query.pageLimit() - 1
+            for (page in firstPage..endPage) {
+                val html = try {
+                    fetchWithFallback(client, pass.urlFor(page, floor), "Kleinanzeigen", waitSelector = "article[data-adid]")
+                } catch (e: CrawlerBlockedException) {
+                    if (firstFetch && firstPass) throw e
+                    return
+                }
+
+                val doc = Jsoup.parse(html)
+                val rawItemCount = doc.select("article[data-adid]").size
+                if (rawItemCount == 0) return
+
+                if (firstFetch && firstPass) emitSuggestedTerms(parseSuggestedTerms(doc))
+                firstFetch = false
+                val pageResults = parseSearchResults(html, freeOnly = false)
+                // Cards on the page and none of them read is the parser no longer fitting the markup,
+                // which would otherwise pass for a search nothing matched.
+                if (pageResults.isEmpty() && rawItemCount >= 5 && allResults.isEmpty()) {
+                    throw unreadablePage("Kleinanzeigen", "$rawItemCount cards on the page, none of them read", html)
+                }
+                val newResults = pageResults.filter { seenIds.add(it.externalId) }
+                allResults.addAll(newResults)
+                if (newResults.isNotEmpty()) emitPartialResults(newResults)
+
+                // A later page holding nothing the earlier ones did not is the site ignoring the page
+                // number; asking for the next one would fetch the same page again.
+                if (page > firstPage && newResults.isEmpty()) {
+                    lastFullPageTop = pageResults.maxOfOrNull { it.price.amount }
+                    break
+                }
+                if (rawItemCount < 10) return
+                if (allResults.size - start >= query.resultCap()) return
+                if (page == endPage) lastFullPageTop = pageResults.maxOfOrNull { it.price.amount }
             }
-
-            val doc = Jsoup.parse(html)
-            val rawItemCount = doc.select("article[data-adid]").size
-            if (rawItemCount == 0) break
-
-            if (page == query.startPage && firstPass) emitSuggestedTerms(parseSuggestedTerms(doc))
-            val pageResults = parseSearchResults(html, freeOnly = false)
-            // Cards on the page and none of them read is the parser no longer fitting the markup,
-            // which would otherwise pass for a search nothing matched.
-            if (pageResults.isEmpty() && rawItemCount >= 5 && allResults.isEmpty()) {
-                throw unreadablePage("Kleinanzeigen", "$rawItemCount cards on the page, none of them read", html)
-            }
-            val newResults = pageResults.filter { seenIds.add(it.externalId) }
-            allResults.addAll(newResults)
-            if (newResults.isNotEmpty()) emitPartialResults(newResults)
-
-            // A later page holding nothing the earlier ones did not is the site ignoring the page
-            // number; asking for the next one would fetch the same page again.
-            if (page > query.startPage && newResults.isEmpty()) break
-            if (rawItemCount < 10) break
-            if (allResults.size - start >= query.resultCap()) break
+            // Kleinanzeigen serves 50 pages of one answer and then the 50th again: 1,390 Crafters
+            // between 10,000 and 30,990 € in Nutzfahrzeuge ended at 27,999 €. An answer cheapest
+            // first goes on as a new answer from the last price read; the offers at that price are
+            // read again and counted once.
+            val next = lastFullPageTop?.takeIf { pass.byPrice && (floor == null || it > floor) } ?: return
+            floor = next
+            firstPage = 1
         }
     }
 

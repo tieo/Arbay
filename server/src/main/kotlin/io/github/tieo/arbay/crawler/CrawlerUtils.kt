@@ -267,8 +267,10 @@ internal fun SearchQuery.pageLimit(cap: Int = Int.MAX_VALUE): Int =
 /** The most pages a search asking for more offers than usual reads from one market. */
 internal const val DEEP_SEARCH_PAGES = 50
 
-/** The most offers a search reads from one market when it reads the whole of its price band. */
-internal const val WHOLE_BAND_RESULTS = 1000
+/** The most offers a search reads from one market when it reads the whole of its price band.
+ *  Kleinanzeigen's Nutzfahrzeuge held 1,390 Crafters between 10,000 and 30,990 €, and a cap of
+ *  1,000 ended the read at 24,990 € with the search's own ideal price at 25,000 €. */
+internal const val WHOLE_BAND_RESULTS = 2000
 
 /** This search reading every offer between its prices, for a market that sorts by price and caps
  *  the price itself ([SortsByPrice]): where the search names a ceiling and no offer count of its
