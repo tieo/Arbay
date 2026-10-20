@@ -51,6 +51,9 @@ data class NotificationSubfilter(
     val learnUntil: Instant? = null,
     /** The lowest landed price, whole euros, of what the rule passed while it was learning. */
     val bestSeenEur: Int? = null,
+    /** The offer that price was learned from, so the bar can be checked against its ad, and
+     *  learned again from the market when that offer is put away as a fake or a scam. */
+    val bestSeenListingId: String? = null,
 )
 
 /** Whether the rule is still learning the market at [now] rather than telling about finds. */

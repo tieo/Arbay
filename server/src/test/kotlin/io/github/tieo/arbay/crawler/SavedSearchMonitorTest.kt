@@ -221,4 +221,28 @@ class SavedSearchMonitorTest {
         assertFalse(rule.learning(Instant.fromEpochMilliseconds(1_000)))
         assertFalse(sf().learning(Instant.fromEpochMilliseconds(0)))
     }
+
+    @Test
+    fun `a bar set by an offer put away is learned again from the market`() {
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo())
+        val fake = listing("Crucial P310 2TB NVMe", 84)
+        val real = listing("WD Black SN770M 2TB NVMe", 120, Condition.USED)
+        val rule = sf().copy(learnUntil = Instant.fromEpochMilliseconds(Long.MAX_VALUE / 4), bestSeenEur = 84, bestSeenListingId = fake.id)
+        val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "2TB NVMe",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "2TB NVMe", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = Instant.fromEpochMilliseconds(0), notificationSubfilters = listOf(rule),
+        ))
+        try {
+            // Kept while the offer stands, though a dearer one comes in.
+            assertEquals(84, monitor.learn(saved, listOf(real), hidden = emptySet()).notificationSubfilters.single().bestSeenEur)
+            val relearned = monitor.learn(saved, listOf(real), hidden = setOf(fake.id)).notificationSubfilters.single()
+            assertEquals(120, relearned.bestSeenEur)
+            assertEquals(real.id, relearned.bestSeenListingId)
+            assertEquals(120, products.getById(saved.id)!!.notificationSubfilters.single().bestSeenEur)
+        } finally {
+            products.delete(saved.id)
+        }
+    }
 }

@@ -240,8 +240,9 @@ class SavedSearchMonitor(
 
         // An offer the user put away is a judgement on it: a fake or a scam priced below
         // everything real would otherwise set the price every later find has to beat.
-        found.keys.removeAll(io.github.tieo.arbay.repo.UserStateStore.hiddenOffers())
-        val learned = learn(product, found.values)
+        val hidden = io.github.tieo.arbay.repo.UserStateStore.hiddenOffers()
+        found.keys.removeAll(hidden)
+        val learned = learn(product, found.values, hidden)
         val freshListings = record(learned, found) ?: return
 
         // Named notification subfilters someone set on this search specifically — a listing can
@@ -471,10 +472,13 @@ class SavedSearchMonitor(
      * auction's price is a bid so far, and what [pricesTheThing] turns away is not the thing at
      * its price, so none of them teaches anything.
      */
-    private fun learn(product: TrackedProduct, found: Collection<Listing>): TrackedProduct {
+    internal fun learn(product: TrackedProduct, found: Collection<Listing>, hidden: Set<String>): TrackedProduct {
         val now = Clock.System.now()
-        val rules = product.notificationSubfilters.map { sf ->
-            if (!sf.enabled || !sf.learning(now)) return@map sf
+        val rules = product.notificationSubfilters.map { rule ->
+            if (!rule.enabled || !rule.learning(now)) return@map rule
+            // A bar set by an offer since put away was never the market's price: it is learned
+            // again from what the markets answer now.
+            val sf = if (rule.bestSeenListingId in hidden) rule.copy(bestSeenEur = null, bestSeenListingId = null) else rule
             val cheapest = found
                 .filter { it.saleType != SaleType.AUCTION && pricesTheThing(it) && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
                 .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
@@ -483,14 +487,21 @@ class SavedSearchMonitor(
             val eur = ((cheapest.second + 99) / 100).toInt()
             if ((sf.bestSeenEur ?: Int.MAX_VALUE) <= eur) return@map sf
             log.info("saved-search {}: rule {} learned €{} from {}", product.name, sf.displayName, eur, cheapest.first.url)
-            sf.copy(bestSeenEur = eur)
+            sf.copy(bestSeenEur = eur, bestSeenListingId = cheapest.first.id)
         }
         if (rules == product.notificationSubfilters) return product
         // The user may have changed the search while it ran; only the learned prices are written.
         val current = productRepo.getById(product.id) ?: return product
         val byId = rules.associateBy { it.id }
         val next = current.copy(notificationSubfilters = current.notificationSubfilters.map { sf ->
-            byId[sf.id]?.bestSeenEur?.takeIf { sf.learnUntil != null && (sf.bestSeenEur ?: Int.MAX_VALUE) > it }?.let { sf.copy(bestSeenEur = it) } ?: sf
+            val ran = byId[sf.id] ?: return@map sf
+            val learnedEur = ran.bestSeenEur
+            val relearned = sf.bestSeenListingId != null && sf.bestSeenListingId in hidden
+            when {
+                sf.learnUntil == null || learnedEur == null -> if (relearned) sf.copy(bestSeenEur = null, bestSeenListingId = null) else sf
+                relearned || (sf.bestSeenEur ?: Int.MAX_VALUE) > learnedEur -> sf.copy(bestSeenEur = learnedEur, bestSeenListingId = ran.bestSeenListingId)
+                else -> sf
+            }
         })
         return productRepo.update(next) ?: product
     }

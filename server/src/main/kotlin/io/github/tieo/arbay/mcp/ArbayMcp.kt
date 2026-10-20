@@ -278,7 +278,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 ).joinToString(" · ") + p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
                     // seen so far: the bar a find has to beat once learning ends.
-                    "\n  alert rule ${r.id}" + (if (r.name.isNotBlank()) " \"${r.name}\"" else "") + ": " + r.summaryText() + if (r.enabled) "" else " (off)"
+                    "\n  alert rule ${r.id}" + (if (r.name.isNotBlank()) " \"${r.name}\"" else "") + ": " + r.summaryText() +
+                        (r.bestSeenListingId?.let { ", learned from $it (put it away with hide_offers if it is no real offer, and the rule learns again on the next run)" } ?: "") +
+                        if (r.enabled) "" else " (off)"
                 } + ((s?.get("newListingIds") as? JsonArray).orEmpty()
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
                     ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more (new_offers lists them all)" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
