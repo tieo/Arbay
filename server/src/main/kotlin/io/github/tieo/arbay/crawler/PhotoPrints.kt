@@ -241,11 +241,15 @@ object PhotoPrints {
     }
 
     /** Whether two ads were placed by different sellers or in different places. [where] places an
-     *  entry printed without a point by its place's name. */
+     *  entry printed without a point: by the postcode of its archived listing, else by its place's
+     *  name, which for a district ("Aubing") the postcode list does not know. */
     internal fun apart(
         a: Entry,
         b: Entry,
-        where: (Entry) -> Pair<Double, Double>? = { e -> e.place?.let { runCatching { Geocoder.resolve(null, null, it) }.getOrNull() } },
+        where: (Entry) -> Pair<Double, Double>? = { e ->
+            io.github.tieo.arbay.repo.ListingArchive.get(e.id)?.let(::whereIs)
+                ?: e.place?.let { runCatching { Geocoder.resolve(null, null, it) }.getOrNull() }
+        },
     ): Boolean {
         if (a.seller != null && b.seller != null && !a.seller.equals(b.seller, ignoreCase = true)) return true
         val pointA = if (a.lat != null && a.lon != null) a.lat to a.lon else where(a)
