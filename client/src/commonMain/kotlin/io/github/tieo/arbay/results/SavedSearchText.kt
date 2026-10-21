@@ -1,5 +1,9 @@
 package io.github.tieo.arbay.results
 
+import io.github.tieo.arbay.format
+import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.PriceDrop
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.TopOfferState
 import io.github.tieo.arbay.model.TrackedProduct
@@ -33,6 +37,13 @@ fun lostLabel(status: SavedSearchStatus): String? {
         ruledOut.takeIf { it > 0 }?.let { "$it of its best offers ruled out" },
     ).joinToString(", ").ifEmpty { null }
 }
+
+/** How many offers the search already knew have come down in price since it was last opened; null when none. */
+fun priceDropLabel(status: SavedSearchStatus): String? =
+    status.priceDrops.size.takeIf { it > 0 }?.let { if (it == 1) "1 offer cheaper" else "$it offers cheaper" }
+
+/** The price an offer had before it came down, as every screen shows a price. */
+fun PriceDrop.before(): String = Money(kotlin.math.round(fromEur * 100).toLong(), Currency.EUR).format()
 
 /** When a saved search last ran, so an empty result reads as "nothing new" rather than as a search
  *  that never happened. */

@@ -25,6 +25,25 @@ data class SavedSearchStatus(
     // their ad is up or its market cannot say, and ruled out by one of the search's own rules on
     // the run that first did so, with the rule named. A best offer leaves silently in neither way.
     val missingTopOffers: List<TopOffer> = emptyList(),
+    // Offers this search keeps finding that have come down in price since it was last opened, each
+    // from what it cost when first seen dearer to what it costs now.
+    val priceDrops: List<PriceDrop> = emptyList(),
+)
+
+/**
+ * An offer a saved search found again for less than on an earlier run. [fromEur] is the landed
+ * price before the first drop since the search was last opened, so an offer lowered twice reads
+ * as the whole way down; [toEur] is what it costs as the latest run found it; [at] is when it
+ * dropped last.
+ */
+@Serializable
+data class PriceDrop(
+    val listingId: String,
+    val url: String,
+    val title: String,
+    val fromEur: Double,
+    val toEur: Double,
+    val at: kotlin.time.Instant,
 )
 
 /** Whether a saved search's last run still returned an offer it once ranked among its best. */

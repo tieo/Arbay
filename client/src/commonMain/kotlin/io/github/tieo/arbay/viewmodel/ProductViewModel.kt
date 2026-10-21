@@ -174,7 +174,7 @@ class ProductViewModel(
     /** A saved search was opened: what was waiting in it has been seen. */
     fun markOpened(productId: String) {
         _status.value = _status.value[productId]?.let { current ->
-            _status.value + (productId to current.copy(newSinceOpened = 0))
+            _status.value + (productId to current.copy(newSinceOpened = 0, priceDrops = emptyList()))
         } ?: _status.value
         viewModelScope.launch { runCatching { client.markSavedSearchOpened(productId) } }
     }

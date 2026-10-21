@@ -12,6 +12,7 @@ import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.results.savedSearchSubtitle
 import io.github.tieo.arbay.results.watchLabel
 import io.github.tieo.arbay.results.lostLabel
+import io.github.tieo.arbay.results.priceDropLabel
 import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
@@ -32,7 +33,7 @@ fun HomeScreen(app: WebApp) {
     val status by app.products.status.collectAsState()
     val history by SearchHistoryStore.entries.collectAsState()
     val freeMatches by app.freeItems.newMatches.collectAsState()
-    val ordered = products.sortedByDescending { status[it.id]?.newSinceOpened ?: 0 }
+    val ordered = products.sortedByDescending { status[it.id]?.let { s -> s.newSinceOpened + s.priceDrops.size } ?: 0 }
     val waiting = products.sumOf { status[it.id]?.newSinceOpened ?: 0 }
 
     Main({ classes("results", "home") }) {
@@ -61,6 +62,7 @@ fun HomeScreen(app: WebApp) {
                             Text(watchLabel(s))
                         }
                     }
+                    found?.let { priceDropLabel(it) }?.let { cheaper -> Span({ classes("card-foot") }) { Text(cheaper) } }
                     found?.let { lostLabel(it) }?.let { lost -> Span({ classes("card-foot") }) { Text(lost) } }
                 }
             }

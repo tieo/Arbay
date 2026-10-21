@@ -268,7 +268,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private fun Server.registerTools() {
-        tool("list_saved_searches", "Every saved search with its id, words, markets, its alert rules with the price each has learned, and the ids of the new offers it found since last opened.") {
+        tool("list_saved_searches", "Every saved search with its id, words, markets, its alert rules with the price each has learned, the ids of the new offers it found since last opened, and the offers it keeps finding that have come down in price since then.") {
             val products = getJson<List<TrackedProduct>>("/api/products")
             val status = getJsonElement("/api/products/status").let { it as? JsonArray }.orEmpty()
                 .associateBy({ (it as JsonObject)["productId"]?.jsonPrimitive?.contentOrNull }, { it as JsonObject })
@@ -294,20 +294,22 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                             else "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")"
                         "\n  $why: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
                             "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
-                    })
+                    }) + priceDropLines(s)
             }.ifEmpty { "No saved searches." }
         }
 
         tool(
             "new_offers",
-            "Every offer a saved search found since it was last opened, as the watch found it, with its price and link. Opens nothing, so they stay new.",
+            "Every offer a saved search found since it was last opened, as the watch found it, with its price and link, then every offer it already knew that has come down in price since. Opens nothing, so they stay new.",
             props = { string("saved_search_id", "The saved search", required = true) },
         ) { args ->
             val id = args.str("saved_search_id")!!
             val found = getJson<List<Listing>>("/api/products/${id.encodeURLPathPart()}/new")
             found.forEach { seen[it.id] = it }
-            if (found.isEmpty()) "Nothing new in this saved search."
-            else "${found.size} new, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }).joinToString("\n") { it.line() }
+            val status = (getJsonElement("/api/products/status") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.str("productId") == id }
+            (if (found.isEmpty()) "Nothing new in this saved search."
+            else "${found.size} new, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }).joinToString("\n") { it.line() }) +
+                priceDropLines(status)
         }
 
         tool(
@@ -922,6 +924,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages")
     }
 }
+
+/** A line per offer of a saved search's status that came down in price since it was last opened,
+ *  biggest cut first, from the price before the first cut to the price now. */
+private fun priceDropLines(status: JsonObject?): String =
+    (status?.get("priceDrops") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.joinToString("") { d ->
+        "\n  price drop: ${d.str("listingId")} ${d.str("title")} ${d.num("fromEur")?.toLong()} € → ${d.num("toEur")?.toLong()} € ${d.str("url")}"
+    }
 
 private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 private fun JsonObject.num(k: String) = this[k]?.jsonPrimitive?.doubleOrNull

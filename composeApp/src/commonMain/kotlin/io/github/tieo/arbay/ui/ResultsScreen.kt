@@ -76,6 +76,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
+import io.github.tieo.arbay.results.before
 import androidx.compose.ui.unit.dp
 import io.github.tieo.arbay.DevicePosition
 import io.github.tieo.arbay.DisplayCurrency
@@ -410,6 +412,7 @@ private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mar
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             PriceText(listing.comparablePrice, lowest = lowest)
+            state.open.priceDrops[listing.id]?.let { WasPrice(it.before()) }
             if (listing.saleType == SaleType.AUCTION) Muted(listing.bidCount?.let { "$it bids" } ?: "auction")
             if (fresh) Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary))
         }
@@ -431,7 +434,10 @@ private fun OfferTile(listing: Listing, state: ResultsState, modifier: Modifier,
             if (picked) PickedMark(Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds)
+                state.open.priceDrops[listing.id]?.let { WasPrice(it.before()) }
+            }
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Muted(sourceLabel(listing, copies), maxLines = 1)
             mark?.let { SellerMark(it) }
@@ -456,6 +462,12 @@ private fun ChangeSearchDialog(name: String, term: String, onDismiss: () -> Unit
         confirmButton = { TextButton(enabled = newTerm.isNotBlank(), onClick = { onSave(newName, newTerm) }) { Text("Search again") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** What an offer cost before it came down since the search was last opened, struck through. */
+@Composable
+private fun WasPrice(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
 }
 
 /** A tick over a picked offer's photo. */

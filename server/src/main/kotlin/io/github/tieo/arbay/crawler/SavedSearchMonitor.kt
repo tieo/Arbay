@@ -137,6 +137,7 @@ class SavedSearchMonitor(
                 newSinceOpened = unopened[product.id]?.size ?: 0,
                 newListingIds = unopened[product.id]?.toList().orEmpty(),
                 missingTopOffers = TopOffers.missing(product.id),
+                priceDrops = PriceDrops.of(product.id),
             )
         }
     }
@@ -144,6 +145,7 @@ class SavedSearchMonitor(
     /** Called when a saved search is opened: what was waiting has now been seen. */
     fun markOpened(productId: String) {
         synchronized(stateLock) { unopened.remove(productId) }
+        PriceDrops.opened(productId)
         saveStatus()
     }
 
@@ -327,6 +329,8 @@ class SavedSearchMonitor(
             saveStatus()
             return null
         }
+        // Every offer found, not only the new ones: a cut is news about an offer already known.
+        PriceDrops.update(product.id, found.values)
 
         val silent: Boolean
         val fresh: List<String>
@@ -670,6 +674,7 @@ class SavedSearchMonitor(
             lastRun.keys.retainAll(live)
             // A fit alert's own mark sits beside its search's ids and goes only with the search.
             seen.keys.retainAll { it.removePrefix(FIT_KEY) in live }
+            PriceDrops.retain(live)
             SearchState(
                 unopened = unopened.mapValues { it.value.toSet() },
                 lastNew = lastNew.mapValues { it.value.toSet() },

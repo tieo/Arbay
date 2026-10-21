@@ -58,6 +58,7 @@ import io.github.tieo.arbay.results.marketsToAsk
 import io.github.tieo.arbay.results.narrow
 import io.github.tieo.arbay.results.priceSummary
 import io.github.tieo.arbay.results.sourceLabel
+import io.github.tieo.arbay.results.before
 import io.github.tieo.arbay.results.changeSavedSearch
 import io.github.tieo.arbay.state.OfferNotes
 import io.github.tieo.arbay.model.Verdict
@@ -188,8 +189,9 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 val to = route.copy(listing = listing.id, panel = null)
                 val lowest = listing.id in summary.cheapestIds
                 val hide = { (listOf(listing) + copies).forEach(vm::ban) }
-                if (photos) OfferTile(app, listing, copies, listing.id == selected, lowest, to, picking, hide)
-                else OfferRow(app, listing, copies, listing.id == selected, lowest, to, picking, hide)
+                val was = open.priceDrops[listing.id]?.before()
+                if (photos) OfferTile(app, listing, copies, listing.id == selected, lowest, was, to, picking, hide)
+                else OfferRow(app, listing, copies, listing.id == selected, lowest, was, to, picking, hide)
             }
         }
     }
@@ -373,7 +375,7 @@ private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (F
 }
 
 @Composable
-private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, picking: Boolean, onHide: () -> Unit) {
+private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, was: String?, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-row", "active".takeIf { active }).toTypedArray())
@@ -392,6 +394,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
             }
             Div({ classes("offer-price") }) {
                 Price(listing.comparablePrice, lowest = lowest)
+                was?.let { WasPrice(it) }
                 if (listing.saleType == SaleType.AUCTION) Span({ classes("muted", "small") }) { Text(listing.bidCount?.let { "$it bids" } ?: "auction") }
             }
         }
@@ -400,7 +403,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
 }
 
 @Composable
-private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, to: Route, picking: Boolean, onHide: () -> Unit) {
+private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, was: String?, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-tile", "active".takeIf { active }).toTypedArray())
@@ -410,6 +413,7 @@ private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, acti
             Thumb(listing, "tile-photo")
             Div({ classes("tile-text") }) {
                 Price(listing.comparablePrice, lowest = lowest)
+                was?.let { WasPrice(it) }
                 Span({ classes("offer-title") }) { Text(listing.title.tidyTitle()) }
                 Span({ classes("offer-meta") }) { Text(sourceLabel(listing, copies)) }
                 SellerMarkLine(app, listing)
@@ -417,6 +421,12 @@ private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, acti
         }
         Div({ classes("offer-actions") }) { IconButton(Glyph.EyeOff, "Hide this offer") { onHide() } }
     }
+}
+
+/** What an offer cost before it came down since the search was last opened, struck through. */
+@Composable
+private fun WasPrice(text: String) {
+    Span({ classes("price-was") }) { Text(text) }
 }
 
 /** The verdict on this offer, when one was written; "Avoid" alone in the warning colour. */

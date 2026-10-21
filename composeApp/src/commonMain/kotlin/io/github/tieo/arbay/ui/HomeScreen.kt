@@ -48,6 +48,7 @@ import io.github.tieo.arbay.navigation.Source
 import io.github.tieo.arbay.results.savedSearchSubtitle
 import io.github.tieo.arbay.results.watchLabel
 import io.github.tieo.arbay.results.lostLabel
+import io.github.tieo.arbay.results.priceDropLabel
 
 /**
  * Where the app opens: a search box, then the saved searches with what each found since it was last
@@ -62,7 +63,7 @@ fun HomeScreen(session: Session) {
     val error by session.products.error.collectAsState()
     val history by SearchHistoryStore.entries.collectAsState()
     val freeMatches by session.freeItems.newMatches.collectAsState()
-    val ordered = products.sortedByDescending { status[it.id]?.newSinceOpened ?: 0 }
+    val ordered = products.sortedByDescending { status[it.id]?.let { s -> s.newSinceOpened + s.priceDrops.size } ?: 0 }
     val waiting = products.sumOf { status[it.id]?.newSinceOpened ?: 0 }
     val unsaved = history.filter { entry -> products.none { it.searchQuery.text.equals(entry.searchQuery.text, true) && it.searchQuery.category == entry.searchQuery.category } }
 
@@ -112,7 +113,7 @@ fun HomeScreen(session: Session) {
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Muted(
-                        listOfNotNull(savedSearchSubtitle(product), found?.takeIf { it.watched }?.let { watchLabel(it) }, found?.let { lostLabel(it) }).joinToString(" · "),
+                        listOfNotNull(savedSearchSubtitle(product), found?.takeIf { it.watched }?.let { watchLabel(it) }, found?.let { priceDropLabel(it) }, found?.let { lostLabel(it) }).joinToString(" · "),
                         maxLines = 1,
                     )
                 }

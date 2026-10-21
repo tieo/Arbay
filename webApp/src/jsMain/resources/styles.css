@@ -218,6 +218,8 @@ img { display: block; }
     text-underline-offset: 4px;
 }
 .price.big { font-size: 26px; letter-spacing: -0.02em; }
+.price-was { color: var(--muted); font-size: 0.82em; text-decoration: line-through; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile-text .price-was { align-self: flex-start; }
 .old-price { color: var(--muted); text-decoration: line-through; margin-left: 8px; }
 
 /* Controls. */
