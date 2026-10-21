@@ -125,4 +125,16 @@ class PhotoPrintsTest {
         assertEquals(listOf("KLEINANZEIGEN:pp-copy"), PhotoPrints.copiesOf(source).map { it.listingId })
         assertFalse(PhotoPrints.copiesOf(repost).any { it.listingId == "KLEINANZEIGEN:pp-src" })
     }
+
+    @Test
+    fun `a dealer's ad in a district and the same ad in its city are one place`() {
+        // AP-Automobile's Crafter: Kleinanzeigen places it in Aubing by its postcode 81249, mobile.de
+        // in München by name. Compared by their names they were two places, and the van read as a
+        // likely scam made of someone else's photos.
+        val aubing = PhotoPrints.Entry("KLEINANZEIGEN:3545414060", "https://ka/1", place = "Aubing", lat = 48.1549, lon = 11.4107)
+        val munich = PhotoPrints.Entry("MOBILE_DE:51545473665504", "https://mobile/1", place = "München", seller = "AP-Automobile GmbH")
+        val byName = mapOf("München" to (48.1345 to 11.571), "Köln" to (50.9375 to 6.9603))
+        assertFalse(PhotoPrints.apart(aubing, munich) { byName[it.place] })
+        assertTrue(PhotoPrints.apart(aubing, munich.copy(place = "Köln")) { byName[it.place] })
+    }
 }

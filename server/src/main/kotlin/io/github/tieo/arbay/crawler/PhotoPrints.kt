@@ -151,7 +151,12 @@ object PhotoPrints {
     suspend fun record(listing: Listing, photos: List<String>, firstFile: File? = null): Boolean {
         if (photos.isEmpty()) return false
         val known = synchronized(this) { entries[listing.id] }
-        if (known != null && known.prints.size >= photos.size) return true
+        val at = whereIs(listing)
+        if (known != null && known.prints.size >= photos.size) {
+            // Printed before the place was read as a point: the point is added, the photos kept.
+            if (known.lat == null && at != null) synchronized(this) { put(known.copy(lat = at.first, lon = at.second)); dirty = true }
+            return true
+        }
         val prints = coroutineScope {
             photos.take(30).mapIndexed { index, url ->
                 async {
@@ -164,7 +169,7 @@ object PhotoPrints {
         val location = listing.location
         val entry = Entry(
             id = listing.id, url = listing.url,
-            place = location?.city ?: location?.raw, lat = location?.latitude, lon = location?.longitude,
+            place = location?.city ?: location?.raw, lat = at?.first, lon = at?.second,
             seller = listing.seller?.name, prints = (known?.prints.orEmpty() + prints).distinct(),
         )
         synchronized(this) { put(entry); dirty = true }
@@ -198,7 +203,9 @@ object PhotoPrints {
 
     /** The ads placed elsewhere or by someone else that show one of [listing]'s photos. */
     fun copiesOf(listing: Listing): List<PhotoCopy> = synchronized(this) {
-        val own = entries[listing.id] ?: return emptyList()
+        val own = entries[listing.id]?.let { e ->
+            if (e.lat != null) e else whereIs(listing)?.let { e.copy(lat = it.first, lon = it.second) } ?: e
+        } ?: return emptyList()
         own.prints.flatMap { print -> othersWith(print, own) }
             .distinctBy { it.id }
             .map { PhotoCopy(it.id, it.url, it.place) }
@@ -221,11 +228,29 @@ object PhotoPrints {
 
     private fun placeKey(e: Entry) = e.place?.lowercase()?.let { Regex("""\p{L}+""").find(it)?.value }
 
-    /** Whether two ads were placed by different sellers or in different places. */
-    internal fun apart(a: Entry, b: Entry): Boolean {
+    /**
+     * Where a listing is, as a point: its own coordinates, or its postcode or town looked up. A
+     * place's name is no measure of distance: a dealer's van in "Aubing" on Kleinanzeigen and the
+     * same van in "München" on mobile.de are one dealer's two ads, ten kilometres apart by the
+     * postcode, and compared by name they read as someone else's photos.
+     */
+    private fun whereIs(listing: Listing): Pair<Double, Double>? {
+        val loc = listing.location ?: return null
+        if (loc.latitude != null && loc.longitude != null) return loc.latitude!! to loc.longitude!!
+        return runCatching { Geocoder.resolve(loc.country, loc.zip, loc.city) }.getOrNull()
+    }
+
+    /** Whether two ads were placed by different sellers or in different places. [where] places an
+     *  entry printed without a point by its place's name. */
+    internal fun apart(
+        a: Entry,
+        b: Entry,
+        where: (Entry) -> Pair<Double, Double>? = { e -> e.place?.let { runCatching { Geocoder.resolve(null, null, it) }.getOrNull() } },
+    ): Boolean {
         if (a.seller != null && b.seller != null && !a.seller.equals(b.seller, ignoreCase = true)) return true
-        if (a.lat != null && a.lon != null && b.lat != null && b.lon != null)
-            return Geocoder.haversine(a.lat, a.lon, b.lat, b.lon) > SAME_PLACE_KM
+        val pointA = if (a.lat != null && a.lon != null) a.lat to a.lon else where(a)
+        val pointB = if (b.lat != null && b.lon != null) b.lat to b.lon else where(b)
+        if (pointA != null && pointB != null) return Geocoder.haversine(pointA.first, pointA.second, pointB.first, pointB.second) > SAME_PLACE_KM
         val pa = placeKey(a) ?: return false
         val pb = placeKey(b) ?: return false
         return pa != pb
