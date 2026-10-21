@@ -151,6 +151,8 @@ class ListingPlaceTest {
         assertNull(VehicleTextParser.parseWheelbaseMm("Langer Radstand !!!"))
         assertNull(VehicleTextParser.parseWheelbaseMm("Radstand verstärkt, Motor 2,1 Ltr. - 120 kW"))
         assertNull(VehicleTextParser.parseWheelbaseMm(""""wheelBase":null,"costModel":null,4"""))
+        assertNull(VehicleTextParser.parseWheelbaseMm("Volkswagen Crafter Kasten mittlerer Radstand 2.0 TDI 35 HD"))
+        assertEquals(3640, VehicleTextParser.parseWheelbaseMm("Radstand 3,64"))
     }
 
     @Test

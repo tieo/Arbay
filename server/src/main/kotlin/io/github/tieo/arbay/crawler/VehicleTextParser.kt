@@ -306,6 +306,10 @@ object VehicleTextParser {
             val grouped = Regex("""^\d{1,2}[.,]\d{3}$""").matches(raw)
             val asNumber = raw.replace(",", ".").let { if (grouped) it.replace(".", "") else it }
             val value = asNumber.toDoubleOrNull() ?: return@firstNotNullOfOrNull null
+            // Metres with no unit are written to the centimetre, "3,64"; a number with one decimal
+            // right behind the word is the engine, "mittlerer Radstand 2.0 TDI", which read as a
+            // two metre wheelbase.
+            if (unit.isEmpty() && value < 10 && !Regex("""[.,]\d{2,3}$""").containsMatchIn(raw)) return@firstNotNullOfOrNull null
             val mm = when {
                 unit == "mm" -> value
                 unit == "cm" -> value * 10
