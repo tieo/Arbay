@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.model
 
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
@@ -131,3 +133,25 @@ data class FitAlertSettings(
     val home: String? = null,
     val softDriveHours: Double = 4.0,
 )
+
+/** How often a watched search may look again, and the words for each. */
+val WATCH_INTERVALS: List<Pair<Int, String>> =
+    listOf(30 to "30 min", 60 to "1 hour", 180 to "3 hours", 360 to "6 hours", 720 to "12 hours", 1440 to "day")
+
+/**
+ * A new notification rule from what the form holds; [words] is comma separated. [minPriceEur]
+ * keeps out what costs too little to be the thing: a bundle priced per piece, an empty box, a bid.
+ * With [learnDays], the rule watches the market that long first and then tells only about finds
+ * below the best seen.
+ */
+fun newRule(maxPriceEur: Int?, condition: String?, words: String, learnDays: Int? = null, minPriceEur: Int? = null): NotificationSubfilter {
+    val now = Clock.System.now()
+    return NotificationSubfilter(
+        id = "r" + now.toEpochMilliseconds().toString(36),
+        minPriceEur = minPriceEur,
+        maxPriceEur = maxPriceEur,
+        condition = condition,
+        mustContainAnyOf = words.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+        learnUntil = learnDays?.takeIf { it > 0 }?.let { now + it.days },
+    )
+}

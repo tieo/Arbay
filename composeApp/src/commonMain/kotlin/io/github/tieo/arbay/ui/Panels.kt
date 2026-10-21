@@ -56,12 +56,12 @@ import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.ResultsState
-import io.github.tieo.arbay.results.WATCH_INTERVALS
+import io.github.tieo.arbay.model.WATCH_INTERVALS
 import io.github.tieo.arbay.results.blockWord
 import io.github.tieo.arbay.results.clearBand
 import io.github.tieo.arbay.results.coveredMarkets
 import io.github.tieo.arbay.results.isProblem
-import io.github.tieo.arbay.results.newRule
+import io.github.tieo.arbay.model.newRule
 import io.github.tieo.arbay.results.saidWhat
 import io.github.tieo.arbay.results.setAliases
 import io.github.tieo.arbay.results.setOtherWords
@@ -329,21 +329,25 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
             }
         }
     }
+    var min by remember { mutableStateOf("") }
     var max by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf<String?>(null) }
     var words by remember { mutableStateOf("") }
     var learnDays by remember { mutableStateOf("") }
     Panel {
-        OutlinedTextField(max, { max = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Up to €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(min, { min = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("From €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            OutlinedTextField(max, { max = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("Up to €") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        }
         Choices { listOf(null to "Any condition", "NEW" to "New", "USED" to "Used").forEach { (v, l) -> Choice(l, condition == v) { condition = v } } }
         OutlinedTextField(words, { words = it }, Modifier.fillMaxWidth(), label = { Text("Has one of these words") }, singleLine = true)
         OutlinedTextField(
             learnDays, { learnDays = it.filter(Char::isDigit).take(3) }, Modifier.fillMaxWidth(),
             label = { Text("Beats the best of the first … days") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
-        TextButton(enabled = max.isNotEmpty() || condition != null || words.isNotBlank() || learnDays.isNotEmpty(), onClick = {
-            session.products.setNotificationSubfilters(bookmark, bookmark.notificationSubfilters + newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull()))
-            max = ""; condition = null; words = ""; learnDays = ""
+        TextButton(enabled = min.isNotEmpty() || max.isNotEmpty() || condition != null || words.isNotBlank() || learnDays.isNotEmpty(), onClick = {
+            session.products.setNotificationSubfilters(bookmark, bookmark.notificationSubfilters + newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull(), min.toIntOrNull()))
+            min = ""; max = ""; condition = null; words = ""; learnDays = ""
         }) { Text("Add this rule") }
     }
 }

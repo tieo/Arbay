@@ -6,7 +6,6 @@ import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Location
-import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.VehicleInfo
 import io.github.tieo.arbay.model.importVat
@@ -14,8 +13,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.round
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.days
 
 /**
  * One offer as it reads in full: what the search card carried, with what its own page adds. The
@@ -62,21 +59,3 @@ fun importVatNote(listing: Listing): String? = listing.importVat(ImportRules.cur
 fun copyLabel(copy: Listing, of: Listing): String =
     "Also on ${copy.platformId.displayName}" + if (copy.comparablePrice != of.comparablePrice) " · ${copy.comparablePrice.format()}" else ""
 
-/** How often a watched search may look again, and the words for each. */
-val WATCH_INTERVALS: List<Pair<Int, String>> =
-    listOf(30 to "30 min", 60 to "1 hour", 180 to "3 hours", 360 to "6 hours", 720 to "12 hours", 1440 to "day")
-
-/**
- * A new notification rule from what the form holds; [words] is comma separated. With [learnDays],
- * the rule watches the market that long first and then tells only about finds below the best seen.
- */
-fun newRule(maxPriceEur: Int?, condition: String?, words: String, learnDays: Int? = null): NotificationSubfilter {
-    val now = Clock.System.now()
-    return NotificationSubfilter(
-        id = "r" + now.toEpochMilliseconds().toString(36),
-        maxPriceEur = maxPriceEur,
-        condition = condition,
-        mustContainAnyOf = words.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-        learnUntil = learnDays?.takeIf { it > 0 }?.let { now + it.days },
-    )
-}

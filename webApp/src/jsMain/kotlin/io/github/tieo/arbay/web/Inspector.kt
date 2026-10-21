@@ -47,11 +47,11 @@ import io.github.tieo.arbay.results.toggleMarket
 import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSuggestedWord
 import io.github.tieo.arbay.results.unblockWord
-import io.github.tieo.arbay.results.WATCH_INTERVALS
+import io.github.tieo.arbay.model.WATCH_INTERVALS
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
 import io.github.tieo.arbay.results.importVatNote
-import io.github.tieo.arbay.results.newRule
+import io.github.tieo.arbay.model.newRule
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
 import io.github.tieo.arbay.state.OfferNotes
@@ -358,6 +358,7 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
 
 @Composable
 private fun RuleForm(onAdd: (NotificationSubfilter) -> Unit) {
+    var min by remember { mutableStateOf("") }
     var max by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf<String?>(null) }
     var words by remember { mutableStateOf("") }
@@ -366,10 +367,14 @@ private fun RuleForm(onAdd: (NotificationSubfilter) -> Unit) {
         classes("rule-form")
         addEventListener("submit") { event ->
             event.preventDefault()
-            onAdd(newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull()))
-            max = ""; condition = null; words = ""; learnDays = ""
+            onAdd(newRule(max.toIntOrNull(), condition, words, learnDays.toIntOrNull(), min.toIntOrNull()))
+            min = ""; max = ""; condition = null; words = ""; learnDays = ""
         }
     }) {
+        Input(InputType.Number) {
+            classes("control"); placeholder("From €"); attr("aria-label", "From this price")
+            value(min); onInput { min = it.value?.toString().orEmpty() }
+        }
         Input(InputType.Number) {
             classes("control"); placeholder("Up to €"); attr("aria-label", "Up to this price")
             value(max); onInput { max = it.value?.toString().orEmpty() }

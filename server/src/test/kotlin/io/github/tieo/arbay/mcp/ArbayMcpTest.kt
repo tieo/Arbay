@@ -155,4 +155,43 @@ class ArbayMcpTest {
         products.delete(saved.id)
         mcp.close()
     }
+
+    /** How often a watch looks and which finds it pushes are set over MCP as in the app's panel. */
+    @Test
+    fun aWatchsIntervalAndAlertRulesAreChanged() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        routing {
+            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            mcpRoutes("", client)
+        }
+        val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "",
+            name = "watch change test",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "watch change test", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = kotlin.time.Clock.System.now(),
+            autoFetch = io.github.tieo.arbay.model.AutoFetchSettings(enabled = true, intervalMinutes = 180),
+            notificationSubfilters = listOf(io.github.tieo.arbay.model.NotificationSubfilter(
+                id = "r1", minPriceEur = 80, learnUntil = kotlin.time.Instant.parse("2026-10-22T12:34:56Z"), bestSeenEur = 85,
+            )),
+        ))
+        val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
+        val changed = (mcp.callTool(name = "change_saved_search", arguments = mapOf(
+            "id" to saved.id, "look_every_minutes" to 60, "remove_alert_rules" to listOf("r1"), "alert_from_eur" to 60, "alert_up_to_eur" to 130,
+        )).content.single() as TextContent).text
+        assertContains(changed, "looks every 60 min")
+        assertContains(changed, ": €60–130")
+        val after = products.getById(saved.id)!!
+        assertEquals(60, after.autoFetch.intervalMinutes)
+        assertEquals(listOf(60 to 130), after.notificationSubfilters.map { it.minPriceEur to it.maxPriceEur })
+        assertEquals(null, after.notificationSubfilters.single().learnUntil)
+        val refused = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to saved.id, "look_every_minutes" to 45)).content.single() as TextContent).text
+        assertTrue(refused.startsWith("Not changed"), refused)
+        products.delete(saved.id)
+        mcp.close()
+    }
 }
