@@ -79,6 +79,16 @@ class VanDimensionsTest {
     }
 
     @Test
+    fun `VW's trim as the title outweighs a code in the text`() {
+        // AutoScout24 32c5b9cf: titled with VW's trim, "L3H2" in the seller's text, a high roof in
+        // every photo. Read as VW's Normaldach it was removed from a search for a high roof.
+        val d = VanDimensions.read("Volkswagen Crafter 35 mittellang Hochdach FWD VW Crafter L3H2 – 1. Hand, Automatik")
+        assertEquals(VanSize.HIGH_ROOF, d.height)
+        assertTrue(d.heightSure)
+        assertEquals(VanSize.MEDIUM, d.length)
+    }
+
+    @Test
     fun `a Crafter dealer's short names say mittellang Hochdach`() {
         for (text in listOf("Modell: VW Crafter 35 D MLH", "Volkswagen Crafter 2.0TDI MITTEL HOCH AUTOM",
                 "Crafter Kasten35 DSG Standh mittelhoch Navi", "VW Crafter 30 Kasten MR Hochraum-Kasten")) {

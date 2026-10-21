@@ -121,9 +121,15 @@ object VanDimensions {
     // for mittellang Hochdach ("VW Crafter 35 D MLH").
     private val highRoof = Regex("""\b(hochdach|hochraum\w*|hoch|hd|mlh|mittelhoch|mittellanghoch)\b""", RegexOption.IGNORE_CASE)
     private val normalRoof = Regex("""\bnormaldach\b""", RegexOption.IGNORE_CASE)
-    // The trim line a dealer picks from VW's own catalogue on mobile.de ("Ausstattungslinie: 35
-    // mittellang Hochdach FWD"): there Hochdach is exactly the high roof, Superhochdach its own trim.
-    private val catalogueHighRoof = Regex("""ausstattungslinie:[^\n]*\bhochdach\b""", RegexOption.IGNORE_CASE)
+    // The trim line a seller picks from VW's own catalogue: on mobile.de as "Ausstattungslinie: 35
+    // mittellang Hochdach FWD", on AutoScout24 and Kleinanzeigen as the title itself ("Volkswagen
+    // Crafter 35 mittellang Hochdach FWD"). There Hochdach is exactly the high roof, Superhochdach
+    // its own trim, and it outweighs a code beside it: that van's seller wrote "L3H2" in the text,
+    // VW's length with the common roof, and its photos show the high roof.
+    private val catalogueHighRoof = Regex(
+        """ausstattungslinie:[^\n]*\bhochdach\b|\b(?:30|35|50)\s+(?:mittellang|lang)\s+hochdach\s+(?:fwd|rwd|4motion)\b""",
+        RegexOption.IGNORE_CASE,
+    )
     // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5.
     private val overhang = Regex("""\b(verlängerte[mnr]? überhang|überhang)\b""", RegexOption.IGNORE_CASE)
     // VW's own short names for the wheelbases: MR mittlerer Radstand, LR langer Radstand.
