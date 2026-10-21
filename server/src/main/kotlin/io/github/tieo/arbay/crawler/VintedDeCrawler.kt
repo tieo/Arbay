@@ -5,7 +5,7 @@ import io.ktor.client.*
 import kotlin.time.Clock
 import org.jsoup.Jsoup
 
-class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
+class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, KnowsAdState {
 
     /** The product's name off a card, without the fields the title attribute reads out after it. */
     internal fun cardTitle(item: org.jsoup.nodes.Element): String? =
@@ -37,6 +37,28 @@ class VintedDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
             ?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.joinToString("\n")
             ?.takeIf { it.isNotBlank() }
             ?.let { ListingDetail(description = it) }
+
+    override suspend fun adState(url: String): AdState? = try {
+        adStateOf(fetchWithFallback(client, url.substringBefore("?"), "Vinted"))
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * An item page's state, read off the item the page's script carries. A sold item keeps its page
+     * and its price, and only a status box ("Verkauft") and a buy button that is gone tell it apart
+     * from one on offer; a reserved or hidden item is promised to a buyer or taken off by its seller,
+     * and may come back.
+     */
+    internal fun adStateOf(html: String): AdState? {
+        val page = html.replace("\\\"", "\"")
+        return when {
+            "\"is_reserved\":true" in page || "\"is_hidden\":true" in page -> AdState.PAUSED
+            "\"name\":\"buyer_item_status\"" in page -> AdState.DELETED
+            "\"can_buy\":true" in page -> AdState.LIVE
+            else -> null
+        }
+    }
 
     /** One page of the catalog, unless the search asked for more offers than usual: each page
      *  is a fetch Vinted counts towards its challenge, so the rest are read only when wanted. */
