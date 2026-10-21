@@ -222,11 +222,11 @@ class ArbayMcpTest {
             createdAt = kotlin.time.Clock.System.now(),
         ))
         val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
-        val set = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 80)).content.single() as TextContent).text
-        assertContains(set, "pushes a fit of 80 % or more")
-        assertEquals(0.8, products.getById(van.id)!!.fitAlert.minScore, 0.001)
+        val set = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 82)).content.single() as TextContent).text
+        assertContains(set, "pushes a fit of 82 % or more")
+        assertEquals(0.82, products.getById(van.id)!!.fitAlert.minScore, 0.001)
         val list = (mcp.callTool(name = "list_saved_searches", arguments = emptyMap()).content.single() as TextContent).text
-        assertContains(list, "fits 80 % or more")
+        assertContains(list, "fits 82 % or more")
         val refused = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to drive.id, "fit_alert_percent" to 80)).content.single() as TextContent).text
         assertTrue(refused.startsWith("Not changed"), refused)
         mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 0))

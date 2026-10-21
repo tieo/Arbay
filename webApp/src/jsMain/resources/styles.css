@@ -333,6 +333,8 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .switch input:checked + .switch-track::after { transform: translateX(14px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .range { width: 100%; accent-color: var(--accent); }
+.range-steps { display: flex; align-items: center; gap: 6px; }
+.range-steps .range { flex: 1; }
 
 /* Offers as rows. */
 .rows { display: flex; flex-direction: column; padding: 6px var(--pad) var(--pad); }

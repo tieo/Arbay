@@ -121,7 +121,7 @@ data class TrackedProduct(
  *
  * A new offer is sent when it would rank among the [topN] best of everything the search finds right
  * now and fits at least [minScore], and never twice. The rank keeps a rich week from pushing every
- * decent offer; [minScore] is the user's own floor, picked from [FIT_ALERT_LEVELS], below which
+ * decent offer; [minScore] is the user's own floor, any whole percent in [FIT_ALERT_PERCENT], below which
  * nothing is worth being told about however thin the market is.
  */
 @Serializable
@@ -133,8 +133,9 @@ data class FitAlertSettings(
     val softDriveHours: Double = 4.0,
 )
 
-/** The fits a fit alert can be set to tell about from, as the share of a perfect fit. */
-val FIT_ALERT_LEVELS: List<Double> = listOf(0.6, 0.7, 0.8, 0.9)
+/** The whole percentages of a perfect fit a fit alert can be set to tell about from. Below half,
+ *  an offer misses more of the search's wishes than it meets. */
+val FIT_ALERT_PERCENT: IntRange = 50..100
 
 /** How often a watched search may look again, and the words for each. */
 val WATCH_INTERVALS: List<Pair<Int, String>> =

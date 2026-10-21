@@ -48,9 +48,8 @@ import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSuggestedWord
 import io.github.tieo.arbay.results.unblockWord
 import io.github.tieo.arbay.model.WATCH_INTERVALS
-import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.FIT_ALERT_PERCENT
 import io.github.tieo.arbay.model.weighsAFit
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
@@ -349,12 +348,25 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
         if (bookmark.searchQuery.weighsAFit) {
             val fit = bookmark.fitAlert
-            P { Text("a fit of at least") }
-            Div({ classes("chips") }) {
-                Chip("Off", !fit.enabled) { app.products.setFitAlert(bookmark, null) }
-                FIT_ALERT_LEVELS.forEach { level ->
-                    Chip("${(level * 100).roundToInt()} %", fit.enabled && abs(fit.minScore - level) < 0.001) { app.products.setFitAlert(bookmark, level) }
+            // Dragged here and saved where the thumb is let go, as the free-item score is.
+            var percent by remember(bookmark.id, fit.minScore) { mutableStateOf((fit.minScore * 100).roundToInt().coerceIn(FIT_ALERT_PERCENT)) }
+            fun step(by: Int) {
+                percent = (percent + by).coerceIn(FIT_ALERT_PERCENT)
+                app.products.setFitAlert(bookmark, percent / 100.0)
+            }
+            Switch("a fit of at least $percent %", fit.enabled) { on -> app.products.setFitAlert(bookmark, if (on) percent / 100.0 else null) }
+            // The slider finds the neighbourhood, a step at a time lands on the exact percent.
+            if (fit.enabled) Div({ classes("range-steps") }) {
+                IconButton(Glyph.Minus, "One percent less") { step(-1) }
+                Input(InputType.Range) {
+                classes("range")
+                attr("min", FIT_ALERT_PERCENT.first.toString()); attr("max", FIT_ALERT_PERCENT.last.toString())
+                attr("aria-label", "Fit a new offer has to reach")
+                value(percent.toString())
+                onInput { percent = it.value?.toInt() ?: percent }
+                onChange { app.products.setFitAlert(bookmark, percent / 100.0) }
                 }
+                IconButton(Glyph.Plus, "One percent more") { step(1) }
             }
         }
         bookmark.notificationSubfilters.forEach { rule ->

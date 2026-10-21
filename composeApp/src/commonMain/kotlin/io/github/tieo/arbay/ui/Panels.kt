@@ -15,7 +15,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -26,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,9 +61,8 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.model.WATCH_INTERVALS
-import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.FIT_ALERT_PERCENT
 import io.github.tieo.arbay.model.weighsAFit
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import io.github.tieo.arbay.results.blockWord
 import io.github.tieo.arbay.results.clearBand
@@ -328,13 +330,26 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
     if (bookmark.searchQuery.weighsAFit) {
         val fit = bookmark.fitAlert
-        Text("a fit of at least", style = MaterialTheme.typography.bodyMedium)
-        Choices {
-            Choice("Off", !fit.enabled) { session.products.setFitAlert(bookmark, null) }
-            FIT_ALERT_LEVELS.forEach { level ->
-                Choice("${(level * 100).roundToInt()} %", fit.enabled && abs(fit.minScore - level) < 0.001) { session.products.setFitAlert(bookmark, level) }
-            }
+        // Dragged here and saved where the thumb is let go, as the free-item score is.
+        var percent by remember(bookmark.id, fit.minScore) { mutableStateOf((fit.minScore * 100).roundToInt().coerceIn(FIT_ALERT_PERCENT)) }
+        fun step(by: Int) {
+            percent = (percent + by).coerceIn(FIT_ALERT_PERCENT)
+            session.products.setFitAlert(bookmark, percent / 100.0)
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("a fit of at least", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            // The slider finds the neighbourhood, a step at a time lands on the exact percent.
+            if (fit.enabled) IconButton(onClick = { step(-1) }, enabled = percent > FIT_ALERT_PERCENT.first) { Icon(Icons.Outlined.Remove, "One percent less") }
+            Text("$percent %", style = MaterialTheme.typography.bodyLarge)
+            if (fit.enabled) IconButton(onClick = { step(1) }, enabled = percent < FIT_ALERT_PERCENT.last) { Icon(Icons.Outlined.Add, "One percent more") }
+            Switch(fit.enabled, { on -> session.products.setFitAlert(bookmark, if (on) percent / 100.0 else null) })
+        }
+        if (fit.enabled) Slider(
+            percent.toFloat(), { percent = it.roundToInt() },
+            // Whole percents by rounding rather than steps, which would draw fifty tick marks.
+            valueRange = FIT_ALERT_PERCENT.first.toFloat()..FIT_ALERT_PERCENT.last.toFloat(),
+            onValueChangeFinished = { session.products.setFitAlert(bookmark, percent / 100.0) },
+        )
     }
     bookmark.notificationSubfilters.forEach { rule ->
         Row(verticalAlignment = Alignment.CenterVertically) {

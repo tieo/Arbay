@@ -31,7 +31,7 @@ import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.WATCH_INTERVALS
-import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.FIT_ALERT_PERCENT
 import io.github.tieo.arbay.model.weighsAFit
 import io.github.tieo.arbay.model.newRule
 import io.github.tieo.arbay.model.canMessage
@@ -440,7 +440,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_from_eur", "Add an alert rule: push for finds from this landed price")
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
-                number("fit_alert_percent", "Vehicle searches: push a new offer that fits the search's wishes at least this well: ${FIT_ALERT_LEVELS.joinToString { "${(it * 100).toInt()}" }}; 0 stops it")
+                number("fit_alert_percent", "Vehicle searches: push a new offer that fits the search's wishes at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
             },
         ) { args ->
             val id = args.str("id")!!
@@ -449,9 +449,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val every = args.num("look_every_minutes")?.toInt()
             if (every != null && every != 0 && WATCH_INTERVALS.none { it.first == every })
                 return@tool "Not changed: look_every_minutes is one of ${WATCH_INTERVALS.joinToString { it.first.toString() }}, or 0."
-            val fitLevel = args.num("fit_alert_percent")?.let { it / 100 }
-            if (fitLevel != null && fitLevel != 0.0 && FIT_ALERT_LEVELS.none { kotlin.math.abs(it - fitLevel) < 0.001 })
-                return@tool "Not changed: fit_alert_percent is one of ${FIT_ALERT_LEVELS.joinToString { "${(it * 100).toInt()}" }}, or 0."
+            val fitPercent = args.num("fit_alert_percent")
+            if (fitPercent != null && fitPercent != 0.0 && (fitPercent % 1.0 != 0.0 || fitPercent.toInt() !in FIT_ALERT_PERCENT))
+                return@tool "Not changed: fit_alert_percent is a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}, or 0."
+            val fitLevel = fitPercent?.let { it / 100 }
             if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.weighsAFit)
                 return@tool "Not changed: a fit is weighed from a vehicle search's wishes, and this search has none."
             val gone = args.strs("remove_alert_rules").toSet()
