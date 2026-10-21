@@ -15,8 +15,9 @@ import kotlin.time.Clock
  * and weighed against the others, because a buyer trades them off: a van over budget can still be
  * the best one if everything else is right, and one that scrapes past every filter with several
  * small misses is not. Only a few things rule an offer out entirely: it is not the kind of vehicle
- * wanted at all, it is offered to traders or for export only, its dealer has under four stars
- * on the market's own reviews, or it shows another ad's photos.
+ * wanted at all, it runs on another fuel or states another drive, it is offered to traders or for
+ * export only, its dealer has under four stars on the market's own reviews, or it shows another
+ * ad's photos.
  *
  * The weights were set with the user on a real search (a Crafter): the van's size first, then the
  * price, where every euro counts, then gearbox, mileage, age and drive; the drive to the seller
@@ -48,6 +49,7 @@ object FitScore {
             """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""",
     )
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
+    private val rearWheel = Regex("""(?i)heckantrieb|hinterradantrieb|\brwd\b""")
     private val noAirConditioning = Regex("""(?i)keine klimaanlage|(ohne|keine?)\s+klima""")
     private val airConditioning = Regex("""(?i)klimaanlage|klimaautomatik|climatronic|\bklima\b|airco|air ?con""")
 
@@ -82,6 +84,17 @@ object FitScore {
         if (stars != null && stars < 4.0) return null
 
         val v = listing.vehicle
+        // The drive decides the body: a Crafter driven at the rear or on all four wheels sits its
+        // load floor 100 mm higher than the front-driven one, so the hold is 100 mm lower and its
+        // doors are too (VW's data sheet, L3H2: 1,726 against 1,626 mm), and a conversion planned
+        // around the one does not fit the other. A drive the ad states and the search does not want
+        // rules the offer out; one it does not state is weighed below.
+        val statedDrive = v?.drivetrain ?: when {
+            allWheel.containsMatchIn(text) -> Drivetrain.AWD
+            rearWheel.containsMatchIn(text) -> Drivetrain.RWD
+            else -> null
+        }
+        if (wishes.drivetrain != null && statedDrive != null && statedDrive != wishes.drivetrain) return null
         val misses = mutableListOf<String>()
 
         // Size: every size the listing could be, against the sizes wanted.
@@ -107,14 +120,7 @@ object FitScore {
                 else -> 0.1.also { misses += if (wanted == Transmission.AUTOMATIC) "manual" else "automatic" }
             }
         }
-        val drive = wishes.drivetrain?.let { wanted ->
-            val stated = v?.drivetrain ?: if (allWheel.containsMatchIn(text)) Drivetrain.AWD else null
-            when (stated) {
-                wanted -> 1.0
-                null -> 0.8
-                else -> 0.3.also { misses += stated.name }
-            }
-        }
+        val drive = wishes.drivetrain?.let { if (statedDrive == null) 0.8 else 1.0 }
         val min = wishes.minPriceEur?.toDouble()
         val max = wishes.maxPriceEur?.toDouble()
         val price = if (max != null) linear(priceEur, (min ?: 0.0) + ((max - (min ?: 0.0)) * 0.25), max * 1.03) else null

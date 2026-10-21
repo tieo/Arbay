@@ -121,9 +121,16 @@ class FitScoreTest {
     fun `every miss costs something and is named`() {
         val perfect = fit(van())!!.score
         val noAc = fit(van(description = "Keine Klimaanlage oder -automatik"))!!
-        val awd = fit(van(vehicle = van().vehicle!!.copy(drivetrain = Drivetrain.AWD)))!!
         assertTrue(noAc.score < perfect && "no air conditioning" in noAc.misses)
-        assertTrue(awd.score < perfect && "AWD" in awd.misses)
+    }
+
+    @Test
+    fun `another drive than the one wanted rules the van out, an unstated one costs a little`() {
+        assertNull(fit(van(vehicle = van().vehicle!!.copy(drivetrain = Drivetrain.AWD))))
+        assertNull(fit(van(vehicle = van().vehicle!!.copy(drivetrain = null), description = "Crafter 35 Kasten Heckantrieb")))
+        assertNull(fit(van(vehicle = van().vehicle!!.copy(drivetrain = null), description = "Crafter 35 4MOTION")))
+        val unstated = fit(van(vehicle = van().vehicle!!.copy(drivetrain = null)))!!
+        assertTrue(unstated.score < fit(van())!!.score)
     }
 
     @Test
