@@ -48,4 +48,19 @@ class DetailEnricherTest {
         assertEquals(375_572, read.vehicle?.mileageKm)
         assertEquals(2015, read.vehicle?.firstRegYear)
     }
+
+    @Test
+    fun `a page cached under an older reading has its wheelbase read again from its text`() {
+        val listing = van("wheelbase-${System.nanoTime()}").copy(title = "Volkswagen Crafter Kasten mittlerer Radstand 2.0 TDI 35 HD")
+        DetailCache.put(listing.id, ListingDetail(
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(mileageKm = 134_106, wheelbaseMm = 2000),
+            description = "Räder/Reifen:\nRadstand mittel\n\nKilometerstand: 134.106 km",
+        ))
+        assertEquals(null, DetailEnricher.withCachedDetail(listing).vehicle?.wheelbaseMm)
+        DetailCache.put(listing.id, ListingDetail(
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(wheelbaseMm = 2000),
+            description = "Motor 2,0 Ltr. - 103 kW TDI, Radstand 3640 mm",
+        ))
+        assertEquals(3640, DetailEnricher.withCachedDetail(listing).vehicle?.wheelbaseMm)
+    }
 }

@@ -117,7 +117,7 @@ object DetailEnricher {
     internal fun Listing.withDetail(detail: io.github.tieo.arbay.model.ListingDetail): Listing = VehicleTextParser.enrich(copy(
         vehicle = VehicleTextParser.merge(
             VehicleTextParser.merge(
-                detail.vehicle,
+                detail.vehicle?.withWheelbaseReadAgain(title, detail.description),
                 VehicleTextParser.merge(
                     VehicleTextParser.verifiedOnly(vehicle),
                     detail.description?.let { VehicleTextParser.parse("$title $it") },
@@ -130,6 +130,19 @@ object DetailEnricher {
         listingDate = listingDate ?: detail.listedAt,
         seller = detail.sellerReviews?.let { reviews -> seller?.copy(reviewCount = reviews) } ?: seller,
     ))
+
+    /**
+     * The wheelbase a page states, read again from the page's text the cache keeps. No market has
+     * a field for it, so it was only ever read off the seller's prose, and a page cached under an
+     * older reading kept that reading for the cache's thirty days: a Kleinanzeigen Crafter titled
+     * "mittlerer Radstand 2.0 TDI" still showed a 2000 mm wheelbase nine hours after the reading
+     * was fixed. Where the page left no text behind, what it was read as stays.
+     */
+    private fun io.github.tieo.arbay.model.VehicleInfo.withWheelbaseReadAgain(title: String, text: String?): io.github.tieo.arbay.model.VehicleInfo {
+        if (text == null) return this
+        val read = VehicleTextParser.parseWheelbaseMm("$title\n$text")
+        return copy(wheelbaseMm = read, verified = if (read == null) verified - VehicleField.WHEELBASE else verified)
+    }
 
     private fun priceEurCents(listing: Listing): Long =
         if (listing.price.currency == io.github.tieo.arbay.model.Currency.EUR) listing.price.amount
