@@ -1022,9 +1022,9 @@ object RelevanceFilter {
         val implied = impliedWords(listings, parsed)
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
-            // as something the market got wrong.
-            if (blockedWord(listing, asked) != null) {
-                dropped += DroppedListing(listing, DropReason.BLOCKED_WORD)
+            // as something the market got wrong, naming the word so the reader can check it.
+            blockedWord(listing, asked)?.let { word ->
+                dropped += DroppedListing(listing, DropReason.BLOCKED_WORD, word)
                 return@mapNotNull null
             }
             val s = score(listing, asked, implied[listing.id].orEmpty())

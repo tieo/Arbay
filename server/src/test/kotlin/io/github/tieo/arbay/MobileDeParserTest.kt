@@ -36,6 +36,15 @@ class MobileDeParserTest {
     }
 
     @Test
+    fun `a card's title carries the seller's line beside the model`() {
+        val results = MobileDeCrawler(dummyClient()).parseSearchResults(fixture())
+        val titles = results.map { it.title }
+        assertTrue("Volkswagen Crafter Kasten 35 lang L3H2 Klima 2.Hand 110TKM" in titles, titles.toString())
+        assertTrue("Volkswagen Crafter 2,0TDI Pritsche DOKA 3,5t L2 Klima 6Sitz" in titles, titles.toString())
+        assertTrue(titles.none { "Gesponsert" in it }, titles.toString())
+    }
+
+    @Test
     fun `a search page states its hit count, and an empty one says zero`() {
         val crawler = MobileDeCrawler(dummyClient())
         assertEquals(922, crawler.resultsTotal(fixture()))

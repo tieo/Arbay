@@ -398,11 +398,18 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             val externalId = idInHref.find(href)?.groupValues?.get(1) ?: return@mapNotNull null
             val url = if (href.startsWith("http")) href else "https://suchen.mobile.de$href"
 
-            // `listing-title-card-view` is the bare model name; the `-title` wrapper also holds a
-            // "Gesponsert" sponsored badge and a subtitle, which would leak into the title text.
-            val title = (item.selectFirst("[data-testid=listing-title-card-view]")
+            // `listing-title-card-view` is the bare model name, and the subtitle beside it is the
+            // line the seller writes ("Kasten 30 mittellang Hochdach FWD", "2,0TDI Pritsche DOKA").
+            // Both make the title, as they do on every other market: a mobile.de van titled only
+            // "Volkswagen Crafter" passed a search that blocked "30" and "Pritsche" while the same
+            // van on AutoScout24 was removed. The `-title` wrapper is not read whole, since it also
+            // holds a "Gesponsert" sponsored badge.
+            val model = (item.selectFirst("[data-testid=listing-title-card-view]")
                 ?: item.selectFirst("[data-testid$=-title]"))?.text()?.trim()
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val subtitle = item.selectFirst("[data-testid=listing-title-card-view]")?.parent()
+                ?.selectFirst("[class*=subTitle]")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            val title = listOfNotNull(model, subtitle).joinToString(" ")
 
             // Price lives in `main-price-label` ("42.900 €"); `price-label` is the same amount
             // elsewhere in the card, `-price-section` is the legacy testid. nbsp (U+00A0) between
