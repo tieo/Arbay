@@ -79,4 +79,15 @@ class TruckScout24ParserTest {
         assertTrue("VW Crafter Kasten L3H3\nTempomat" in description.replace("1.Hand\n", ""), description)
         assertTrue("Laderaumlänge: 3.300 mm" in description, description)
     }
+
+    @Test
+    fun `the site's distance to a card's town is no mileage`() {
+        // TruckScout24 14644525, a Crafter in Parma whose card states no mileage: the distance in
+        // its location cell came in as 400 km on the clock.
+        val html = """<html><body><section data-listing-id="14644525"><a href="/tsp/ts-146-44-525"><div data-grid="title">VAN VWCRAFTER</div></a>""" +
+            """<div data-grid="price">24.156 € brutto</div><div data-grid="location"><div class="country-name">Parma</div> 400 km</div></section></body></html>"""
+        val van = TruckScout24Crawler(dummyClient()).parse(html).single()
+        assertEquals(null, van.vehicle?.mileageKm)
+        assertEquals("Parma", van.location?.city)
+    }
 }

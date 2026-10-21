@@ -221,8 +221,10 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
             }?.takeIf { it.startsWith("http") }
 
             // The card carries a labeled attribute line: "<km> km, Leistung: <kW> kW (<PS> PS),
-            // Erstzulassung: MM/YYYY, Kraftstofftyp: <fuel>, Getriebetyp: <gearbox>".
-            val cardText = card.text()
+            // Erstzulassung: MM/YYYY, Kraftstofftyp: <fuel>, Getriebetyp: <gearbox>". Read without
+            // the location cell, whose distance from the reader ("Parma 400 km") read as the
+            // mileage of a Crafter whose seller states 97,967 km.
+            val cardText = card.clone().also { it.select("[data-grid=location]").remove() }.text()
             val reg = Regex("""Erstzulassung:\s*(\d{1,2}/\d{4})""").find(cardText)?.groupValues?.get(1)
             val vehicle = VehicleTextParser.merge(
                 VehicleTextParser.verifiedByPresence(VehicleInfo(
