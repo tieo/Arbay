@@ -418,6 +418,10 @@ class EbayDeCrawler(
                 ?: item.selectFirst(".s-card__price")?.text()
                 ?: return@mapNotNull null
             val price = Money.parse(priceText) ?: return@mapNotNull null
+            // A listing of several choices prints its cheapest and its dearest as two prices
+            // with " a " / " to " / " bis " between them, each its own s-card__price span.
+            val priceUpTo = item.select(".s-card__price").mapNotNull { Money.parse(it.text()) }
+                .takeIf { it.size > 1 }?.last()?.takeIf { it.currency == price.currency && it.amount > price.amount }
 
             val conditionText = item.selectFirst("div.s-card__subtitle-row span")?.text()
                 ?: item.selectFirst(".SECONDARY_INFO")?.text()
@@ -469,6 +473,7 @@ class EbayDeCrawler(
                 url = link,
                 title = title,
                 price = price,
+                priceUpTo = priceUpTo,
                 condition = condition,
                 imageUrls = listOfNotNull(imageUrl),
                 location = location,

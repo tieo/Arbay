@@ -13,6 +13,10 @@ data class Listing(
     val title: String,
     val price: Money,
     val oldPrice: Money? = null,
+    // The dearest choice of a listing that sells several at one address (sizes, colours), whose
+    // [price] is then its cheapest: "EUR 95,30 a EUR 204,67" for a drive in 512 GB, 1 TB and 2 TB
+    // titled "2TB". Which choice costs what only the ad's page says.
+    val priceUpTo: Money? = null,
     val negotiable: Boolean = false,
     // How this is sold, when the market says. An auction's price is the bid so far, which is not
     // what the thing costs: a Crucial module alerted at €10.50 was €21.50 the next day and still

@@ -267,7 +267,7 @@ class SavedSearchMonitor(
                         // with. Where the search's own words are written by nobody, everything a
                         // market sends is kept for the screen — and none of it is worth waking
                         // someone for.
-                        RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) &&
+                        RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && isTheThing(it) &&
                             matchesSubfilter(it, sf) && beatsTheBestSeen(it, sf) && worthInterrupting(
                             it,
                             product.autoFetch.intervalMinutes.coerceAtLeast(MIN_INTERVAL_MIN),
@@ -643,9 +643,18 @@ class SavedSearchMonitor(
          * without a condition on eBay.es and taught the 1 TB watch a bar of 50 €.
          */
         internal fun pricesTheThing(listing: Listing): Boolean =
-            listing.condition != Condition.PARTS_ONLY &&
-                !RelevanceFilter.namesSeveralSizes(listing.title) &&
-                !(listing.platformId.name.startsWith("EBAY_") && listing.condition == null)
+            isTheThing(listing) && !(listing.platformId.name.startsWith("EBAY_") && listing.condition == null)
+
+        /**
+         * Whether a listing's price is one working thing's, as far as the card tells: not a thing
+         * sold for parts, not a row of sizes priced at the smallest, whether the title names them
+         * or the card prints a span of prices. A push about any of them is about a price nobody
+         * can pay for the thing searched for: a drive titled "2TB" came at 113 € while its 2 TB
+         * choice cost 230 $.
+         */
+        internal fun isTheThing(listing: Listing): Boolean =
+            listing.condition != Condition.PARTS_ONLY && listing.priceUpTo == null &&
+                !RelevanceFilter.namesSeveralSizes(listing.title)
 
         /** Whether a find costs less than the cheapest a learning rule saw; true for a rule that never learned. */
         internal fun beatsTheBestSeen(
