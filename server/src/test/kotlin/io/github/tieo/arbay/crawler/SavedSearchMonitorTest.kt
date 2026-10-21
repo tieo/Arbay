@@ -225,7 +225,7 @@ class SavedSearchMonitorTest {
     @Test
     fun `a bar set by an offer put away is learned again from the market`() {
         val products = io.github.tieo.arbay.repo.ProductRepo()
-        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo())
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adText = { null })
         val fake = listing("Crucial P310 2TB NVMe", 84)
         val real = listing("WD Black SN770M 2TB NVMe", 120, Condition.USED)
         val rule = sf().copy(learnUntil = Instant.fromEpochMilliseconds(Long.MAX_VALUE / 4), bestSeenEur = 84, bestSeenListingId = fake.id)
@@ -236,11 +236,36 @@ class SavedSearchMonitorTest {
         ))
         try {
             // Kept while the offer stands, though a dearer one comes in.
-            assertEquals(84, monitor.learn(saved, listOf(real), hidden = emptySet()).notificationSubfilters.single().bestSeenEur)
-            val relearned = monitor.learn(saved, listOf(real), hidden = setOf(fake.id)).notificationSubfilters.single()
+            assertEquals(84, kotlinx.coroutines.runBlocking { monitor.learn(saved, listOf(real), hidden = emptySet()) }.notificationSubfilters.single().bestSeenEur)
+            val relearned = kotlinx.coroutines.runBlocking { monitor.learn(saved, listOf(real), hidden = setOf(fake.id)) }.notificationSubfilters.single()
             assertEquals(120, relearned.bestSeenEur)
             assertEquals(real.id, relearned.bestSeenListingId)
             assertEquals(120, products.getById(saved.id)!!.notificationSubfilters.single().bestSeenEur)
+        } finally {
+            products.delete(saved.id)
+        }
+    }
+
+    @Test
+    fun `a learning rule takes no price from an ad that says it is sold broken`() {
+        val broken = listing("Gigabyte 2500E 2TB (2000GB) M.2 NVMe SSD", 100)
+        val working = listing("Samsung PM981 2TB M.2 NVMe PCIe SSD", 150)
+        val texts = mapOf(
+            broken.id to "Diese SSD weist höchstwahrscheinlich einen Defekt am Controller auf. Die SSD wird als defekt verkauft.",
+            working.id to "ich verkaufe eine voll funktionsfähige und schnelle M.2 NVMe SSD",
+        )
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adText = { texts[it.id] })
+        val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "2TB NVMe",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "2TB NVMe", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = Instant.fromEpochMilliseconds(0),
+            notificationSubfilters = listOf(sf().copy(learnUntil = Instant.fromEpochMilliseconds(Long.MAX_VALUE / 4))),
+        ))
+        try {
+            val rule = kotlinx.coroutines.runBlocking { monitor.learn(saved, listOf(broken, working), hidden = emptySet()) }.notificationSubfilters.single()
+            assertEquals(150, rule.bestSeenEur)
+            assertEquals(working.id, rule.bestSeenListingId)
         } finally {
             products.delete(saved.id)
         }

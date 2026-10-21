@@ -58,6 +58,8 @@ class SavedSearchMonitor(
     private val listingRepo: ListingRepo,
     /** This server's own address, which a fit alert searches through like the app does. */
     private val selfUrl: String? = null,
+    /** The seller's own text of an offer, read off its page; null when it cannot be read. */
+    private val adText: suspend (Listing) -> String? = ::readAdText,
 ) {
 
     private val log = LoggerFactory.getLogger(SavedSearchMonitor::class.java)
@@ -70,6 +72,10 @@ class SavedSearchMonitor(
     // A floor under whatever interval a search is given, so a mistyped "5" does not turn into a
     // five-minute crawl loop — the flag risk the anti-block work manages is per-crawl, not per-search.
     private val MIN_INTERVAL_MIN = 30
+
+    /** How many ad pages a learning rule reads, cheapest first, looking for one not sold broken:
+     *  each is a request to the market inside its per-minute window. */
+    private val MAX_AD_READS = 5
 
     /** Prefix of the [seen] entry that marks a fit alert's first run as done. */
     private val FIT_KEY = "fit:"
@@ -269,6 +275,9 @@ class SavedSearchMonitor(
                     }
                     .map { sf to it }
             }
+            // The card rarely says a thing is broken and the ad's text often does; the few
+            // offers worth a push are read before one goes out.
+            .filterNot { (_, l) -> soldBroken(l) }
         if (subfilterMatches.isNotEmpty()) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
@@ -476,17 +485,24 @@ class SavedSearchMonitor(
      * auction's price is a bid so far, and what [pricesTheThing] turns away is not the thing at
      * its price, so none of them teaches anything.
      */
-    internal fun learn(product: TrackedProduct, found: Collection<Listing>, hidden: Set<String>): TrackedProduct {
+    internal suspend fun learn(product: TrackedProduct, found: Collection<Listing>, hidden: Set<String>): TrackedProduct {
         val now = Clock.System.now()
         val rules = product.notificationSubfilters.map { rule ->
             if (!rule.enabled || !rule.learning(now)) return@map rule
             // A bar set by an offer since put away was never the market's price: it is learned
             // again from what the markets answer now.
             val sf = if (rule.bestSeenListingId in hidden) rule.copy(bestSeenEur = null, bestSeenListingId = null) else rule
-            val cheapest = found
+            val candidates = found
                 .filter { it.saleType != SaleType.AUCTION && pricesTheThing(it) && RelevanceFilter.carriesAWordOfTheSearch(it, product.searchQuery) && matchesSubfilter(it, sf) }
                 .mapNotNull { l -> eurCents(l.landedPrice(ImportSettingsStore.current))?.let { l to it } }
-                .minByOrNull { it.second }
+                .sortedBy { it.second }
+            // Below what the rule already holds, cheapest first, the first whose ad does not say
+            // it is sold broken: a defective drive is listed as one only in its text, and set
+            // the bar at 100 € for 2 TB.
+            val cheapest = candidates
+                .takeWhile { (sf.bestSeenEur ?: Int.MAX_VALUE) * 100L > it.second }
+                .take(MAX_AD_READS)
+                .firstOrNull { !soldBroken(it.first) }
                 ?: return@map sf
             val eur = ((cheapest.second + 99) / 100).toInt()
             if ((sf.bestSeenEur ?: Int.MAX_VALUE) <= eur) return@map sf
@@ -509,6 +525,10 @@ class SavedSearchMonitor(
         })
         return productRepo.update(next) ?: product
     }
+
+    /** Whether the offer's title or the seller's text says it is sold broken. */
+    private suspend fun soldBroken(listing: Listing): Boolean =
+        Condition.soldAsDefective(listing.title, adText(listing))
 
     /**
      * Subfilter matches to the phone through ntfy as well as the app: one message per run, the
@@ -712,3 +732,14 @@ class SavedSearchMonitor(
 internal fun <F> bestCopyEach(scored: List<Pair<Listing, F>>, score: (F) -> Double): List<Pair<Listing, F>> =
     scored.sortedByDescending { score(it.second) }
         .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
+
+/** The seller's text of [listing], from a page read before or read now. */
+private suspend fun readAdText(listing: Listing): String? = try {
+    DetailCache.get(listing.id)?.description
+        ?: CrawlerRegistry.crawlerFor(listing.platformId)?.fetchDetail(listing)
+            ?.also { DetailCache.put(listing.id, it) }?.description
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    null
+}
