@@ -194,4 +194,44 @@ class ArbayMcpTest {
         products.delete(saved.id)
         mcp.close()
     }
+
+    /** The fit a vehicle search pushes from is set over MCP as in the app's panel, and refused
+     *  for a search without vehicle wishes. */
+    @Test
+    fun aVehicleSearchsFitAlertLevelIsSet() = testApplication {
+        application {
+            install(SSE)
+            configureSerialization()
+            configureStatusPages()
+        }
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        routing {
+            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            mcpRoutes("", client)
+        }
+        val van = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "fit level test",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "fit level test", category = io.github.tieo.arbay.model.MarketGroup.GENERAL,
+                carFilters = io.github.tieo.arbay.model.CarFilters(maxMileageKm = 150_000)),
+            createdAt = kotlin.time.Clock.System.now(),
+            fitAlert = io.github.tieo.arbay.model.FitAlertSettings(enabled = true, minScore = 0.6),
+        ))
+        val drive = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "no fit test",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "no fit test", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = kotlin.time.Clock.System.now(),
+        ))
+        val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
+        val set = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 80)).content.single() as TextContent).text
+        assertContains(set, "pushes a fit of 80 % or more")
+        assertEquals(0.8, products.getById(van.id)!!.fitAlert.minScore, 0.001)
+        val list = (mcp.callTool(name = "list_saved_searches", arguments = emptyMap()).content.single() as TextContent).text
+        assertContains(list, "fits 80 % or more")
+        val refused = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to drive.id, "fit_alert_percent" to 80)).content.single() as TextContent).text
+        assertTrue(refused.startsWith("Not changed"), refused)
+        mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 0))
+        assertEquals(false, products.getById(van.id)!!.fitAlert.enabled)
+        products.delete(van.id); products.delete(drive.id)
+        mcp.close()
+    }
 }

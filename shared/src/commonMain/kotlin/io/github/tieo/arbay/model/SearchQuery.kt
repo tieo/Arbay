@@ -126,6 +126,10 @@ fun SearchQuery.toCarFilters(): CarFilters? {
     return if (complete.isEmpty) null else complete
 }
 
+/** Whether the search carries vehicle wishes a fit can be weighed from; a price band alone is
+ *  no vehicle wish, since every search has one. */
+val SearchQuery.weighsAFit: Boolean get() = carFilters?.isEmpty == false
+
 /** The vehicle criteria of a search, empty when it carries none. Every crawler reads its native
  *  filter parameters from here, so a criterion cannot reach one site and be silently dropped on
  *  another for want of a field on the query. The price band is not among them: it is not

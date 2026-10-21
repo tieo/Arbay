@@ -58,6 +58,10 @@ import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.model.WATCH_INTERVALS
+import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.weighsAFit
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import io.github.tieo.arbay.results.blockWord
 import io.github.tieo.arbay.results.clearBand
 import io.github.tieo.arbay.results.coveredMarkets
@@ -321,6 +325,17 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     }
     HorizontalDivider(color = arbay.line)
     Text("Tell me when a find is", style = MaterialTheme.typography.titleMedium)
+    // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
+    if (bookmark.searchQuery.weighsAFit) {
+        val fit = bookmark.fitAlert
+        Text("a fit of at least", style = MaterialTheme.typography.bodyMedium)
+        Choices {
+            Choice("Off", !fit.enabled) { session.products.setFitAlert(bookmark, null) }
+            FIT_ALERT_LEVELS.forEach { level ->
+                Choice("${(level * 100).roundToInt()} %", fit.enabled && abs(fit.minScore - level) < 0.001) { session.products.setFitAlert(bookmark, level) }
+            }
+        }
+    }
     bookmark.notificationSubfilters.forEach { rule ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(rule.displayName, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)

@@ -48,6 +48,10 @@ import io.github.tieo.arbay.results.toggleNewOnly
 import io.github.tieo.arbay.results.toggleSuggestedWord
 import io.github.tieo.arbay.results.unblockWord
 import io.github.tieo.arbay.model.WATCH_INTERVALS
+import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.weighsAFit
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
 import io.github.tieo.arbay.results.importVatNote
@@ -342,6 +346,17 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         }
 
         H3 { Text("Tell me when a find is") }
+        // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
+        if (bookmark.searchQuery.weighsAFit) {
+            val fit = bookmark.fitAlert
+            P { Text("a fit of at least") }
+            Div({ classes("chips") }) {
+                Chip("Off", !fit.enabled) { app.products.setFitAlert(bookmark, null) }
+                FIT_ALERT_LEVELS.forEach { level ->
+                    Chip("${(level * 100).roundToInt()} %", fit.enabled && abs(fit.minScore - level) < 0.001) { app.products.setFitAlert(bookmark, level) }
+                }
+            }
+        }
         bookmark.notificationSubfilters.forEach { rule ->
             Div({ classes("rule") }) {
                 Switch(rule.displayName, rule.enabled) { on ->

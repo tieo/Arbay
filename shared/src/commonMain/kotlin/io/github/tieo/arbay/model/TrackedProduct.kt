@@ -120,10 +120,9 @@ data class TrackedProduct(
  * less rather than not at all.
  *
  * A new offer is sent when it would rank among the [topN] best of everything the search finds right
- * now, and never twice. A rank rather than a fixed score, because a score means nothing on its own:
- * the van the user called perfect scored 0.74 on price and distance, below a threshold that would
- * have let through offers whose size is not even stated. [minScore] only keeps a thin week from
- * pushing whatever happens to be best of very little.
+ * now and fits at least [minScore], and never twice. The rank keeps a rich week from pushing every
+ * decent offer; [minScore] is the user's own floor, picked from [FIT_ALERT_LEVELS], below which
+ * nothing is worth being told about however thin the market is.
  */
 @Serializable
 data class FitAlertSettings(
@@ -133,6 +132,9 @@ data class FitAlertSettings(
     val home: String? = null,
     val softDriveHours: Double = 4.0,
 )
+
+/** The fits a fit alert can be set to tell about from, as the share of a perfect fit. */
+val FIT_ALERT_LEVELS: List<Double> = listOf(0.6, 0.7, 0.8, 0.9)
 
 /** How often a watched search may look again, and the words for each. */
 val WATCH_INTERVALS: List<Pair<Int, String>> =

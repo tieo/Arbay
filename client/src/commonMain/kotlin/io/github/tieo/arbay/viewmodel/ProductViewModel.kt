@@ -161,6 +161,11 @@ class ProductViewModel(
         updateProduct(product.copy(autoFetch = autoFetch))
     }
 
+    /** Set from which fit this bookmark tells about a new offer, or null to tell about none. */
+    fun setFitAlert(product: TrackedProduct, minScore: Double?) {
+        updateProduct(product.copy(fitAlert = product.fitAlert.copy(enabled = minScore != null, minScore = minScore ?: product.fitAlert.minScore)))
+    }
+
     /** Set this bookmark's notification subfilters and persist. */
     fun setNotificationSubfilters(product: TrackedProduct, subfilters: List<NotificationSubfilter>) {
         updateProduct(product.copy(notificationSubfilters = subfilters))

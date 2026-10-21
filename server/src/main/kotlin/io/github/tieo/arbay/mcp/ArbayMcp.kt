@@ -31,6 +31,8 @@ import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.WATCH_INTERVALS
+import io.github.tieo.arbay.model.FIT_ALERT_LEVELS
+import io.github.tieo.arbay.model.weighsAFit
 import io.github.tieo.arbay.model.newRule
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.composeBlocks
@@ -49,6 +51,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
@@ -286,7 +289,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     "${p.searchQuery.platforms.size} markets",
                     p.searchQuery.maxPrice?.let { "up to ${it.amount / 100} €" },
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
-                ).joinToString(" · ") + p.notificationSubfilters.joinToString("") { r ->
+                ).joinToString(" · ") +
+                    (if (p.fitAlert.enabled) "\n  fit alert: a new offer in its top ${p.fitAlert.topN} that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
+                    p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
                     // seen so far: the bar a find has to beat once learning ends.
                     "\n  alert rule ${r.id}" + (if (r.name.isNotBlank()) " \"${r.name}\"" else "") + ": " + r.summaryText() +
@@ -435,6 +440,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_from_eur", "Add an alert rule: push for finds from this landed price")
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
+                number("fit_alert_percent", "Vehicle searches: push a new offer that fits the search's wishes at least this well: ${FIT_ALERT_LEVELS.joinToString { "${(it * 100).toInt()}" }}; 0 stops it")
             },
         ) { args ->
             val id = args.str("id")!!
@@ -443,6 +449,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val every = args.num("look_every_minutes")?.toInt()
             if (every != null && every != 0 && WATCH_INTERVALS.none { it.first == every })
                 return@tool "Not changed: look_every_minutes is one of ${WATCH_INTERVALS.joinToString { it.first.toString() }}, or 0."
+            val fitLevel = args.num("fit_alert_percent")?.let { it / 100 }
+            if (fitLevel != null && fitLevel != 0.0 && FIT_ALERT_LEVELS.none { kotlin.math.abs(it - fitLevel) < 0.001 })
+                return@tool "Not changed: fit_alert_percent is one of ${FIT_ALERT_LEVELS.joinToString { "${(it * 100).toInt()}" }}, or 0."
+            if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.weighsAFit)
+                return@tool "Not changed: a fit is weighed from a vehicle search's wishes, and this search has none."
             val gone = args.strs("remove_alert_rules").toSet()
             val unknown = gone - p.notificationSubfilters.map { it.id }.toSet()
             if (unknown.isNotEmpty()) return@tool "Not changed: no alert rule ${unknown.joinToString()} on this search."
@@ -451,6 +462,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val next = p.copy(
                 autoFetch = when (every) { null -> p.autoFetch; 0 -> p.autoFetch.copy(enabled = false); else -> AutoFetchSettings(enabled = true, intervalMinutes = every) },
                 notificationSubfilters = p.notificationSubfilters.filterNot { it.id in gone } + listOfNotNull(added),
+                fitAlert = when (fitLevel) { null -> p.fitAlert; 0.0 -> p.fitAlert.copy(enabled = false); else -> p.fitAlert.copy(enabled = true, minScore = fitLevel) },
                 name = args.str("name") ?: p.name,
                 searchQuery = p.searchQuery.copy(
                     text = args.str("words") ?: p.searchQuery.text,
@@ -464,6 +476,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             Live.show("/saved/${id.encodeURLPathPart()}")
             "Changed: ${next.name} (\"${next.searchQuery.text}\")" +
                 (if (next.autoFetch.enabled) ", looks every ${next.autoFetch.intervalMinutes} min" else ", does not look on its own") +
+                (if (next.fitAlert.enabled) ", pushes a fit of ${(next.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
                 next.notificationSubfilters.joinToString("") { "\n  alert rule ${it.id}: ${it.summaryText()}" }
         }
 
