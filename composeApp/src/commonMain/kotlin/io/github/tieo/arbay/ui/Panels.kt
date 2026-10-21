@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -81,10 +82,12 @@ fun PanelSheet(session: Session, route: Route.Results, panel: Panel, state: Resu
     val nav = LocalNavigator.current
     ModalBottomSheet(
         onDismissRequest = { nav.back() },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = panel == Panel.CRITERIA || panel == Panel.HIDDEN || panel == Panel.WRITE),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = panel == Panel.CRITERIA || panel == Panel.HIDDEN || panel == Panel.WRITE || panel == Panel.ALERTS),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
-        PanelBody(session, route, panel, state, Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding())
+        // The keyboard's height is padding under the body, so a form's button scrolls up above it
+        // instead of staying under the keys.
+        PanelBody(session, route, panel, state, Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().imePadding())
     }
 }
 
