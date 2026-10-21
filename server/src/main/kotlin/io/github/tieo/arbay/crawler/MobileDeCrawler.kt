@@ -403,12 +403,15 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
             // Both make the title, as they do on every other market: a mobile.de van titled only
             // "Volkswagen Crafter" passed a search that blocked "30" and "Pritsche" while the same
             // van on AutoScout24 was removed. The `-title` wrapper is not read whole, since it also
-            // holds a "Gesponsert" sponsored badge.
-            val model = (item.selectFirst("[data-testid=listing-title-card-view]")
-                ?: item.selectFirst("[data-testid$=-title]"))?.text()?.trim()
+            // holds a "Gesponsert" sponsored badge. The subtitle is told by where it sits, right
+            // after the model and carrying its whole text as a tooltip, since its class names are
+            // hashed and change with every release of the site.
+            val modelView = item.selectFirst("[data-testid=listing-title-card-view]")
+            val model = (modelView ?: item.selectFirst("[data-testid$=-title]"))?.text()?.trim()
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val subtitle = item.selectFirst("[data-testid=listing-title-card-view]")?.parent()
-                ?.selectFirst("[class*=subTitle]")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            val subtitle = modelView?.nextElementSiblings()
+                ?.firstOrNull { it.hasAttr("title") && !it.hasAttr("data-testid") }
+                ?.text()?.trim()?.takeIf { it.isNotBlank() }
             val title = listOfNotNull(model, subtitle).joinToString(" ")
 
             // Price lives in `main-price-label` ("42.900 €"); `price-label` is the same amount

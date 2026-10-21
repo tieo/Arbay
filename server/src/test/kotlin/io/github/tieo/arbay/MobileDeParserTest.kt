@@ -42,6 +42,13 @@ class MobileDeParserTest {
         assertTrue("Volkswagen Crafter Kasten 35 lang L3H2 Klima 2.Hand 110TKM" in titles, titles.toString())
         assertTrue("Volkswagen Crafter 2,0TDI Pritsche DOKA 3,5t L2 Klima 6Sitz" in titles, titles.toString())
         assertTrue(titles.none { "Gesponsert" in it }, titles.toString())
+        // Live, 2026-10-21: the same markup with every class name hashed.
+        val live = MobileDeCrawler(dummyClient()).parseSearchResults(
+            javaClass.getResource("/fixtures/mobilede_search_hashed.html")!!.readText(),
+        ).map { it.title }
+        assertTrue("Volkswagen Crafter Pritsche 55 lang Doppelkabine RWD Trendl" in live, live.toString())
+        assertTrue("Volkswagen Crafter Kasten 30 mittellang Hochdach FWD" in live, live.toString())
+        assertTrue(live.none { "Gesponsert" in it }, live.toString())
     }
 
     @Test
