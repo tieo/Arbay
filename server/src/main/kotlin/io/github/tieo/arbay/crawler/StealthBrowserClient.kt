@@ -151,11 +151,14 @@ object StealthBrowserClient {
 
         // The reference of an outright refusal page, which has nothing on it for a person to solve.
         val denied = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        // The sidecar's word that the bot check never let it through.
+        val blocked = java.util.concurrent.atomic.AtomicReference<String?>(null)
         try {
             coroutineScope {
                 val ctrlJob = launch {
                     for (msg in controls) {
                         if (msg.startsWith("DENIED")) denied.set(msg.removePrefix("DENIED").trim())
+                        if (msg.startsWith("BLOCKED")) blocked.set(msg.removePrefix("BLOCKED").trim())
                         when (msg) {
                             "CAPTCHA_INTERACTIVE" -> clock?.personSolving(true)
                             "CAPTCHA_SOLVED", "CAPTCHA_TIMEOUT" -> clock?.personSolving(false)
@@ -183,6 +186,9 @@ object StealthBrowserClient {
         val exitCode = runCatching { process.exitValue() }.getOrElse { -1 }
         denied.get()?.let { reference ->
             throw CrawlerBlockedException("access denied for $url (reference $reference)", ErrorType.BLOCKED_403)
+        }
+        blocked.get()?.let { why ->
+            throw CrawlerBlockedException("blocked at $url: $why", ErrorType.CAPTCHA)
         }
         if (exitCode != 0) {
             log.warn("stealth browser exit {} for {}: {}", exitCode, url, stderr.take(200))

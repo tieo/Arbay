@@ -168,7 +168,9 @@ def main() -> None:
             sys.stderr.write(f"error: {e}\n")
             sys.exit(1)
         if is_blocked:
-            sys.stderr.write("blocked: challenge did not resolve\n")
+            # A control line, not a diagnostic: xvfb-run hands stderr to stdout, where a plain line
+            # arrived as a page with no ads on it and read as an empty search instead of a block.
+            captcha_gate.ctrl("BLOCKED challenge did not resolve")
             sys.exit(2)
         return
     if len(sys.argv) < 2:
@@ -183,7 +185,9 @@ def main() -> None:
         sys.stderr.write(f"error: {e}\n")
         sys.exit(1)
     if is_blocked:
-        sys.stderr.write("blocked: challenge did not resolve\n")
+        # A control line, not a diagnostic: xvfb-run hands stderr to stdout, where a plain line
+        # arrived as a page with no ads on it and read as an empty search instead of a block.
+        captcha_gate.ctrl("BLOCKED challenge did not resolve")
         sys.exit(2)
 
 
