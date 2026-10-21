@@ -50,6 +50,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -84,6 +86,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -303,15 +306,26 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "new_offers",
-            "Every offer a saved search found since it was last opened, as the watch found it, with its price and link, then every offer it already knew that has come down in price since. Opens nothing, so they stay new.",
-            props = { string("saved_search_id", "The saved search", required = true) },
+            "Every offer a saved search found since it was last opened, as the watch found it, with its price, link and when the watch found it, then every offer it already knew that has come down in price since. Opens nothing, so they stay new.",
+            props = {
+                string("saved_search_id", "The saved search", required = true)
+                integer("within_hours", "Only the offers the watch found in this many last hours")
+            },
         ) { args ->
             val id = args.str("saved_search_id")!!
-            val found = getJson<List<Listing>>("/api/products/${id.encodeURLPathPart()}/new")
-            found.forEach { seen[it.id] = it }
             val status = (getJsonElement("/api/products/status") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.firstOrNull { it.str("productId") == id }
-            (if (found.isEmpty()) "Nothing new in this saved search."
-            else "${found.size} new, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }).joinToString("\n") { it.line() }) +
+            val foundAt = (status?.get("foundAtMillis") as? JsonObject).orEmpty()
+                .mapNotNull { (k, v) -> v.jsonPrimitive.longOrNull?.let { k to Instant.fromEpochMilliseconds(it) } }.toMap()
+            val all = getJson<List<Listing>>("/api/products/${id.encodeURLPathPart()}/new")
+            all.forEach { seen[it.id] = it }
+            val since = args.int("within_hours")?.let { Clock.System.now() - it.hours }
+            // An offer found before its find time was kept has no time, and is kept out of a
+            // window rather than passed off as inside it.
+            val found = if (since == null) all else all.filter { l -> foundAt[l.id]?.let { it >= since } == true }
+            val window = args.int("within_hours")?.let { " in the last $it h" } ?: ""
+            (if (found.isEmpty()) "Nothing new in this saved search$window."
+            else "${found.size} new$window, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
+                .joinToString("\n") { l -> l.line(foundAt[l.id]) }) +
                 priceDropLines(status)
         }
 
@@ -829,12 +843,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     private fun why(reason: DropReason, detail: String?): String = reason.label + (detail?.let { ": $it" } ?: "")
 
-    private fun Listing.line(): String = listOfNotNull(
+    private fun Listing.line(foundAt: Instant? = null): String = listOfNotNull(
         id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
         shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
+        foundAt?.let { "found ${(Clock.System.now() - it).inWholeHours} h ago" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
         matchScore?.let { "fit ${Math.round(it * 100)}%" },
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },

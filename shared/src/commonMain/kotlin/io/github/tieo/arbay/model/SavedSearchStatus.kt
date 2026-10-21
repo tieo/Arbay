@@ -21,6 +21,10 @@ data class SavedSearchStatus(
     // Which listings those are, so opening the search can show just them instead of only counting
     // them. Carried with the count rather than fetched separately: the count is this list's size.
     val newListingIds: List<String> = emptyList(),
+    // When the watch found each offer it still holds as new or as its last batch, epoch
+    // milliseconds by listing id: the ad's own date is when the seller posted it, which says
+    // nothing about how long the offer has been waiting here.
+    val foundAtMillis: Map<String, Long> = emptyMap(),
     // Offers that once ranked in this search's top ten and its last run did not return: lost while
     // their ad is up or its market cannot say, and ruled out by one of the search's own rules on
     // the run that first did so, with the rule named. A best offer leaves silently in neither way.

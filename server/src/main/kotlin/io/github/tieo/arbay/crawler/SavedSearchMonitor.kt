@@ -109,13 +109,14 @@ class SavedSearchMonitor(
      * [lastRunAtMillis] is persisted because it is what decides when a search is next due: held
      * only in memory, every watched search came up due at once on the first tick after a restart
      * and they all crawled together, which is exactly the traffic shape that gets an address
-     * blocked.
+     * blocked. [foundAtMillis] is when the watch found each id still held in either set.
      */
     @Serializable
     private data class SearchState(
         val unopened: Map<String, Set<String>> = emptyMap(),
         val lastNew: Map<String, Set<String>> = emptyMap(),
         val lastRunAtMillis: Map<String, Long> = emptyMap(),
+        val foundAtMillis: Map<String, Map<String, Long>> = emptyMap(),
     )
 
     private val stateFile = DataDir.file("saved_search_state.json")
@@ -125,12 +126,14 @@ class SavedSearchMonitor(
     private val unopened: MutableMap<String, MutableSet<String>>
     private val lastNew: MutableMap<String, MutableSet<String>>
     private val lastRun: MutableMap<String, Long>
+    private val foundAt: MutableMap<String, MutableMap<String, Long>>
 
     init {
         val state = loadState()
         unopened = state.unopened.mapValuesTo(HashMap()) { it.value.toMutableSet() }
         lastNew = state.lastNew.mapValuesTo(HashMap()) { it.value.toMutableSet() }
         lastRun = HashMap(state.lastRunAtMillis)
+        foundAt = state.foundAtMillis.mapValuesTo(HashMap()) { HashMap(it.value) }
     }
 
     /** What every saved search has been doing, for the app's list of them. */
@@ -142,6 +145,7 @@ class SavedSearchMonitor(
                 lastRunAtMillis = lastRun[product.id],
                 newSinceOpened = unopened[product.id]?.size ?: 0,
                 newListingIds = unopened[product.id]?.toList().orEmpty(),
+                foundAtMillis = foundAt[product.id]?.toMap().orEmpty(),
                 missingTopOffers = TopOffers.missing(product.id),
                 priceDrops = PriceDrops.of(product.id),
             )
@@ -327,7 +331,7 @@ class SavedSearchMonitor(
      * when there is nothing to tell: no market answered, nothing is new, or this is the search's
      * first run, which seeds itself silently.
      */
-    private fun record(product: TrackedProduct, found: Map<String, Listing>): List<Listing>? {
+    internal fun record(product: TrackedProduct, found: Map<String, Listing>): List<Listing>? {
         synchronized(stateLock) { lastRun[product.id] = System.currentTimeMillis() }
 
         // Every market refused or failed. Recording that as this search's first, silent run would
@@ -351,6 +355,8 @@ class SavedSearchMonitor(
             if (fresh.isNotEmpty() && !silent) {
                 unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
                 lastNew[product.id] = fresh.toMutableSet()
+                val now = System.currentTimeMillis()
+                foundAt.getOrPut(product.id) { HashMap() }.apply { fresh.forEach { put(it, now) } }
             }
         }
         if (fresh.isNotEmpty() && !silent) {
@@ -701,6 +707,12 @@ class SavedSearchMonitor(
             unopened.keys.retainAll(live)
             lastNew.keys.retainAll(live)
             lastRun.keys.retainAll(live)
+            // A find time lives as long as its id is still held as new or as the last batch.
+            foundAt.keys.retainAll(live)
+            foundAt.forEach { (id, times) ->
+                val held = unopened[id].orEmpty() + lastNew[id].orEmpty()
+                times.keys.retainAll(held)
+            }
             // A fit alert's own mark sits beside its search's ids and goes only with the search.
             seen.keys.retainAll { it.removePrefix(FIT_KEY) in live }
             PriceDrops.retain(live)
@@ -708,6 +720,7 @@ class SavedSearchMonitor(
                 unopened = unopened.mapValues { it.value.toSet() },
                 lastNew = lastNew.mapValues { it.value.toSet() },
                 lastRunAtMillis = lastRun.toMap(),
+                foundAtMillis = foundAt.mapValues { it.value.toMap() },
             )
         }
         try {

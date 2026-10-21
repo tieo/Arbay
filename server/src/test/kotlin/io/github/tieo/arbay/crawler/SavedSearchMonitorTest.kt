@@ -270,4 +270,33 @@ class SavedSearchMonitorTest {
             products.delete(saved.id)
         }
     }
+
+    /** The daily look at a watch asks what it found in the last day, which the ad's own date
+     *  cannot answer: each find keeps its time while it is new or in the last batch. */
+    @Test
+    fun `a watch keeps when it found each offer for as long as it holds it`() {
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo())
+        val product = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "found time test",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "found time test", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
+            createdAt = kotlin.time.Clock.System.now(),
+        ))
+        val (a, b, c) = listOf("drive a", "drive b", "drive c").map { listing(it, 100) }
+        fun times() = monitor.statuses().single { it.productId == product.id }.foundAtMillis
+        try {
+            monitor.record(product, mapOf(a.id to a))
+            assertEquals(emptyMap(), times(), "the first run only seeds what is already there")
+            val before = System.currentTimeMillis()
+            monitor.record(product, mapOf(a.id to a, b.id to b))
+            assertEquals(setOf(b.id), times().keys)
+            assertTrue(times().getValue(b.id) >= before)
+            monitor.markOpened(product.id)
+            assertEquals(setOf(b.id), times().keys, "opened, it is still the last batch")
+            monitor.record(product, mapOf(a.id to a, b.id to b, c.id to c))
+            assertEquals(setOf(c.id), times().keys)
+        } finally {
+            products.delete(product.id)
+        }
+    }
 }

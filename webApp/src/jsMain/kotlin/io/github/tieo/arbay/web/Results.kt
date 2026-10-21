@@ -191,7 +191,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 val hide = { (listOf(listing) + copies).forEach(vm::ban) }
                 val was = open.priceDrops[listing.id]?.before()
                 if (photos) OfferTile(app, listing, copies, listing.id == selected, lowest, was, to, picking, hide)
-                else OfferRow(app, listing, copies, listing.id == selected, lowest, was, to, picking, hide)
+                else OfferRow(app, listing, copies, listing.id == selected, lowest, was, open.foundAt[listing.id], to, picking, hide)
             }
         }
     }
@@ -375,7 +375,7 @@ private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (F
 }
 
 @Composable
-private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, was: String?, to: Route, picking: Boolean, onHide: () -> Unit) {
+private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, was: String?, foundAt: Long?, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-row", "active".takeIf { active }).toTypedArray())
@@ -388,7 +388,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
                 Span({ classes("offer-meta") }) {
                     Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
                 }
-                listingFoot(listing, app.listings.views.collectAsState().value[listing.id]).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
+                listingFoot(listing, app.listings.views.collectAsState().value[listing.id], foundAt).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
                 SellerMarkLine(app, listing)
                 NoteLine(listing.id)
             }

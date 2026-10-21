@@ -114,14 +114,27 @@ private fun vehicleSpecs(v: VehicleInfo): List<Spec> = buildList {
     v.vanHeight?.let { add(Spec(VanSize.roofLabel(it), v.isVerified(VehicleField.VAN_HEIGHT))) }
 }
 
-/** Where it is, how far, how old, how well it fits: the line under a listing's specs. */
-fun listingFoot(listing: Listing, views: Int? = null): List<String> = buildList {
+/** How long ago a saved search's watch found an offer, in hours while that is under two days. */
+fun foundLabel(foundAtMillis: Long): String? {
+    val hours = (Clock.System.now() - Instant.fromEpochMilliseconds(foundAtMillis)).inWholeHours
+    return when {
+        hours < 0 -> null
+        hours == 0L -> "found just now"
+        hours < 48 -> "found $hours h ago"
+        else -> "found ${hours / 24} days ago"
+    }
+}
+
+/** Where it is, how far, how old, how well it fits, and when a saved search's watch found it if
+ *  it is new there: the line under a listing's specs. */
+fun listingFoot(listing: Listing, views: Int? = null, foundAtMillis: Long? = null): List<String> = buildList {
     listing.location?.let { loc ->
         val place = loc.raw ?: listOfNotNull(loc.zip, loc.city).joinToString(" ")
         if (place.isNotBlank()) add(place)
     }
     listing.distanceKm?.let { add("${it.roundToInt()} km away") }
     listing.listingDate?.let { posted -> ageLabel(posted)?.let { add(it) } }
+    foundAtMillis?.let { foundLabel(it)?.let { add(it) } }
     views?.let { add(if (it == 1) "seen once" else "seen $it times") }
     listing.matchScore?.let { add("${(it * 100).roundToInt()}% match") }
 }

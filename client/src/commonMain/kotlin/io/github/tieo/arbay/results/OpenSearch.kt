@@ -34,6 +34,8 @@ class OpenSearch(
     val newListingIds: Set<String>,
     /** The offers it already knew that came down in price before it was opened, by listing id. */
     val priceDrops: Map<String, PriceDrop> = emptyMap(),
+    /** When the watch found each of [newListingIds], epoch milliseconds by listing id. */
+    val foundAt: Map<String, Long> = emptyMap(),
 ) {
     /** Writes a change to this search where it is kept. Never starts a crawl. */
     fun persist(products: ProductViewModel, edit: (SearchQuery) -> SearchQuery) {
@@ -58,10 +60,12 @@ fun rememberOpenSearch(source: Source, products: ProductViewModel): OpenSearch? 
 
     var backlog by remember(source) { mutableStateOf<Set<String>?>(null) }
     var drops by remember(source) { mutableStateOf<Map<String, PriceDrop>>(emptyMap()) }
+    var found by remember(source) { mutableStateOf<Map<String, Long>>(emptyMap()) }
     LaunchedEffect(source, status.isNotEmpty()) {
         if (source is Source.Saved && backlog == null && status.isNotEmpty()) {
             backlog = status[source.id]?.newListingIds.orEmpty().toSet()
             drops = status[source.id]?.priceDrops.orEmpty().associateBy { it.listingId }
+            found = status[source.id]?.foundAtMillis.orEmpty().filterKeys { it in backlog.orEmpty() }
             products.markOpened(source.id)
         }
         if (source is Source.Typed) SearchHistoryStore.recordOpen(source.text, source.text, null, null, MarketGroup.GENERAL)
@@ -74,7 +78,7 @@ fun rememberOpenSearch(source: Source, products: ProductViewModel): OpenSearch? 
 
     return when (source) {
         is Source.Saved -> saved.firstOrNull { it.id == source.id }?.let {
-            OpenSearch(ResultsView.of(it), it, it.searchQuery, backlog.orEmpty(), drops)
+            OpenSearch(ResultsView.of(it), it, it.searchQuery, backlog.orEmpty(), drops, found)
         }
         is Source.Typed -> {
             val bookmark = bookmarkFor(source.text, MarketGroup.GENERAL)
