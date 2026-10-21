@@ -165,7 +165,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
             if (changing) ChangeSearch(open, view.name) { name, term -> state.changeSavedSearch(app.products, name, term); changing = false }
             MarketsLine(route, loading, total, completed, statuses)
             PriceStrip(route, summary)
-            Toolbar(app, route, state, sortMode, blocked.size, hidden.sumOf { it.listings.size })
+            Toolbar(app, route, state, sortMode, blocked.size, hidden.sumOf { it.total })
             PickBar(app, route)
         }
 

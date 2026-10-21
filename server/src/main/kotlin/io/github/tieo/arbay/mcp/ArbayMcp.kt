@@ -14,6 +14,8 @@ import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.DroppedListing
+import io.github.tieo.arbay.model.DropCount
+import io.github.tieo.arbay.model.DropReason
 import io.github.tieo.arbay.model.label
 import io.github.tieo.arbay.model.summaryText
 import io.github.tieo.arbay.model.Listing
@@ -127,6 +129,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val searching: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         /** Per market: what it sent that the search removed, with the reason for each. */
         val dropped = java.util.concurrent.ConcurrentHashMap<String, List<DroppedListing>>()
+        /** Per market: how many offers each reason removed, over all of them, where [dropped] holds some. */
+        val dropCounts = java.util.concurrent.ConcurrentHashMap<String, List<DropCount>>()
         /** Per market: how many offers it sent and how many the search kept. */
         val counts = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Int>>()
         val startedAt = kotlin.time.Clock.System.now()
@@ -172,11 +176,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 val sentAndKept = counts.toSortedMap().filterValues { (sent, kept) -> sent > kept }
                 if (sentAndKept.isNotEmpty()) appendLine("Removed by the search: " + sentAndKept.entries.joinToString("; ") { (market, n) ->
                     "$market ${n.first - n.second} of ${n.first} (" +
-                        removed[market].orEmpty().groupingBy { it.why() }.eachCount().entries.sortedByDescending { it.value }
-                            .joinToString(", ") { "${it.key} ${it.value}" } + ")"
+                        dropCounts[market].orEmpty().joinToString(", ") { "${why(it.reason, it.detail)} ${it.count}" } + ")"
                 })
                 if (args.bool("dropped") == true) removed.forEach { (market, list) ->
-                    if (list.isNotEmpty()) appendLine("Removed from $market (${list.size} listed, in the market's order):")
+                    val total = dropCounts[market].orEmpty().sumOf { it.count }
+                    if (list.isNotEmpty()) appendLine("Removed from $market (${list.size}" + (if (total > list.size) " of $total, every reason among them" else "") + " listed, in the market's order):")
                     list.forEach { appendLine("  " + it.why() + " | " + it.listing.line()) }
                 }
                 if (job.isActive) appendLine(
@@ -249,6 +253,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     if (event.type == CrawlerEventType.PLATFORM_DONE) {
                         run.listings.removeIf { it.platformId.name == event.platform }
                         run.dropped[market] = event.dropped
+                        run.dropCounts[market] = event.droppedCounts
                         run.counts[market] = event.rawCount to event.resultCount
                     }
                     run.listings += event.listings
@@ -798,7 +803,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }.getOrNull()
 
     /** Why the search removed an offer: the reason, and which criterion or word when it names one. */
-    private fun DroppedListing.why(): String = reason.label + (detail?.let { ": $it" } ?: "")
+    private fun DroppedListing.why(): String = why(reason, detail)
+
+    private fun why(reason: DropReason, detail: String?): String = reason.label + (detail?.let { ": $it" } ?: "")
 
     private fun Listing.line(): String = listOfNotNull(
         id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",

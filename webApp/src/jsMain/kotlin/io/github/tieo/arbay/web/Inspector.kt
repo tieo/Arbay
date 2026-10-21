@@ -174,7 +174,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         state.hidden.forEach { group ->
             Div({ classes("hidden-group") }) {
                 Div({ classes("hidden-head") }) {
-                    H3 { Text("${group.listings.size} · ${group.label}") }
+                    H3 { Text("${group.total} · ${group.label}") }
                     when (val kind = group.kind) {
                         HiddenKind.YouHid -> QuietButton("Put all back") { vm.unbanAll() }
                         HiddenKind.BlockedWords -> QuietButton("Edit the words") { Router.replace(route.copy(panel = Panel.WORDS)) }
@@ -209,7 +209,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                         }
                     }
                 }
-                if (group.listings.size > 50) P({ classes("muted") }) { Text("and ${group.listings.size - 50} more") }
+                if (group.total > group.listings.take(50).size) P({ classes("muted") }) { Text("and ${group.total - group.listings.take(50).size} more") }
             }
         }
     }

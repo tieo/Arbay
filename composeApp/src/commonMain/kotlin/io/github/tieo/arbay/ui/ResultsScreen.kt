@@ -223,7 +223,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
                 MarketsLine(askingSummary(loading, total, completed, statuses), statuses.captchaCount() > 0, loading, total, completed) { panel(Panel.MARKETS) }
             }
             if (state.summary.count > 0) item { PriceStrip(state) { panel(Panel.PRICES) } }
-            item { NarrowingRow(session, state, hiddenCount = state.hidden.sumOf { it.listings.size }, onPanel = ::panel) }
+            item { NarrowingRow(session, state, hiddenCount = state.hidden.sumOf { it.total }, onPanel = ::panel) }
             if (shown.isEmpty()) item {
                 Nothing(
                     when {

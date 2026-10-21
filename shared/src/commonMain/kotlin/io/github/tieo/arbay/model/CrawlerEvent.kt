@@ -14,6 +14,8 @@ data class CrawlerSearchEvent(
     // can show what it dropped: a market's answer disappearing with no number attached is how a
     // filter gets to be wrong for months without anyone finding out.
     val dropped: List<DroppedListing> = emptyList(),
+    // How many offers each reason removed, over all of them: [dropped] can be a sample.
+    val droppedCounts: List<DropCount> = emptyList(),
     val error: String? = null,
     val errorType: String? = null,
     val captchaUrl: String? = null,

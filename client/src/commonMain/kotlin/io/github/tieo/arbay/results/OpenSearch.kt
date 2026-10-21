@@ -124,6 +124,7 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val blocked by vm.blockedTerms.collectAsState()
     val marketBasis by vm.marketBasis.collectAsState()
     val dropped by vm.droppedBySearch.collectAsState()
+    val dropCounts by vm.dropCounts.collectAsState()
     val dealers by vm.blockedDealers.collectAsState()
     val views by vm.views.collectAsState()
     val newPrice by vm.newPrice.collectAsState()
@@ -161,8 +162,8 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val scams = remember(fetched, views, money) { likelyScams(fetched, views) }
     val narrowed = remember(listings, current, money, open.newListingIds, scams, newPrice) { narrow(listings, current, open.newListingIds, scams.keys, newPrice) }
     val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
-    val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped, scams, dealers) {
-        hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds, scams, dealers)
+    val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped, dropCounts, scams, dealers) {
+        hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds, scams, dealers, dropCounts.values.flatten())
     }
     return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets, { narrowing = it }, views, newPrice)
 }

@@ -181,7 +181,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
     if (state.hidden.isEmpty()) Muted("Everything the markets sent is on the list.")
     state.hidden.forEach { group ->
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${group.listings.size} · ${group.label}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Text("${group.total} · ${group.label}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             when (val kind = group.kind) {
                 HiddenKind.YouHid -> TextButton(onClick = { vm.unbanAll() }) { Text("Put all back") }
                 HiddenKind.BlockedWords -> TextButton(onClick = { nav.replace(route.copy(panel = Panel.WORDS)) }) { Text("Edit the words") }
@@ -211,7 +211,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
                 }
             }
         }
-        if (group.listings.size > 30) Muted("and ${group.listings.size - 30} more")
+        if (group.total > group.listings.take(30).size) Muted("and ${group.total - group.listings.take(30).size} more")
         HorizontalDivider(color = arbay.line)
     }
 }

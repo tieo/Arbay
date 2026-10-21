@@ -130,6 +130,9 @@ class ListingViewModel(
     // findable, and a card that appears and then vanishes tells nobody anything.
     private val _droppedBySearch = MutableStateFlow(sampleDropped)
     val droppedBySearch: StateFlow<List<DroppedListing>> = _droppedBySearch
+    // Per market, how many offers each reason removed: [droppedBySearch] holds only some of them.
+    private val _dropCounts = MutableStateFlow<Map<String, List<DropCount>>>(emptyMap())
+    val dropCounts: StateFlow<Map<String, List<DropCount>>> = _dropCounts
 
     // The other words the markets printed under this search, merged across markets: the same word
     // offered by two markets is one word, and the one that was actually searched carries what it
@@ -451,6 +454,7 @@ class ListingViewModel(
         _completedPlatforms.value = 0
         _facets.value = emptyMap()
         _droppedBySearch.value = emptyList()
+        _dropCounts.value = emptyMap()
         _newPrice.value = null
         _priceHistory.value = emptyList()
         _allListings.value = stored
@@ -682,6 +686,7 @@ class ListingViewModel(
             _totalPlatforms.value = 0
             _facets.value = emptyMap()
             _droppedBySearch.value = emptyList()
+        _dropCounts.value = emptyMap()
             _otherWords.value = emptyList()
             _newPrice.value = null
 
@@ -733,6 +738,7 @@ class ListingViewModel(
                             _droppedBySearch.value =
                                 (_droppedBySearch.value.filterNot { it.listing.platformId.name == event.platform } +
                                     event.dropped).distinctBy { it.listing.id }
+                            _dropCounts.value = _dropCounts.value + (event.platform to event.droppedCounts)
                             // A word two markets both printed is one word here, and a word one of
                             // them searched carries what it added, so the searched entry wins.
                             _otherWords.value = (_otherWords.value + event.suggestedTerms)

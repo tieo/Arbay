@@ -20,6 +20,39 @@ data class DroppedListing(
     val detail: String? = null,
 )
 
+/**
+ * How many of a market's offers one reason took, counted over everything the search removed. A
+ * search where somebody waits is sent only some of the removed offers themselves, so the number a
+ * reason took is carried on its own: a reader counting the sample would see a filter that took
+ * four hundred vans as one that took none.
+ */
+@Serializable
+data class DropCount(
+    val reason: DropReason,
+    val detail: String? = null,
+    val count: Int,
+)
+
+/** Every removed offer counted per reason and detail, most first. */
+fun List<DroppedListing>.dropCounts(): List<DropCount> =
+    groupingBy { it.reason to it.detail }.eachCount()
+        .map { (key, n) -> DropCount(key.first, key.second, n) }
+        .sortedByDescending { it.count }
+
+/**
+ * At most [limit] of [dropped], in the market's order, with every reason and detail represented:
+ * taken round the groups one offer at a time, so four hundred offers removed for their mileage
+ * cannot crowd the eighty slots out of the twelve removed for a blocked word, nor the other way.
+ */
+fun sampleDropped(dropped: List<DroppedListing>, limit: Int): List<DroppedListing> {
+    if (dropped.size <= limit) return dropped
+    val queues = dropped.indices.groupBy { dropped[it].reason to dropped[it].detail }.values.map { ArrayDeque(it) }
+    val picked = BooleanArray(dropped.size)
+    var n = 0
+    while (n < limit) queues.forEach { q -> if (n < limit) q.removeFirstOrNull()?.let { picked[it] = true; n++ } }
+    return dropped.filterIndexed { i, _ -> picked[i] }
+}
+
 @Serializable
 enum class DropReason {
     /** Not one listing the market sent carries a word of the search, so it answered something

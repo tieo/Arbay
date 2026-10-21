@@ -6,6 +6,7 @@ import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.DropCount
 import io.github.tieo.arbay.model.DropReason
 import io.github.tieo.arbay.model.DroppedListing
 import io.github.tieo.arbay.model.Listing
@@ -192,8 +193,9 @@ sealed interface HiddenKind {
     data class Search(val reason: DropReason, val detail: String?) : HiddenKind
 }
 
-/** A group of listings missing from the screen, what took them, and why. */
-data class Hidden(val kind: HiddenKind, val label: String, val why: String, val listings: List<Listing>)
+/** A group of listings missing from the screen, what took them, and why. [total] counts every one,
+ *  where [listings] can hold only some of those the search removed on the server. */
+data class Hidden(val kind: HiddenKind, val label: String, val why: String, val listings: List<Listing>, val total: Int = listings.size)
 
 /**
  * Every way a listing can be missing from a results screen, each with what took it: the reader's
@@ -214,7 +216,15 @@ fun hiddenListings(
     newListingIds: Set<String>,
     likelyScams: Map<String, String> = emptyMap(),
     blockedDealers: List<BlockedDealer> = emptyList(),
+    dropCounts: List<DropCount> = emptyList(),
 ): List<Hidden> = buildList {
+    // How many the server removed for a reason, against how many of them it sent: the difference
+    // is what a group adds to its count beyond the offers it lists.
+    fun unsent(reason: DropReason, detail: String? = null, anyDetail: Boolean = false): Int {
+        val counted = dropCounts.filter { it.reason == reason && (anyDetail || it.detail == detail) }.sumOf { it.count }
+        val sent = droppedBySearch.count { it.reason == reason && (anyDetail || it.detail == detail) }
+        return (counted - sent).coerceAtLeast(0)
+    }
     val banned = fetched.filter { it.id in bannedIds }
     // By id: the list the words leave carries copies with their distance filled in, which are not
     // equal to the listings as fetched, and every one of them read as blocked.
@@ -243,9 +253,9 @@ fun hiddenListings(
         "Listings you sent away with the bin on their card.", banned))
     if (byDealer.isNotEmpty()) add(Hidden(HiddenKind.BlockedDealers, "dealers you blocked",
         "Sold by " + byDealer.mapNotNull { l -> dealerThatCaught(l, blockedDealers)?.name ?: droppedBySearch.firstOrNull { it.listing.id == l.id }?.detail }
-            .distinct().joinToString(", ") + ".", byDealer))
+            .distinct().joinToString(", ") + ".", byDealer, byDealer.size + unsent(DropReason.BLOCKED_DEALER, anyDetail = true)))
     if (byWord.isNotEmpty()) add(Hidden(HiddenKind.BlockedWords, "your blocked words",
-        "Carrying one of your blocked words: " + blockedTerms.joinToString(", "), byWord))
+        "Carrying one of your blocked words: " + blockedTerms.joinToString(", "), byWord, byWord.size + unsent(DropReason.BLOCKED_WORD, anyDetail = true)))
     narrowed.newPrice?.takeIf { narrowed.aboveNew.isNotEmpty() }?.let { new ->
         add(Hidden(HiddenKind.AboveNewPrice, "above the new price",
             "Costing more than the thing new in a shop, ${new.format()}. The search named no price, so the markets were asked for nothing dearer.",
@@ -269,7 +279,7 @@ fun hiddenListings(
             val (reason, detail) = key
             add(Hidden(HiddenKind.Search(reason, detail), detail ?: reason.label,
                 explainDropReason(reason) + (detail?.let { " Taken by: $it." } ?: ""),
-                entries.map { it.listing }))
+                entries.map { it.listing }, entries.size + unsent(reason, detail)))
         }
 }
 

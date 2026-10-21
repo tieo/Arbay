@@ -221,6 +221,16 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
  */
 private fun droppedSent(query: SearchQuery): Int = if (query.unattended) Int.MAX_VALUE else 80
 
+/**
+ * The removed offers a search is sent: in the order the market ranked them, so the ones it thought
+ * most relevant, the ones a wrong filter would be hiding, come first, and within [droppedSent] a
+ * share for every reason, so the reasons that removed the most cannot hide the rest.
+ */
+private fun sentDropped(dropped: List<DroppedListing>, raw: List<Listing>, query: SearchQuery): List<DroppedListing> {
+    val rank = raw.withIndex().associate { it.value.id to it.index }
+    return sampleDropped(dropped.sortedBy { rank[it.listing.id] ?: Int.MAX_VALUE }, droppedSent(query))
+}
+
 /** The most offers one search reads from one market: fifty pages of a market's usual size. */
 private const val MAX_PER_MARKET = 1000
 
@@ -770,6 +780,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val partitioned = RelevanceFilter.partition(cached, pq)
                                 val classified = partitioned.kept.map { SoldDetector.classify(it) }
                                 val done = finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
+                                val dropped = partitioned.dropped + done.criteriaDropped +
+                                    done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
                                 resultChannel.send(CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
@@ -777,10 +789,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = done.listings.size,
                                     rawCount = cached.size,
                                     listings = done.listings,
-                                    dropped = (
-                                        partitioned.dropped + done.criteriaDropped +
-                                            done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
-                                        ).take(droppedSent(pq)),
+                                    dropped = sentDropped(dropped, cached, pq),
+                                    droppedCounts = dropped.dropCounts(),
                                     fromCache = true,
                                     facets = done.facets,
                                 ))
@@ -923,10 +933,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     resultCount = results.size,
                                     rawCount = rawResults.size,
                                     listings = results,
-                                    // Kept in the order the market ranked them, so the ones it
-                                    // thought most relevant, the ones a wrong filter would be
-                                    // hiding, are the ones sent ([droppedSent]).
-                                    dropped = dropped.take(droppedSent(pq)),
+                                    dropped = sentDropped(dropped, rawResults, pq),
+                                    droppedCounts = dropped.dropCounts(),
                                     termsUsed = termsUsed.toList(),
                                     suggestedTerms = verdicts.values.toList(),
                                     facets = facets,
