@@ -32,6 +32,13 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             call.respond(savedSearches.newListings(id))
         }
 
+        // Every offer a saved search's alert let through, after the one numbered `after`; waits up
+        // to `waitSeconds` (at most a minute) for one when there is none yet.
+        get("/alerts") {
+            val after = call.request.queryParameters["after"]?.toLongOrNull() ?: 0L
+            val wait = (call.request.queryParameters["waitSeconds"]?.toIntOrNull() ?: 0).coerceIn(0, 60)
+            call.respond(io.github.tieo.arbay.crawler.AlertFeed.after(after, kotlin.time.Duration.parse("${wait}s")))
+        }
         // The saved search was opened, so what was waiting in it has been seen.
         post("/{id}/opened") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")

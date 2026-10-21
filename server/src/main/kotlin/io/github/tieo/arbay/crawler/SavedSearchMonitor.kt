@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.crawler
 
+import kotlin.math.roundToLong
+import kotlin.math.roundToInt
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
@@ -304,6 +306,13 @@ class SavedSearchMonitor(
         }
 
         if (subfilterMatches.isNotEmpty()) pushSubfilterMatches(product, subfilterMatches)
+        AlertFeed.record(subfilterMatches.map { (sf, l) ->
+            FoundAlert(
+                seq = 0, savedSearchId = product.id, searchName = product.name, rule = sf.displayName,
+                listingId = l.id, title = l.title, url = l.url,
+                priceEur = eurCents(l.landedPrice(ImportSettingsStore.current))?.let { it / 100 }, at = Clock.System.now(),
+            )
+        })
 
         log.info(
             "saved-search {}: {} new, {} subfilter matches",
@@ -468,6 +477,12 @@ class SavedSearchMonitor(
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return
+        AlertFeed.record(worth.map { (l, fit) ->
+            FoundAlert(
+                seq = 0, savedSearchId = product.id, searchName = product.name, rule = "fit ${(fit.score * 100).roundToInt()} %",
+                listingId = l.id, title = l.title, url = l.url, priceEur = FitScore.priceEur(l).roundToLong(), at = Clock.System.now(),
+            )
+        })
         // One message per run, however many made it: the best one in full, opened by a tap, and a
         // line each for the next, with buttons. Several pushes at once were both noise and more
         // than ntfy.sh takes in a burst (the fifth was refused with 429).
