@@ -47,13 +47,13 @@ class AtTheSourceTest {
     }
 
     @Test
-    fun `mobile_de and AutoScout24 are asked for the limits only`() {
+    fun `mobile_de and AutoScout24 are asked for the limits only, AutoScout24 for the gearbox too`() {
         val mobile = MobileDeCrawler(client).filterParams(crafter)
         listOf("&fr=2018:", "&ml=:150000", "&p=10000:30990", "&ft=DIESEL").forEach { assertTrue(it in mobile, "$it in $mobile") }
         listOf("&tr=", "&pw=", "&st=", "&dt=").forEach { assertFalse(it in mobile, "$it in $mobile") }
         val as24 = AutoScout24Crawler(client).filterParams(crafter)
-        listOf("&fregfrom=2018", "&kmto=150000", "&fuel=").forEach { assertTrue(it in as24, "$it in $as24") }
-        listOf("&gear=", "&powerfrom=", "&custtype=").forEach { assertFalse(it in as24, "$it in $as24") }
+        listOf("&fregfrom=2018", "&kmto=150000", "&fuel=", "&gear=A").forEach { assertTrue(it in as24, "$it in $as24") }
+        listOf("&powerfrom=", "&custtype=").forEach { assertFalse(it in as24, "$it in $as24") }
     }
 
     @Test

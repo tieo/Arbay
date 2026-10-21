@@ -198,7 +198,11 @@ class AutoScout24Crawler(
         c.minMileageKm?.let { append("&kmfrom=$it") }
         c.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
         c.maxPowerKw?.let { append("&powertype=kw&powerto=$it") }
-        when (c.transmission) {
+        // The gearbox goes even where the fit score weighs it: every ad here states one (72 of 72
+        // Crafters, 2026-10-21), so the site removes exactly the vans Arbay's own filter removes.
+        // Left out, the manual vans filled the 20 pages the site serves: Germany answered 401
+        // Crafters in the band, 49 of them automatic, and 21 of those were never read.
+        when (query.carCriteria.transmission) {
             Transmission.AUTOMATIC -> append("&gear=A")
             Transmission.MANUAL -> append("&gear=M")
             null -> {}
