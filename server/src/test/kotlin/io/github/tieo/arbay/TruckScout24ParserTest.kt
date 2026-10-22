@@ -90,4 +90,15 @@ class TruckScout24ParserTest {
         assertEquals(null, van.vehicle?.mileageKm)
         assertEquals("Parma", van.location?.city)
     }
+
+    @Test
+    fun `a card's body, make and own title are separate words`() {
+        // TruckScout24 23109816 as the card writes it: the make and the seller's title, each in its
+        // own span with no space between, read as "VWVW Crafter", and the search for a Volkswagen
+        // Crafter threw it out as off target.
+        val html = """<html><body><section data-listing-id="23109816"><a data-grid="title" href="/tsp/ts-231-09-816"><h2>""" +
+            """<span class="text-gray-100">Kastenwagen</span><br><span class="me-1">VW</span><span>VW Crafter L2-H2/Allrad</span></h2></a>""" +
+            """<div data-grid="price">21.000 € brutto</div></section></body></html>"""
+        assertEquals("Kastenwagen VW VW Crafter L2-H2/Allrad", TruckScout24Crawler(dummyClient()).parse(html).single().title)
+    }
 }

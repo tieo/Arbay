@@ -66,6 +66,18 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
      * read, which no row carries. The load space measures are kept as a line of the description,
      * since they tell an L2 from an L3 where a title only claims one.
      */
+
+    /**
+     * A card's title with a space between its parts. The card writes the body, the make and the
+     * seller's own title as separate elements with no whitespace between them, spaced only by CSS,
+     * so their plain text reads "VWCrafter" and "VWVW Crafter", and the relevance filter, finding
+     * neither word, threw out Crafters as off target.
+     */
+    internal fun titleText(slot: org.jsoup.nodes.Element): String {
+        val parts = slot.select("span, div").filter { it.children().none { c -> c.tagName() in setOf("span", "div") } }
+            .map { it.text().trim() }.filter { it.isNotEmpty() }
+        return (if (parts.isEmpty()) slot.text() else parts.joinToString(" ")).replace(Regex("""\s+"""), " ").trim()
+    }
     internal fun parseDetail(html: String): ListingDetail? {
         val doc = Jsoup.parse(html)
         val text = doc.selectFirst(".beschreibung")?.let { body ->
@@ -193,7 +205,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
         return doc.select("section[data-listing-id]").mapNotNull { card ->
             val externalId = card.attr("data-listing-id").takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            val title = card.selectFirst("[data-grid=title]")?.text()?.trim()
+            val title = card.selectFirst("[data-grid=title]")?.let(::titleText)
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             // A dealer's price cell reads "14.900 € Festpreis zzgl. MwSt. (17.731 € brutto)": the
             // headline is net, and a private buyer pays the gross, so the gross is the price where
