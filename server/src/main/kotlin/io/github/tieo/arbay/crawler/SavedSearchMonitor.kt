@@ -7,6 +7,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.SaleType
@@ -381,6 +382,71 @@ class SavedSearchMonitor(
 
     private val loopback by lazy { io.github.tieo.arbay.routes.loopbackClient() }
 
+    /** Why a market gave a run no full answer; [refusal] when the market turned the run away. */
+    private class MarketFailure(val message: String, val refusal: Boolean)
+
+    /** What one search through the app's stream brought back. */
+    private class FitCrawl(
+        val found: LinkedHashMap<String, Listing> = LinkedHashMap(),
+        /** The rule that removed each offer the markets sent, so a best offer that stops coming
+         *  back is told apart: removed by the search, or not sent at all. */
+        val ruledOut: HashMap<String, String> = HashMap(),
+        /** Each market, by [PlatformId] name, that ended in an error rather than an answer. */
+        val failed: HashMap<String, MarketFailure> = HashMap(),
+    )
+
+    /** One search of [q] through this server's own stream, as the app runs it; [platforms] narrows it
+     *  to those markets, and null searches every market the saved search names. */
+    private suspend fun fitCrawl(
+        selfUrl: String,
+        q: io.github.tieo.arbay.model.SearchQuery,
+        crawl: io.github.tieo.arbay.model.CarFilters,
+        home: Pair<Double, Double>?,
+        platforms: List<PlatformId>?,
+    ): FitCrawl {
+        val result = FitCrawl()
+        // What each market streamed before it finished, kept where it is given up on instead: a
+        // market that timed out after sending 275 vans otherwise counted as having sent none, and
+        // its best ones as lost.
+        val streamed = HashMap<String, MutableList<Listing>>()
+        loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
+            parameter("q", q.text)
+            (platforms ?: q.platforms).takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
+            q.excludeKeywords.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
+            q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+            parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
+            home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }
+            parameter("unattended", true)
+        }.execute { response ->
+            if (!response.status.isSuccess()) return@execute
+            val channel = response.bodyAsChannel()
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                if (line.isBlank()) continue
+                val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
+                when (event.type) {
+                    CrawlerEventType.PLATFORM_PROGRESS -> streamed.getOrPut(event.platform) { mutableListOf() } += event.listings
+                    CrawlerEventType.PLATFORM_ERROR -> {
+                        streamed.remove(event.platform)?.forEach { result.found.putIfAbsent(it.id, it) }
+                        val type = event.errorType
+                        result.failed[event.platform] = MarketFailure(
+                            message = event.error ?: type ?: "error",
+                            refusal = type == "COOLING_DOWN" || ErrorType.entries.any { it.name == type && BlockCooldown.isBlock(it) },
+                        )
+                    }
+                    CrawlerEventType.PLATFORM_DONE -> {
+                        streamed.remove(event.platform)
+                        event.listings.forEach { result.found[it.id] = it }
+                        event.dropped.forEach { d -> result.ruledOut[d.listing.id] = listOfNotNull(d.reason.name.lowercase().replace('_', ' '), d.detail).joinToString(": ") }
+                    }
+                    else -> {}
+                }
+                if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
+            }
+        }
+        return result
+    }
+
     /**
      * A saved search with a fit alert: searched exactly as the app searches it, so every listing
      * has had its ad read (size, drive, air conditioning, the dealer's reviews) and carries its
@@ -404,42 +470,24 @@ class SavedSearchMonitor(
             minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
         )
         val home = settings.home?.let(::homePoint)
-        val found = LinkedHashMap<String, Listing>()
-        // The rule that removed each offer the markets sent, so a best offer that stops coming back
-        // is told apart: removed by the search, or not sent at all.
-        val ruledOut = HashMap<String, String>()
-        // What each market streamed before it finished, kept where it is given up on instead: a
-        // market that timed out after sending 275 vans otherwise counted as having sent none, and
-        // its best ones as lost.
-        val streamed = HashMap<String, MutableList<Listing>>()
-        loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
-            parameter("q", q.text)
-            q.platforms.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
-            q.excludeKeywords.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
-            q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
-            parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
-            home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }
-            parameter("unattended", true)
-        }.execute { response ->
-            if (!response.status.isSuccess()) return@execute
-            val channel = response.bodyAsChannel()
-            while (true) {
-                val line = channel.readUTF8Line() ?: break
-                if (line.isBlank()) continue
-                val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
-                when (event.type) {
-                    CrawlerEventType.PLATFORM_PROGRESS -> streamed.getOrPut(event.platform) { mutableListOf() } += event.listings
-                    CrawlerEventType.PLATFORM_ERROR -> streamed.remove(event.platform)?.forEach { found.putIfAbsent(it.id, it) }
-                    CrawlerEventType.PLATFORM_DONE -> {
-                        streamed.remove(event.platform)
-                        event.listings.forEach { found[it.id] = it }
-                        event.dropped.forEach { d -> ruledOut[d.listing.id] = listOfNotNull(d.reason.name.lowercase().replace('_', ' '), d.detail).joinToString(": ") }
-                    }
-                    else -> {}
-                }
-                if (event.type == CrawlerEventType.SEARCH_COMPLETE) break
-            }
+        val crawled = fitCrawl(selfUrl, q, crawl, home, platforms = null)
+        // A market that refused the run is asked again once its block cooldown is over: mobile.de
+        // answers Access denied for a quarter of an hour now and then and is fine before and after,
+        // and a run that took that answer as final lost every van of the market until the next
+        // day's run (live, 2026-10-21: nine of the Crafter search's best ten).
+        val refused = crawled.failed.filterValues { it.refusal }.keys.mapNotNull { name -> PlatformId.entries.firstOrNull { it.name == name } }
+        if (refused.isNotEmpty()) {
+            val wait = refused.maxOf { BlockCooldown.remainingMs(it) }
+            log.info("fit alert {}: {} refused the run, asking again in {} s", product.name, refused.joinToString { it.displayName }, wait / 1000)
+            delay(wait + 1_000L)
+            val again = fitCrawl(selfUrl, q, crawl, home, platforms = refused)
+            crawled.found.putAll(again.found)
+            crawled.ruledOut.putAll(again.ruledOut)
+            refused.forEach { crawled.failed.remove(it.name) }
+            crawled.failed.putAll(again.failed)
         }
+        val found = crawled.found
+        val ruledOut = crawled.ruledOut
         // The saved market and country picks narrow what was fetched, as they do on the screen.
         val markets = q.showOnlyMarkets
         val countries = q.showOnlyCountries
@@ -460,7 +508,10 @@ class SavedSearchMonitor(
             shown.values.mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } },
         ) { it.score }
         // Every run, quiet ones included: the best offers it ever ranked are looked for again.
-        if (shown.isNotEmpty()) TopOffers.update(product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState)
+        if (shown.isNotEmpty()) TopOffers.update(
+            product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState,
+            unanswered = crawled.failed.mapValues { it.value.message },
+        )
         if (firstFitRun) {
             log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
             return

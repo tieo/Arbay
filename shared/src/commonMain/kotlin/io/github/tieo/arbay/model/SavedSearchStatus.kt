@@ -54,7 +54,8 @@ data class PriceDrop(
 @Serializable
 enum class TopOfferState {
     FOUND,
-    /** Not returned, its ad up or its market unable to say: the search is losing it. */
+    /** Not returned, its ad up or its market unable to say, or its market not answering the run
+     *  at all ([TopOffer.marketError]): the search is losing it. */
     LOST,
     /** Returned by its market and removed by a rule of the search, named in [TopOffer.ruledOutBy]. */
     RULED_OUT,
@@ -78,4 +79,9 @@ data class TopOffer(
     val adState: AdState? = null,
     /** The search's rule that removed it, "vehicle criteria: mileage", while [state] is RULED_OUT. */
     val ruledOutBy: String? = null,
+    /**
+     * Why its market gave the last run no full answer, "access denied", while [state] is LOST
+     * for that reason: the search never got to look for it, and the market is what needs fixing.
+     */
+    val marketError: String? = null,
 )

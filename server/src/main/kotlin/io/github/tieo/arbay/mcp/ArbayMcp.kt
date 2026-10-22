@@ -302,7 +302,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more (new_offers lists them all)" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
                     .joinToString("") { o ->
                         val why = if (o.str("state") == "RULED_OUT") "RULED OUT of its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} by the search's rule \"${o.str("ruledOutBy")}\" (check the ad really breaks it)"
-                            else "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")"
+                            else o.str("marketError")?.let { e ->
+                                val market = runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(o.str("listingId")!!.substringBefore(':')).displayName }.getOrNull() ?: "its market"
+                                "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} ($market gave the last run no answer, so it was never looked for: $e)"
+                            } ?: ("LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")")
                         "\n  $why: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
                             "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
                     }) + priceDropLines(s)

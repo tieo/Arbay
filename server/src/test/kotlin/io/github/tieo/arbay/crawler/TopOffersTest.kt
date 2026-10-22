@@ -51,4 +51,22 @@ class TopOffersTest {
         assertEquals(emptyList(), TopOffers.update(search, listOf(other to 0.7), setOf(other.id), rule, read))
         assertEquals(emptyList(), TopOffers.missing(search))
     }
+
+    @Test
+    fun `a best offer whose market gave the run no answer is lost for that reason, and its page is not read`() = runBlocking {
+        val search = "top-offers-test-${System.nanoTime()}"
+        val schrobenhausen = van("schrobenhausen")
+        var reads = 0
+        val read: suspend (io.github.tieo.arbay.model.TopOffer) -> AdState? = { reads++; AdState.LIVE }
+        TopOffers.update(search, listOf(schrobenhausen to 0.87), setOf(schrobenhausen.id), emptyMap(), read)
+        val lost = TopOffers.update(search, emptyList(), emptySet(), emptyMap(), read, unanswered = mapOf("MOBILE_DE" to "access denied")).single()
+        assertEquals(TopOfferState.LOST, lost.state); assertEquals("access denied", lost.marketError)
+        assertEquals(0, reads)
+        // Its market answers again and returns it: found, and the error forgotten.
+        TopOffers.update(search, listOf(schrobenhausen to 0.87), setOf(schrobenhausen.id), emptyMap(), read)
+        assertEquals(null, TopOffers.of(search).single().marketError)
+        // Its market answers and does not return it: lost the ordinary way, its page read.
+        val plain = TopOffers.update(search, emptyList(), emptySet(), emptyMap(), read).single()
+        assertEquals(null, plain.marketError); assertEquals(1, reads)
+    }
 }

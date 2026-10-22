@@ -44,7 +44,10 @@ object TopOffers {
     /**
      * One run's outcome: [ranked] is what it scored, best first, [found] every offer it returned,
      * and [ruledOut] the rule that removed each offer its markets sent and it did not return.
-     * [stateOf] reads an ad's page, or answers null where the market cannot say. Answers what the
+     * [stateOf] reads an ad's page, or answers null where the market cannot say. [unanswered] is
+     * each market, by [io.github.tieo.arbay.model.PlatformId] name, that gave the run no full
+     * answer, with its error: an offer there is lost for that reason and its page is not read,
+     * since a market that just refused the search refuses the ad's page as well. Answers what the
      * run reports missing: the lost, and the newly ruled out.
      */
     suspend fun update(
@@ -53,6 +56,7 @@ object TopOffers {
         found: Set<String>,
         ruledOut: Map<String, String>,
         stateOf: suspend (TopOffer) -> AdState?,
+        unanswered: Map<String, String> = emptyMap(),
     ): List<TopOffer> {
         val now = Clock.System.now()
         val missing = synchronized(this) {
@@ -65,18 +69,21 @@ object TopOffers {
                     lastSeenAt = now, state = TopOfferState.FOUND,
                 )
             }
-            known.replaceAll { id, o -> if (id in found && o.state != TopOfferState.FOUND) o.copy(state = TopOfferState.FOUND, lastSeenAt = now) else o }
+            known.replaceAll { id, o -> if (id in found && o.state != TopOfferState.FOUND) o.copy(state = TopOfferState.FOUND, lastSeenAt = now, marketError = null) else o }
             known.values.filter { it.listingId !in found && it.state != TopOfferState.GONE }
         }
         val checked = missing.map { o ->
             val rule = ruledOut[o.listingId]
+            val marketError = unanswered[o.listingId.substringBefore(':')]
             when {
+                rule == null && marketError != null ->
+                    o.copy(state = TopOfferState.LOST, checkedAt = now, adState = null, ruledOutBy = null, marketError = marketError)
                 rule == null -> {
                     val state = runCatching { stateOf(o) }.getOrNull()
-                    o.copy(state = if (state == AdState.DELETED) TopOfferState.GONE else TopOfferState.LOST, checkedAt = now, adState = state, ruledOutBy = null)
+                    o.copy(state = if (state == AdState.DELETED) TopOfferState.GONE else TopOfferState.LOST, checkedAt = now, adState = state, ruledOutBy = null, marketError = null)
                 }
                 o.state == TopOfferState.RULED_OUT && o.ruledOutBy == rule -> o
-                else -> o.copy(state = TopOfferState.RULED_OUT, checkedAt = now, adState = null, ruledOutBy = rule)
+                else -> o.copy(state = TopOfferState.RULED_OUT, checkedAt = now, adState = null, ruledOutBy = rule, marketError = null)
             }
         }
         synchronized(this) {
@@ -87,7 +94,8 @@ object TopOffers {
         }
         val reported = checked.filter { it.state == TopOfferState.LOST || it.state == TopOfferState.RULED_OUT && it.checkedAt == now }
         reported.forEach {
-            if (it.state == TopOfferState.LOST) log.warn("top offer lost from {}: {} {} (ad {})", productId, it.title, it.url, it.adState ?: "state unknown")
+            if (it.state == TopOfferState.LOST) log.warn("top offer lost from {}: {} {} ({})", productId, it.title, it.url,
+                it.marketError?.let { e -> "market gave no answer: $e" } ?: "ad ${it.adState ?: "state unknown"}")
             else log.warn("top offer ruled out of {} by {}: {} {}", productId, it.ruledOutBy, it.title, it.url)
         }
         return reported

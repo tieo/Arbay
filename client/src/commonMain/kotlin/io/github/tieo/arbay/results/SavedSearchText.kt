@@ -3,6 +3,7 @@ package io.github.tieo.arbay.results
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PriceDrop
 import io.github.tieo.arbay.model.SavedSearchStatus
 import io.github.tieo.arbay.model.TopOfferState
@@ -28,12 +29,17 @@ fun savedSearchSubtitle(product: TrackedProduct): String {
     return if (termDiffers) "${product.searchQuery.text}  ·  $markets" else markets
 }
 
-/** How many of the search's best offers it is losing, and how many its last run ruled out; null when none. */
+/** How many of the search's best offers it is losing, which markets gave its last run no answer,
+ *  and how many its last run ruled out; null when none. */
 fun lostLabel(status: SavedSearchStatus): String? {
-    val lost = status.missingTopOffers.count { it.state == TopOfferState.LOST }
+    val (unanswered, lost) = status.missingTopOffers.filter { it.state == TopOfferState.LOST }.partition { it.marketError != null }
+    val silent = unanswered.map { o ->
+        PlatformId.entries.firstOrNull { it.name == o.listingId.substringBefore(':') }?.displayName ?: o.listingId.substringBefore(':')
+    }.distinct()
     val ruledOut = status.missingTopOffers.count { it.state == TopOfferState.RULED_OUT }
     return listOfNotNull(
-        lost.takeIf { it > 0 }?.let { "$it of its best offers no longer found" },
+        silent.takeIf { it.isNotEmpty() }?.let { "${it.joinToString()} did not answer its last check" },
+        lost.size.takeIf { it > 0 }?.let { "$it of its best offers no longer found" },
         ruledOut.takeIf { it > 0 }?.let { "$it of its best offers ruled out" },
     ).joinToString(", ").ifEmpty { null }
 }
