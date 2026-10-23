@@ -94,4 +94,49 @@ class SmartScreensTest {
         )
         assertEquals("https://i.ebayimg.com/images/g/abc/s-l1600.jpg", SmartScreens.fullSize("https://i.ebayimg.com/images/g/abc/s-l500.webp"))
     }
+
+    @Test
+    fun `raw values shown in decimal are read as decimal`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_decimal_clean"), 5))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+        assertEquals(401L, r.powerOnHours)
+    }
+
+    @Test
+    fun `an older CrystalDiskInfo's names for the same rows are read`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_old_names_clean"), 5))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+        assertEquals(0L, r.pending)
+        assertEquals(27_780L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a photo of a monitor with the window's edge read after each row still reads`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_monitor_photo_clean"), 2))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+        assertEquals(6_884L, r.powerOnHours)
+        assertEquals("Gut", r.status)
+    }
+
+    @Test
+    fun `a row whose current value reads under its worst is a misread, not a failing drive`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_monitor_photo_misread"), 3))
+        assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
+        assertEquals(49_963L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a Seagate's hours come from the header, not the raw value that packs more than hours`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_seagate_hours"), 2))
+        assertEquals(26_488L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a sector count under CrystalDiskInfo's Gut is a misread zero`() {
+        val misread = text("crystaldiskinfo_de_monitor_photo_clean").replace(
+            Regex("""(Aktuell ausstehende Sektoren 100 100 0 )000000000000"""), "$1000000000900",
+        )
+        val r = assertNotNull(SmartScreens.parse(misread, 2))
+        assertEquals(DriveVerdict.UNREADABLE, r.verdict)
+    }
 }

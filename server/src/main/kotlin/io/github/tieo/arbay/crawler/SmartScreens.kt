@@ -48,24 +48,40 @@ object SmartScreens {
     /** A screenshot this narrow is upscaled before reading: Tesseract wants letters some 20 pixels high. */
     private const val READ_WIDTH = 1_400
 
-    /** A row of a SMART table: three normalised values and the raw one in hex, as CrystalDiskInfo and
-     *  smartctl print them ("Wiederzugewiesene Sektoren 88 88 10 00000000B9A0"). */
-    private val tableRow = Regex("""(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+([0-9A-Fa-f]{6,16})\s*$""")
+    /** A row of a SMART table: three normalised values and the raw one in twelve hex digits, as
+     *  CrystalDiskInfo prints them ("Wiederzugewiesene Sektoren 88 88 10 00000000B9A0"). Whatever the
+     *  OCR makes of the scroll bar and window edge after it is let be, and so is one stray character
+     *  before the raw value ("1000000000000"), since the twelve digits are a fixed width. */
+    private val tableRow = Regex("""(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+[0-9A-Fa-f]?([0-9A-Fa-f]{12})(?![0-9A-Fa-f])""")
+
+    /** The same row with the raw value in decimal, as CrystalDiskInfo shows it when set so
+     *  ("Wiederzugewiesene Sektoren 100 100 36 0"); believed only on a screen with no hex row. */
+    private val decimalRow = Regex("""(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,12})\W*$""")
 
     /** A row with only a value and its threshold, as Scrutiny shows some ("Current Helium Level 19 25"). */
     private val pairRow = Regex("""(\d{1,6})\s+(\d{1,3})\b""")
 
+    private val scrutinyMarks = Regex("""(?i)\(0[x%]\w{2}\)|threshold\s+ideal|fa\w{0,2}ure\s?rate|scrutiny""")
+
     private enum class Attribute(val names: Regex) {
-        REALLOCATED(Regex("""(?i)wiederzugewiesene\s+sektoren|reallocated\s+sectors?(\s+count)?\b""")),
-        PENDING(Regex("""(?i)ausstehende\s+sektoren|pending\s+sectors?""")),
-        UNCORRECTABLE(Regex("""(?i)nicht\s?korrigierbare\s+sektoren|offline\s+uncorrectable|uncorrectable\s+sectors?""")),
+        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated\s+sectors?(\s+count)?\b""")),
+        // Older German CrystalDiskInfo calls pending sectors "schwebend".
+        PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending\s+sectors?""")),
+        UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline\s+uncorrectable|uncorrectable\s+sectors?""")),
         REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported\s+uncorrect""")),
         HOURS(Regex("""(?i)betriebsstunden|power[\s-]?on[\s-]?hours""")),
         HELIUM(Regex("""(?i)helium""")),
     }
 
     private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")
-    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours)\s+(\d{1,3}(?:[.,]?\d{3})*)\s*(std|stunden|hours)""")
+    // The field beside the label is framed, and the OCR reads its edge as "[", "|" or "_".
+    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours)[\s|\[\]_:;.]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|stunden|hours)""")
+    private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
+
+    /** The most hours a drive's counter believes: some 34 years. */
+    private const val MOST_HOURS = 300_000L
+    private val goodTab = Regex("""\b(gut|good)\b""", RegexOption.IGNORE_CASE)
+    private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad|unbekannt|unknown)\b""", RegexOption.IGNORE_CASE)
     private val failingStatus = setOf("vorsicht", "schlecht", "caution", "bad")
 
     /** The most bad sectors a reading believes; a drive's spare area holds some thousands to tens of thousands. */
@@ -84,20 +100,30 @@ object SmartScreens {
         val counts = HashMap<Attribute, Long>()
         val failing = mutableListOf<String>()
         var tableHours: Long? = null
+        // A screen shows raw values in hex when one of them has a letter or a leading zero, which no
+        // decimal number has; twelve decimal digits alone also fit the hex row.
+        val hexScreen = lines.any { line -> tableRow.findAll(line).any { it.groupValues[4].let { raw -> raw.startsWith('0') || raw.any(Char::isLetter) } } }
+        // Only Scrutiny shows a row as a bare value and threshold, and it is known by its columns and
+        // its IDs ("5(0x05)"); on any other screen two numbers are a row the OCR lost half of, and
+        // CrystalDiskInfo's "100 100" is no sector count.
+        val scrutiny = !hexScreen && scrutinyMarks.containsMatchIn(text)
         for (line in lines) {
             val attribute = Attribute.entries.firstOrNull { it.names.containsMatchIn(line) } ?: continue
             found++
             val after = line.substring(attribute.names.find(line)!!.range.last + 1)
-            val row = tableRow.find(after)
+            val row = tableRow.find(after) ?: if (hexScreen) null else decimalRow.find(after)
             if (row != null) {
-                val (current, _, threshold, rawHex) = row.destructured
-                val raw = rawHex.toLongOrNull(16)
-                // A value at or under a threshold above zero is the drive's own failure mark.
+                val (current, worst, threshold, rawDigits) = row.destructured
+                val raw = rawDigits.toLongOrNull(if (hexScreen) 16 else 10)
+                // A value at or under a threshold above zero is the drive's own failure mark. The
+                // worst value is the lowest the current one has been, so a current one under it is
+                // the OCR misreading the row ("100" read as "0"), and the row's marks are not believed.
                 val cur = current.toInt()
                 val thr = threshold.toInt()
-                if (thr in 1..254 && cur <= thr) failing += "${attribute.label()} $cur at threshold $thr"
+                if (thr in 1..254 && cur <= thr && cur >= worst.toInt() && cur <= 253) failing += "${attribute.label()} $cur at threshold $thr"
                 when (attribute) {
-                    Attribute.HOURS -> tableHours = raw
+                    // Seagate keeps more than hours in this raw value; the hours are its low four bytes.
+                    Attribute.HOURS -> tableHours = raw?.and(0xFFFFFFFFL)?.takeIf { it <= MOST_HOURS }
                     Attribute.HELIUM -> {}
                     // No drive has this many bad sectors: a count past it is the OCR misreading a
                     // digit of the hex ("…0000" read as "…9000"), and stays unread.
@@ -107,7 +133,7 @@ object SmartScreens {
             }
             // Only a row of exactly two numbers is Scrutiny's: a CrystalDiskInfo row whose hex was
             // misread still has its three normalised values, and "200 200" is no sector count.
-            if (Regex("""\b\d+\b""").findAll(after).count() != 2) continue
+            if (!scrutiny || Regex("""\b\d+\b""").findAll(after).count() != 2) continue
             val pair = pairRow.find(after) ?: continue
             val (value, threshold) = pair.destructured
             when (attribute) {
@@ -121,8 +147,15 @@ object SmartScreens {
             }
         }
         if (found < 3) return null
+        // The big status box is white on colour and often lost to the OCR; the row of drive tabs
+        // above it names each drive's status too. Where every tab is good and no word anywhere on
+        // the screen is a warning, the drive shown is good as well.
         val word = status.find(text)?.groupValues?.get(1)
-        val hours = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull() ?: tableHours
+            ?: goodTab.find(text)?.value?.takeIf { !warningWord.containsMatchIn(text) }
+        // The header's own count comes first: in the table's hex the OCR reads B as 8.
+        val hours = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
+            ?: daysAndHours.find(text)?.let { it.groupValues[1].toLong() * 24 + it.groupValues[3].toLong() }
+            ?: tableHours
         val reallocated = counts[Attribute.REALLOCATED]
         val pending = counts[Attribute.PENDING]
         val uncorrectable = listOfNotNull(counts[Attribute.UNCORRECTABLE], counts[Attribute.REPORTED_UNCORRECTABLE]).takeIf { it.isNotEmpty() }?.max()
@@ -133,7 +166,12 @@ object SmartScreens {
             reallocated?.takeIf { it > 0 }?.let { add("$it reallocated sectors") }
             addAll(failing)
         }
+        // CrystalDiskInfo itself turns to Vorsicht as soon as a reallocated, pending or uncorrectable
+        // sector is counted, so under its Gut a count above zero is the OCR reading a 0 as 9 or 8.
+        val misread = word?.lowercase() in setOf("gut", "good") &&
+            listOf(Attribute.REALLOCATED, Attribute.PENDING, Attribute.UNCORRECTABLE).any { (counts[it] ?: 0) > 0 }
         val verdict = when {
+            misread -> DriveVerdict.UNREADABLE
             (word != null && word.lowercase() in failingStatus) || failing.isNotEmpty() ||
                 (pending ?: 0) > 0 || (uncorrectable ?: 0) > 0 || (reallocated ?: 0) > MANY_REALLOCATED -> DriveVerdict.FAILING
             (reallocated ?: 0) > 0 -> DriveVerdict.WORN
@@ -157,20 +195,25 @@ object SmartScreens {
 
     // ── Reading photos ──
 
-    /** Each photo's reading by its address, so an ad opened again is not read again. */
+    /**
+     * Each photo's text by its address, so an ad opened again is not read again. The text is kept
+     * rather than the reading, so a better parser reads every photo seen before anew; a photo whose
+     * text names no SMART attribute is kept as null, being no screen.
+     */
     @Serializable
-    private data class Read(val url: String, val reading: SmartReading?)
+    private data class Read(val url: String, val text: String?)
 
-    private val cacheFile = DataDir.file("smart_screens.json")
-    private val cache: MutableMap<String, SmartReading?> = HashMap<String, SmartReading?>().apply {
-        cacheFile.readStore(log) { json.decodeFromString<List<Read>>(it) }?.forEach { put(it.url, it.reading) }
+    private val cacheFile = DataDir.file("smart_screens_text.json")
+    private val cache: MutableMap<String, String?> = LinkedHashMap<String, String?>().apply {
+        cacheFile.readStore(log) { json.decodeFromString<List<Read>>(it) }?.forEach { put(it.url, it.text) }
     }
 
-    /** Every reading with the ad it came from, one JSON object a line, to be checked against the drives. */
+    /** Every reading with the ad and the text it came from, one JSON object a line, to be checked
+     *  against the photos. */
     private val shadowLog = DataDir.file("smart_screens_log.jsonl")
 
     @Serializable
-    private data class Logged(val at: String, val listingId: String, val title: String, val url: String, val reading: SmartReading)
+    private data class Logged(val at: String, val listingId: String, val title: String, val url: String, val reading: SmartReading, val text: String)
 
     /** The SMART screenshots among [photos], read; empty where there are none or the reader is missing. */
     suspend fun read(listingId: String, title: String, photos: List<String>, fetch: suspend (String) -> ByteArray?): DriveHealth {
@@ -178,21 +221,18 @@ object SmartScreens {
         val urls = photos.take(MOST_PHOTOS)
         val readings = urls.mapIndexedNotNull { i, url ->
             val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
-            val reading = known?.getOrNull() ?: if (known != null) null else {
-                val bytes = runCatching { fetch(fullSize(url)) }.getOrNull()
-                val text = bytes?.let { ocr(it) }
-                val read = text?.let { parse(it, i + 1) }
-                // Only a photo that was read is remembered: one that failed to arrive or to read is
-                // tried again the next time, rather than counted as no screenshot for good.
-                if (text != null) synchronized(cache) { cache[url] = read }
-                read?.let { r ->
-                    runCatching {
-                        shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r)) + "\n")
-                    }
+            if (known != null) return@mapIndexedNotNull known.getOrNull()?.let { parse(it, i + 1) }
+            val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { ocr(it) }
+            // Only a photo that was read is remembered: one that failed to arrive or to read is
+            // tried again the next time, rather than counted as no screenshot for good.
+            if (text != null) synchronized(cache) { cache[url] = text.takeIf { t -> Attribute.entries.any { it.names.containsMatchIn(t) } } }
+            val read = text?.let { parse(it, i + 1) }
+            read?.let { r ->
+                runCatching {
+                    shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r, text)) + "\n")
                 }
-                read
             }
-            reading?.copy(photo = i + 1)
+            read
         }
         persist()
         return DriveHealth(readings = readings, photosRead = urls.size)
@@ -212,7 +252,7 @@ object SmartScreens {
     }
 
     private fun persist() {
-        val all = synchronized(cache) { cache.map { (url, r) -> Read(url, r) } }.takeLast(5_000)
+        val all = synchronized(cache) { cache.map { (url, t) -> Read(url, t) } }.takeLast(5_000)
         runCatching { cacheFile.writeTextAtomically(json.encodeToString(all)) }
             .onFailure { log.warn("SMART readings not kept: {}", it.message) }
     }

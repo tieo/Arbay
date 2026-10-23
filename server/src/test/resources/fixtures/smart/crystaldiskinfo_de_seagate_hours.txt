@@ -1,0 +1,32 @@
+R
+& CrystalDiskinfo 9.7.2 x64 — %
+Datel  Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+&@ Gut @ Gut
+37 A
+@ Disk 1
+< ST1000NMO0008-2F2100 : 1000,2 GB
+Gesamtzustand Firmware | SNO2 =
+T T Schnittstelle [Serial ATA ! Drehzahl [ 7200 RPM _
+Ubertragungsmodus | SATA/600 | SATA/600 Eingeschaltet | 48 mal _
+\ktuelle Temperatu Laufwerksbuchstaben Betriebsstunden | _ 26488 Std
+({ 21:°C A Standard | ACS-3 | ACS-3 Revision 5 —
+. Eigenschaften | SMART, NCO, GPL . - z
+‘ ID Parametername ktueller Wert :htester Wert  Grenzwert Rohwerte
+@ 01 e 79 63 44 0000054D7A7A
+| @ 03  Mittlere Anlaufzeit 96 96 0 000000000000
+| @ 04 Start/Stopp-Zyklen der Spindel 100 100 20 _ 000000000037 ||
+1H 05 Wiederzugewiesene Sektoren 100 100 10 000000000000
+A ‘H 07 Suchfehler 90 60 45 00003AF84ADS
+‘(»-5 09 Betriebsstunden 70 70 0 C48D00006778 | |
+4 S ® 04  Misslungene Spindelanläufe 100 100 97 000000000000 | |
+A | @ 0C Geräte-Einschaltvorgänge 100 100 20 000000000030 | |
+| @ B8 Ende-zu-Ende-Fehler 100 100 99 000000000000 | |
+S, = \(-5 BB _ Gemeldete unkorrigierbare Fehler 100 100 0 000000000000 f e
+B | ® C Befehlszeitüberschreitung 100 100 0 000000000000 S R
+\(rg BD _ Übergeordnete Schreibvorgänge 100 100 0 000000000000 E
+‘Q’ BE | Luftstromtemperatur 79 57 40| 000015120015 e
+® F | Beschleunigungssensor-Fehlerrate 100 100 0 000000000000 i
+® © Ausschaltungsabbriche 100 100 0 000000000237 ——
+® C1 Laden/Entladen-Zyklen 100 100 0 000000000486 L1 .. — A
+® 2 Temperatur 21 43 0 001100000015
+® 3 Hardware-ECC wiederhergestellt 79 63 0 0000054D7A7A

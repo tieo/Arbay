@@ -1,0 +1,39 @@
+4 CrystalDiskinfo 8.17.14 x64 — X
+Datei Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut @ Gut @® Gut
+2226 21°C 23°C
+CR Disk 1 Disk 2
+< ST2000LM007-1R8174 2000,3 GB
+Gesamtzustand Firmware |SBK2 ... ...
+i = =
+Schnittstelle |USB (Serial ATA) Drehzahl | 5400 RPM
+2 ——
+Übertragungsmodus |SATA/300 | SATA/600 Eingeschaltet | 506 mal
+Akt. Temperatur Laufwerkbuchstaben| Betriebsstunden 27780 Std.
+@ Standard [ACS-3 | ACS-3 Revision 3b
+Eigenschaften |S.M.A.R.T., APM, NCQ, GPL
+ID Parametername Akt. Wert... Schlechte... Grenzwer... Rohwert (Einh. b...
+@ 01 Lesefehlerrate ! 84 65 6 00000E3F81B3
+@ 03 Mittl. Anlaufzeit ! 97 97 0 000000000000
+® 04 Start/Stopp-Zyklen d. Spindel 82 82 20 000000004828
+@ 05 Anz wiederzugewiesener Sektoren ! 100 100 36 000000000000
+@ 07 Anz. Suchfehler 75 60 45 000001E1131B
+@ 09 Betriebsstunden 69 69 0  FCA500006C84
+@ 0A Anz misslungener Spindelanläufe ! 100 100 97 000000000000
+®& oC Anz Gerate-Einschaltvorgénge 100 100 20 0000000001FA
+@ B8 Ende-zu-Ende-Fehler ¢ 100 100 99 000000000000
+@ BB Gemeldete unkorrigierbare Fehler ! 100 100 0 000000000000
+@ BC Befehlszeitiiberschreitung ! 100 100 0 000000000000
+@ BD Ubergeordnete Schreibvorgange ! 100 100 0 000000000000
+@ e Luftstromtemperatur ! 77 51 40 000025140017
+@ BF G-Sensor-Fehlerrate ! 100 100 0 000000000001
+@ (0 Ausschaltungsabbriiche ! 100 100 0 00000000005E
+@ C1 Laden/Entladen-Zyklen ! 75 75 0  00000000CA55
+@® 2 Temperatur ! 23 49 0 000C00000017
+@ C5 Aktuell schwebende Sektoren ! 100 100 0 000000000000
+@ C6 Nicht korrigierbare Sektoren ! 100 100 0 000000000000
+@® 7 UitraDMA-CRC-Fehler ¢ 200 200 0 000000000000
+@ F0 Kopfpositionierungszeit 100 253 0  077D00000229
+@ F1  LBA geschrieben (gesamt) 100 253 0  0001EA4C18BB
+@® 2 LBA gelesen (gesamt) 100 253 0 000014253474
+@ FE Freifallschutz ! 100 100 0 000000000000

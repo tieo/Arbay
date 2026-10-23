@@ -1,0 +1,37 @@
+¢4 CrystalDiskinfo 9.9.2 x64 — X
+Datei Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gt @& Gt O Gut O Gut
+44°C 36°C 36°C 38°C
+C: D: E E .
+< ST2000LM015-2E8174 : 2000,3 GB
+Gesamtzustand Firmware I 0001 a [ =
+Schnittstelle I UASP (Serial ATA) Drehzahl 5400 RPM
+i ’ Übertragungsmodus I SATA/600 | SATA/600 Eingeschaltet l 240 mal
+\ktuelle Temperatu Laufwerksbuchstaben | F: Betriebsstunden 401 Std.
+@ Standard [ ACS-3 | ACS-3 Revision 3b
+. Eigenschaften | SM.ART, APM, NCQ, TRIM, GPL
+ID  Parametername ktueller Wert :htester Wert ~ Grenzwert Rohwerte
+@ 01 Lesefehlerrate 78 64 6 68015079
+@ 03 Mittlere Anlaufzeit 99 99 0 0
+@ 04 Start/Stopp-Zyklen der Spindel 100 100 20 458
+® o5 Wiederzugewiesene Sektoren 100 100 36 0
+@ 07 Suchfehler 65 60 45 3239076
+@ 09 Betriebsstunden 100 100 0 148438364717...
+@ 0A Misslungene Spindelanlaufe 100 100 97 0
+@ 0C Gerite-Einschaltvorginge 100 100 20 240
+@ B8 Ende-zu-Ende-Fehler 100 100 99 0
+@ BB Gemeldete unkorrigierbare Fehler 100 100 0 0
+@ BC Befehlszeitiiberschreitung 100 100 0 0
+@ 8D Ubergeordnete Schreibvorgange 100 100 0 0
+@ BE Luftstromtemperatur 62 50 40 639041574
+@ BF Beschleunigungssensor-Fehlerrate 100 100 0 3
+® © Ausschaltungsabbriiche 100 100 0 41
+@ C1  Laden/Entladen-Zyklen 100 100 0 1801
+@& C2 Temperatur 38 50 0 73014444070
+„ C5 Aktuell ausstehende Sektoren 100 100 0 0
+@® C6 Nicht korrigierbare Sektoren 100 100 0 0
+@ C7 UitraDMA-CRC-Fehler 200 200 0 0
+@ F0 Kopfpositionierungszeit 100 253 0 457456966697...
+@& F1 LBA geschrieben (gesamt) 100 253 0 3642196789
+@ F2 LBA gelesen (gesamt) 100 253 0 1320930733
+@ FE Freifallschutz 100 100 0 0

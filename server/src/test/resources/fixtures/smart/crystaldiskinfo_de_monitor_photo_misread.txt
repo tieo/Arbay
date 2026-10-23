@@ -1,0 +1,38 @@
+WU Wj:\“{\“ß@r‘t»enc„ »tionen Ansicht Festplatte Hilfe Sprache(Language) i | e - \-i““\‘\?‘;“\c‘l“l‘t‘ﬂ}\‘
+A L A I A AA I :'if‘(:»"_‘:‘i‘;‘\‘!\.\‘
+( T TT (i „M
+I ”“‘yu\‘\‘;\l ot »2%“. a m C R . "?"::!?3“‘:3:?5’!?;?@\"J's»‘-f
+A L L LD Disks | IR L
+[ ‘““’“‘
+\ TOSHIBA MGO4ACA200E : 2000,3 GB »
+gl | Schnittstelle [UASP (Serial ATA) 7 Drehzahl 7200RPM |
+e Ubertragungsmodus [S“ATA/_G_O»O—I“S}FÄ_/BÖO*„_ Eingeschaltetm
+‚ktuelle Temperatı Laufwerksbuchstaben l...‚_.‚__.__...„ ST Betriebsstunden 49963 Std.
+ML HCO KK
+" Standard [ ATAS-ACS | -
+i Eigenschaften EJÄ—!{T_—ÄEF\Ä‚ Nedarl T
+‘® 01 Lesefehlerrate | | 100 99 50 000000000000
+@® 02 Datendurchsatz-Leistung T 100 100 50 000000000000
+® 03 Mittlere Anlaufzeit | 1 T oo 100 1 000000000D3D
+® 04 Start/Stopp-Zyklen der Spindel I ‘ / 900 100 0  0000000059D6 |
+® 05 Wiederzugewiesene Sektoren 0 | MLE1 00 100 50 000000000000
+|® 07 Suchfehler ‘ | H‘ “‘;“: | 100 100 50 000000000000
+|® 08 Gute der Suchoperationen HI | 100 100 50 000000000000
+® 09 Betriebsstunden | ”“ ‘ L 1 0 00000000328 |
+‘ ® A Misslungene Spindelanlaufe i “H 1,“1‘”\\% |53 100 30 000000000000 |
+| ® 0C Gerste-Einschaltvorgange “‘ el 100 0 000000000027 f
+| @ BF Beschleunigungssensor-Fehlerrate | ‘\‘ “‘\ | 100 100 0 000000000004 E
+\ ® © Ausschaltungsabbriiche | 100 100 Q 00000000001F E
+| ® C1 laden/Entladen-Zyklen 98 98 0 000000005A2C
+® 2 Temperatur 100 100 0 003300140015
+® C4 Wiederzuweisungsereignisse 100 00 0 000000000000 —
+® C5 Aktuell ausstehende Sektoren | 1(1]0‘\“ Ao 0 000000000000 =
+'® © Nicht korrigierbare Sektoren e e AT e A 0 000000000000 -
+® 7 UltraDMA-CRC-Fehler i äqo„\u“‘;‘„„;w«‘\‘ U Q| 000000000000 5E
+® DC Festplattenverschiebung I A }‘w“‘w“w‘““‘““““'l“ 0 000000000000 } -
+A e ‘"“‘äbﬂ“‘“\‘\‘\“r]w"«\\‘\t‘„\\‘*\\*‘}““\‘\“\‘1\»‘v»‘\ 9 000000006006 |[|
+® DF Lagen/Entiaden Wiederholungen | „‘1„‘m\‘h\‘\‘\‘\\\‘\\“““&‘\i "v\\l“;&“\1‘\\1*w\ﬁ»‘:\y"; :WWJ‘M'\W“\\\
+E JTWT TTT \\‘\\\M.\\H\\‘}w L e
+® o KQPTPOWQN@WN%FWWM‘“ O A | „}„W I ‘M‘\ W \\w\‘\\‘„‘‚\H\;„\v\„\x\„;“pf‘;l\ag\\\!\\\\u‘{\‘\\l" 0000000000 \A„
+» TT “‘“”W‘ M ‘ 0 tH“‘11“‘1‘:;““i1l|‘i“i“\\N‘)W i\*“\‘“\“‘l\‘“&\‘*\\‘\‘W\W‘i‘:‘\‘\‘\“‘“‘*“‘*J“"5"51"\“‘9““‘"\“\\\5‘ \\\\.
+A A ‘H«‘mmﬁmninid\r“n„lnm‘m‘rhlnn‘dmmn\m‘nmmmvm;En:%;:m:üiimnnm‘nüy‘r‘m‘uuiin\l A MM
