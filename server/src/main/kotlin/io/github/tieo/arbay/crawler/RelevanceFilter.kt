@@ -464,8 +464,10 @@ object RelevanceFilter {
     /** Sizes as a listing writes them: a number glued or spaced to a storage unit, French "Go"
      *  and "To" included. A speed is not a size: "7.300 MB/s Lesen" is how fast the drive is, and
      *  counting it as a second size made every drive that advertises one look like a row of variants. */
+    // Whole numbers only, never the tail of one: "1,12 TB" is an iMac's one and a bit terabytes,
+    // and read from its "12" it was the 12TB drive searched for.
     private val sizeInTitle =
-        Regex("""\b(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+        Regex("""(?<![\d.,])\b(\d{1,4}(?:[.,]\d{1,2})?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
 
     /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
      *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
@@ -587,7 +589,7 @@ object RelevanceFilter {
     /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
      *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
     private fun sizeInGigabytes(token: String): Double? {
-        val m = Regex("""^(\d{1,4}(?:[.,]\d)?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
+        val m = Regex("""^(\d{1,4}(?:[.,]\d{1,2})?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
             .find(token.trim()) ?: return null
         val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
         return when (m.groupValues[2].lowercase()) {
@@ -1005,7 +1007,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } || isACompound(token) ||
+                isASize(token) || token.all { it.isDigit() } || isACompound(token) || (isAModelCode(token) && parsed.positiveTokens.size > 1) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             // A requirement made only of words the whole answer carries decides nothing. Asked for
@@ -1173,6 +1175,23 @@ object RelevanceFilter {
             }
         }
     }
+
+    /**
+     * Whether the word is a model number: six characters or more, letters and digits mixed
+     * ("MG09ACA18TE", "ST16000NM000J", "WD80EZAZ"). It names one product, so a listing without it is
+     * not that product however many other words it shares: asked for a Toshiba MG09ACA18TE, Vinted
+     * answered with Toshiba remote controls and televisions, and every one of them passed on
+     * "Toshiba" because no title in the answer wrote the number. Required only beside other words:
+     * those are what such listings pass on, while a search that is the number alone is left to a
+     * market that files it as a field and never prints it (Geizhals). Short codes ("M.2", "S25")
+     * are left to the market's own answer, since they are written out of as many titles as into them.
+     */
+    private fun isAModelCode(token: String): Boolean {
+        val t = token.replace(NON_ALNUM, "")
+        return t.length >= MODEL_CODE_LENGTH && t.any { it.isLetter() } && t.any { it.isDigit() } && !isASize(t)
+    }
+
+    private const val MODEL_CODE_LENGTH = 6
 
     /** Whether the word is a compound naming one thing: letters enough of them that nobody types
      *  it meaning a category. "Parkettschleifmaschine" is a machine for parquet and nothing else,

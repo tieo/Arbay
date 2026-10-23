@@ -835,6 +835,23 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a model number is required even where no title in the answer writes it`() {
+        // Vinted, live, for "Toshiba MG09ACA18TE": remote controls and televisions, none with the number.
+        val kept = search("Toshiba MG09ACA18TE", listOf(
+            listing("Télécommande Toshiba"),
+            listing("Toshiba Smart TV"),
+            listing("Toshiba Canvio Partner 4TB External HDD"),
+        ))
+        assertEquals(emptyList(), kept.map { it.title })
+        val drives = search("Toshiba MG09ACA18TE", listOf(
+            listing("18TB SATA Festplatte HDD Toshiba MG09ACA18TE"),
+            listing("Toshiba MG09 ACA18TE 18 TB"),
+            listing("Toshiba MG09 18TB SATA Festplatten HDD"),
+        ))
+        assertEquals(listOf("18TB SATA Festplatte HDD Toshiba MG09ACA18TE", "Toshiba MG09 ACA18TE 18 TB"), drives.map { it.title })
+    }
+
+    @Test
     fun `a size whose digits match once the comma is gone is another size`() {
         val result = RelevanceFilter.partition(listOf(
             listing("Seagate Exos 10E2400 1,2TB SAS 12Gb/s 10K 2,5\" Enterprise HDD ST1200MM0129"),
@@ -849,6 +866,11 @@ class RelevanceFilterTest {
             listing("Seagate Exos X18 18 TB HDD 3.5 Zoll Hyperscale SATA 6 Gb/s Festplatte"),
         ), SearchQuery(text = "18TB HDD", category = MarketGroup.GENERAL), emptyList())
         assertEquals(listOf("Seagate Exos X18 18 TB HDD 3.5 Zoll Hyperscale SATA 6 Gb/s Festplatte"), cisco.kept.map { it.title })
+        val imac = RelevanceFilter.partition(listOf(
+            listing("iMac27 3,2 GHz QuadCore Intel i5 NVIDIA GT 755M 1GB 1,12 TB HDD"),
+            listing("WD Purple 12TB Festplatte – 3,5 Zoll SATA HDD"),
+        ), SearchQuery(text = "12TB HDD", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("WD Purple 12TB Festplatte – 3,5 Zoll SATA HDD"), imac.kept.map { it.title })
     }
 
     @Test
