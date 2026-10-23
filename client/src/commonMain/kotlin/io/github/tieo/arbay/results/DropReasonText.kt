@@ -11,6 +11,8 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
         "The title carries too few of the words searched for."
     DropReason.ONE_OF_SEVERAL_SIZES ->
         "One listing selling the same thing in several sizes, whose price is the smallest one."
+    DropReason.ANOTHER_SIZE ->
+        "The search names a size and the title states only other ones, such as 1,2TB for 12TB."
     DropReason.BUILT_INTO_A_DEVICE ->
         "The title names a machine of its own and lists the thing searched for among its parts."
     DropReason.ACCESSORY ->

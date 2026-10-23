@@ -71,6 +71,10 @@ enum class DropReason {
     /** One listing offering a row of sizes, priced at the smallest of them. */
     ONE_OF_SEVERAL_SIZES,
 
+    /** The search names a size and the listing states only other ones: a 1.2TB drive found by a
+     *  search for 12TB, whose words match once the comma is gone. */
+    ANOTHER_SIZE,
+
     /** Something the thing uses up: sanding paper, dust bags, filters. */
     CONSUMABLE,
 
@@ -110,6 +114,7 @@ val DropReason.label: String
         DropReason.ACCESSORY -> "accessory"
         DropReason.BUILT_INTO_A_DEVICE -> "inside another device"
         DropReason.ONE_OF_SEVERAL_SIZES -> "priced at a smaller size"
+        DropReason.ANOTHER_SIZE -> "another size"
         DropReason.CONSUMABLE -> "consumable"
         DropReason.WANTED_AD -> "wanted ad"
         DropReason.RENTAL -> "for rent"

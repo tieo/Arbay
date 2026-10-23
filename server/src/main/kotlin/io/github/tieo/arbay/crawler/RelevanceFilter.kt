@@ -528,6 +528,22 @@ object RelevanceFilter {
     }
 
     /**
+     * Whether the search names a size and the listing states sizes, none of them that one.
+     *
+     * Words are matched with their punctuation gone, so a "Seagate Exos 10E2400 1,2TB" reads as
+     * carrying the "12TB" a search for a 12TB Exos typed, and a Cisco "1,8TB" drive as an 18TB one.
+     * The sizes compared as numbers tell them apart. A size fifty times smaller than the one asked
+     * for is not the drive's ("Nur 5GB geschrieben"), and pieces adding up to it are it ("2x 6TB").
+     */
+    private fun statesAnotherSize(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        val offered = sizesIn(listing.title.replace(memorySize, " ")).filter { it >= asked.min() / 50 }
+        if (offered.isEmpty()) return false
+        if (offered.any { size -> asked.any { sameSize(it, size) } }) return false
+        return asked.none { addsUpToTheAskedSize(listing.title, it) }
+    }
+
+    /**
      * Whether the title offers more than one size under its one price: "M.2 NVME SSD 1To 2To 4To".
      * The price is the cheapest variant's, which may be a size the title never names, so it says
      * nothing about what any one size costs. Kept on screen when the asked-for size is the
@@ -1041,6 +1057,13 @@ object RelevanceFilter {
             }
             if (onlyTheSizeRequired && score(listing, parsed.copy(positiveTokens = beyondTheSize), implied[listing.id].orEmpty()) == 0.0) {
                 dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                return@mapNotNull null
+            }
+            // Only once the words are judged: the listings of other sizes are part of the answer
+            // the words are read off, and taken out first they changed which words this market
+            // writes, so the 2TB drives asked for lost to a "decides nothing" rule.
+            if (statesAnotherSize(listing, parsed)) {
+                dropped += DroppedListing(listing, DropReason.ANOTHER_SIZE)
                 return@mapNotNull null
             }
             listing to s

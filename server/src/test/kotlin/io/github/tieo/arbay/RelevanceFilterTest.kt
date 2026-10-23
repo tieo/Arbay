@@ -835,6 +835,23 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a size whose digits match once the comma is gone is another size`() {
+        val result = RelevanceFilter.partition(listOf(
+            listing("Seagate Exos 10E2400 1,2TB SAS 12Gb/s 10K 2,5\" Enterprise HDD ST1200MM0129"),
+            listing("Seagate Exos X12 12TB SATA 6Gb/s 256MB 7200 RPM 3.5\""),
+            listing("Seagate Exos 12TB (2x 6TB) SATA"),
+            listing("Seagate Exos X18 16TB SATA"),
+        ), SearchQuery(text = "Exos 12TB", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Seagate Exos X12 12TB SATA 6Gb/s 256MB 7200 RPM 3.5\"", "Seagate Exos 12TB (2x 6TB) SATA"), result.kept.map { it.title })
+        assertEquals(DropReason.ANOTHER_SIZE, result.dropped.first { it.listing.title.contains("1,2TB") }.reason)
+        val cisco = RelevanceFilter.partition(listOf(
+            listing("NEU Cisco UCS-HD18TB10K4KN 1,8TB 10k 2,5\" SAS 12G Festplatte Disk HDD mit Caddy"),
+            listing("Seagate Exos X18 18 TB HDD 3.5 Zoll Hyperscale SATA 6 Gb/s Festplatte"),
+        ), SearchQuery(text = "18TB HDD", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Seagate Exos X18 18 TB HDD 3.5 Zoll Hyperscale SATA 6 Gb/s Festplatte"), cisco.kept.map { it.title })
+    }
+
+    @Test
     fun `two storage tiers written with a space are a row`() {
         val result = RelevanceFilter.partition(listOf(
             listing("Google Pixel 9 Pro XL 5G 256 512GB 6,8 \"OLED 50MP 5060mAh Telefon von FedEx"),
