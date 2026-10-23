@@ -1372,4 +1372,18 @@ class RelevanceFilterTest {
         val drive = listing("Seagate Exos 32TB HDD SATA", 60000)
         assertEquals(listOf(drive.title), search("32TB HDD", listOf(dock, drive)).map { it.title })
     }
+
+    @Test
+    fun `a NAS named by its line is a NAS, and a drive made for one is a drive`() {
+        val nas = listing("NAS Buffalo TeraStation 5140DN mit 32TB", 45000)
+        val drive = listing("WD Red 32TB NAS Festplatte HDD", 60000)
+        assertEquals(listOf(drive.title), search("32TB HDD", listOf(nas, drive)).map { it.title })
+    }
+
+    @Test
+    fun `a drive's circuit board named after its size is the board`() {
+        val board = listing("1,0TB SAMSUNG Momentus Platine ST1000LM024 2,5\" SATA-II 5400", 980)
+        val drive = listing("Samsung Momentus 1TB HDD ST1000LM024", 2500)
+        assertEquals(listOf(drive.title), search("1TB HDD", listOf(board, drive)).map { it.title })
+    }
 }

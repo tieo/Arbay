@@ -517,6 +517,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // someone opens it, since an item page costs a browser load on the markets that defend
         // them — a price worth paying for the one listing being read and not for fifty being
         // scrolled past.
+        fun ListingDetail.withBrokenRead() =
+            copy(soldBroken = io.github.tieo.arbay.model.Condition.soldAsDefective("", description))
+
         get("/listing-detail") {
             val rawUrl = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
@@ -525,12 +528,15 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // A Kleinanzeigen page read before shipping was read from it is read again, once, and so
             // is an eBay page read before its description was.
             // Door delivery comes from what the ad charges at payment, else Kleinanzeigen's price list,
-            // so it is added on the way out.
-            suspend fun ListingDetail.priced() =
-                if (platform != PlatformId.KLEINANZEIGEN) this
-                else copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(shipping) {
+            // and whether the text says the thing is sold broken from the rule as it is now, so both
+            // are added on the way out, to a page read long ago as well.
+            suspend fun ListingDetail.priced(): ListingDetail {
+                val read = withBrokenRead()
+                return if (platform != PlatformId.KLEINANZEIGEN) read
+                else read.copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(read.shipping) {
                     id.substringAfter(':').takeIf { it.all(Char::isDigit) }?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
                 })
+            }
             io.github.tieo.arbay.crawler.DetailCache.get(id)
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
                 // eBay's description was read from its page only later; a page read before is read again.

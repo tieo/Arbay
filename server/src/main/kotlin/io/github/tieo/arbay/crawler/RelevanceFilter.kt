@@ -661,6 +661,10 @@ object RelevanceFilter {
             """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
             // A video recorder for cameras ships with its drive inside: "Hiseeu NVR … 4TB HDD".
             """nvr|dvr|videorekorder|(video)?registratore|time\s?capsule|""" +
+            // A NAS is named by its maker's line, never by "NAS" alone, which a drive's title
+            // carries too ("WD Red 4TB NAS HDD"): "NAS Buffalo TeraStation 5140DN mit 32TB" was an
+            // empty NAS that takes up to 32 TB, standing at 450 euro as the cheapest 32 TB drive.
+            """terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|""" +
             // "PC SN730" is the name Western Digital sells a drive under, not a computer.
             """pc(?!\s*sn\d)|""" +
             // The same machines as the markets in other languages name them.
@@ -801,6 +805,9 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
+    private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
+    private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
+
     private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with|und|sowie|plus|and)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
 
     /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Akku Kapazität
@@ -827,6 +834,10 @@ object RelevanceFilter {
         val match = accessoryNoun.findAll(listing.title)
             .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
         val before = listing.title.take(match.range.first)
+        // A board after the size is the board on offer unless the title calls it new: "256 GB
+        // Bundle Neues Mainboard" is a repaired phone, "1,0TB SAMSUNG Momentus Platine" a drive's
+        // circuit board sold as a spare.
+        if (boardNoun.matches(match.value) && !newBoard.containsMatchIn(before)) return true
         // "mit", "und" make the noun an extra only where the thing searched for stands ahead of
         // them: "WH-1000XM5 mit Tasche" is the headphones, and "SSD und Festplatten Docking Station"
         // is a dock for both, which at €29 stood as the cheapest 32 TB drive.

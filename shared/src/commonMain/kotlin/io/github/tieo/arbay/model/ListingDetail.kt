@@ -34,6 +34,9 @@ data class ListingDetail(
      *  [moreAvailable] where it says only that there are more than that ("Mehr als 10 verfügbar"). */
     val available: Int? = null,
     val moreAvailable: Boolean = false,
+    /** Whether the seller's text says it is sold broken ("läuft nicht an", "als defekt verkauft"),
+     *  which a card without the text cannot show. */
+    val soldBroken: Boolean = false,
 )
 
 /**
