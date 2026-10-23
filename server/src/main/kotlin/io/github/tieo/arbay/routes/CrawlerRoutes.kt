@@ -518,10 +518,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // them — a price worth paying for the one listing being read and not for fifty being
         // scrolled past.
         get("/listing-detail") {
-            val url = requirePublicHttpUrl(call.queryParameters["url"] ?: throw BadRequestException("Missing url"))
+            val rawUrl = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
                 ?: throw BadRequestException("Missing or unknown platform")
-            val id = call.queryParameters["id"] ?: url
+            val id = call.queryParameters["id"] ?: rawUrl
             // A Kleinanzeigen page read before shipping was read from it is read again, once, and so
             // is an eBay page read before its description was.
             // Door delivery comes from what the ad charges at payment, else Kleinanzeigen's price list,
@@ -536,6 +536,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 // eBay's description was read from its page only later; a page read before is read again.
                 ?.takeUnless { platform.name.startsWith("EBAY") && it.description == null }
                 ?.let { return@get call.respond(it.priced()) }
+            // Checked only before a fetch: a page already read is served without resolving its host,
+            // so it is still there when the server cannot reach the internet.
+            val url = requirePublicHttpUrl(rawUrl)
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(

@@ -291,6 +291,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     p.searchQuery.maxPrice?.let { "up to ${it.amount / 100} €" },
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
                 ).joinToString(" · ") +
+                    // A run no market answered finds nothing, which reads as a quiet day unless said.
+                    ((s?.get("unansweredMarkets") as? JsonObject)?.takeIf { it.isNotEmpty() }?.let { failed ->
+                        val ran = s?.get("lastRunAtMillis")?.jsonPrimitive?.longOrNull?.let { hoursAgo(it) } ?: "never"
+                        failed.entries.joinToString(", ", prefix = "\n  LAST RUN ($ran) got no answer from ${failed.size} of ${p.searchQuery.platforms.size} markets: ") { (name, e) ->
+                            (runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(name).displayName }.getOrNull() ?: name) + " (" + e.jsonPrimitive.content.take(80) + ")"
+                        }
+                    } ?: "") +
                     (if (p.fitAlert.enabled) "\n  fit alert: a new offer in its top ${p.fitAlert.topN} that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
                     p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
@@ -307,7 +314,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                                 val market = runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(o.str("listingId")!!.substringBefore(':')).displayName }.getOrNull() ?: "its market"
                                 "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} ($market gave the last run no answer, so it was never looked for: $e)"
                             } ?: ("LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")")
-                        "\n  $why: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
+                        val looked = o.str("checkedAt")?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+                            ?.let { " (looked for ${hoursAgo(it)})" }.orEmpty()
+                        "\n  $why$looked: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
                             "${o.num("bestScore")?.let { Math.round(it * 100) }}% · ${o.str("listingId")} · ${o.str("url")}"
                     }) + priceDropLines(s)
             }.ifEmpty { "No saved searches." }
@@ -374,7 +383,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
             val head = l.line() + l.fitLine()
-            if (!detail.status.isSuccess() || detail.status.value == 204) return@tool head + "\nThe market gave no more than this."
+            // A page Arbay could not fetch says nothing about the ad, so it is not reported as one
+            // that has nothing more to say: with the server offline every ad read that way.
+            if (!detail.status.isSuccess()) return@tool head + "\nArbay could not read the ad page: " + detail.bodyAsText().ifBlank { detail.status.toString() }
+            if (detail.status.value == 204) return@tool head + "\nThe market gave no more than this."
             // A detail carries a vehicle block for every listing; for anything but a vehicle it is
             // all empty and only buries the description, so it is left out.
             val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()
@@ -383,7 +395,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
             // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
             // is read now, where the market says it, so a sold van does not read as on offer.
-            val state = adNow(l)?.state?.let { "Ad now: $it (read just now). " } ?: "Ad now: not checked on this market. "
+            val state = adNowLine(l)
             head + "\n" + state + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
@@ -851,6 +863,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         else json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText())
     }.getOrNull()
 
+    /** Whether the ad is up, for offer_details: read now, not checkable on this market, or a read that failed and why. */
+    private suspend fun adNowLine(l: Listing): String = runCatching {
+        val r = http.get("$base/api/crawler/listing-state") { parameter("url", l.url); parameter("platform", l.platformId.name) }
+        when {
+            r.status.value == 204 -> "Ad now: not checked on this market. "
+            !r.status.isSuccess() -> "Ad now: could not be read (${r.bodyAsText().ifBlank { r.status.toString() }}). "
+            else -> "Ad now: ${json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText()).state} (read just now). "
+        }
+    }.getOrElse { "Ad now: could not be read (${it.message}). " }
+
     private suspend fun pageShipping(l: Listing): io.github.tieo.arbay.model.Shipping? = runCatching {
         val r = http.get("$base/api/crawler/listing-detail") { parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id) }
         if (!r.status.isSuccess() || r.status.value == 204) null
@@ -993,6 +1015,9 @@ private fun priceDropLines(status: JsonObject?): String =
     (status?.get("priceDrops") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.joinToString("") { d ->
         "\n  price drop: ${d.str("listingId")} ${d.str("title")} ${d.num("fromEur")?.toLong()} € → ${d.num("toEur")?.toLong()} € ${d.str("url")}"
     }
+
+/** How long ago an epoch-millisecond time was, in whole hours: "5 h ago". */
+private fun hoursAgo(millis: Long) = "${(Clock.System.now().toEpochMilliseconds() - millis) / 3_600_000L} h ago"
 
 private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 private fun JsonObject.num(k: String) = this[k]?.jsonPrimitive?.doubleOrNull

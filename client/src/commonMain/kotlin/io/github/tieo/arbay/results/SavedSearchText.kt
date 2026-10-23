@@ -29,17 +29,13 @@ fun savedSearchSubtitle(product: TrackedProduct): String {
     return if (termDiffers) "${product.searchQuery.text}  ·  $markets" else markets
 }
 
-/** How many of the search's best offers it is losing, which markets gave its last run no answer,
- *  and how many its last run ruled out; null when none. */
+/** How many of the search's best offers it is losing and how many its last run ruled out; null
+ *  when none. One lost because its market did not answer is told by [watchLabel] instead. */
 fun lostLabel(status: SavedSearchStatus): String? {
-    val (unanswered, lost) = status.missingTopOffers.filter { it.state == TopOfferState.LOST }.partition { it.marketError != null }
-    val silent = unanswered.map { o ->
-        PlatformId.entries.firstOrNull { it.name == o.listingId.substringBefore(':') }?.displayName ?: o.listingId.substringBefore(':')
-    }.distinct()
+    val lost = status.missingTopOffers.count { it.state == TopOfferState.LOST && it.marketError == null }
     val ruledOut = status.missingTopOffers.count { it.state == TopOfferState.RULED_OUT }
     return listOfNotNull(
-        silent.takeIf { it.isNotEmpty() }?.let { "${it.joinToString()} did not answer its last check" },
-        lost.size.takeIf { it > 0 }?.let { "$it of its best offers no longer found" },
+        lost.takeIf { it > 0 }?.let { "$it of its best offers no longer found" },
         ruledOut.takeIf { it > 0 }?.let { "$it of its best offers ruled out" },
     ).joinToString(", ").ifEmpty { null }
 }
@@ -55,8 +51,10 @@ fun PriceDrop.before(): String = Money(kotlin.math.round(fromEur * 100).toLong()
  *  that never happened. */
 fun watchLabel(status: SavedSearchStatus): String {
     val ran = status.lastRunAtMillis?.let { ago(it) }
+    val silent = status.unansweredMarkets.keys.map { name -> PlatformId.entries.firstOrNull { it.name == name }?.displayName ?: name }
     return when {
         !status.watched -> "not watched"
+        ran != null && silent.isNotEmpty() -> "checked $ran, no answer from ${silent.joinToString()}"
         ran != null -> "checked $ran"
         else -> "watched, not run yet"
     }

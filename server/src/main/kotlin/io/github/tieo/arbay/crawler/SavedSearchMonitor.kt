@@ -114,6 +114,8 @@ class SavedSearchMonitor(
      * only in memory, every watched search came up due at once on the first tick after a restart
      * and they all crawled together, which is exactly the traffic shape that gets an address
      * blocked. [foundAtMillis] is when the watch found each id still held in either set.
+     * [unansweredAtLastRun] is each market, by [PlatformId] name, that gave a search's last run no
+     * answer, with why: a run every market failed finds nothing and otherwise reads as a quiet one.
      */
     @Serializable
     private data class SearchState(
@@ -121,6 +123,7 @@ class SavedSearchMonitor(
         val lastNew: Map<String, Set<String>> = emptyMap(),
         val lastRunAtMillis: Map<String, Long> = emptyMap(),
         val foundAtMillis: Map<String, Map<String, Long>> = emptyMap(),
+        val unansweredAtLastRun: Map<String, Map<String, String>> = emptyMap(),
     )
 
     private val stateFile = DataDir.file("saved_search_state.json")
@@ -131,6 +134,7 @@ class SavedSearchMonitor(
     private val lastNew: MutableMap<String, MutableSet<String>>
     private val lastRun: MutableMap<String, Long>
     private val foundAt: MutableMap<String, MutableMap<String, Long>>
+    private val unanswered: MutableMap<String, Map<String, String>>
 
     init {
         val state = loadState()
@@ -138,6 +142,7 @@ class SavedSearchMonitor(
         lastNew = state.lastNew.mapValuesTo(HashMap()) { it.value.toMutableSet() }
         lastRun = HashMap(state.lastRunAtMillis)
         foundAt = state.foundAtMillis.mapValuesTo(HashMap()) { HashMap(it.value) }
+        unanswered = HashMap(state.unansweredAtLastRun)
     }
 
     /** What every saved search has been doing, for the app's list of them. */
@@ -152,6 +157,7 @@ class SavedSearchMonitor(
                 foundAtMillis = foundAt[product.id]?.toMap().orEmpty(),
                 missingTopOffers = TopOffers.missing(product.id),
                 priceDrops = PriceDrops.of(product.id),
+                unansweredMarkets = unanswered[product.id].orEmpty(),
             )
         }
     }
@@ -231,8 +237,9 @@ class SavedSearchMonitor(
             .ifEmpty { return }
 
         val found = LinkedHashMap<String, Listing>() // listing id -> listing
+        val failed = HashMap<String, String>()
         for (platformId in platforms) {
-            if (BlockCooldown.isCoolingDown(platformId)) continue
+            if (BlockCooldown.isCoolingDown(platformId)) { failed[platformId.name] = "cooling down after a block"; continue }
             val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
             // Asked exactly as the search asks when it is opened by hand, including a term the
             // searcher accepted for this market's language. A watch that asked something else
@@ -246,9 +253,11 @@ class SavedSearchMonitor(
                 withTimeoutOrNull(120_000L) { crawler.trackedSearch(query) { term -> listingRepo.titleShareOfCorpus(term) } }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.debug("saved-search {} on {} failed: {}", product.id, platformId, e.message?.take(60))
+                failed[platformId.name] = e.message?.take(120) ?: e.javaClass.simpleName
                 continue
             } ?: run {
                 log.debug("saved-search {} on {} gave nothing within 120s", product.id, platformId)
+                failed[platformId.name] = "no answer within 120 s"
                 continue
             }
             RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
@@ -259,6 +268,7 @@ class SavedSearchMonitor(
         val hidden = io.github.tieo.arbay.repo.UserStateStore.hiddenOffers()
         found.keys.removeAll(hidden)
         val learned = learn(product, found.values, hidden)
+        noteUnanswered(product.id, failed)
         val freshListings = record(learned, found) ?: return
 
         // Named notification subfilters someone set on this search specifically — a listing can
@@ -336,6 +346,11 @@ class SavedSearchMonitor(
         saveSeen()
     }
 
+
+    /** Which markets gave [productId]'s run that just ended no answer, kept until its next run. */
+    private fun noteUnanswered(productId: String, failed: Map<String, String>) {
+        synchronized(stateLock) { if (failed.isEmpty()) unanswered.remove(productId) else unanswered[productId] = failed.toMap() }
+    }
 
     /**
      * Notes what one run of [product] found and returns what is new since earlier runs, or null
@@ -489,6 +504,7 @@ class SavedSearchMonitor(
         }
         val found = crawled.found
         val ruledOut = crawled.ruledOut
+        noteUnanswered(product.id, crawled.failed.mapValues { it.value.message })
         // The saved market and country picks narrow what was fetched, as they do on the screen.
         val markets = q.showOnlyMarkets
         val countries = q.showOnlyCountries
@@ -775,6 +791,7 @@ class SavedSearchMonitor(
             unopened.keys.retainAll(live)
             lastNew.keys.retainAll(live)
             lastRun.keys.retainAll(live)
+            unanswered.keys.retainAll(live)
             // A find time lives as long as its id is still held as new or as the last batch.
             foundAt.keys.retainAll(live)
             foundAt.forEach { (id, times) ->
@@ -789,6 +806,7 @@ class SavedSearchMonitor(
                 lastNew = lastNew.mapValues { it.value.toSet() },
                 lastRunAtMillis = lastRun.toMap(),
                 foundAtMillis = foundAt.mapValues { it.value.toMap() },
+                unansweredAtLastRun = unanswered.toMap(),
             )
         }
         try {

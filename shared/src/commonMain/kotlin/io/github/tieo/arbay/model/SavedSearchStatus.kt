@@ -32,6 +32,9 @@ data class SavedSearchStatus(
     // Offers this search keeps finding that have come down in price since it was last opened, each
     // from what it cost when first seen dearer to what it costs now.
     val priceDrops: List<PriceDrop> = emptyList(),
+    // Each market, by PlatformId name, that gave the last run no answer, with why ("Host does not
+    // resolve"): a run no market answered finds nothing new and would otherwise read as a quiet one.
+    val unansweredMarkets: Map<String, String> = emptyMap(),
 )
 
 /**
