@@ -661,13 +661,6 @@ object RelevanceFilter {
             """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
             // A video recorder for cameras ships with its drive inside: "Hiseeu NVR … 4TB HDD".
             """nvr|dvr|videorekorder|(video)?registratore|time\s?capsule|""" +
-            // A NAS is named by its maker's line, never by "NAS" alone, which a drive's title
-            // carries too ("WD Red 4TB NAS HDD"): "NAS Buffalo TeraStation 5140DN mit 32TB" was an
-            // empty NAS that takes up to 32 TB, standing at 450 euro as the cheapest 32 TB drive.
-            """terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
-            // A drive bay or a media player is sold with the drives it holds: "Asustor Xpanstor 4
-            // AS5004U 4-Bay mit 30TB", "Himedia Q10 inkl. Fernbedienung (10TB interne HDD extra)".
-            """\d[\s-]?bay|media\s?player|mediaplayer|himedia|""" +
             // "PC SN730" is the name Western Digital sells a drive under, not a computer.
             """pc(?!\s*sn\d)|""" +
             // The same machines as the markets in other languages name them.
@@ -702,6 +695,7 @@ object RelevanceFilter {
      */
     private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (hostDevice.containsMatchIn(queryText) || phoneOrTablet.containsMatchIn(queryText)) return false
+        if (!driveHolder.containsMatchIn(queryText) && holdsTheDrives(listing.title)) return true
         if (isADeviceOfThatSize(listing, parsed)) return true
         // The rule weighs how much of the search falls either side of the machine's name, so it
         // needs more than one word to weigh. Asked for a part number alone, everything sits on one
@@ -731,6 +725,28 @@ object RelevanceFilter {
         // MacBook Pro M2 Max carries "m2" in its own name, where it is the processor and not the
         // slot, and the drive it holds is listed with everything else it holds.
         return inTail > inHead
+    }
+
+    /**
+     * A box made to hold drives, named by its line or its bays: a NAS ("NAS Buffalo TeraStation
+     * 5140DN mit 32TB", an empty one that takes up to 32 TB, at 450 euro the cheapest 32 TB
+     * drive), a drive bay ("Asustor Xpanstor 4 AS5004U 4-Bay mit 30TB"), a media player ("Himedia
+     * Q10 inkl. Fernbedienung (10TB interne HDD extra)"). Never "NAS" alone, which a drive's own
+     * title carries ("WD Red 4TB NAS HDD"). Unlike a PC, its maker and model come first, so it is
+     * found anywhere ahead of the size rather than in the first words.
+     */
+    private val driveHolder = Regex(
+        """\b(terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
+            """\d[\s-]?bay|xpanstor|media\s?player|mediaplayer|himedia)(?!\w)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val saidToFit = Regex("""(?i)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
+
+    private fun holdsTheDrives(title: String): Boolean {
+        val holder = driveHolder.find(title) ?: return false
+        val size = sizeInTitle.find(title)
+        if (size != null && size.range.first < holder.range.first) return false
+        return !saidToFit.containsMatchIn(title.take(holder.range.first))
     }
 
     /** "PS5 kompatibel", "PS5 ready": the machine a part is said to fit, not the thing sold. */

@@ -1398,4 +1398,12 @@ class RelevanceFilterTest {
         assertTrue(search("32TB HDD", listOf(listing("Synology DS918+ mit 16GB RAM und 32TB HDD (Ironwolf)", 95000))).isEmpty())
         assertEquals(1, search("18TB HDD", listOf(listing("Seagate Exos 18TB HDD mit Gehäuse", 26000))).size)
     }
+
+    @Test
+    fun `a drive bay named after its maker and model, with drives in it, is the bay`() {
+        val bay = listing("Asustor Xpanstor 4 AS5004U 4-Bay mit 30TB (3x 10TB) Bestpreis Festplatte SATA HDD", 149400)
+        assertTrue(search("30TB HDD", listOf(bay)).isEmpty())
+        // A drive said to suit one stays a drive.
+        assertEquals(1, search("8TB HDD", listOf(listing("Seagate IronWolf 8TB HDD für Synology DS918+", 15000))).size)
+    }
 }
