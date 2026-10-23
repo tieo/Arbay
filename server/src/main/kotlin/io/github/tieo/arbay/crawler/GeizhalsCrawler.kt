@@ -9,7 +9,9 @@ class GeizhalsCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.GEIZHALS
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val url = "https://geizhals.de/?fs=${query.positiveText.encodeUrl()}"
+        // Cheapest first: in its own order Geizhals answers "20TB HDD" with whole NAS systems that
+        // come with drives, and the drives themselves never reach the page read.
+        val url = "https://geizhals.de/?fs=${query.positiveText.encodeUrl()}&sort=p"
         // A current Chrome TLS fingerprint (rnet, step 2 of the chain) clears the Cloudflare
         // TLS check that older curl profiles and the plain HTTP client fail; the browser tiers
         // remain as a fallback.
