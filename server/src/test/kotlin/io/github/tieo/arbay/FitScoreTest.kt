@@ -5,6 +5,10 @@ import io.github.tieo.arbay.crawler.FitScore
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.model.FitWish
+import io.github.tieo.arbay.model.biggestLosses
+import io.github.tieo.arbay.model.wholePoints
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
@@ -55,8 +59,29 @@ class FitScoreTest {
     @Test
     fun `a van that meets every wish misses nothing`() {
         val f = assertNotNull(fit(van()))
-        assertEquals(emptyList(), f.misses)
+        val met = setOf(FitWish.SIZE, FitWish.GEARBOX, FitWish.POWER, FitWish.YEAR, FitWish.DRIVE, FitWish.SELLER, FitWish.AIR_CONDITIONING)
+        assertEquals(emptyList(), f.parts.filter { it.wish in met && it.points < it.of - 1e-9 })
         assertEquals(true, f.airConditioning)
+    }
+
+    @Test
+    fun `the parts add up to the fit, and in whole points to the fit as shown`() {
+        val f = assertNotNull(fit(van(euros = 27_400, vehicle = van().vehicle!!.copy(powerKw = 103, gearbox = null))))
+        assertEquals(f.score * 100, f.parts.sumOf { it.points }, 1e-9)
+        assertEquals(100.0, f.parts.sumOf { it.of }, 1e-9)
+        val whole = f.parts.wholePoints()
+        assertEquals(Math.round(f.score * 100).toInt(), whole.sumOf { it.first })
+        assertEquals(100, whole.sumOf { it.second })
+        assertEquals(FitPart.NOT_STATED, f.parts.single { it.wish == FitWish.GEARBOX }.note)
+        assertEquals(listOf(FitWish.PRICE, FitWish.GEARBOX, FitWish.MILEAGE, FitWish.POWER), f.parts.biggestLosses(4).map { it.first.wish })
+    }
+
+    @Test
+    fun `a wish the search does not make counts for nothing`() {
+        val few = CarFilters(maxPriceEur = 30_990)
+        val f = assertNotNull(FitScore.score(van(), few, 23_950.0, softDriveHours = 4.0))
+        assertEquals(null, f.parts.firstOrNull { it.wish == FitWish.GEARBOX || it.wish == FitWish.SIZE })
+        assertEquals(100.0, f.parts.sumOf { it.of }, 1e-9)
     }
 
     @Test
@@ -121,7 +146,7 @@ class FitScoreTest {
     fun `every miss costs something and is named`() {
         val perfect = fit(van())!!.score
         val noAc = fit(van(description = "Keine Klimaanlage oder -automatik"))!!
-        assertTrue(noAc.score < perfect && "no air conditioning" in noAc.misses)
+        assertTrue(noAc.score < perfect && noAc.parts.single { it.wish == FitWish.AIR_CONDITIONING }.note == "no")
     }
 
     @Test
@@ -172,10 +197,11 @@ class FitScoreTest {
         val ideal = wishes.copy(minPowerKw = null, idealPowerKw = 130)
         fun withPower(kw: Int) = van(vehicle = van().vehicle!!.copy(powerKw = kw))
         fun fitOf(kw: Int) = assertNotNull(FitScore.score(withPower(kw), ideal, 23_950.0, softDriveHours = 4.0))
-        assertEquals(emptyList(), fitOf(130).misses)
+        fun powerOf(f: FitScore.Fit) = f.parts.single { it.wish == FitWish.POWER }
+        assertEquals(powerOf(fitOf(130)).of, powerOf(fitOf(130)).points, 1e-9)
         val weaker = fitOf(103)
         assertTrue(weaker.score < fitOf(130).score)
-        assertEquals(listOf("103 kW of 130"), weaker.misses)
+        assertEquals("103 kW of 130", powerOf(weaker).note)
         assertTrue(CarFilterEngine.apply(listOf(withPower(80)), ideal).isNotEmpty())
     }
 }

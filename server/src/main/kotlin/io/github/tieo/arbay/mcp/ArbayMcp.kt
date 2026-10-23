@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.mcp
 
 import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.wholePoints
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.AdDraft
@@ -372,17 +373,18 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
-            if (!detail.status.isSuccess() || detail.status.value == 204) return@tool l.line() + "\nThe market gave no more than this."
+            val head = l.line() + l.fitLine()
+            if (!detail.status.isSuccess() || detail.status.value == 204) return@tool head + "\nThe market gave no more than this."
             // A detail carries a vehicle block for every listing; for anything but a vehicle it is
             // all empty and only buries the description, so it is left out.
             val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()
-                ?: return@tool l.line() + "\n" + detail.bodyAsText()
+                ?: return@tool head + "\n" + detail.bodyAsText()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
             // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
             // is read now, where the market says it, so a sold van does not read as on offer.
             val state = adNow(l)?.state?.let { "Ad now: $it (read just now). " } ?: "Ad now: not checked on this market. "
-            l.line() + "\n" + state + "The details below are the ad page as Arbay last read it.\n" +
+            head + "\n" + state + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
@@ -872,6 +874,14 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
         url,
     ).joinToString(" | ")
+
+    /** Where a vehicle's fit comes from, each wish with the whole points it adds of those it could:
+     *  "\nfit 76 %: size 27/27, price 7/21 (27.400 €), …". Empty for an offer without a fit. */
+    private fun Listing.fitLine(): String = fit.takeIf { it.isNotEmpty() }?.let { parts ->
+        parts.zip(parts.wholePoints()).joinToString(", ", prefix = "\nfit ${Math.round((matchScore ?: 0.0) * 100)} %: ") { (p, w) ->
+            "${p.wish.label.lowercase()} ${w.first}/${w.second}" + (p.note?.let { " ($it)" } ?: "")
+        }
+    }.orEmpty()
 
     /** What a vehicle's card states, so a van can be judged from the list: its age, mileage,
      *  power, gearbox and size. The size is on the common scale (L1 short to L4 extra long, H1

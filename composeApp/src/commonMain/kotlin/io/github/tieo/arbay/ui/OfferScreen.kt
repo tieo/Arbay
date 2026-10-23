@@ -68,6 +68,11 @@ import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import io.github.tieo.arbay.results.detailSpecs
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.style.TextAlign
+import io.github.tieo.arbay.results.fitPercent
+import io.github.tieo.arbay.results.fitRows
 import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
@@ -163,6 +168,8 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 val facts = offerFacts(listing, page.place)
                 if (facts.isNotEmpty()) Choices { facts.forEach { Box(Modifier.padding(vertical = 3.dp)) { Fact(it) } } }
 
+                FitBreakdown(listing)
+
                 page.vehicle?.let { v ->
                     val specs = detailSpecs(v)
                     if (specs.isNotEmpty()) {
@@ -190,6 +197,43 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 }
                 if (reading) Muted("Reading the rest off the ad")
             }
+        }
+    }
+}
+
+/**
+ * Where the offer's fit comes from: a row per wish, the one that counts most first, its bar as long
+ * as the wish weighs and filled as far as the offer meets it, so a short fill on a long bar is where
+ * the points went.
+ */
+@Composable
+private fun FitBreakdown(listing: Listing) {
+    val rows = fitRows(listing)
+    val percent = fitPercent(listing) ?: return
+    if (rows.isEmpty()) return
+    val most = rows.maxOf { it.of }.toFloat()
+    Gap(4.dp)
+    SectionTitle("Fit $percent %")
+    rows.forEach { row ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(0.42f)) {
+                Text(row.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                row.note?.let { Muted(it, maxLines = 1, style = MaterialTheme.typography.bodySmall.copy(fontStyle = if (row.known) FontStyle.Normal else FontStyle.Italic)) }
+            }
+            Box(Modifier.weight(0.40f)) {
+                Box(
+                    Modifier.fillMaxWidth(row.of / most).height(8.dp).clip(CircleShape).background(arbay.raised),
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth(if (row.of == 0) 0f else row.points.toFloat() / row.of).fillMaxHeight().clip(CircleShape)
+                            .background(if (row.known) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)),
+                    )
+                }
+            }
+            Text(
+                "${row.points}/${row.of}", Modifier.weight(0.18f), style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.End, color = if (row.points < row.of) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

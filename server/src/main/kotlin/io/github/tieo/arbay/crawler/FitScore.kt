@@ -3,9 +3,12 @@ package io.github.tieo.arbay.crawler
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.model.FitPart.Companion.NOT_STATED
+import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SellerType
-import io.github.tieo.arbay.model.Transmission
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 
 /**
@@ -21,7 +24,10 @@ import kotlin.time.Clock
  *
  * The weights were set with the user on a real search (a Crafter): the van's size first, then the
  * price, where every euro counts, then gearbox, mileage, age and drive; the drive to the seller
- * counts for little, since it is made once or twice.
+ * counts for little, since it is made once or twice, and so does the seller: a dealer under four
+ * stars is ruled out already, and what is left between a good dealer and a private seller is
+ * mostly the dealer's warranty. A wish the search does not make counts for nothing, so the fit of
+ * a search with few wishes is not pulled down by the ones it leaves open.
  */
 object FitScore {
 
@@ -29,10 +35,16 @@ object FitScore {
         val score: Double,
         /** Hours by road from home, estimated from the straight-line distance. */
         val driveHours: Double?,
-        /** The wishes this offer misses, in the user's words, for the notification. */
-        val misses: List<String>,
         val airConditioning: Boolean?,
+        /** What each wish adds, in points that sum to [score] in percent. */
+        val parts: List<FitPart> = emptyList(),
     )
+
+    /** How well the offer meets one wish, 0 to 1 or null where the ad does not say, and what it has. */
+    private data class Wish(val score: Double?, val note: String?)
+
+    /** What a wish the ad does not answer scores. */
+    private const val UNKNOWN = 0.45
 
     private val notAClosedVan = Regex(
         """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine|rettungswagen|krankenwagen|\b[rk]tw\b""",
@@ -59,6 +71,13 @@ object FitScore {
     private const val AVERAGE_KMH = 100.0
 
     fun driveHours(distanceKm: Double?): Double? = distanceKm?.let { it * ROAD_FACTOR / AVERAGE_KMH }
+
+    /** "~45 min", "~7 h". */
+    fun hoursLabel(h: Double) = if (h < 1) "~${(h * 60 / 15).roundToInt() * 15} min" else "~${h.roundToInt()} h"
+
+    private fun grouped(n: Long) = "%,d".format(java.util.Locale.GERMANY, n)
+
+    private fun euros(eur: Double) = "${grouped(eur.roundToInt().toLong())} €"
 
     /** 1 at [good], 0 at [bad], straight in between; null stays null (unknown). */
     private fun linear(x: Double?, good: Double, bad: Double): Double? {
@@ -95,73 +114,85 @@ object FitScore {
             else -> null
         }
         if (wishes.drivetrain != null && statedDrive != null && statedDrive != wishes.drivetrain) return null
-        val misses = mutableListOf<String>()
-
         // Size: every size the listing could be, against the sizes wanted.
-        fun fits(wanted: Set<Int>, low: Int?, high: Int?, what: String): Double? {
+        fun fits(wanted: Set<Int>, low: Int?, high: Int?, what: String): Pair<Double, String>? {
             if (wanted.isEmpty()) return null
-            if (low == null) return 0.35.also { misses += "$what not stated" }
+            if (low == null) return 0.35 to "$what not stated"
             val top = high ?: low
             val possible = (low..top).toSet()
             return when {
-                possible.all { it in wanted } -> 1.0
-                possible.any { it in wanted } -> 0.6.also { misses += "$what not certain" }
-                else -> 0.1.also { misses += "other $what" }
+                possible.all { it in wanted } -> 1.0 to "$what as wanted"
+                possible.any { it in wanted } -> 0.6 to "$what not certain"
+                else -> 0.1 to "other $what"
             }
         }
         val length = fits(wishes.vanLengths, v?.vanLength, v?.vanLengthMax, "length")
         val height = fits(wishes.vanHeights, v?.vanHeight, v?.vanHeightMax, "roof")
-        val size = listOfNotNull(length, height).takeIf { it.isNotEmpty() }?.average()
+        val sizes = listOfNotNull(length, height)
+        val size = sizes.takeIf { it.isNotEmpty() }?.let { s ->
+            Wish(s.map { it.first }.average(), s.map { it.second }.filter { !it.endsWith("as wanted") }.joinToString(", ").ifEmpty { "as wanted" })
+        }
 
         val gear = wishes.transmission?.let { wanted ->
-            when (v?.gearbox) {
-                wanted -> 1.0
-                null -> 0.5
-                else -> 0.1.also { misses += if (wanted == Transmission.AUTOMATIC) "manual" else "automatic" }
+            when (val g = v?.gearbox) {
+                wanted -> Wish(1.0, g.name.lowercase())
+                null -> Wish(0.5, NOT_STATED)
+                else -> Wish(0.1, g.name.lowercase())
             }
         }
-        val drive = wishes.drivetrain?.let { if (statedDrive == null) 0.8 else 1.0 }
+        val drive = wishes.drivetrain?.let { if (statedDrive == null) Wish(0.8, NOT_STATED) else Wish(1.0, statedDrive.name) }
         val min = wishes.minPriceEur?.toDouble()
         val max = wishes.maxPriceEur?.toDouble()
-        val price = if (max != null) linear(priceEur, (min ?: 0.0) + ((max - (min ?: 0.0)) * 0.25), max * 1.03) else null
-        val km = wishes.maxMileageKm?.let { linear(v?.mileageKm?.toDouble(), it * 0.4, it * 1.33) }
+        val price = max?.let { Wish(linear(priceEur, (min ?: 0.0) + ((it - (min ?: 0.0)) * 0.25), it * 1.03), euros(priceEur)) }
+        val km = wishes.maxMileageKm?.let { Wish(linear(v?.mileageKm?.toDouble(), it * 0.4, it * 1.33), v?.mileageKm?.let { m -> "${grouped(m.toLong())} km" }) }
         val thisYear = Clock.System.now().toString().take(4).toInt()
-        val year = wishes.firstRegFromYear?.let { linear(v?.firstRegYear?.toDouble(), thisYear - 4.0, it - 2.0) }
+        val year = wishes.firstRegFromYear?.let { Wish(linear(v?.firstRegYear?.toDouble(), thisYear - 4.0, it - 2.0), v?.firstRegYear?.toString()) }
         // The ideal power fits fully and 50 kW below it not at all; a bare minimum fits fully 20 kW
         // above it and not at all 35 kW below.
         val power = wishes.idealPowerKw?.let { ideal ->
-            linear(v?.powerKw?.toDouble(), ideal.toDouble(), ideal - 50.0)?.also { if (it < 0.9) misses += "${v?.powerKw} kW of $ideal" }
+            Wish(linear(v?.powerKw?.toDouble(), ideal.toDouble(), ideal - 50.0), v?.powerKw?.let { "$it kW of $ideal" })
         } ?: wishes.minPowerKw?.let { want ->
-            linear(v?.powerKw?.toDouble(), want + 20.0, want - 35.0)?.also { if (it < 0.7) misses += "${v?.powerKw} kW" }
+            Wish(linear(v?.powerKw?.toDouble(), want + 20.0, want - 35.0), v?.powerKw?.let { "$it kW" })
         }
         val dealer = when {
-            stars != null -> (if (stars >= 4.5) 1.0 else 0.75) *
-                ((seller.reviewCount ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 })
-            seller?.type == SellerType.PRIVATE -> 0.6
-            else -> 0.45
+            stars != null -> Wish(
+                (if (stars >= 4.5) 1.0 else 0.75) * ((seller.reviewCount ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
+                "${"%.1f".format(stars)}★" + (seller.reviewCount?.let { " ($it)" } ?: ""),
+            )
+            seller?.type == SellerType.PRIVATE -> Wish(0.6, "private")
+            else -> Wish(0.45, NOT_STATED)
         }
         val days = listing.listingDate?.let { (Clock.System.now() - it).inWholeDays.toDouble() }
-        val age = days?.let { if (it <= 30) 1.0 else if (it <= 90) 0.85 else (linear(it, 90.0, 365.0) ?: 0.0) * 0.6 + 0.2 }
+        val age = Wish(days?.let { if (it <= 30) 1.0 else if (it <= 90) 0.85 else (linear(it, 90.0, 365.0) ?: 0.0) * 0.6 + 0.2 }, days?.let { "${it.toLong()} days" })
         val ac = when {
             noAirConditioning.containsMatchIn(text) -> false
             airConditioning.containsMatchIn(text) -> true
             else -> null
         }
-        if (ac == false) misses += "no air conditioning"
         val hours = driveHours(listing.distanceKm)
         // Full marks within half the drive the user would happily make, half marks at it, none at twice.
-        val where = hours?.let {
+        val where = Wish(hours?.let {
             if (it <= softDriveHours / 2) 1.0 else if (it <= softDriveHours) 1.0 - (it - softDriveHours / 2) / softDriveHours
             else (0.5 - (it - softDriveHours) / (2 * softDriveHours)).coerceAtLeast(0.0)
-        }
+        }, hours?.let { h -> listOfNotNull(listing.distanceKm?.let { "${it.roundToInt()} km" }, hoursLabel(h)).joinToString(", ") })
 
-        val parts = listOf(
-            size to .26, price to .22, gear to .12, km to .11, year to .09, drive to .07,
-            dealer to .05, where to .03, power to .08, age to .01, (ac?.let { if (it) 1.0 else 0.3 }) to .01,
+        // A wish the search does not make counts for nothing; one it makes and the ad does not
+        // answer counts a little under half.
+        val weighed = listOfNotNull(
+            size?.let { Triple(FitWish.SIZE, it, .26) }, price?.let { Triple(FitWish.PRICE, it, .22) },
+            gear?.let { Triple(FitWish.GEARBOX, it, .12) }, km?.let { Triple(FitWish.MILEAGE, it, .11) },
+            power?.let { Triple(FitWish.POWER, it, .08) }, year?.let { Triple(FitWish.YEAR, it, .09) },
+            drive?.let { Triple(FitWish.DRIVE, it, .07) }, Triple(FitWish.SELLER, dealer, .03),
+            Triple(FitWish.DISTANCE, where, .03), Triple(FitWish.AD_AGE, age, .01),
+            Triple(FitWish.AIR_CONDITIONING, Wish(ac?.let { if (it) 1.0 else 0.3 }, ac?.let { if (it) "yes" else "no" }), .01),
         )
-        // A wish the offer does not answer counts a little under half.
-        val score = parts.sumOf { (s, w) -> (s ?: 0.45) * w } / parts.sumOf { it.second }
-        return Fit(score = score, driveHours = hours, misses = misses, airConditioning = ac)
+        val total = weighed.sumOf { it.third }
+        val parts = weighed.map { (wish, w, weight) ->
+            val of = weight / total * 100
+            FitPart(wish, (w.score ?: UNKNOWN) * of, of, if (w.score == null) NOT_STATED else w.note)
+        }
+        val score = parts.sumOf { it.points } / 100
+        return Fit(score = score, driveHours = hours, airConditioning = ac, parts = parts)
     }
 
     /**

@@ -485,6 +485,15 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .fact { padding: 3px 9px; border-radius: 999px; background: var(--raised); font-size: 12.5px; }
 .specs { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .spec-label { color: var(--muted); }
+.fit { display: grid; grid-template-columns: max-content 1fr max-content; align-items: center; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.fit-wish { display: flex; flex-direction: column; }
+.fit-note { color: var(--muted); font-size: 0.85em; }
+.fit-note.unknown { font-style: italic; }
+.fit-bar { display: block; height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+.fit-fill { display: block; height: 100%; background: var(--accent); }
+.fit-fill.unknown { background: var(--muted); opacity: 0.45; }
+.fit-points { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.fit-points.lost { color: var(--text); }
 .spec-value.read { font-style: italic; }
 .spec-value.read::after { content: " · read from the ad"; color: var(--muted); font-size: 0.85em; font-style: normal; }
 .description { white-space: pre-line; line-height: 1.55; }

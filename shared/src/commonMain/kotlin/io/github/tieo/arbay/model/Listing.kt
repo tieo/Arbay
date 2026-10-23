@@ -40,9 +40,13 @@ data class Listing(
     val scrapedAt: Instant,
     val extras: JsonObject? = null,
     val relevanceScore: Double? = null,
-    // Semantic match [0,1] to a car search's free-form idealDescription; null when none set. Used to
-    // rank car results by how well each fits the described ideal.
+    // How well a vehicle fits its search as a whole, [0,1]: the weighed wishes, and half of it the
+    // likeness to the search's free-form idealDescription where one is set. Null where the search
+    // weighs no fit or the offer is ruled out. Ranks vehicle results by fit.
     val matchScore: Double? = null,
+    // What each wish of a vehicle search adds to [matchScore], in points that sum to it in percent;
+    // empty where the search weighs no fit or the offer is ruled out.
+    val fit: List<FitPart> = emptyList(),
     // Great-circle distance in km from the searcher's position to this listing, set when the search
     // carried the user's coordinates and the listing's location could be geocoded.
     val distanceKm: Double? = null,

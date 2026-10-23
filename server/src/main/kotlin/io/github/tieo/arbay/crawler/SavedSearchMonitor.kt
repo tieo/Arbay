@@ -3,6 +3,7 @@ package io.github.tieo.arbay.crawler
 import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.model.biggestLosses
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
@@ -635,13 +636,11 @@ class SavedSearchMonitor(
 
     private fun euros(l: Listing) = "%,d €".format(java.util.Locale.GERMANY, FitScore.priceEur(l).toLong())
 
-    private fun hours(h: Double) = if (h < 1) "~${Math.round(h * 60 / 15) * 15} min" else "~${Math.round(h)} h"
-
     /** Price, place and drive: "23.950 € · Oldenburg · ~7 h". */
     private fun fitLine(l: Listing, fit: FitScore.Fit): String =
-        listOfNotNull(euros(l), l.location?.city ?: l.location?.country, fit.driveHours?.let(::hours)).joinToString(" · ")
+        listOfNotNull(euros(l), l.location?.city ?: l.location?.country, fit.driveHours?.let(FitScore::hoursLabel)).joinToString(" · ")
 
-    /** Year, mileage, power, dealer, how well it fits and what it misses. */
+    /** Year, mileage, power, dealer, how well it fits and the wishes that cost it most: "price −10 · power −4 (103 kW)". */
     private fun fitDetails(l: Listing, fit: FitScore.Fit): String {
         val v = l.vehicle
         val seller = l.seller
@@ -656,7 +655,10 @@ class SavedSearchMonitor(
             dealer,
             "fit ${Math.round(fit.score * 100)}%",
         ).joinToString(" · ")
-        return facts + (fit.misses.takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "\nmisses: $it" } ?: "")
+        val losses = fit.parts.biggestLosses().joinToString(" · ") { (part, lost) ->
+            "${part.wish.label.lowercase()} −$lost" + (part.note?.let { " ($it)" } ?: "")
+        }
+        return facts + losses.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
     }
 
     companion object {

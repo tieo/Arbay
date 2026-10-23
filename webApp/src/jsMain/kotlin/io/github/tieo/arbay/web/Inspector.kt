@@ -29,6 +29,8 @@ import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.coveredMarkets
 import io.github.tieo.arbay.results.detailSpecs
+import io.github.tieo.arbay.results.fitPercent
+import io.github.tieo.arbay.results.fitRows
 import io.github.tieo.arbay.results.isProblem
 import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.saidWhat
@@ -502,6 +504,8 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             offerFacts(listing, page.place).forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
         }
 
+        FitBreakdown(listing)
+
         vehicle?.let { v ->
             val specs = detailSpecs(v)
             if (specs.isNotEmpty()) {
@@ -524,6 +528,37 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             P({ classes("description") }) { Text(it) }
         }
         if (reading) P({ classes("muted", "small") }) { Text("Reading the rest off the ad…") }
+    }
+}
+
+/**
+ * Where the offer's fit comes from: a row per wish, the one that counts most first, its bar as long
+ * as the wish weighs and filled as far as the offer meets it, so a short fill on a long bar is where
+ * the points went.
+ */
+@Composable
+private fun FitBreakdown(listing: Listing) {
+    val rows = fitRows(listing)
+    val percent = fitPercent(listing) ?: return
+    if (rows.isEmpty()) return
+    val most = rows.maxOf { it.of }.toDouble()
+    H3 { Text("Fit $percent %") }
+    Div({ classes("fit") }) {
+        rows.forEach { row ->
+            Span({ classes("fit-wish") }) {
+                Text(row.label)
+                row.note?.let { Span({ classes(*listOfNotNull("fit-note", "unknown".takeIf { !row.known }).toTypedArray()) }) { Text(it) } }
+            }
+            Span({ classes("fit-track") }) {
+                Span({ classes("fit-bar"); style { property("width", "${row.of / most * 100}%") } }) {
+                    Span({
+                        classes(*listOfNotNull("fit-fill", "unknown".takeIf { !row.known }).toTypedArray())
+                        style { property("width", "${if (row.of == 0) 0.0 else row.points * 100.0 / row.of}%") }
+                    })
+                }
+            }
+            Span({ classes(*listOfNotNull("fit-points", "lost".takeIf { row.points < row.of }).toTypedArray()) }) { Text("${row.points}/${row.of}") }
+        }
     }
 }
 

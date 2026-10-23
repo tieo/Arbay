@@ -8,6 +8,7 @@ import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.VehicleInfo
+import io.github.tieo.arbay.model.wholePoints
 import io.github.tieo.arbay.monthYear
 import kotlin.math.roundToInt
 import kotlin.time.Clock
@@ -136,8 +137,20 @@ fun listingFoot(listing: Listing, views: Int? = null, foundAtMillis: Long? = nul
     listing.listingDate?.let { posted -> ageLabel(posted)?.let { add(it) } }
     foundAtMillis?.let { foundLabel(it)?.let { add(it) } }
     views?.let { add(if (it == 1) "seen once" else "seen $it times") }
-    listing.matchScore?.let { add("${(it * 100).roundToInt()}% match") }
+    listing.matchScore?.let { add("fit ${(it * 100).roundToInt()} %") }
 }
+
+/** One wish in an offer's fit: what it is, what the offer has, and the whole points it adds of the most it could. */
+data class FitRow(val label: String, val note: String?, val points: Int, val of: Int, val known: Boolean)
+
+/** Where an offer's fit comes from, the wish that counts most first; the points add up to the fit as shown. */
+fun fitRows(listing: Listing): List<FitRow> = listing.fit.zip(listing.fit.wholePoints())
+    .map { (part, whole) -> FitRow(part.wish.label, part.note, whole.first, whole.second, part.known) }
+    .filter { it.of > 0 }
+    .sortedByDescending { it.of }
+
+/** The fit in whole percent, as its rows add up. */
+fun fitPercent(listing: Listing): Int? = listing.matchScore?.let { (it * 100).roundToInt() }
 
 /** One row of a listing's full description of the vehicle: what it is called, its value, and the
  *  field it came from, so a value the market stated and one read out of its words differ. */
