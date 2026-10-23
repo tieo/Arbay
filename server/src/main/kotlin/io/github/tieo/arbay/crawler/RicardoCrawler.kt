@@ -24,6 +24,35 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage,
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * The seller's text and every photo of the gallery, off the item page. The page sits behind
+     * Cloudflare's challenge where the search does not, so it is read by the tier that ticks the
+     * box, known through by the gallery it holds.
+     */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        parseDetail(fetchWithFallback(client, listing.url, "ricardo.ch", stealthMarker = IMAGES_KEY))
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
+    /** The gallery, largest copies first in its order, and the description from the page's
+     *  Product data, which carries it as plain text where the article's own copy is HTML. */
+    internal fun parseDetail(html: String): ListingDetail? {
+        val photos = (balancedArray(html, IMAGES_KEY) ?: balancedArray(decodeChunks(html), IMAGES_KEY))
+            .orEmpty().mapNotNull { image ->
+                val o = image as? JsonObject ?: return@mapNotNull null
+                (o["bigSizeUrl"] ?: o["url"])?.jsonPrimitive?.contentOrNull
+            }
+        val description = Regex("""<script[^>]*application/ld\+json[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html).mapNotNull { runCatching { json.parseToJsonElement(it.groupValues[1]) }.getOrNull() }
+            .flatMap { ld -> ((ld as? JsonObject)?.get("@graph") as? JsonArray ?: JsonArray(listOf(ld))).asSequence() }
+            .filterIsInstance<JsonObject>()
+            .firstOrNull { it["@type"]?.jsonPrimitive?.contentOrNull == "Product" }
+            ?.get("description")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
+        if (photos.isEmpty() && description == null) return null
+        return ListingDetail(description = description, photos = photos)
+    }
+
     override suspend fun search(query: SearchQuery): List<Listing> {
         // A car query is searched by make and model words; ricardo has no vehicle-specific
         // category filter in the URL, so the text carries the intent.
@@ -67,12 +96,13 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage,
      * `articles` array. Each chunk body is a JSON-encoded string, so it is decoded by parsing it
      * as one, which handles every escape the stream uses.
      */
-    private fun extractArticles(html: String): JsonArray? {
-        val blob = decodeChunks(html)
+    private fun extractArticles(html: String): JsonArray? = balancedArray(decodeChunks(html), ARTICLES_KEY)
 
-        val start = blob.indexOf(ARTICLES_KEY)
+    /** The JSON array after the first [key] in [blob]. */
+    private fun balancedArray(blob: String, key: String): JsonArray? {
+        val start = blob.indexOf(key)
         if (start < 0) return null
-        val arrayStart = start + ARTICLES_KEY.length
+        val arrayStart = start + key.length
 
         // The payload is not valid JSON as a whole, so take the balanced array by hand.
         var depth = 0
@@ -182,6 +212,7 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage,
     private companion object {
         const val CHUNK_MARKER = "self.__next_f.push([1,\""
         const val ARTICLES_KEY = "\"articles\":"
+        const val IMAGES_KEY = "\"images\":"
 
         /** ricardo product types that are a whole vehicle. Everything else it classifies
          *  (auto_part, car_mat, wheel, rim, trailer_coupling, keychain, ...) is an accessory. */
