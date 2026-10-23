@@ -857,7 +857,7 @@ object RelevanceFilter {
         // German plurals, because the word boundary after the singular is what let an eight euro
         // pack of "Schleifpapiere" through as a floor sander: an ad names what it is selling in
         // whatever number it has of them.
-        """\b(schleifpapiere?|schleifb[aä]nder?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
+        """\b(schleifpapiere?|schleifb[aä]nd(er)?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
             """schleifmittel|staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
             """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
             // The electrical spares a machine is stripped for. Named as the thing being sold, so

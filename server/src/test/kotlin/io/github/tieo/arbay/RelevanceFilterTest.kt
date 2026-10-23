@@ -1228,6 +1228,8 @@ class RelevanceFilterTest {
         val listings = listOf(
             listing("Schleifpapiere Parkett für Walzenschleifmaschine NEU", price = 800),
             listing("Schleifpapier für Parkettschleifmaschine", price = 900),
+            // A pack of twelve belts named in the singular, let through by an alert at 25 euro.
+            listing("Schleifband Parkettschleifmaschine", price = 2500),
             listing("Parkett Schleifmaschine Walzenschleifmaschine", price = 40000),
             listing("Parkett-, Bodenschleifmaschine von Scheer", price = 9000),
         )
