@@ -402,9 +402,19 @@ internal suspend fun fetchWithFallback(
     browserOnly: Boolean = false,
     stealthMarker: String? = null,
     stealthMinMatches: Int = 1,
+    pageMarker: String? = null,
 ): String {
     val errors = mutableListOf<String>()
     val emitter = coroutineContext[FetchProgressEmitter.Key]
+
+    // Where every real page holds [pageMarker], a tier's answer without it is not that page: a
+    // rate-limited site serves its own error page, which no block check knows, and taking it would
+    // end the chain before the tier that gets through.
+    fun String.proven(): String {
+        if (pageMarker != null && pageMarker !in this)
+            throw CrawlerBlockedException("$platformName: page without ${pageMarker.take(40)}", ErrorType.BLOCKED_403)
+        return this
+    }
 
     // Paced to the platform's per-window request ceiling, so neither a runaway nor a whole price
     // band can hammer a site into flagging our IP; refused only when the window stays spent.
@@ -422,6 +432,7 @@ internal suspend fun fetchWithFallback(
         try {
             val html = fetchHttp(client, url, platformName)
             validateHtml(html, platformName)
+            html.proven()
             RequestMonitor.recordTier(platformName, "HTTP")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -435,6 +446,7 @@ internal suspend fun fetchWithFallback(
         try {
             val html = RnetClient.fetch(url, primeUrl = primeUrl)
             validateHtml(html, platformName)
+            html.proven()
             RequestMonitor.recordTier(platformName, "Rnet")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -448,6 +460,7 @@ internal suspend fun fetchWithFallback(
         try {
             val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)
             validateHtml(html, platformName)
+            html.proven()
             RequestMonitor.recordTier(platformName, "CurlCffi")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -469,7 +482,7 @@ internal suspend fun fetchWithFallback(
                 engine = BrowserEngine.CHROMIUM,
             )
         }
-        return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
+        return validateBrowserResult(result, platformName).proven().also { RequestMonitor.recordTier(platformName, "Browser") }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         errors.add("Chromium: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Chromium failed: {}", platformName, e.message?.take(80))
@@ -487,7 +500,7 @@ internal suspend fun fetchWithFallback(
                 engine = BrowserEngine.FIREFOX,
             )
         }
-        return validateBrowserResult(result, platformName).also { RequestMonitor.recordTier(platformName, "Browser") }
+        return validateBrowserResult(result, platformName).proven().also { RequestMonitor.recordTier(platformName, "Browser") }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         errors.add("Firefox: ${e.message?.take(60)}")
         fetchLog.debug("[{}] Firefox failed: {}", platformName, e.message?.take(80))

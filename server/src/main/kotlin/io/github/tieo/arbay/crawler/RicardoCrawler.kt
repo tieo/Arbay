@@ -30,7 +30,7 @@ class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage,
      * box, known through by the gallery it holds.
      */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        parseDetail(fetchWithFallback(client, listing.url, "ricardo.ch", stealthMarker = IMAGES_KEY))
+        parseDetail(fetchWithFallback(client, listing.url, "ricardo.ch", stealthMarker = IMAGES_KEY, pageMarker = IMAGES_KEY))
     } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
         null
     }
