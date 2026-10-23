@@ -54,7 +54,9 @@ fun ForSaleList(app: WebApp, openId: String?) {
 
 /**
  * One ad for sale beside the list: its photos, title, text, price and details, changed here and
- * posted on Kleinanzeigen with the one button at the bottom. A posted ad shows as it went out.
+ * posted on Kleinanzeigen with the one button at the bottom. A posted ad keeps its photos and
+ * details; its title, text and price change here and go to the market with the button that appears
+ * once one did.
  */
 @Composable
 fun SellPane(app: WebApp, draftId: String) {
@@ -63,6 +65,7 @@ fun SellPane(app: WebApp, draftId: String) {
     val busy by sell.busy.collectAsState()
     val error by sell.error.collectAsState()
     val account by app.chat.account.collectAsState()
+    sell.drafts.collectAsState().value
     LaunchedEffect(draftId) { sell.open(draftId) }
     val d = open?.takeIf { it.id == draftId }
     val scope = rememberCoroutineScope()
@@ -105,7 +108,6 @@ fun SellPane(app: WebApp, draftId: String) {
             Span({ classes("field-label") }) { Text("Title") }
             Input(InputType.Text) {
                 classes("control"); value(d.title)
-                if (posted) attr("readonly", "")
                 onInput { sell.change(d.copy(title = it.value)) }
             }
         }
@@ -113,7 +115,6 @@ fun SellPane(app: WebApp, draftId: String) {
             Span({ classes("field-label") }) { Text("Text") }
             TextArea(d.description) {
                 classes("control"); attr("rows", "14")
-                if (posted) attr("readonly", "")
                 onInput { sell.change(d.copy(description = it.value)) }
             }
         }
@@ -122,28 +123,30 @@ fun SellPane(app: WebApp, draftId: String) {
             Div({ classes("with-unit") }) {
                 Input(InputType.Text) {
                     classes("control"); attr("inputmode", "numeric"); value(d.priceEur?.toString().orEmpty())
-                    if (posted) attr("readonly", "")
                     onInput { e -> sell.change(d.copy(priceEur = e.value.filter(Char::isDigit).take(7).toIntOrNull())) }
                 }
                 Span({ classes("unit") }) { Text("€") }
             }
         }
-        Div({ classes("chips") }) { AdPriceType.entries.forEach { t -> Chip(t.label, d.priceType == t) { if (!posted) sell.change(d.copy(priceType = t)) } } }
+        Div({ classes("chips") }) { AdPriceType.entries.forEach { t -> Chip(t.label, d.priceType == t) { sell.change(d.copy(priceType = t)) } } }
         Div({ classes("chips") }) {
-            Chip("Ships", d.shipping) { if (!posted) sell.change(d.copy(shipping = true)) }
-            Chip("Pickup only", !d.shipping) { if (!posted) sell.change(d.copy(shipping = false, buyNow = false)) }
-            if (d.shipping) Chip("Direkt kaufen", d.buyNow) { if (!posted) sell.change(d.copy(buyNow = !d.buyNow)) }
+            Chip("Ships", d.shipping) { sell.change(d.copy(shipping = true)) }
+            Chip("Pickup only", !d.shipping) { sell.change(d.copy(shipping = false, buyNow = false)) }
+            if (d.shipping) Chip("Direkt kaufen", d.buyNow) { sell.change(d.copy(buyNow = !d.buyNow)) }
         }
         if (d.attributes.isNotEmpty()) {
             H3({ classes("group-title") }) { Text("Details") }
             Div({ classes("sale-details") }) { d.attributes.forEach { (label, value) -> DetailField(d, label, value, posted) { sell.change(it) } } }
         }
-        if (!posted) {
+        if (!posted || sell.unsaved(d)) {
             val problem = d.problem() ?: if (account?.signedIn != true) "Sign in to Kleinanzeigen first" else null
             problem?.let { P({ classes("muted", "small") }) { Text(it) } }
             Div({ classes("actions") }) {
-                QuietButton("Throw away") { sell.delete(d.id) { Router.replace(Route.Inbox) } }
-                PrimaryButton("Post on Kleinanzeigen", Glyph.Send, enabled = problem == null && busy == null) { sell.post() }
+                if (posted) PrimaryButton("Save on Kleinanzeigen", Glyph.Send, enabled = problem == null && busy == null) { sell.save() }
+                else {
+                    QuietButton("Throw away") { sell.delete(d.id) { Router.replace(Route.Inbox) } }
+                    PrimaryButton("Post on Kleinanzeigen", Glyph.Send, enabled = problem == null && busy == null) { sell.post() }
+                }
             }
         }
     }

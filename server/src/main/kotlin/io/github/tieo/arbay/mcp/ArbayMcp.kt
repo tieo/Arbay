@@ -796,7 +796,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "change_ad",
-            "Change a draft ad for sale: what is given replaces what it had. Title and text only as the user worded or approved them.",
+            "Change an ad for sale: what is given replaces what it had. A draft is changed here; a posted ad is changed on Kleinanzeigen at once (title, text, price, price type, shipping, Direkt kaufen; its photos and details stay). Title and text only as the user worded or approved them.",
+            destructive = true,
             props = {
                 string("id", "The draft", required = true)
                 string("title", "The ad's title"); string("text", "The ad's text")
@@ -818,11 +819,15 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 photos = args.strs("photos").takeIf { "photos" in args } ?: d.photos,
                 attributes = (d.attributes + details.toMap()).filterValues { it.isNotEmpty() },
             )
-            val r = http.put("$base/api/selling/drafts/${d.id.encodeURLPathPart()}") {
+            // A posted ad is changed on the market itself, through its edit form.
+            val r = if (d.postedAdId == null) http.put("$base/api/selling/drafts/${d.id.encodeURLPathPart()}") {
+                contentType(ContentType.Application.Json); setBody(json.encodeToString(AdDraft.serializer(), next))
+            } else http.post("$base/api/selling/drafts/${d.id.encodeURLPathPart()}/update") {
                 contentType(ContentType.Application.Json); setBody(json.encodeToString(AdDraft.serializer(), next))
             }
             if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
-            json.decodeFromString(AdDraft.serializer(), r.bodyAsText()).describe()
+            val kept = json.decodeFromString(AdDraft.serializer(), r.bodyAsText())
+            (if (kept.postedAdId != null) "Changed on Kleinanzeigen: ${kept.postedUrl()}\n" else "") + kept.describe()
         }
 
         tool(

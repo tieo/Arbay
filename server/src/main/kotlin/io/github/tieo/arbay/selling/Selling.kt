@@ -132,6 +132,48 @@ object Selling {
         return now
     }
 
+    /**
+     * A posted ad changed on the market through its own edit form, then kept here as changed: title,
+     * text, price, price type, shipping and Direkt kaufen. Only what differs from the ad as posted
+     * is sent, so a new price leaves the rest of the ad untouched. Photos and details stay as posted.
+     * With [send] false the form is filled and left without saving, and the answer says what it took.
+     */
+    suspend fun update(changed: AdDraft, send: Boolean = true): Pair<AdDraft, JsonObject?> {
+        val old = draft(changed.id) ?: throw SellingFailure("No draft ${changed.id}")
+        val adId = old.postedAdId ?: throw SellingFailure("This ad is not posted yet")
+        if (changed.photos != old.photos || changed.attributes != old.attributes)
+            throw SellingFailure("A posted ad's photos and details stay as posted")
+        val next = old.copy(
+            title = changed.title, description = changed.description, priceEur = changed.priceEur?.takeIf { it >= 0 },
+            priceType = changed.priceType, shipping = changed.shipping, buyNow = changed.shipping && changed.buyNow,
+        )
+        next.problem()?.let { throw SellingFailure(it) }
+        if (next == old) return old to null
+        val answer = try {
+            ChatBrowser.call(
+                "edit_ad", 180_000,
+                "adId" to adId,
+                "title" to next.title.takeIf { it != old.title },
+                "description" to next.description.takeIf { it != old.description },
+                "priceType" to next.priceType.label,
+                "price" to next.priceEur,
+                "shipping" to next.shipping.takeIf { it != old.shipping },
+                "buyNow" to next.buyNow.takeIf { it != old.buyNow },
+                "send" to send,
+            )
+        } catch (e: ChatBrowser.ChatFailure) {
+            e.detail?.let { keepFailedPage(old, it, e) }
+            throw SellingFailure(e.message ?: "The ad could not be changed")
+        }
+        if (!send) return old to answer
+        synchronized(drafts) {
+            val current = drafts.first { it.id == old.id }
+            drafts[drafts.indexOf(current)] = next.copy(postedAt = current.postedAt)
+        }
+        persist()
+        return next to answer
+    }
+
     fun delete(id: String) {
         synchronized(drafts) { drafts.removeAll { it.id == id } }
         if (id.isSafeName()) DataDir.file("selling/$id").deleteRecursively()

@@ -17,8 +17,9 @@ import kotlinx.coroutines.launch
  * The user's ads for sale, shared by the phone and the web: drafts made from ads the user bought
  * from, changed here, and posted on Kleinanzeigen only when the user presses post.
  *
- * Every change is kept on the server a moment after the last key, so the phone, the browser and an
- * assistant see the same draft.
+ * Every change to a draft is kept on the server a moment after the last key, so the phone, the
+ * browser and an assistant see the same draft. A change to a posted ad goes to the market, so it
+ * waits on screen until the user saves it there.
  */
 class SellViewModel(
     private val client: ArbayClient = ArbayClient(),
@@ -79,7 +80,7 @@ class SellViewModel(
     /** The draft as the user changed it; kept on the server a moment after the last change. */
     fun change(draft: AdDraft) {
         _open.value = draft
-        if (rendersASample) return
+        if (rendersASample || draft.postedAdId != null) return
         saving?.cancel()
         saving = viewModelScope.launch {
             delay(600)
@@ -90,6 +91,25 @@ class SellViewModel(
     private suspend fun keep(draft: AdDraft) = attempt {
         val kept = client.changeAdDraft(draft)
         _drafts.value = _drafts.value.map { if (it.id == kept.id) kept else it }
+    }
+
+    /** Whether the open ad is posted and changed on screen since, which only saving puts on the market. */
+    fun unsaved(draft: AdDraft): Boolean =
+        draft.postedAdId != null && _drafts.value.firstOrNull { it.id == draft.id }?.let { it != draft } == true
+
+    /** The open posted ad's changes saved on Kleinanzeigen. */
+    fun save() {
+        val draft = _open.value?.takeIf { it.postedAdId != null } ?: return
+        if (rendersASample) return
+        viewModelScope.launch {
+            _busy.value = "Saving on Kleinanzeigen"
+            attempt {
+                val kept = client.updateAd(draft)
+                _drafts.value = _drafts.value.map { if (it.id == kept.id) kept else it }
+                if (_open.value == draft) _open.value = kept
+            }
+            _busy.value = null
+        }
     }
 
     fun post(done: (AdDraft) -> Unit = {}) {

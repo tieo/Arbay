@@ -53,7 +53,8 @@ import io.github.tieo.arbay.model.saleLine
 
 /**
  * One ad for sale: its photos, title, text, details and price, changed here and posted on
- * Kleinanzeigen with the one button at the bottom. A posted ad shows as it went out.
+ * Kleinanzeigen with the one button at the bottom. A posted ad keeps its photos and details; its
+ * title, text and price change here and go to the market with the button that appears once one did.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +65,7 @@ fun SellScreen(session: Session, draftId: String) {
     val busy by sell.busy.collectAsState()
     val error by sell.error.collectAsState()
     val account by session.chat.account.collectAsState()
+    sell.drafts.collectAsState().value
     LaunchedEffect(draftId) { sell.open(draftId) }
     val d = open?.takeIf { it.id == draftId }
     val posted = d?.postedAdId != null
@@ -83,12 +85,12 @@ fun SellScreen(session: Session, draftId: String) {
             )
         },
         bottomBar = {
-            if (d != null && !posted) {
+            if (d != null && (!posted || sell.unsaved(d))) {
                 val problem = d.problem() ?: if (account?.signedIn != true) "Sign in to Kleinanzeigen first" else null
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = arbay.pad, vertical = 8.dp)) {
                     problem?.let { Muted(it) }
-                    Button(enabled = problem == null && busy == null, onClick = { sell.post() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Post on Kleinanzeigen")
+                    Button(enabled = problem == null && busy == null, onClick = { if (posted) sell.save() else sell.post() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (posted) "Save on Kleinanzeigen" else "Post on Kleinanzeigen")
                     }
                 }
             }
@@ -111,12 +113,12 @@ fun SellScreen(session: Session, draftId: String) {
                 }
             }
             item {
-                OutlinedTextField(d.title, { sell.change(d.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true, readOnly = posted)
+                OutlinedTextField(d.title, { sell.change(d.copy(title = it)) }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true)
             }
             item {
-                OutlinedTextField(d.description, { sell.change(d.copy(description = it)) }, Modifier.fillMaxWidth(), label = { Text("Text") }, minLines = 8, readOnly = posted)
+                OutlinedTextField(d.description, { sell.change(d.copy(description = it)) }, Modifier.fillMaxWidth(), label = { Text("Text") }, minLines = 8)
             }
-            item { PriceFields(d, posted) { sell.change(it) } }
+            item { PriceFields(d) { sell.change(it) } }
             item { Details(d, posted) { sell.change(it) } }
         }
     }
@@ -145,19 +147,19 @@ private fun Photos(d: AdDraft, posted: Boolean, photo: (String) -> String, onAdd
 }
 
 @Composable
-private fun PriceFields(d: AdDraft, posted: Boolean, onChange: (AdDraft) -> Unit) {
+private fun PriceFields(d: AdDraft, onChange: (AdDraft) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (d.priceType != AdPriceType.GIVE_AWAY) OutlinedTextField(
             d.priceEur?.toString().orEmpty(),
             { v -> onChange(d.copy(priceEur = v.filter(Char::isDigit).take(7).toIntOrNull())) },
-            Modifier.fillMaxWidth(), label = { Text("Price") }, suffix = { Text("€") }, singleLine = true, readOnly = posted,
+            Modifier.fillMaxWidth(), label = { Text("Price") }, suffix = { Text("€") }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
-        Choices { AdPriceType.entries.forEach { t -> Choice(t.label, d.priceType == t) { if (!posted) onChange(d.copy(priceType = t)) } } }
+        Choices { AdPriceType.entries.forEach { t -> Choice(t.label, d.priceType == t) { onChange(d.copy(priceType = t)) } } }
         Choices {
-            Choice("Ships", d.shipping) { if (!posted) onChange(d.copy(shipping = true)) }
-            Choice("Pickup only", !d.shipping) { if (!posted) onChange(d.copy(shipping = false, buyNow = false)) }
-            if (d.shipping) Choice("Direkt kaufen", d.buyNow) { if (!posted) onChange(d.copy(buyNow = !d.buyNow)) }
+            Choice("Ships", d.shipping) { onChange(d.copy(shipping = true)) }
+            Choice("Pickup only", !d.shipping) { onChange(d.copy(shipping = false, buyNow = false)) }
+            if (d.shipping) Choice("Direkt kaufen", d.buyNow) { onChange(d.copy(buyNow = !d.buyNow)) }
         }
     }
 }

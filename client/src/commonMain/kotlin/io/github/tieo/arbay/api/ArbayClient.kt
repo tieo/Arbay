@@ -325,6 +325,13 @@ class ArbayClient(
         client.delete("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}")
     }
 
+    /** A posted ad changed on Kleinanzeigen itself, through its edit form, and kept as changed. */
+    suspend fun updateAd(draft: io.github.tieo.arbay.model.AdDraft): io.github.tieo.arbay.model.AdDraft =
+        client.post("$baseUrl/api/selling/drafts/${draft.id.encodeURLPathPart()}/update") {
+            contentType(ContentType.Application.Json)
+            setBody(draft)
+        }.body()
+
     suspend fun postAd(id: String): io.github.tieo.arbay.model.PostAdResult =
         client.post("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}/post").body()
 

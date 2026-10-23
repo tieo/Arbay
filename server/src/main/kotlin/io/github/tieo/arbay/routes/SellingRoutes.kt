@@ -13,7 +13,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** The user's ads for sale on Kleinanzeigen: drafts, their photos, and posting them. */
+/** The user's ads for sale on Kleinanzeigen: drafts, their photos, posting them and changing them once posted. */
 fun Route.sellingRoutes() {
     route("/api/selling/drafts") {
         get { call.respond(Selling.drafts()) }
@@ -30,6 +30,17 @@ fun Route.sellingRoutes() {
         get("/{id}/photos/{photo}") {
             val file = Selling.photoFile(call.id(), call.parameters["photo"].orEmpty()) ?: throw NotFoundException("No such photo")
             call.respondFile(file)
+        }
+        // A posted ad changed on the market and kept as changed; with ?try=true the edit form is
+        // filled and left without saving, and the answer is what it took, with a picture of it.
+        post("/{id}/update") {
+            val draft = call.receive<AdDraft>()
+            if (draft.id != call.id()) throw BadRequestException("The draft's id is ${draft.id}")
+            val send = call.request.queryParameters["try"] != "true"
+            call.selling {
+                val (kept, answer) = Selling.update(draft, send)
+                if (send) call.respond(kept) else call.respond(answer ?: JsonObject(emptyMap()))
+            }
         }
         post("/{id}/post") { call.selling { call.respond(Selling.post(call.id()).first) } }
         // Fills the market's post form and leaves it without posting: what the form took, with a

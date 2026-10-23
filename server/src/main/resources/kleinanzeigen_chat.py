@@ -39,6 +39,10 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
    "priceType": "VB", "price": 449, "shipping": true, "buyNow": true, "photos": [paths], "send": false}
                                                     -> {"ok": true, "posted": bool, "adId": "..", "taken": {what the form holds}, "picture": ..};
                                                        the market's post form filled in, posted with its own button only when "send" is true
+  {"op": "edit_ad", "adId": "..", "title": "..", "description": "..", "priceType": "Festpreis", "price": 420, "shipping": true,
+   "buyNow": true, "send": false}                  -> {"ok": true, "saved": bool, "before": {..}, "taken": {..}, "buttons": [..], "picture": ..};
+                                                       a posted ad's edit form, the fields given changed where they differ,
+                                                       saved with the form's own button only when "send" is true
   {"op": "offer", "id": "..", "price": 425.0, "toDoor": true, "most": 450.0, "send": false}
                                                     -> {"ok": true, "price": .., "fee": .., "shippingFrom": .., "shipping": [{"name", "eur"}],
                                                         "shippingEur": .., "paid": .., "sent": bool, "picture": ..}; a price offer through
@@ -810,6 +814,91 @@ class Chat:
                 return {"ok": True, "posted": True, "adId": m.group(1), "taken": taken}
         return await self.post_failed("the form was sent but no posted ad came back", taken)
 
+    EDIT_FORM = ROOT + "/p-anzeige-bearbeiten.html?adId={}"
+    SAVE_LABELS = ("Änderungen speichern", "Anzeige speichern", "Speichern", "Anzeige aufgeben")
+
+    async def edit_ad(self, req: dict) -> dict:
+        """A posted ad changed through the market's own edit form: only the fields given, and of those
+        only the ones the form does not hold already, so a price change leaves the photos, the text
+        and the details as they are. Saved with the form's own button only when "send" is true; what
+        the form took is read back and compared with what was asked before that."""
+        await self.session()
+        await self.tab.get(self.EDIT_FORM.format(int(req["adId"])))
+        await asyncio.sleep(random.uniform(3, 4.5))
+        await self.accept_cookies()
+        if not await self.visible("#ad-title"):
+            return await self.post_failed("the edit form did not open")
+        before = json.loads(await within("form values", self.tab.evaluate(self.FORM_VALUES)))
+        price = req.get("price")
+        try:
+            if req.get("title") is not None and (before.get("title") or "").strip() != req["title"].strip():
+                await self.press(*(await self.visible("#ad-title"))[0])
+                await self.hand.key("ctrl+a")
+                await self.hand.type(req["title"], fast=True)
+            if req.get("description") is not None and \
+                    (before.get("description") or "").replace("\r\n", "\n").strip() != req["description"].replace("\r\n", "\n").strip():
+                await self.press(*(await self.visible("#ad-description"))[0])
+                await self.hand.key("ctrl+a")
+                await asyncio.sleep(random.uniform(0.3, 0.7))
+                await within("description", self.tab.send(cdp.input_.insert_text(text=req["description"])))
+            if req.get("shipping") is not None and bool(req["shipping"]) != bool(before.get("shipping")):
+                await self.post_shipping(bool(req["shipping"]), price)
+            if req.get("priceType") is not None:
+                await self.pick_option("#ad-price-type", req["priceType"])
+            if price is not None and req.get("priceType") != "Zu verschenken" and str(before.get("price") or "").strip() != str(int(price)):
+                await self.press(*(await self.visible("#ad-price-amount"))[0])
+                await self.hand.key("ctrl+a")
+                await self.hand.type(str(int(price)), fast=True)
+            if req.get("buyNow") is not None and before.get("buyNowOffered") and bool(req["buyNow"]) != bool(before.get("buyNow")):
+                target = "ad-buy-now-true" if req["buyNow"] else "ad-buy-now-false"
+                await self.press(*(await self.visible(f"label[for='{target}']"))[0])
+        except PostFormProblem as e:
+            return await self.post_failed(str(e), before)
+        await asyncio.sleep(1)
+        taken = json.loads(await within("form values", self.tab.evaluate(self.FORM_VALUES)))
+        differs = self.edit_differs(req, taken)
+        if differs:
+            return await self.post_failed("the form took " + "; ".join(differs), taken)
+        buttons = [(e, p, (e.text_all or "").strip()) for e, p in await self.visible("button")]
+        if not req.get("send"):
+            picture = (await self.page_detail()).get("picture")
+            await self.leave_form()
+            return {"ok": True, "saved": False, "before": before, "taken": taken,
+                    "buttons": [label for _, _, label in buttons if label], "picture": picture}
+        saves = [(e, p) for e, p, label in buttons if label in self.SAVE_LABELS]
+        if not saves:
+            return await self.post_failed("the form shows no save button; it shows " + ", ".join(l for _, _, l in buttons if l), taken)
+        edit_url = await self.url()
+        await self.press(*saves[-1])
+        for _ in range(20):
+            await asyncio.sleep(1.5)
+            # Saving can open an offer to pay for the ad to be pushed up again ("Hochschieben für
+            # 2,99 €"); it is declined with its own "Ohne Hochschieben weiter", never paid.
+            declines = [(e, p) for e, p in await self.visible("dialog[open] button") if (e.text_all or "").strip().startswith("Ohne ")]
+            if declines:
+                await self.press(*declines[0])
+                continue
+            if await self.url() != edit_url:
+                await self.tab.get(ROOT + "/")
+                return {"ok": True, "saved": True, "before": before, "taken": taken}
+        return await self.post_failed("the form was sent but stayed open", taken)
+
+    @staticmethod
+    def edit_differs(req: dict, taken: dict) -> list:
+        """What the edit form holds that is not what was asked, for the fields asked."""
+        differs = []
+        if req.get("title") is not None and (taken.get("title") or "").strip() != req["title"].strip():
+            differs.append(f"the title as {taken.get('title')!r}")
+        if req.get("description") is not None and \
+                (taken.get("description") or "").replace("\r\n", "\n").strip() != req["description"].replace("\r\n", "\n").strip():
+            differs.append("another text")
+        price = req.get("price")
+        if price is not None and req.get("priceType") != "Zu verschenken" and str(taken.get("price") or "").strip() != str(int(price)):
+            differs.append(f"the price as {taken.get('price')!r}")
+        if req.get("buyNow") is not None and taken.get("buyNowOffered") and bool(req["buyNow"]) != bool(taken.get("buyNow")):
+            differs.append("Direkt kaufen otherwise")
+        return differs
+
     async def post_failed(self, why: str, taken: dict | None = None) -> dict:
         detail = await self.page_detail()
         await self.leave_form()
@@ -1012,6 +1101,8 @@ async def handle(chat: Chat, req: dict) -> dict:
                                 float(most) if most is not None else None, bool(req.get("send")))
     if op == "post_ad":
         return await chat.post_ad(req)
+    if op == "edit_ad":
+        return await chat.edit_ad(req)
     if op == "contact":
         return await chat.contact(str(req["adId"]), req["text"])
     return {"ok": False, "error": f"unknown op {op}"}
