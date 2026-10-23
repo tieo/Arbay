@@ -252,6 +252,7 @@ private fun MarketsPanel(session: Session, state: ResultsState) {
         status?.takeIf { it.status == PlatformSearchStatus.CAPTCHA }?.captchaUrl?.let { url ->
             OutlinedButton(onClick = { openBrowser(url) }) { Text("Solve the captcha for ${platform.displayName}") }
         }
+        if (status?.status == PlatformSearchStatus.BLOCKED) OutlinedButton(onClick = { vm.tryNow(platform) }) { Text("Ask ${platform.displayName} now") }
     }
 }
 

@@ -325,6 +325,11 @@ class ArbayClient(
         client.delete("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}")
     }
 
+    /** Ends a market's cooldown after a block, so the next search asks it again now. */
+    suspend fun endCooldown(platform: io.github.tieo.arbay.model.PlatformId) {
+        client.delete("$baseUrl/api/crawler/cooldown/${platform.name}")
+    }
+
     /** A posted ad changed on Kleinanzeigen itself, through its edit form, and kept as changed. */
     suspend fun updateAd(draft: io.github.tieo.arbay.model.AdDraft): io.github.tieo.arbay.model.AdDraft =
         client.post("$baseUrl/api/selling/drafts/${draft.id.encodeURLPathPart()}/update") {

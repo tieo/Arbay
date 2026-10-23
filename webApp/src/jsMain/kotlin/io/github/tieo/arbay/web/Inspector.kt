@@ -250,6 +250,7 @@ private fun MarketsPanel(app: WebApp, route: Route.Results, state: ResultsState)
                         Text("Solve the captcha")
                     }
                 }
+                if (status?.status == PlatformSearchStatus.BLOCKED) QuietButton("Ask now") { vm.tryNow(platform) }
             }
         }
     }

@@ -653,6 +653,16 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         }
 
         // Streaming search — returns newline-delimited JSON events
+        // Ends a market's cooldown after a block, or every market's without one named, so the next
+        // search asks it again now.
+        delete("/cooldown/{platform?}") {
+            val platform = call.parameters["platform"]?.let { name ->
+                runCatching { PlatformId.valueOf(name) }.getOrNull() ?: throw BadRequestException("Unknown platform: $name")
+            }
+            BlockCooldown.clear(platform)
+            call.respond(HttpStatusCode.NoContent)
+        }
+
         get("/search/stream") {
             val query = call.queryParameters["q"] ?: throw BadRequestException("Missing query parameter 'q'")
             val platformName = call.queryParameters["platform"]

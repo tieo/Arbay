@@ -363,8 +363,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
                 integer("per_market", "How many offers to read from each market (default 60, up to 1000): more finds the cheapest of a thing sold by the hundred, and takes longer")
                 boolean("dropped", "Also list the offers the search removed, per market with the reason for each, to check a filter took out only what it should")
+                boolean("ask_cooling_down", "Ask a market that is cooling down after a block now instead of waiting the cooldown out, as the app's \"Ask now\"; a market that blocks again starts a new cooldown")
             },
         ) { args ->
+            if (args.bool("ask_cooling_down") == true && args.str("search_id") == null) http.delete("$base/api/crawler/cooldown")
             val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }
                 ?: startSearch(args) ?: return@tool "Name the words or a saved search."
             // A tool call has a time limit of its own, and a search on a busy server can take

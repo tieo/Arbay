@@ -22,7 +22,8 @@ fun PlatformStatus.saidWhat(kept: Int, hiddenByWords: Boolean = false): String? 
         if (kept > 0) "too slow; this is what it managed before it was given up on"
         else "too slow, given up on"
     PlatformSearchStatus.IP_BLOCKED -> "blocked us"
-    PlatformSearchStatus.BLOCKED -> "rate limited, cooling down"
+    // "Cooling down after a block (~19 min left)": how long it would otherwise wait.
+    PlatformSearchStatus.BLOCKED -> error?.lowercase() ?: "cooling down after a block"
     PlatformSearchStatus.ERROR ->
         if (kept > 0) shortError(error)?.let { "$it; this is what it sent first" } ?: "failed partway"
         else shortError(error) ?: "failed"

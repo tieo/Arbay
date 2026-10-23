@@ -39,4 +39,12 @@ object BlockCooldown {
     }
 
     fun isCoolingDown(platform: PlatformId): Boolean = remainingMs(platform) > 0
+
+    /**
+     * Ends the cooldown of [platform], or of every platform when null, for a user who wants the
+     * market asked now; a market that blocks again starts a new one.
+     */
+    fun clear(platform: PlatformId? = null) {
+        if (platform == null) until.clear() else until.remove(platform)
+    }
 }

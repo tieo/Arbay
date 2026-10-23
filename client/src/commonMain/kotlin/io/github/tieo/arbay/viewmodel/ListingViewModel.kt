@@ -460,6 +460,17 @@ class ListingViewModel(
         _allListings.value = stored
     }
 
+    /**
+     * Asks a market that is cooling down after a block again now: its cooldown ends and the search
+     * runs again, the other markets answering from what they sent a moment ago.
+     */
+    fun tryNow(platform: PlatformId) {
+        viewModelScope.launch {
+            runCatching { client.endCooldown(platform) }
+            refresh()
+        }
+    }
+
     fun refresh(platforms: List<PlatformId>? = null) {
         val query = _searchQuery.value
         if (query.isBlank() || _loading.value) return
@@ -762,6 +773,7 @@ class ListingViewModel(
                                 "CAPTCHA" -> PlatformSearchStatus.CAPTCHA
                                 "TIMEOUT" -> PlatformSearchStatus.TIMEOUT
                                 "BLOCKED_403", "AUTH_REQUIRED_401" -> PlatformSearchStatus.IP_BLOCKED
+                                "COOLING_DOWN" -> PlatformSearchStatus.BLOCKED
                                 else -> PlatformSearchStatus.ERROR
                             }
                             upsertStatus(event.platform, event.platformName) {
