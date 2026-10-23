@@ -1,0 +1,32 @@
+S.M.A.R.T ATA ATTRIBUTES
+
+Status ıD Name Value Threshold Ideal  payurerate @©  History
+z 10x0) Read Error Rate © 99 16 i
+QI 2002 Throughput Performance © 129 54 (N
+QD 5009 spin-UpTime @ 154 24 2% (T
+D - 004 Start/Stop Count ® 2004 0 T
+a Reallocated Sectors Count 0 5 low 3%
+
+a 7007 seekError Rate © 100 67 T
+QI 2008 seek Time Performance © 128 20 T
+CI 2000 power-on Hours © 95 0 (I
+x o« Spin Retry Count ‘ 0 60 D %
+
+CI 120x00) power Cycle Count © 2084 0 low i
+QA= 22 0x16) Gurrent Helium Level @ 19 25 [ TT——
+
+
+Status ID Name Value Threshold Ideal Failure Rate @ History
+a ı 0x01) Read Error Rate @ 99 16 N
+QD) 2 0x02) Throughput Performance W 129 54 Tt
+3(0x03)  spin-Up Time @ 154 24 2% W
+4(0x04)  start/stop Count © 2094 0 T
+5 (0x0 Reallocated Sectors Count © 0 5 W B A
+
+QD) 700  seek Error Rate © 100 67 IINIFHHFAAFEROR
+QD) = (0x09) Seek Time Performance ® 128 20 T
+a o 0%09) Power-0n Houre @ 95 0 NI
+QD o oo Spin Retry Count © 0 60 WA A
+
+a 2 (0x00) Power Cycle Count @ 2084 0 low T
+Q) 22 (0x16) Current Helium Level © 19 25 | L

@@ -76,7 +76,8 @@ object SmartScreens {
     /** A row with only a value and its threshold, as Scrutiny shows some ("Current Helium Level 19 25"). */
     private val pairRow = Regex("""(\d{1,6})\s+(\d{1,3})\b""")
 
-    private val scrutinyMarks = Regex("""(?i)\(0[x%]\w{2}\)|threshold\s+ideal|fa\w{0,2}ure\s?rate|scrutiny""")
+    // The OCR loses the opening bracket of an ID as often as not ("22 0x16)").
+    private val scrutinyMarks = Regex("""(?i)\(?0[x%]\w{2}\)|threshold\s+ideal|fa\w{0,2}ure\s?rate|scrutiny""")
 
     private enum class Attribute(val names: Regex) {
         // smartctl and Proxmox join the words with underscores ("Reallocated_Sector_Ct"); the French
@@ -86,7 +87,7 @@ object SmartScreens {
         PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending[\s_]+sectors?|secteurs\s+en\s+attente|secteurs\W+instables""")),
         UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
         REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported[\s_]+uncorrect|erreurs\s+signal|erreurs\s+qui\s+n.ont\s+pas""")),
-        HOURS(Regex("""(?i)betriebsstunden|power[\s_-]?on[\s_-]?hours|heures\s+de\s+fonctionnement""")),
+        HOURS(Regex("""(?i)betriebsstunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
         HELIUM(Regex("""(?i)helium""")),
     }
 
@@ -140,7 +141,10 @@ object SmartScreens {
             val all = seen.map { it.counts[a] }
             agreed(all)?.takeIf { it == 0L || all.all { v -> v == it } }?.let { a to it }
         }.toMap()
-        val failing = seen.map { it.failing.toSet() }.reduce { a, b -> a intersect b }.toList()
+        // A value at its threshold is read off a whole row that passed its own check (current at or
+        // above worst), and a reading at the larger size can lose a row the first one had, so a
+        // mark either reading makes counts.
+        val failing = seen.flatMap { it.failing }.distinct()
         return judge(
             Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreed(seen.map { it.hours })),
             photo,

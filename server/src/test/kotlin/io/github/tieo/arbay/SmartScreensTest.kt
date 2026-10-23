@@ -183,4 +183,11 @@ class SmartScreensTest {
         val r = assertNotNull(SmartScreens.parse(readings("hex_prefix_clean"), 4))
         assertEquals(DriveVerdict.CLEAN, r.verdict)
     }
+
+    @Test
+    fun `a dark Scrutiny read twice keeps the helium mark only one reading saw`() {
+        val r = assertNotNull(SmartScreens.parse(readings("scrutiny_dark_helium_two_readings"), 2))
+        assertEquals(DriveVerdict.FAILING, r.verdict)
+        assertTrue(r.findings.any { "Helium 19" in it }, r.findings.toString())
+    }
 }
