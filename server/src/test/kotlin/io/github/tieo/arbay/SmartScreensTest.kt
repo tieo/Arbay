@@ -15,6 +15,9 @@ import kotlin.test.assertTrue
 class SmartScreensTest {
     private fun text(name: String) = javaClass.getResource("/fixtures/smart/$name.txt")!!.readText()
 
+    /** A fixture of two readings of one photo, at two sizes, as the server reads a SMART screen. */
+    private fun readings(name: String) = text(name).split("\n\u000C\n")
+
     @Test
     fun `a helium level under its threshold is a failing drive`() {
         val r = assertNotNull(SmartScreens.parse(text("scrutiny_wd_8tb_helium"), 2))
@@ -138,5 +141,46 @@ class SmartScreensTest {
         )
         val r = assertNotNull(SmartScreens.parse(misread, 2))
         assertEquals(DriveVerdict.UNREADABLE, r.verdict)
+    }
+
+    @Test
+    fun `a terminal's slashed zeros read as 9 are no pending sectors`() {
+        val r = assertNotNull(SmartScreens.parse(readings("smartctl_slashed_zero_clean"), 2))
+        assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
+        assertEquals(33_888L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a dark terminal turned over reads smartctl's rows`() {
+        val r = assertNotNull(SmartScreens.parse(readings("smartctl_dark_clean"), 5))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+        assertEquals(13_461L, r.powerOnHours)
+    }
+
+    @Test
+    fun `Proxmox's dialog shows the raw value first, and pending sectors there fail the drive`() {
+        val r = assertNotNull(SmartScreens.parse(readings("proxmox_failing"), 3))
+        assertEquals(DriveVerdict.FAILING, r.verdict)
+        assertEquals(15L, r.pending)
+        assertEquals(37_506L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a French CrystalDiskInfo is read by its French names`() {
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_fr_clean"), 3))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+        assertEquals(43_602L, r.powerOnHours)
+    }
+
+    @Test
+    fun `Hard Disk Sentinel's rows put the threshold first and a status word before the raw value`() {
+        val r = assertNotNull(SmartScreens.parse(readings("hdsentinel_clean"), 1))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
+    }
+
+    @Test
+    fun `a raw value written with 0x before it is read`() {
+        val r = assertNotNull(SmartScreens.parse(readings("hex_prefix_clean"), 4))
+        assertEquals(DriveVerdict.CLEAN, r.verdict)
     }
 }

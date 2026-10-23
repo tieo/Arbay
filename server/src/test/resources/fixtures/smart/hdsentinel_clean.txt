@@ -1,0 +1,52 @@
+‚No. Attribute Thresh... Value Worst  Status Data Offset Enable
+j°1 Raw Read Error Rate 44 83 64 oK 00000B547A1E s 0 | M
+°3 Spin Up Time 0 91 91 OK (Always passing) 000000000000 - 0 [ ™M
+4 Start/Stop Count 20 100 100 oK 00000000005A | 0 | ]
+‘°5 Reallocated Sectors Count 10 100 100 oK 000000000000 i 0 | E]
+j°7 Seek Error Rate 45 89 60 oK 00002C8B5301 s 0 o ™M
+9 Power On Time Count 0 72 72 OK (Always passing] 9ADS000060F6 - 0 | E
+Q0 Spin Retry Count 97 100 100 oK 000000000000 | 0 | ™
+12 Drive Power Cycle Count 20 100 100 OK 000000000058 - 0 | ™M
+184 End-to-End Error Count 99 100 100 oK 000000000000 =| 0 | M
+187 Reported Uncorrectable Errors 0 100 100 OK (Always passing] 000000000000 - 0 |
+188 Command Timeout 0 100 100 OK (Always passing) 000000000000 - 0 | <{ Iz
+189 High Fly Writes 0 5 5 OK (Always passing) 00000000005F [ 0 | ™
+190 Airflow Temperature 40 74 50 oK 00001A19001A | 0 | @
+191 G-Sense Error Rate 0 78 78 OK (Always passing) 00000000AD31 - 0 |
+192 Power off Retract Cycle Count 0 100 100 OK (Always passing) 000000000027 - 0 | ]
+193 Load/Unload Cycle Count 0 10 10 OK (Always passing}) 00000002C630 - 0 | ™
+194 Disk Temperature 0 26 50 OK (Always passing) 00140000001A | 0 | %]
+195 Hardware ECC Recovered 0 9 1 OK (Always passing] 00000B547A1E - 0 | %]
+°197 Current Pending Sector Count 0 100 100 OK (Always passing) 000000000000 - 0 | ™
+‘0198 Off-Line Uncorrectable Sector Count 0 100 100 OK (Always passing) 000000000000 - 0 | ™M
+199 Ultra ATA CRC Error Count 0 200 200 OK (Always passing) 000000000000 wa| 0 | %]
+240 Head Flying Hours 0 100 253 OK (Always passing) 3D3D00004C5E - 0 | M
+241 Total LBA Written 0 100 253 OK (Always passing) 0047B777DC6B - 0 | ™
+‘ 242 Total LBA Read 0 100 253 OK (Always passing) 003B7B02AA76 | 0 | ™
+
+
+\ No. Attribute Thresh... Value  Worst  Status Data Offset Enable
+j°1 Raw Read Error Rate e 83 64 OK 00000B547A1E ‘ 0 | M
+;03 Spin Up Time 0 91 91 OK (Always passing) 000000000000 e 0 | E]
+| 4 Start/Stop Count 20 100 100 OK 00000000005A | 0 | M
+j°5 Reallocated Sectors Count 10 100 100 oK 000000000000 s 0 | M
+;°7 Seek Error Rate 45 89 60 oK 00002C8B5301 w 0 | M
+| :a Power On Time Count 0 72 72 OK (Always passing) 9AD5000060F6 =.| 0 \< E}
+°10 Spin Retry Count 97 100 100 OK 000000000000 i 0 |dp M
+12 Drive Power Cycle Count 20 100 100 oK 000000000058 | 0 |op M
+184 End-to-End Error Count 99 100 100 oK 000000000000 wnl 0 | M
+187 Reported Uncorrectable Errors 0 100 100 OK (Always passing} 000000000000 e 0 (W E}
+188 Command Timeout 0 100 100 OK (Always passing) 000000000000 C 0 -{-V IZ
+189 High Fly Writes 0 5 5 OK (Always passing} 00000000005F C 0 _+ E}
+190  Airflow Temperature 40 74 50 oK 00001A19001A wal O |op M
+191 G-Sense Error Rate 0 78 78 OK (Always passing) 00000000AD31 w0 (W E}
+192 Power off Retract Cycle Count 0 100 100 OK (Always passing) 000000000027 i O | lz
+193 Load/Unload Cycle Count 0 10 10 OK [Always passing) 00000002C630 s 0 < E]
+194 Disk Temperature 0 26 50 OK (Always passing}) 00140000001A um| 0 g @
+| 195 Hardware ECC Recovered 0 9 1 OK (Always passing) 00000B547A1E - 0 (W E]
+‘°197 Current Pending Sector Count 0 100 100 OK (Always passing) 000000000000 | O |dfe
+Ä° 198  Off-Line Uncorrectable Sector Count 0 100 100 OK (Always passing] 000000000000 | O | M
+199 Ultra ATA CRC Error Count 0 200 200 OK [Always passing) 000000000000 wm| 0 o @
+240 Head Flying Hours 0 100 253 OK (Always passing] 3D3D00004C5E | 0 (W E]
+241 Total LBA Written 0 100 253 OK (Always passing) 0047B777DC6B C 0 -.-_ IZ
+242 Total LBA Read 0 100 253 OK (Always passing) 003B7B02AA76 =| 0 |<j> E]

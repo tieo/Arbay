@@ -17,7 +17,10 @@ class SmartScreensEval {
         val dir = System.getenv("SMART_EVAL_DIR")?.let(::File) ?: return
         val json = Json { encodeDefaults = true }
         dir.walkTopDown().filter { it.isFile && it.extension == "txt" }.forEach { f ->
-            val r = SmartScreens.parse(f.readText(), 1)
+            // A text of two readings, split by a form feed line, is judged as the server judges it:
+            // the second counts only where the first shows a SMART screen.
+            val texts = f.readText().split("\n\u000C\n")
+            val r = SmartScreens.parse(texts.take(1), 1)?.let { SmartScreens.parse(texts, 1) }
             File(f.path.removeSuffix(".txt") + ".json").writeText(r?.let { json.encodeToString(SmartReading.serializer(), it) } ?: "null")
         }
     }

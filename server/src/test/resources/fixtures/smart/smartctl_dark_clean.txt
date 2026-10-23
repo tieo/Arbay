@@ -1,0 +1,88 @@
+SMART Attributes Data Structure revision number: 10
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
+1 Raw_Read_Error_Rate 0x000£ 076 064 044 Pre-fail Always - 42915456
+3 Spin_Up_Time 0x0003 092 090 000 Pre-fail Always - 0
+4 Start_Stop_Count 0x0032 100 100 020 0ld_age Always - 755
+5 Reallocated_Sector_Ct 0x0033 100 100 010 Pre-fail Always - 0
+7 Seek_Error_Rate 0x000f 087 060 030 Pre-fail Always = 497301569
+9 Power_On_Hours 0x0032 085 085 000 0ld_age Always = 13461
+10 Spin_Retry_Count 0x0013 100 100 097 Pre-fail Always = 0
+12 Power_Cycle_Count 0x0032 100 100 020 0ld_age Always = 717
+18 Unknown_Attribute 0x000b 100 100 050 Pre-fail Always = 0
+187 Reported_Uncorrect 0x0032 100 100 000 0ld_age Always = 0
+188 Command_Timeout 0x0032 100 099 000 0ld_age Always = 65541
+190 Airflow_Temperature_Cel 0x0022 067 035 000 0ld_age Always - 33 (Min/Max 26/63)
+192 Power-Off_Retract_Count 0x0032 100 100 000 0ld_age Always - 48
+193 Load_Cycle_Count 0x0032 100 100 000 0ld_age Always = 1219
+194 Temperature_Celsius 0x0022 033 065 000 0ld_age Always - 33 (0 13 0 0 0)
+197 Current_Pending_Sector 0x0012 100 100 000 0ld_age Always - 0
+198 Offline_Uncorrectable 0x0010 100 100 000 0ld_age Offline = 0
+199 UDMA_CRC_Error_Count 0x003e 200 200 000 0ld_age Always _ 0
+200 Multi_Zone_Error_Rate 0x0023 100 100 001 Pre-fail Always = 0
+240 Head_Flying_Hours 0x0000 100 100 000 0ld_age Offline = 13439 (195 1 0)
+241 Total_LBAs_Written 0x0000 100 253 000 0ld_age Offline = 401915542450
+242 Total LBAs_Read 0x0000 100 253 000 Old_age Offline = 186995625031
+SMART Error Log Version: 1
+No Errors Logged
+SMART Self-test log structure revision number 1
+Num Test_Description Status Remaining LifeTime (hours) LBA_of_ first_error
+# 1 Extended offline Completed without error 10% 13454 =
+# 2 Extended offline Aborted by host 90% 10577 =
+# 3 Short offline Completed without error 10% 10577 =
+# 4 Short offline Completed without error 10% 9476 =
+# 5 Extended offline Completed without error 00% 8757 =
+# 6 Extended offline Completed without error 00% 8070 =
+# 7 Extended offline Completed without error 00% 7254 =
+# 8 Extended offline Completed without error 00% 6605 =
+# 9 Extended offline Completed without error 00% 5922 =
+#10 Extended offline Completed without error 00% 4440 -
+#11 Extended offline Completed without error 00% 3686 =
+#12 Extended offline Completed without error 00% 1507 =
+#13 Extended offline Completed without error 00% 766 -
+#14 Extended offline Completed without error 10% 164 -
+
+
+SMART Attributes Data Structure revision number: 10
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
+1 Raw_Read_Error_Rate 0x000£ 076 064 044 Pre-fail Always - 42915456
+3 Spin_Up_Time 0x0003 092 090 000 Pre-fail Always = 0
+4 Start_Stop_Count 0x0032 100 100 020 0ld_age Always = 755
+5 Reallocated_Sector_Ct 0x0033 100 100 010 Pre—-fail Always - 0
+7 Seek_Error_Rate 0x000£ 087 060 030 Pre-fail Always - 497301569
+9 Power_On_Hours 0x0032 085 085 000 0ld_age Always - 13461
+10 Spin_Retry_ Count 0x0013 100 100 097 Pre—-fail Always = 0
+12 Power_Cycle_Count 0x0032 100 100 020 0ld_age Always - LF
+18 Unknown_Attribute 0x000b 100 100 050 Pre-fail Always = 0
+187 Reported_Uncorrect 0x0032 100 100 000 0ld_age Always = 0
+188 Command_Timeout 0x0032 100 099 000 0ld_age Always - 65541
+190 Airflow_Temperature_Cel 0x0022 067 035 000 0ld_age Always = 33 (Min/Max 26/63)
+192 Power-Off_Retract_Count 0x0032 100 100 000 Old_age Always - 48
+193 Load_Cycle_Count 0x0032 100 100 000 0ld_age Always - 1219
+194 Temperature_Celsius 0x0022 033 065 000 0ld_age Always - 33 (0 13 0 0 D)
+197 Current_Pending_Sector 0x0012 100 100 000 0ld_age Always - 0
+198 Offline_Uncorrectable 0x0010 100 100 000 0ld_age Offline = 0
+199 UDMA_CRC_Error_Count 0x003e 200 200 000 0ld_age Always - 0
+200 Multi_Zone_Error_Rate 0x0023 100 100 001 Pre-fail Always - 0
+240 Head_Flying_Hours 0x0000 100 100 000 0ld_age Offline - 13439 (195 1 0)
+241 Total_ILBAs_Written 0x0000 100 253 000 0ld_age Offline - 401915542450
+242 Total_LBAs_Read 0x0000 100 253 000 0ld_age Offline = 186995625031
+SMART Error Log Version: 1
+No Errors Logged
+SMART Self-test log structure revision number 1
+Num Test_Description Status Remaining LifeTime (hours) LBA_of first_error
+# 1 Extended offline Completed without error 10% 13454 =
+# 2 Extended offline Aborted by host 90% 10577 =
+# 3 Short offline Completed without error 10% 10577 =
+# 4 Short offline Completed without error 10% 9476 =
+# 5 Extended offline Completed without error 00% 8757 =
+# 6 Extended offline Completed without error 00% 8070 =
+# 7 Extended offline Completed without error 00% 7254 =
+# 8 Extended offline Completed without error 00% 6605 =
+# 9 Extended offline Completed without error 00% 5922 =
+#10 Extended offline Completed without error 00% 4440 =
+#11 Extended offline Completed without error 00% 3686 =
+#12 Extended offline Completed without error 00% 1507 =
+#13 Extended offline Completed without error 00% 766 =
+#14 Extended offline Completed without error 10% 164 _

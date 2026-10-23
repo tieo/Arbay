@@ -52,11 +52,26 @@ object SmartScreens {
      *  CrystalDiskInfo prints them ("Wiederzugewiesene Sektoren 88 88 10 00000000B9A0"). Whatever the
      *  OCR makes of the scroll bar and window edge after it is let be, and so is one stray character
      *  before the raw value ("1000000000000"), since the twelve digits are a fixed width. */
-    private val tableRow = Regex("""(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+[0-9A-Fa-f]?([0-9A-Fa-f]{12})(?![0-9A-Fa-f])""")
+    private val tableRow = Regex("""(\d{1,3})\s*[^\w\s]{0,2}\s+(\d{1,3})\s*[^\w\s]{0,2}\s+(\d{1,3})\s*[^\w\s]{0,2}\s+(?:0x|[0-9A-Fa-f])?([0-9A-Fa-f]{12})(?![0-9A-Fa-f])""")
+
+    /** A row as Hard Disk Sentinel shows it: threshold, value, worst, its own status word, then the
+     *  raw value in twelve hex digits ("Reallocated Sectors Count 10 100 100 OK 000000000000"). */
+    private val sentinelRow = Regex("""(?i)(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(?:ok|warning|failed)\b.*?\b([0-9A-Fa-f]{12})\b""")
 
     /** The same row with the raw value in decimal, as CrystalDiskInfo shows it when set so
      *  ("Wiederzugewiesene Sektoren 100 100 36 0"); believed only on a screen with no hex row. */
     private val decimalRow = Regex("""(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,3})\s*[|\]]?\s+(\d{1,12})\W*$""")
+
+    /** A row as smartctl prints it: flag, value, worst, threshold, type, when updated, when failed, raw
+     *  ("Reallocated_Sector_Ct 0x0033 100 100 010 Pre-fail Always - 0"). The OCR reads the flag's
+     *  "0x" as "©x" or "9x", so only its x and four characters are relied on. */
+    private val smartctlRow = Regex("""^\W*\S{0,3}x\w{4}\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+\S+\s+\S+\s+(\S+)\s+(\d+)\b""")
+
+    private val smartctlAnywhere = Regex("""\S{0,3}x\w{4}\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+\S+\s+\S+\s+(\S+)\s+(\d+)\b""")
+
+    /** A row as Proxmox's SMART dialog shows it: raw value first, then normalised, threshold, worst
+     *  and the flags ("Reallocated_Sector_Ct 0 100 10 100 PO--CK -"). */
+    private val proxmoxRow = Regex("""^\W*(\d+)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+[-A-Z]{4,}""")
 
     /** A row with only a value and its threshold, as Scrutiny shows some ("Current Helium Level 19 25"). */
     private val pairRow = Regex("""(\d{1,6})\s+(\d{1,3})\b""")
@@ -64,19 +79,26 @@ object SmartScreens {
     private val scrutinyMarks = Regex("""(?i)\(0[x%]\w{2}\)|threshold\s+ideal|fa\w{0,2}ure\s?rate|scrutiny""")
 
     private enum class Attribute(val names: Regex) {
-        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated\s+sectors?(\s+count)?\b""")),
+        // smartctl and Proxmox join the words with underscores ("Reallocated_Sector_Ct"); the French
+        // CrystalDiskInfo names them in French.
+        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated[\s_]+sectors?|secteurs\s+r[ée]allou""")),
         // Older German CrystalDiskInfo calls pending sectors "schwebend".
-        PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending\s+sectors?""")),
-        UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline\s+uncorrectable|uncorrectable\s+sectors?""")),
-        REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported\s+uncorrect""")),
-        HOURS(Regex("""(?i)betriebsstunden|power[\s-]?on[\s-]?hours""")),
+        PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending[\s_]+sectors?|secteurs\s+en\s+attente|secteurs\W+instables""")),
+        UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
+        REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported[\s_]+uncorrect|erreurs\s+signal|erreurs\s+qui\s+n.ont\s+pas""")),
+        HOURS(Regex("""(?i)betriebsstunden|power[\s_-]?on[\s_-]?hours|heures\s+de\s+fonctionnement""")),
         HELIUM(Regex("""(?i)helium""")),
     }
 
     private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")
-    // The field beside the label is framed, and the OCR reads its edge as "[", "|" or "_".
-    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours)[\s|\[\]_:;.]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|stunden|hours)""")
+    // The field beside the label is framed, and the OCR reads its edge as "[", "|", "_", "l" or "I".
+    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours|fonctionnement)[\s|\[\]_:;.lI!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|stunden|hours|heures)""")
+    /** smartctl's own verdict on the drive; PASSED says nothing of its sector counts, FAILED says it fails. */
+    private val smartctlFailed = Regex("""self-assessment\s+test\s+result:\s*FAILED""", RegexOption.IGNORE_CASE)
     private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
+
+    /** Between the texts of a photo's readings, where it was read more than once. */
+    private const val PASS_BREAK = "\n\u000C\n"
 
     /** The most hours a drive's counter believes: some 34 years. */
     private const val MOST_HOURS = 300_000L
@@ -90,11 +112,42 @@ object SmartScreens {
     /** Reallocated sectors beyond which a drive is failing rather than wearing. */
     private const val MANY_REALLOCATED = 100
 
+    /** What one OCR text of a photo shows, before a verdict: each value as read, null where unread. */
+    private data class Seen(
+        val counts: Map<Attribute, Long>,
+        val failing: List<String>,
+        val word: String?,
+        val hours: Long?,
+    )
+
     /**
      * What one photo's text says, or null where it is no SMART screen: at least three attributes
      * have to be found by name before it counts as one.
      */
-    fun parse(text: String, photo: Int): SmartReading? {
+    fun parse(text: String, photo: Int): SmartReading? = parse(listOf(text), photo)
+
+    /**
+     * What a photo says, read from more than one OCR of it. A value counts only where every reading
+     * that found it agrees: a terminal's slashed zero reads as 0 at one size and 9 at another, and a
+     * count read two ways is a count not known.
+     */
+    fun parse(texts: List<String>, photo: Int): SmartReading? {
+        val seen = texts.mapNotNull { see(it) }.ifEmpty { return null }
+        fun <T> agreed(values: List<T?>): T? = values.filterNotNull().distinct().singleOrNull()
+        // A count above zero says the drive fails, so it has to be read the same by every reading;
+        // a zero is taken from any reading no other contradicts.
+        val counts = Attribute.entries.mapNotNull { a ->
+            val all = seen.map { it.counts[a] }
+            agreed(all)?.takeIf { it == 0L || all.all { v -> v == it } }?.let { a to it }
+        }.toMap()
+        val failing = seen.map { it.failing.toSet() }.reduce { a, b -> a intersect b }.toList()
+        return judge(
+            Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreed(seen.map { it.hours })),
+            photo,
+        )
+    }
+
+    private fun see(text: String): Seen? {
         val lines = text.lines()
         var found = 0
         val counts = HashMap<Attribute, Long>()
@@ -107,14 +160,29 @@ object SmartScreens {
         // its IDs ("5(0x05)"); on any other screen two numbers are a row the OCR lost half of, and
         // CrystalDiskInfo's "100 100" is no sector count.
         val scrutiny = !hexScreen && scrutinyMarks.containsMatchIn(text)
+        // A terminal font with a slashed zero reads it as 8 or 9. No drive counts the same 8 or 9
+        // on three attributes, so where three smartctl rows end in one such lone digit, every lone
+        // 8 or 9 on the screen is a zero misread and is left unread.
+        val zeroAsDigit = lines.mapNotNull { smartctlAnywhere.find(it)?.groupValues?.last() }
+            .filter { it == "8" || it == "9" }.groupingBy { it }.eachCount().values.any { it >= 3 }
         for (line in lines) {
             val attribute = Attribute.entries.firstOrNull { it.names.containsMatchIn(line) } ?: continue
             found++
-            val after = line.substring(attribute.names.find(line)!!.range.last + 1)
-            val row = tableRow.find(after) ?: if (hexScreen) null else decimalRow.find(after)
+            // The rest of the name ("_Ct", " Count") is left to the row patterns, which skip it.
+            val after = line.substring(attribute.names.find(line)!!.range.last + 1).replace(Regex("""^[\w-]*"""), "")
+            // Each format names its columns in its own order: current, worst, threshold, raw.
+            val row: List<String>? = sentinelRow.find(after)?.groupValues?.let { g -> listOf(g[2], g[3], g[1], g[4]) }
+                ?: tableRow.find(after)?.groupValues?.drop(1)
+                ?: smartctlRow.find(after)?.groupValues?.takeUnless { zeroAsDigit && it[5] in setOf("8", "9") }?.let { g ->
+                    if (g[4].startsWith("FAILING", ignoreCase = true)) failing += "${attribute.label()} failing now"
+                    listOf(g[1], g[2], g[3], g[5])
+                }
+                ?: proxmoxRow.find(after)?.groupValues?.let { g -> listOf(g[2], g[4], g[3], g[1]) }
+                ?: if (hexScreen) null else decimalRow.find(after)?.groupValues?.drop(1)
             if (row != null) {
-                val (current, worst, threshold, rawDigits) = row.destructured
-                val raw = rawDigits.toLongOrNull(if (hexScreen) 16 else 10)
+                val (current, worst, threshold, rawDigits) = row
+                val hex = hexScreen && rawDigits.length == 12
+                val raw = rawDigits.toLongOrNull(if (hex) 16 else 10)
                 // A value at or under a threshold above zero is the drive's own failure mark. The
                 // worst value is the lowest the current one has been, so a current one under it is
                 // the OCR misreading the row ("100" read as "0"), and the row's marks are not believed.
@@ -123,7 +191,7 @@ object SmartScreens {
                 if (thr in 1..254 && cur <= thr && cur >= worst.toInt() && cur <= 253) failing += "${attribute.label()} $cur at threshold $thr"
                 when (attribute) {
                     // Seagate keeps more than hours in this raw value; the hours are its low four bytes.
-                    Attribute.HOURS -> tableHours = raw?.and(0xFFFFFFFFL)?.takeIf { it <= MOST_HOURS }
+                    Attribute.HOURS -> tableHours = (if (hex) raw?.and(0xFFFFFFFFL) else raw)?.takeIf { it <= MOST_HOURS }
                     Attribute.HELIUM -> {}
                     // No drive has this many bad sectors: a count past it is the OCR misreading a
                     // digit of the hex ("…0000" read as "…9000"), and stays unread.
@@ -147,6 +215,7 @@ object SmartScreens {
             }
         }
         if (found < 3) return null
+        if (smartctlFailed.containsMatchIn(text)) failing += "smartctl says FAILED"
         // The big status box is white on colour and often lost to the OCR; the row of drive tabs
         // above it names each drive's status too. Where every tab is good and no word anywhere on
         // the screen is a warning, the drive shown is good as well.
@@ -156,6 +225,11 @@ object SmartScreens {
         val hours = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
             ?: daysAndHours.find(text)?.let { it.groupValues[1].toLong() * 24 + it.groupValues[3].toLong() }
             ?: tableHours
+        return Seen(counts, failing, word, hours)
+    }
+
+    private fun judge(seen: Seen, photo: Int): SmartReading {
+        val (counts, failing, word, hours) = seen
         val reallocated = counts[Attribute.REALLOCATED]
         val pending = counts[Attribute.PENDING]
         val uncorrectable = listOfNotNull(counts[Attribute.UNCORRECTABLE], counts[Attribute.REPORTED_UNCORRECTABLE]).takeIf { it.isNotEmpty() }?.max()
@@ -221,12 +295,16 @@ object SmartScreens {
         val urls = photos.take(MOST_PHOTOS)
         val readings = urls.mapIndexedNotNull { i, url ->
             val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
-            if (known != null) return@mapIndexedNotNull known.getOrNull()?.let { parse(it, i + 1) }
-            val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { ocr(it) }
+            if (known != null) return@mapIndexedNotNull known.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
+            val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
+                // A photo that shows a SMART screen is read a second time at twice the size, and a
+                // count is believed only where both readings agree.
+                ocr(bytes, 1.0)?.let { first -> if (see(first) == null) first else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK) }
+            }
             // Only a photo that was read is remembered: one that failed to arrive or to read is
             // tried again the next time, rather than counted as no screenshot for good.
             if (text != null) synchronized(cache) { cache[url] = text.takeIf { t -> Attribute.entries.any { it.names.containsMatchIn(t) } } }
-            val read = text?.let { parse(it, i + 1) }
+            val read = text?.let { parse(it.split(PASS_BREAK), i + 1) }
             read?.let { r ->
                 runCatching {
                     shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r, text)) + "\n")
@@ -263,16 +341,25 @@ object SmartScreens {
     }
 
     /** The photo's text, or null where it is not an image this reads or the reader gave none in time. */
-    private suspend fun ocr(bytes: ByteArray): String? {
+    private suspend fun ocr(bytes: ByteArray, enlarge: Double): String? {
         if (bytes.size > MOST_BYTES) return null
         val image = runCatching { ImageIO.read(ByteArrayInputStream(bytes)) }.getOrNull() ?: return null
         if (image.width > MOST_SIDE || image.height > MOST_SIDE || image.width < 200 || image.height < 150) return null
-        val scale = (READ_WIDTH.toDouble() / image.width).coerceIn(1.0, 3.0)
+        val scale = (READ_WIDTH.toDouble() / image.width).coerceIn(1.0, 3.0) * enlarge
         val gray = BufferedImage((image.width * scale).toInt(), (image.height * scale).toInt(), BufferedImage.TYPE_BYTE_GRAY)
         gray.createGraphics().apply {
             setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
             drawImage(image, 0, 0, gray.width, gray.height, null)
             dispose()
+        }
+        // Tesseract reads dark text on light; a terminal or a dark theme is turned over first, which
+        // took its zeros from "9", "]" and "e" to "0".
+        val raster = gray.raster
+        var sum = 0L
+        for (y in 0 until gray.height step 4) for (x in 0 until gray.width step 4) sum += raster.getSample(x, y, 0)
+        val samples = ((gray.height + 3) / 4).toLong() * ((gray.width + 3) / 4)
+        if (sum < samples * 255 * 0.45) {
+            for (y in 0 until gray.height) for (x in 0 until gray.width) raster.setSample(x, y, 0, 255 - raster.getSample(x, y, 0))
         }
         val file: File = Files.createTempFile("smart", ".png").toFile()
         return try {

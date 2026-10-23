@@ -1,0 +1,65 @@
+[ & CrystalDiskinfo 9.9.1 x64 = X
+Fichier Modifier Fonctions Théme Disque Aide Langue(Language)
+Bon ©& Bon © Bon
+27°C 45°C 21°C
+4 ST2000VNO04-2E4164 : 2000,3 GB
+Etat de santé Firmware | SC60 —
+‚ Mode de transfert | SATA/600 | SATA/600 Nombre d'allumages | 342 fois
+Température Lettre de lecteur | E: ares de fonctionnement | 43602 heures
+@ Standard | ACS-2 | ACS-3 Revision 3b
+Fonctions | S.M.A.R.T., APM, NCQ, Streaming, GPL
+ID  Nom d'attribut Actuel  Pire valeur Seuil Valeurs brutes
+@ 01 Nombre d'erreurs de lecture 116 99 6 000006060FB0
+@ 03 Duree de rotation 97 95 0 000000000000
+@ 04 Nombre de démarrages/arréts 100 100 20  00000000018A
+Q 05 Nombre de secteurs réalloués 100 100 10 000000000000
+Q 07 Nombre d'erreurs de recherche 74 60 30 000001957881
+Q 09 Heures de Fonctionnement 51 51 0 00000000AA52
+@ 0A Nombre d'essais de relancement de la rotati... 100 100 97 000000000000
+@ 0C Nombre total de cycles marche/arrét du dis... 100 100 20 1000000000156
+@ 88 Transfert des données 3 travers le cache tam... 100 100 99 000000000000
+@ BB Nombre d'erreurs qui n'ont pas pu étre récu... 100 100 0 000000000000
+@ BC Nombre d'opérations avortées en raison de ... 100 100 0 000000000000
+@ BD Information réécrite ou réaffectés ä une régi... 52 52 0 000000000030
+@ BE Température interne sur les disques Wester ... 79 67 45 000015140015
+@ BF Nombre d'erreurs résultant de chocs ou de v... 100 100 0 000000000000
+@ CO Nombre de fois que |'armature magnétique ... 100 100 0  00000000000D
+@ C1 Nombre de fois que la téte a changé de posi... 100 100 0 0000000001EF
+@ C2 Température interne actuelle. 21 40 0 000C00000015
+@ C5 Nombre de secteurs "instables” 100 100 0 000000000000
+@ C6 Nombre total d'erreurs incorrigibles d'un se... 100 100 0 000000000000
+@ 7 Nombre d'erreurs dans le transfert de donné... 200 200 0 000000000000
+
+
+| £ CrystalDiskinfo 9.9.1 x64 — X
+Fichier Modifier Fonctions Theme Disque Aide Langue(Language)
+Bon @ Bon © Bon
+27 °C 45 °C 21°C
+G e & . :
+< ST2000VNOO4-2E4164 : 2000,3 GB
+Etat de santé Firmware l SC60 R I ----
+: Mode de transfert l SATA/600 | SATA/600 Nombre d'allumages l 342 fois
+Temperature Lettre de lecteur l E Jres de fonctionnement l 43602 heures
+@ Standard [ ACS-2 | ACS-3 Revision 3b
+; Fonctions l S.M.A.R.T,, APM, NCQ, Streaming, GPL
+ID Nom d'attribut Actuel Pire valeur Seuil Valeurs brutes
+@3 01 Nombre d'erreurs de lecture 116 99 6 000006060FBO
+® 03 Durée de rotation 97 95 0 000000000000
+@) 04 Nombre de démarrages/arréts 100 100 20  00000000018A
+Q 05 Nombre de secteurs realloues 100 100 10 000000000000
+@) 07 _Nombre d'erreurs de recherche 74 60 30 0000019578B1
+€3 09 Heures de Fonctionnement 51 51 0 00000000AA52
+9 0A Nombre d'essais de relancement de la rotati... 100 100 97 000000000000
+@ 0C Nombre total de cycles marche/arrét du dis... 100 100 20 000000000156
+@& B8 Transfert des données 3 travers le cache tam... 100 100 99 000000000000
+@) BB Nombre d'erreurs qui n'ont pas pu étre récu... 100 100 0 000000000000
+@) BC Nombre d'opérations avortées en raison de ... 100 100 0 000000000000
+@) BD Information réécrite ou réaffectés ä une régi... 52 52 0 000000000030
+) BE Température interne sur les disques Western ... 79 67 45 000015140015
+G BF Nombre d'erreurs résultant de chocs ou de v... 100 100 0 000000000000
+@& CO Nombre de fois que |'armature magnetique ... 100 100 0 00000000000D
+@ C1 Nombre de fois que la téte a changé de posi... 100 100 0 0000000001EF
+9 C2 Température interne actuelle, 21 40 0 000C00000015
+@& C5 Nombre de secteurs "instables” 100 100 0 000000000000
+@3 C6 Nombre total d'erreurs incorrigibles d'un se... 100 100 0 000000000000
+Q C7 Nombre d'erreurs dans le transfert de donné... 200 200 0 000000000000

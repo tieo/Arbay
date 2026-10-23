@@ -1,0 +1,56 @@
+S.M.A.R.T. Values (/dev/sdd) ®
+
+ID Attribute Value Norma... Thre... W... Flags Failing
+1 Raw_Read_Error_Rate 0/140786896 81 44 54 POSR-- -
+3  Spin_Up_Time 0 90 0 90 PO---- -
+4  Start_Stop_Count 93 100 20 100 -O-CK -
+5 Reallocated_Sector_Ct 0 100 10 100 PO-CK -
+7 Seek_Emor_Rate 0/160066442 82 45 60 POSR-- -
+9  Power_On_Hours 37506 58 0 58 -O--CK -
+10  Spin_Retry_Count 0 100 97 100 PO--C- -
+12 Power_Cycle_Count 46 100 20 100 -O-CK -
+18  Head Health 0 100 50 100 PO-R-- -
+187  Reported_Uncorrect 15 85 0 85 -O-CK -
+188  Command_Timeout 313134 100 0 99 -O--CK -
+190  Airflow_Temperature_Cel 33 (Min/Max 28/40) 67 0 46 -O--K -
+192  Power-Off_Retract_Count 32 100 0 100 -O--CK -
+193  Load_Cycle_Count 16906 92 0 92 -0-CK =
+194 Temperature_Celsius 33(05000) 33 0 54 -O-—K -
+197  Current_Pending_Sector 15 100 0 100 -O--C- -
+198  Offline_Uncorrectable 15 100 0 100 --C- -
+199 UDMA_CRC_Error_Count 21463 200 0 197 -OSRCK -
+200 Pressure_Limit 0 100 1 100 PO--K -
+240 Head Flying Hours 33445h+54m+42.828s 100 0 253 - -
+241 Total_LBAs_Written 357634046468 100 0 253 - -
+242 Total_LBAs_Read 4208073116124 100 0 253 - -
+
+Reload Close
+
+
+S.M.A.R.T. Values (/dev/sdd) ©
+
+ID Attribute Value Norma... Thre... W... Flags Failing
+1 Raw_Read Error_Rate 0/140786896 81 44 54 POSR-- -
+3 Spin_Up Time 0 90 0 90 PO---- -
+4  Start_Stop_Count 93 100 20 100 -O--CK -
+5 Reallocated_Sector_Ct 0 100 10 100 PO--CK -
+7 Seek_Error_Rate 0/160066442 82 45 60 POSR-- -
+9 Power_On_Hours 37506 58 0 58 -0O--CK -
+10  Spin_Retry_Count 0 100 97 100 PO--C- -
+12 Power_Cycle Count 46 100 20 100 -O--CK -
+18 Head_Health 0 100 50 100 PO-R-- -
+187 Reported_Uncorrect 15 85 0 85 -O-CK -
+188 Command_Timeout 31 31 34 100 0 99 -O--CK -
+190 Airflow_Temperature_Cel 33 (Min/Max 28/40) 67 0 46 -O---K -
+192 Power-Off Retract Count 32 100 0 100 -O--CK -
+193 Load_Cycle_Count 16906 92 0 92 -0O--CK -
+194 Temperature_Celsius 33(05000) 33 0 54 -0--K -
+197  Current_Pending_Sector 15 100 0 100 -O--C- -
+198  Offline_Uncorrectable 15 100 0 100 ----C- -
+199 UDMA_CRC_Error_Count 21463 200 0 197 -OSRCK -
+200 Pressure_Limit 0 100 1 100 PO---K -
+240 Head_Flying_Hours 33445h+54m+42.828s 100 0 253 - -
+241  Total_LBAs_Written 357634046468 100 0 253 —- -
+242 Total_LBAs_Read 4208073116124 100 0 253 —- -
+
+Reload Close
