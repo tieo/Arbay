@@ -179,10 +179,12 @@ object SmartScreens {
         val readings = urls.mapIndexedNotNull { i, url ->
             val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
             val reading = known?.getOrNull() ?: if (known != null) null else {
-                val bytes = runCatching { fetch(url) }.getOrNull()
+                val bytes = runCatching { fetch(fullSize(url)) }.getOrNull()
                 val text = bytes?.let { ocr(it) }
                 val read = text?.let { parse(it, i + 1) }
-                synchronized(cache) { cache[url] = read }
+                // Only a photo that was read is remembered: one that failed to arrive or to read is
+                // tried again the next time, rather than counted as no screenshot for good.
+                if (text != null) synchronized(cache) { cache[url] = read }
                 read?.let { r ->
                     runCatching {
                         shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r)) + "\n")
@@ -194,6 +196,19 @@ object SmartScreens {
         }
         persist()
         return DriveHealth(readings = readings, photosRead = urls.size)
+    }
+
+    /**
+     * The largest copy a market serves of the photo at [url]. Galleries and cards ask for smaller
+     * ones, and a SMART table's digits do not survive them: Kleinanzeigen's usual rule is 960
+     * pixels where 1600 are there, Ricardo's cards 265 by 200 where 1013 by 1350 are there.
+     */
+    internal fun fullSize(url: String): String = when {
+        "img.kleinanzeigen.de" in url -> url.substringBefore('?') + "?rule=\$_57.JPG"
+        "img.ricardostatic.ch" in url -> url.replace(Regex("""/t_\d+x\d+/"""), "/t_1800x1350/")
+        "cache.willhaben.at" in url -> url.replace(Regex("""_(hoved|thumb)\.(jpg|webp)$"""), ".jpg")
+        "i.ebayimg.com" in url -> url.replace(Regex("""s-l\d+\.(jpg|jpeg|webp|png)"""), "s-l1600.jpg")
+        else -> PhotoPrints.jpegAddress(url)
     }
 
     private fun persist() {

@@ -70,4 +70,28 @@ class SmartScreensTest {
     fun `a photo without a SMART table is no reading`() {
         assertNull(SmartScreens.parse("TOSHIBA MG09ACA18TE 18TB\nMADE IN PHILIPPINES\n+12V DC 0.75A", 1))
     }
+
+    @Test
+    fun `a WebP photo is read as an image, as willhaben serves every photo`() {
+        val bytes = javaClass.getResource("/fixtures/smart/webp_probe.webp")!!.readBytes()
+        val image = assertNotNull(javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes)))
+        assertEquals(320, image.width)
+    }
+
+    @Test
+    fun `each market's photo is asked for at its largest`() {
+        assertEquals(
+            "https://img.kleinanzeigen.de/api/v1/prod-ads/images/6c/6c9b?rule=\$_57.JPG",
+            SmartScreens.fullSize("https://img.kleinanzeigen.de/api/v1/prod-ads/images/6c/6c9b?rule=\$_59.AUTO"),
+        )
+        assertEquals(
+            "https://img.ricardostatic.ch/images/30dc/t_1800x1350/1tb-hdd",
+            SmartScreens.fullSize("https://img.ricardostatic.ch/images/30dc/t_265x200/1tb-hdd"),
+        )
+        assertEquals(
+            "https://cache.willhaben.at/mmo/1/137/351/7931_-1526906973.jpg",
+            SmartScreens.fullSize("https://cache.willhaben.at/mmo/1/137/351/7931_-1526906973_hoved.jpg"),
+        )
+        assertEquals("https://i.ebayimg.com/images/g/abc/s-l1600.jpg", SmartScreens.fullSize("https://i.ebayimg.com/images/g/abc/s-l500.webp"))
+    }
 }

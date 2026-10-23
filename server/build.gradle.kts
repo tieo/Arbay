@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.ktor.clientContentNegotiationJvm)
     implementation(libs.mcp.kotlin.server)
     implementation(libs.jsoup)
+    implementation(libs.imageio.webp)
     // Jsoup marks its API with these but leaves them out of its own dependencies; without them
     // Kotlin cannot read which of its returns may be null.
     compileOnly(libs.jspecify)

@@ -562,7 +562,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // ad's every other photo with it.
             val photos = ask.photos.take(20).mapNotNull { runCatching { requirePublicHttpUrl(it) }.getOrNull() }
             call.respond(io.github.tieo.arbay.crawler.SmartScreens.read(ask.listingId, ask.title, photos) {
-                io.github.tieo.arbay.crawler.PhotoPrints.download(it)
+                io.github.tieo.arbay.crawler.PhotoPrints.downloadAt(it)
             })
         }
 

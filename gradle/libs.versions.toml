@@ -22,6 +22,7 @@ kotlinx-datetime = "0.7.1"
 kotlinx-serialization = "1.9.0"
 ktor = "3.3.3"
 jsoup = "1.18.3"
+twelvemonkeys = "3.15.3"
 jspecify = "1.0.0"
 navigationevent = "1.0.1"
 playwright = "1.51.0"
@@ -86,6 +87,7 @@ ktor-clientContentNegotiationJvm = { module = "io.ktor:ktor-client-content-negot
 ktor-clientMock = { module = "io.ktor:ktor-client-mock-jvm", version.ref = "ktor" }
 ktor-serverTestHost = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
