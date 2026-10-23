@@ -35,7 +35,9 @@ class EbayDeCrawler(
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         // Straight to the item page: arriving from a search page first loaded two pages for each
         // one read, and an item page opens as well without one.
-        val html = fetchWithFallback(client, listing.url, "eBay", browserOnly = true)
+        // When eBay's edge serves its error page to every browser, the real Chrome still gets the
+        // item, known by its title block.
+        val html = fetchWithFallback(client, listing.url, "eBay", browserOnly = true, stealthMarker = "x-item-title")
         val doc = Jsoup.parse(html)
         val stock = ebayStock(doc.text(), html)
         ListingDetail(
