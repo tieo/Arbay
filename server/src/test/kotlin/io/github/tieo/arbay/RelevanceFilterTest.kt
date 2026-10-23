@@ -1386,4 +1386,16 @@ class RelevanceFilterTest {
         val drive = listing("Samsung Momentus 1TB HDD ST1000LM024", 2500)
         assertEquals(listOf(drive.title), search("1TB HDD", listOf(board, drive)).map { it.title })
     }
+
+    @Test
+    fun `bays, media players, a Synology and an enclosure for something are not the drive searched for`() {
+        val drive = listing("WD Red Plus 6TB HDD", 9000)
+        assertEquals(listOf(drive.title), search("6TB HDD", listOf(
+            listing("6TB UASP Acceleration HDD -Gehäuse für OS 9.1/OS 10.2 Benutzer", 1503), drive,
+        )).map { it.title })
+        assertTrue(search("10TB HDD", listOf(listing("Himedia Q10 inkl. Fernbedienung (10TB interne HDD extra)", 6000))).isEmpty())
+        assertTrue(search("30TB HDD", listOf(listing("Asustor Xpanstor 4 AS5004U 4-Bay mit 30TB (3x 10TB)", 149400))).isEmpty())
+        assertTrue(search("32TB HDD", listOf(listing("Synology DS918+ mit 16GB RAM und 32TB HDD (Ironwolf)", 95000))).isEmpty())
+        assertEquals(1, search("18TB HDD", listOf(listing("Seagate Exos 18TB HDD mit Gehäuse", 26000))).size)
+    }
 }

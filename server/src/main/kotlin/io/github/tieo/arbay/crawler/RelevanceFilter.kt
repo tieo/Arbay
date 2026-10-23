@@ -664,7 +664,10 @@ object RelevanceFilter {
             // A NAS is named by its maker's line, never by "NAS" alone, which a drive's title
             // carries too ("WD Red 4TB NAS HDD"): "NAS Buffalo TeraStation 5140DN mit 32TB" was an
             // empty NAS that takes up to 32 TB, standing at 450 euro as the cheapest 32 TB drive.
-            """terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|""" +
+            """terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
+            // A drive bay or a media player is sold with the drives it holds: "Asustor Xpanstor 4
+            // AS5004U 4-Bay mit 30TB", "Himedia Q10 inkl. Fernbedienung (10TB interne HDD extra)".
+            """\d[\s-]?bay|media\s?player|mediaplayer|himedia|""" +
             // "PC SN730" is the name Western Digital sells a drive under, not a computer.
             """pc(?!\s*sn\d)|""" +
             // The same machines as the markets in other languages name them.
@@ -805,6 +808,7 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
+    private val forWhat = Regex("""^\s*(f(ü|ue)r|for|pour|per|para|voor)\b""", RegexOption.IGNORE_CASE)
     private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
     private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
 
@@ -838,6 +842,9 @@ object RelevanceFilter {
         // Bundle Neues Mainboard" is a repaired phone, "1,0TB SAMSUNG Momentus Platine" a drive's
         // circuit board sold as a spare.
         if (boardNoun.matches(match.value) && !newBoard.containsMatchIn(before)) return true
+        // An accessory said to be for something is that accessory, whatever size it names before:
+        // "6TB UASP Acceleration HDD -Gehäuse für OS 9.1" is an empty enclosure.
+        if (forWhat.containsMatchIn(listing.title.substring(match.range.last + 1))) return true
         // "mit", "und" make the noun an extra only where the thing searched for stands ahead of
         // them: "WH-1000XM5 mit Tasche" is the headphones, and "SSD und Festplatten Docking Station"
         // is a dock for both, which at €29 stood as the cheapest 32 TB drive.
