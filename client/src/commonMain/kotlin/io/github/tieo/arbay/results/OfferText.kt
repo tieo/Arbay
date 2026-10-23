@@ -18,7 +18,7 @@ import kotlin.math.round
  * One offer as it reads in full: what the search card carried, with what its own page adds. The
  * page's vehicle facts fill the gaps the card left, its description replaces a shorter one, and its
  * place stands in where the card had none. [stock] is how many the page says are left ("3 left",
- * "over 10 left"), where it says.
+ * "over 10 left", "sold out"), where it says.
  */
 data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?, val stock: String? = null)
 
@@ -27,7 +27,7 @@ fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
         listing.vehicle?.let { card -> card.copy(wheelbaseMm = card.wheelbaseMm ?: page.wheelbaseMm, verified = card.verified + page.verified) } ?: page
     } ?: listing.vehicle
     val description = fromItsPage?.description?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
-    val stock = fromItsPage?.available?.let { n -> if (fromItsPage.moreAvailable) "over $n left" else if (n == 1) "last one" else "$n left" }
+    val stock = fromItsPage?.available?.let { n -> if (fromItsPage.moreAvailable) "over $n left" else if (n == 0) "sold out" else if (n == 1) "last one" else "$n left" }
     return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location, stock)
 }
 

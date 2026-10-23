@@ -37,7 +37,7 @@ class EbayDeCrawler(
         // one read, and an item page opens as well without one.
         val html = fetchWithFallback(client, listing.url, "eBay", browserOnly = true)
         val doc = Jsoup.parse(html)
-        val stock = ebayStock(doc.text())
+        val stock = ebayStock(doc.text(), html)
         ListingDetail(
             vehicle = EbayDetailParser.parse(html),
             description = sellerText(doc),
@@ -748,7 +748,9 @@ class EbayDeCrawler(
  * its wording. A recertified drive sold by a dealer at one price is worth a second at the same
  * price only where there is one.
  */
-internal fun ebayStock(text: String): Pair<Int, Boolean>? {
+internal fun ebayStock(text: String, html: String = ""): Pair<Int, Boolean>? {
+    // A sold-out listing keeps its page and its words; only the page's own data says it is out.
+    if ("\"outOfStock\":true" in html) return 0 to false
     Regex("""(?i)mehr\s+als\s+(\d{1,5})\s+verf(ü|ue)gbar|more\s+than\s+(\d{1,5})\s+available""").find(text)?.let { m ->
         return (m.groupValues[1].ifEmpty { m.groupValues[3] }).toInt() to true
     }
