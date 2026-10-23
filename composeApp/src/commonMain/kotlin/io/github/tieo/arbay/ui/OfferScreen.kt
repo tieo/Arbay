@@ -68,6 +68,11 @@ import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import io.github.tieo.arbay.results.detailSpecs
+import io.github.tieo.arbay.results.values
+import io.github.tieo.arbay.results.label
+import io.github.tieo.arbay.model.looksLikeADrive
+import io.github.tieo.arbay.model.DriveVerdict
+import io.github.tieo.arbay.model.DriveHealth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.style.TextAlign
@@ -109,11 +114,20 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
     val nav = LocalNavigator.current
     var fromItsPage by remember(listing.id) { mutableStateOf<ListingDetail?>(null) }
     var reading by remember(listing.id) { mutableStateOf(false) }
-    LaunchedEffect(listing.id) {
+    var health by remember(listing.id) { mutableStateOf<DriveHealth?>(null) }
+    var readingDrive by remember(listing.id) { mutableStateOf(false) }
+    // Again once a search still running brings the live offer in place of the archived copy.
+    LaunchedEffect(listing.id, isArchived) {
         if (isArchived || listing.url.isBlank()) return@LaunchedEffect
         reading = true
         fromItsPage = session.client.listingDetail(listing)
         reading = false
+        // A drive's photos may hold a SMART screenshot; the server reads it.
+        if (looksLikeADrive(listing.title)) {
+            readingDrive = true
+            health = session.client.driveHealth(listing, fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls)
+            readingDrive = false
+        }
     }
     val page = readOffer(listing, fromItsPage)
 
@@ -169,6 +183,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 if (facts.isNotEmpty()) Choices { facts.forEach { Box(Modifier.padding(vertical = 3.dp)) { Fact(it) } } }
 
                 FitBreakdown(listing)
+                DriveHealthSection(health, readingDrive)
 
                 page.vehicle?.let { v ->
                     val specs = detailSpecs(v)
@@ -234,6 +249,40 @@ private fun FitBreakdown(listing: Listing) {
                 "${row.points}/${row.of}", Modifier.weight(0.18f), style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.End, color = if (row.points < row.of) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** What the SMART screenshots among the ad's photos say about the drive, one row per screenshot. */
+@Composable
+private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
+    if (reading) {
+        Gap(4.dp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading the drive's photos") }
+        return
+    }
+    val readings = health?.readings.orEmpty()
+    if (readings.isEmpty()) return
+    Gap(4.dp)
+    SectionTitle("Drive health")
+    readings.forEach { r ->
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    r.verdict.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when (r.verdict) {
+                        DriveVerdict.FAILING -> MaterialTheme.colorScheme.error
+                        DriveVerdict.WORN -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                Muted("photo ${r.photo}", style = MaterialTheme.typography.bodySmall)
+            }
+            r.values().takeIf { it.isNotEmpty() }?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
+            r.findings.filter { "reallocated" !in it && "pending" !in it && "uncorrectable" !in it }.forEach {
+                Muted(it, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

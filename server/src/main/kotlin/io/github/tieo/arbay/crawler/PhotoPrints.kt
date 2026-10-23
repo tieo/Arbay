@@ -131,7 +131,7 @@ object PhotoPrints {
         else -> url
     }
 
-    private suspend fun download(url: String): ByteArray? = downloads.withPermit {
+    internal suspend fun download(url: String): ByteArray? = downloads.withPermit {
         try {
             val response = CrawlerRegistry.httpClient.get(jpegAddress(url))
             if (response.status.isSuccess()) response.body<ByteArray>() else null

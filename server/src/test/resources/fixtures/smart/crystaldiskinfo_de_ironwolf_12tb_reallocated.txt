@@ -1,0 +1,26 @@
+< ST12000VN0007-2GS116 : 12000,1 GB
+Gesamtzustand Firmware | SC60
+. Vorsicht Schnittstelle | UASP (Serial ATA) Drehzahl 7200 RPM
+Ubertragungsmodus [ SATA/600 | SATA/600 Eingeschaltet [ 8 mal
+‚ktuelle Temperatı Laufwerksbuchstaben Betriebsstunden 3579 Std.
+@ Standard | ACS-3 | ACS-3 Revision 5
+sa - Eigenschaften | S.M.A.R.T., NCQ, Streaming, GPL
+ID Parametername ktueller Wert :htester Wert Grenzwert Rohwerte
+@ 01 Lesefehlerrate 76 51 44 00000240CA64
+@ 03 Mittlere Anlaufzeit 88 88 0 000000000000
+@ 04 Start/Stopp-Zykien der Spindel 100 100 20 00000000000A
+) 05 Wiederzugewiesene Sektoren 88 88 10 00000000B9A0
+@ 07 Suchfehler 80 60 45 000005C5D649
+@ 09 Betriebsstunden 96 96 0 000000000DFB
+@ 0A Misslungene Spindelanlaufe 100 100 97 000000000000
+@ 0C Gerate-Einschaltvorgénge 100 100 20 000000000008
+@ BB Gemeldete unkorrigierbare Fehler 1 1 0 000000000083
+@ BC Befehlszeitiberschreitung 100 100 0 000000000000
+@ BE Luftstromtemperatur 73 54 40 00001B1B001B
+@ CO Ausschaltungsabbriiche 100 100 0 000000000087
+@ C1 Laden/Entladen-Zyklen 100 100 0 000000000098
+@ C2 Temperatur 27 46 0 00130000001B
+@ (3 Hardware-ECC wiederhergestellt 1 1 0 00000240CA64
+@ C5 Aktuell ausstehende Sektoren 100 100 0 000000000000
+@ C6 Nicht korrigierbare Sektoren 100 100 0 000000000000
+@ C7 UitraDMA-CRC-Fehler 200 200 0 000000000000

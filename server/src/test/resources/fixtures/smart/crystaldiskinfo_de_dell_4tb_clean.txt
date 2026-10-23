@@ -1,0 +1,35 @@
+VE D _E F H: G
+
+< ST4000NM0265-2DC107 : 4000,7 GB »
+
+Gesamtzustand Firmware | DB34 ==s= =...
+
+
+3 Schnittstelle | Serial ATA Drehzahl 7200 RPM
+
+Übertragungsmodus | SATA/600 | SATA/600 Eingeschaltet 24 mal
+
+ktuelle Temperatu Laufwerksbuchstaben | E: Betriebsstunden 26129 Std.
+
+@ Standard | ACS-3 | ACS-3 Revision 5
+3 Eigenschaften | S.M.A.R.T., NCQ, GPL
+ID Parametername ktueller Wert :htester Wert Grenzwert Rohwerte
+@© 01 Lesefehlerrate 83 64 44 00000C69A999
+@© 03 Mittlere Anlaufzeit 96 93 0 000000000000
+€) 04 Start/Stopp-Zyklen der Spindel 100 100 20  00000000001C
+@) 05 Wiederzugewiesene Sektoren 100 100 10 000000000000
+©& 07 Suchfehler 92 60 45 000058885378
+© 09 Betriebsstunden 71 71 0 000000006611
+@© 0A Misslungene Spindelanläufe 100 100 97 000000000000
+© 0C KGeräte-Einschaltvorgänge 100 100 20 000000000018
+€) B8 Ende-zu-Ende-Fehler 100 100 99 1000000000000
+@) BB Gemeldete unkorrigierbare Fehler 100 100 0 000000000000
+@ BC Befehlszeitiberschreitung 100 100 0 000000000000
+@) 8D Ubergeordnete Schreibvorgénge 100 100 0 000000000000
+@& BE Luftstromtemperatur 74 46 40 00001A17001A
+( ]| BF | Beschleunigungssensor-Fehlerrate | 91 | 91 | 0| 000000004D1F
+@) CO Ausschaltungsabbriiche 100 100 0 000000000387
+© C1 Laden/Entladen-Zyklen 100 100 0 000000000457
+@® C2 Temperatur 26 54 0 00150000001A
+@) C3 Hardware-ECC wiederhergestellt 18 1 0 00000C69A999
+‚ i $ . \ M "

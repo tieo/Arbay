@@ -398,7 +398,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
             // is read now, where the market says it, so a sold van does not read as on offer.
             val state = adNowLine(l)
-            head + "\n" + state + "The details below are the ad page as Arbay last read it.\n" +
+            head + "\n" + state + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
@@ -903,6 +903,27 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
         url,
     ).joinToString(" | ")
+
+    /** What the SMART screenshots among a drive ad's photos say, one line each, as the offer screen shows it. */
+    private suspend fun driveHealthLine(l: Listing, page: JsonObject): String {
+        if (!io.github.tieo.arbay.model.looksLikeADrive(l.title)) return ""
+        val photos = (page["photos"] as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.ifEmpty { l.imageUrls }
+        val health = runCatching {
+            val r = http.post("$base/api/crawler/drive-health") {
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(io.github.tieo.arbay.model.DriveHealthAsk.serializer(), io.github.tieo.arbay.model.DriveHealthAsk(l.id, l.title, photos)))
+            }
+            json.decodeFromString(io.github.tieo.arbay.model.DriveHealth.serializer(), r.bodyAsText())
+        }.getOrNull() ?: return "Drive health: the photos could not be read.\n"
+        if (health.readings.isEmpty()) return "Drive health: none of its ${health.photosRead} photos shows a SMART screen.\n"
+        return health.readings.joinToString("") { r ->
+            "Drive health, photo ${r.photo}: ${r.verdict}" +
+                listOfNotNull(r.powerOnHours?.let { "$it h" }, r.reallocated?.let { "$it reallocated" }, r.pending?.let { "$it pending" },
+                    r.uncorrectable?.let { "$it uncorrectable" }, r.status?.let { "tool says $it" }).takeIf { it.isNotEmpty() }
+                    ?.joinToString(", ", prefix = " (", postfix = ")").orEmpty() +
+                r.findings.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = ": ").orEmpty() + "\n"
+        }
+    }
 
     /** Where a vehicle's fit comes from, each wish with the whole points it adds of those it could:
      *  "\nfit 76 %: size 27/27, price 7/21 (27.400 €), …". Empty for an offer without a fit. */

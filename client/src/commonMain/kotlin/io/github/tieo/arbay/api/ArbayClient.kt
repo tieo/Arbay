@@ -370,6 +370,14 @@ class ArbayClient(
         if (response.status == HttpStatusCode.NoContent) null else response.body<ListingDetail>()
     }
 
+    /** The SMART screenshots among a drive ad's [photos], read on the server. Null when it could not be asked. */
+    suspend fun driveHealth(listing: Listing, photos: List<String>): io.github.tieo.arbay.model.DriveHealth? = orElse(null) {
+        client.post("$baseUrl/api/crawler/drive-health") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.DriveHealthAsk(listing.id, listing.title, photos))
+        }.body<io.github.tieo.arbay.model.DriveHealth>()
+    }
+
     /** The ad as its page has it now, uncached: for an offer about to be written. */
     suspend fun adNow(listing: Listing): io.github.tieo.arbay.model.AdNow? = orElse(null) {
         val response = client.get("$baseUrl/api/crawler/listing-state") {

@@ -29,6 +29,9 @@ import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.results.HiddenKind
 import io.github.tieo.arbay.results.coveredMarkets
 import io.github.tieo.arbay.results.detailSpecs
+import io.github.tieo.arbay.results.values
+import io.github.tieo.arbay.model.looksLikeADrive
+import io.github.tieo.arbay.model.DriveHealth
 import io.github.tieo.arbay.results.fitPercent
 import io.github.tieo.arbay.results.fitRows
 import io.github.tieo.arbay.results.isProblem
@@ -450,11 +453,20 @@ fun DetailPane(app: WebApp, route: Route.Results, id: String, state: ResultsStat
 private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, copies: List<Listing>, isArchived: Boolean, lowest: Boolean, state: ResultsState) {
     var fromItsPage by remember(listing.id) { mutableStateOf<ListingDetail?>(null) }
     var reading by remember(listing.id) { mutableStateOf(false) }
-    LaunchedEffect(listing.id) {
+    var health by remember(listing.id) { mutableStateOf<DriveHealth?>(null) }
+    var readingDrive by remember(listing.id) { mutableStateOf(false) }
+    // Again once a search still running brings the live offer in place of the archived copy.
+    LaunchedEffect(listing.id, isArchived) {
         if (isArchived || listing.url.isBlank()) return@LaunchedEffect
         reading = true
         fromItsPage = app.client.listingDetail(listing)
         reading = false
+        // A drive's photos may hold a SMART screenshot; the server reads it.
+        if (looksLikeADrive(listing.title)) {
+            readingDrive = true
+            health = app.client.driveHealth(listing, fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls)
+            readingDrive = false
+        }
     }
     val page = readOffer(listing, fromItsPage)
     val vehicle = page.vehicle
@@ -506,6 +518,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         }
 
         FitBreakdown(listing)
+        DriveHealthSection(health, readingDrive)
 
         vehicle?.let { v ->
             val specs = detailSpecs(v)
@@ -559,6 +572,30 @@ private fun FitBreakdown(listing: Listing) {
                 }
             }
             Span({ classes(*listOfNotNull("fit-points", "lost".takeIf { row.points < row.of }).toTypedArray()) }) { Text("${row.points}/${row.of}") }
+        }
+    }
+}
+
+/** What the SMART screenshots among the ad's photos say about the drive, one row per screenshot. */
+@Composable
+private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
+    if (reading) {
+        Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading the drive's photos") } }
+        return
+    }
+    val readings = health?.readings.orEmpty()
+    if (readings.isEmpty()) return
+    H3 { Text("Drive health") }
+    Div({ classes("drive-health") }) {
+        readings.forEach { r ->
+            Div({ classes("drive-reading") }) {
+                Span({ classes(*listOfNotNull("health", r.verdict.name.lowercase()).toTypedArray()) }) { Text(r.verdict.label) }
+                Span({ classes("muted", "small") }) { Text("photo ${r.photo}") }
+                r.values().takeIf { it.isNotEmpty() }?.let { Div({ classes("muted", "small") }) { Text(it) } }
+                r.findings.filter { "reallocated" !in it && "pending" !in it && "uncorrectable" !in it }.forEach {
+                    Div({ classes("muted", "small") }) { Text(it) }
+                }
+            }
         }
     }
 }

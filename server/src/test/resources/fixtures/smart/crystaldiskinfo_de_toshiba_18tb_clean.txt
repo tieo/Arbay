@@ -1,0 +1,37 @@
+< TOSHIBA MGO9ACA18TE : 18000,2 GB »
+Gesamtzustand Fimvware‘0104 : ....
+Schnittstelle l USB (Serial ATA) Drehzahl 7200 RPM
+! Übertragungsmodus | SATA/300 | SATA/600 Eingeschaltet | 276 mal
+\ktuelle Temperatu Laufwerksbuchstaben I— Betriebsstunden I—?‚_}W
+= 3 Eigenschaften ] S.M.ART., APM, NCQ, GPL
+
+ID  Parametername ktueller Wert :htester Wert Grenzwert Rohwerte
+) 01 Lesefehlerrate 100 100 50 000000000000
+@ 02 Datendurchsatz-Leistung 100 100 50 000000000000
+@ 03 Mittlere Anlaufzeit 100 100 1 000000002146
+@ 04 Start/Stopp-Zyklen der Spindel 100 100 0 000000000182
+Ü 05 Wiederzugewiesene Sektoren 100 100 10 000000000000
+@ 07 Suchfehler 100 100 50 000000000000
+@ 08 Giite der Suchoperationen 100 100 50 000000000000
+@ 09 Betriebsstunden 8 8 0 00000000911E
+@© 0A Misslungene Spindelanläufe 100 100 30 000000000000
+Q 0C Geräte-Einschaltvorgänge 100 100 0 000000000114
+@ 17 Helium Condition Lower 100 100 75 000000000000
+@) 18 Helium Condition Upper 100 100 75 000000000000
+@ 18 MAMR Health Monitor 100 100 30 00000006085F
+@ BF Beschleunigungssensor-Fehlerrate 100 100 0 000000000023
+®© © Ausschaltungsabbrüche 100 100 0 000000000088
+@ cı Laden/Entladen-Zyklen 100 100 0 000000000277
+@ 2 Temperatur 100 100 0  00330013001D
+© C4 Wiederzuweisungsereignisse 100 100 10 000000000000
+@ C5 Aktuell ausstehende Sektoren 100 100 0 000000000000
+€) C6 Nicht korrigierbare Sektoren 100 100 0 000000000000
+@ 7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+@© DC Festplattenverschiebung 100 100 0 000000200001
+@ DE Stunden geladen 9 9 0 000000008FB7
+@® Dr Laden/Entladen-Wiederholungen 100 100 0 000000000000
+@ E0 Ladereibung 100 100 0 000000000000
+@ E2 Ladezeit 100 100 0 000000000277
+@ FO  Kopfpositionierungszeit 100 100 1 000000000000
+@® F1 LBA geschrieben (gesamt) 100 100 0 0031317BC273
+@® 2 LBA gelesen (gesamt) 100 100 0 00118F05A0F0

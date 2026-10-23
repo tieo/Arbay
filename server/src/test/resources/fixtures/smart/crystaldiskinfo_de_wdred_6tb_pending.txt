@@ -1,0 +1,30 @@
+& CrystalDiskinfo 8.8.5 x64 = X
+Datei Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+@® Gut ® Gut @® Gut @® Gut () Vorsicht @ Gut () Vorsicht
+22°C 227€ Z7C 51°C 33°C 31°C 24°C
+E: D: A: C F: K: Disk 7
+< WDC WD60EFRX-68MYMN1 6001,1 GB
+Gesamtzustand Firmware [82.00A82 E
+Vorsicht Schnittstelle [USB (Serial ATA) E Drehzahl | 5700 RPM
+Ubertragungsmodus gSATA/1 SOI_SATA/GOE E Eingeschaltet — 57 mal
+\ktuelle Temperatu Laufwerksbuchstaben - Betriebsstunden 95285 Sth-
+@ Standard [ACS-2 | ACS-3 Revision 3b B a
+„ " Eigenschaften E-S_‘M‘A‘RT., NCQ ;
+ID _ Parametername Aktueller... Schlechte... Grenzwert Rohwerte
+@ 01 Lesefehlerrate 200 200 51 000000000010
+@ 03 Mittlere Anlaufzeit 225 191 21 000000001E2D
+@ 04 Start/Stopp-Zyklen der Spindel 100 100 0 000000000075
+@ 05 Wiederzugewiesene Sektoren 200 200 140 000000000000
+@ 07 Suchfehler 200 200 0 000000000000
+@ 09 Betriebsstunden 1 1 0 000000017435
+@ 0A Misslungene Spindelanliufe 100 100 0 000000000000
+@ 08B Notwendige Rekalibrierungen 100 253 0 000000000000
+@ 0C Gerste-Einschaltvorginge 100 100 0 000000000039
+@ CO Ausschaltungsabbriiche 200 200 0 000000000028
+@ C1  Laden/Entladen-Zyklen 200 200 0  000000000AES
+@ C2 Temperatur 128 103 0 000000000018
+@ C4 Wiederzuweisungsereignisse 200 200 0 000000000000
+() €5 Aktuell ausstehende Sektoren 200 200 0 000000000001
+@ C6  Nichtkorrigierbare Sektoren 100 253 0 000000000000
+@ 7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+@ 8 Schreibfehlerrate 200 200 0 000000000018

@@ -554,6 +554,16 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             }
         }
 
+        // The SMART screenshots among a drive ad's photos, read on this server (see SmartScreens).
+        // Asked by the sheet that shows one drive, with the photos its page listed.
+        post("/drive-health") {
+            val ask = call.receive<io.github.tieo.arbay.model.DriveHealthAsk>()
+            val photos = ask.photos.take(20).map { requirePublicHttpUrl(it) }
+            call.respond(io.github.tieo.arbay.crawler.SmartScreens.read(ask.listingId, ask.title, photos) {
+                io.github.tieo.arbay.crawler.PhotoPrints.download(it)
+            })
+        }
+
         // Whether an ad is still up, read off its page now. Never cached: the page of a deleted
         // Kleinanzeigen ad stays reachable and reads like a live one apart from this.
         get("/listing-state") {

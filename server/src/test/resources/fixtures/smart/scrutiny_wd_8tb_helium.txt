@@ -1,0 +1,15 @@
+Status 1D Name Value  Threshold Ideal FajureRate @©  History
+
+1(0x01) Read Error Rate ® 99 16 T
+2(0x02)  Throughput Performance © 129 54 AT
+30509 spin-Up Time © 154 24 2% (T
+4(0x04)  startstop Count @ 2094 0 T
+Reallocated Sectors Count 0 5 low 3%
+
+7(0x07)  seekError Rate @ 100 67 (I
+8 (0x08) Seek Time Performance @ 128 20 T
+8(0%09) power-OnHours ® % 0 (T
+Spin Retry Count 0 60 J0W 5%
+
+12(0x0C)  power Cycle Count © 2084 0 low (T
+22 (0x16) Current Helium Level @ 19 25 [[[TTT—
