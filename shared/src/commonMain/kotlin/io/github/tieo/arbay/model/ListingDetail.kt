@@ -30,6 +30,10 @@ data class ListingDetail(
     val sellerReviews: Int? = null,
     /** Every photo of the ad's gallery, where the card carried only the first. */
     val photos: List<String> = emptyList(),
+    /** How many the listing still has, where its page says ("3 verfügbar", "Letzter Artikel");
+     *  [moreAvailable] where it says only that there are more than that ("Mehr als 10 verfügbar"). */
+    val available: Int? = null,
+    val moreAvailable: Boolean = false,
 )
 
 /**

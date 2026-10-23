@@ -179,7 +179,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
 
                 if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(session, listing)
 
-                val facts = offerFacts(listing, page.place)
+                val facts = offerFacts(listing, page)
                 if (facts.isNotEmpty()) Choices { facts.forEach { Box(Modifier.padding(vertical = 3.dp)) { Fact(it) } } }
 
                 FitBreakdown(listing)

@@ -17,23 +17,26 @@ import kotlin.math.round
 /**
  * One offer as it reads in full: what the search card carried, with what its own page adds. The
  * page's vehicle facts fill the gaps the card left, its description replaces a shorter one, and its
- * place stands in where the card had none.
+ * place stands in where the card had none. [stock] is how many the page says are left ("3 left",
+ * "over 10 left"), where it says.
  */
-data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?)
+data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?, val stock: String? = null)
 
 fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     val vehicle = fromItsPage?.vehicle?.let { page ->
         listing.vehicle?.let { card -> card.copy(wheelbaseMm = card.wheelbaseMm ?: page.wheelbaseMm, verified = card.verified + page.verified) } ?: page
     } ?: listing.vehicle
     val description = fromItsPage?.description?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
-    return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location)
+    val stock = fromItsPage?.available?.let { n -> if (fromItsPage.moreAvailable) "over $n left" else if (n == 1) "last one" else "$n left" }
+    return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location, stock)
 }
 
-/** The short facts of an offer, each one a few words: condition, place, distance, age, how it is
- *  sold and delivered, and by whom. */
-fun offerFacts(listing: Listing, place: Location?): List<String> = buildList {
+/** The short facts of an offer, each one a few words: condition, how many are left, place,
+ *  distance, age, how it is sold and delivered, and by whom. */
+fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     listing.condition?.let { add(it.label) }
-    place?.let { loc -> listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country).joinToString(" ").takeIf { it.isNotBlank() }?.let(::add) }
+    page.stock?.let(::add)
+    page.place?.let { loc -> listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country).joinToString(" ").takeIf { it.isNotBlank() }?.let(::add) }
     listing.distanceKm?.let { add("${it.toInt()} km away") }
     listing.listingDate?.let { add("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}") }
     if (listing.saleType == SaleType.AUCTION) add(listing.bidCount?.let { "$it bids" } ?: "auction")

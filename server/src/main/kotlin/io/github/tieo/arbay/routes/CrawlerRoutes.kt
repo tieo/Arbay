@@ -558,7 +558,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // Asked by the sheet that shows one drive, with the photos its page listed.
         post("/drive-health") {
             val ask = call.receive<io.github.tieo.arbay.model.DriveHealthAsk>()
-            val photos = ask.photos.take(20).map { requirePublicHttpUrl(it) }
+            // A photo address that is not a public web address is left out rather than failing the
+            // ad's every other photo with it.
+            val photos = ask.photos.take(20).mapNotNull { runCatching { requirePublicHttpUrl(it) }.getOrNull() }
             call.respond(io.github.tieo.arbay.crawler.SmartScreens.read(ask.listingId, ask.title, photos) {
                 io.github.tieo.arbay.crawler.PhotoPrints.download(it)
             })

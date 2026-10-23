@@ -37,11 +37,14 @@ class EbayDeCrawler(
         // one read, and an item page opens as well without one.
         val html = fetchWithFallback(client, listing.url, "eBay", browserOnly = true)
         val doc = Jsoup.parse(html)
+        val stock = ebayStock(doc.text())
         ListingDetail(
             vehicle = EbayDetailParser.parse(html),
             description = sellerText(doc),
             location = itemLocation(html),
             sellerReviews = sellerFeedback(doc),
+            available = stock?.first,
+            moreAvailable = stock?.second ?: false,
         ).takeIf { it.vehicle != null || it.location != null || it.description != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
@@ -736,4 +739,22 @@ class EbayDeCrawler(
         )
     }
 
+}
+
+/**
+ * How many the listing still has and whether that is a floor, read from the words the page
+ * puts beside the quantity: "3 verfügbar", "Mehr als 10 verfügbar", "Letzter Artikel". Read
+ * from the text rather than an element, since eBay renames its classes far more often than
+ * its wording. A recertified drive sold by a dealer at one price is worth a second at the same
+ * price only where there is one.
+ */
+internal fun ebayStock(text: String): Pair<Int, Boolean>? {
+    Regex("""(?i)mehr\s+als\s+(\d{1,5})\s+verf(ü|ue)gbar|more\s+than\s+(\d{1,5})\s+available""").find(text)?.let { m ->
+        return (m.groupValues[1].ifEmpty { m.groupValues[3] }).toInt() to true
+    }
+    if (Regex("""(?i)letzter\s+artikel|nur\s+noch\s+1\s+(übrig|verfügbar)|last\s+one""").containsMatchIn(text)) return 1 to false
+    Regex("""(?i)\b(\d{1,5})\s+verf(ü|ue)gbar|\b(\d{1,5})\s+available""").find(text)?.let { m ->
+        return (m.groupValues[1].ifEmpty { m.groupValues[3] }).toInt() to false
+    }
+    return null
 }

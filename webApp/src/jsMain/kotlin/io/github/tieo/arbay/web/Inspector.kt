@@ -514,7 +514,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
-            offerFacts(listing, page.place).forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
+            offerFacts(listing, page).forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
         }
 
         FitBreakdown(listing)
