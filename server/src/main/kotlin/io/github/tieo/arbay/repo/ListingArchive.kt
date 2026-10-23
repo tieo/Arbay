@@ -23,7 +23,8 @@ import org.slf4j.LoggerFactory
  * takes the live page and its images with it; this is what still shows the ad afterward.
  *
  * Written once per listing id, never re-fetched: the point is what the ad looked like when it
- * was found, not a live mirror that goes stale the same way the platform's own copy does. Called
+ * was found, not a live mirror that goes stale the same way the platform's own copy does. A saved
+ * search's watch finding it again rewrites its fields as found ([refresh]), photos kept. Called
  * from [ListingRepo.upsert] — every listing any crawl (interactive or background) ever returns
  * passes through there, so this needs no separate wiring per search path.
  */
@@ -56,6 +57,26 @@ object ListingArchive {
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 known.remove(listing.id) // let a failed attempt retry next time this listing is seen
                 log.debug("Archive failed for {}: {}", listing.id, e.message)
+            }
+        }
+    }
+
+    /**
+     * The archived copy of [listing] brought up to what a saved search's watch just found: its price,
+     * fit and details as found, with the photos already mirrored kept. A watch can find an offer
+     * weeks after a hand search first archived it, and its new offers are read from here, so the
+     * first copy would show its old price and no fit.
+     */
+    fun refresh(listing: Listing) {
+        val safe = safeId(listing.id) ?: return
+        val file = File(listingsDir, "$safe.json")
+        if (!file.exists()) return archiveAsync(listing)
+        scope.launch {
+            try {
+                val archived = json.decodeFromString<Listing>(file.readText())
+                file.writeTextAtomically(json.encodeToString(listing.copy(imageUrls = archived.imageUrls.ifEmpty { listing.imageUrls })))
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                log.debug("Archive refresh failed for {}: {}", listing.id, e.message)
             }
         }
     }

@@ -390,6 +390,7 @@ class SavedSearchMonitor(
             // Stored as found, so the app can show this batch later without asking the platform
             // again — which by then may no longer have it. Archiving mirrors the images too.
             listingRepo.upsertBatch(fresh.mapNotNull { found[it] })
+            fresh.mapNotNull { found[it] }.forEach(io.github.tieo.arbay.repo.ListingArchive::refresh)
         }
         saveSeen()
         if (fresh.isEmpty() || silent) return null

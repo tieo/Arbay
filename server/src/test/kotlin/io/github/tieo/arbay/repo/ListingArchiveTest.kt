@@ -56,6 +56,20 @@ class ListingArchiveTest {
     }
 
     @Test
+    fun `a watch finding an archived listing again brings its fields up to date and keeps its photos`() {
+        ListingArchive.archiveAsync(listing())
+        waitFor { ListingArchive.get(id) }
+        val photo = "/api/archive/images/$id/0.jpg"
+        val file = DataDir.file("archive/listings/$id.json")
+        file.writeText(file.readText().replace("\"imageUrls\":[]", "\"imageUrls\":[\"$photo\"]"))
+
+        ListingArchive.refresh(listing().copy(price = Money(800, Currency.EUR), matchScore = 0.7, imageUrls = listOf("https://example.com/remote.jpg")))
+        val stored = waitFor { ListingArchive.get(id)?.takeIf { it.matchScore != null } }
+        assertEquals(800, stored?.price?.amount)
+        assertEquals(listOf(photo), stored?.imageUrls)
+    }
+
+    @Test
     fun `imageFile refuses to walk outside the listing's own directory`() {
         val dir = DataDir.file("archive/images/$id")
         dir.mkdirs()
