@@ -487,8 +487,14 @@ object RelevanceFilter {
             val second = m.groupValues[2].toInt()
             first.takeIf { it in STORAGE_TIERS && second in STORAGE_TIERS && it < second }?.let { sizeInGigabytes("${it}gb") }
         }
-        return (stated + rangeStarts + tierStarts).toSet()
+        // "6/14/16/18TB": a row of drives under one unit, each number a size of its own.
+        val slashed = slashedSizes.findAll(text).flatMap { m ->
+            m.groupValues[1].split('/').mapNotNull { n -> sizeInGigabytes(n.trim() + m.groupValues[2]) }
+        }
+        return (stated + rangeStarts + tierStarts + slashed).toSet()
     }
+
+    private val slashedSizes = Regex("""\b(\d{1,2}(?:\s*/\s*\d{1,2})+)\s?(tb|to)\b""", RegexOption.IGNORE_CASE)
 
     private val spacedTiers = Regex("""\b(\d{2,4})\s+(\d{2,4})\s?gb\b""", RegexOption.IGNORE_CASE)
 
@@ -527,6 +533,49 @@ object RelevanceFilter {
         // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
         // is two terabytes, sold as two sticks, at a price for the pair.
         return !addsUpToTheAskedSize(listing.title, asked.min())
+    }
+
+    /**
+     * A size stated as what something takes rather than what it is: "Upgrade bis 6TB", "passend
+     * für 14TB HDD", "10 TB HDD-Unterstützung", "bis zu 4 x 20 TB". A drive bay, a video recorder,
+     * a controller card and an enclosure name the largest drive they hold, and in a search for that
+     * drive they carry its size and its name. "Max" only with its dot or in full: the iPhone 11 Pro
+     * Max 256 GB is a phone of that size.
+     */
+    private val sizeAsALimit = Regex(
+        """\b(bis(\s+zu)?|up\s+to|max\.|maximal|erweiterbar\s+bis|unterst(ü|ue)tzt|supports?|(passend|geeignet)\s+f(ü|ue)r|for|f(ü|ue)r)""" +
+            """\s+(\d+\s*x\s*)?(?<n1>\d{1,4}(?:[.,]\d{1,2})?)\s?(?<u1>tb|gb|to|go)\b|""" +
+            """(?<![\d.,])\b(?<n2>\d{1,4}(?:[.,]\d{1,2})?)\s?(?<u2>tb|gb|to|go)\b[\s-]+(\p{L}+[\s-]+)?(unterst(ü|ue)tzung|support|kompatibel|compatible)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether every place the title states the size searched for states it as a limit (see
+     * [sizeAsALimit]), so the listing is something made to take that drive rather than the drive.
+     */
+    private fun takesTheSizeAsked(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        val title = gluedThousands(listing.title)
+        val limits = sizeAsALimit.findAll(title).toList()
+        if (limits.isEmpty()) return false
+        val limited = limits.mapNotNull { m ->
+            val number = m.groups["n1"]?.value ?: m.groups["n2"]?.value ?: return@mapNotNull null
+            val unit = m.groups["u1"]?.value ?: m.groups["u2"]?.value ?: return@mapNotNull null
+            sizeInGigabytes(number + unit)
+        }
+        if (limited.none { size -> asked.any { sameSize(it, size) } }) return false
+        // The same size stated plainly elsewhere in the title is the thing's own: take the limits
+        // out and see whether the asked size is still there.
+        val rest = sizeAsALimit.replace(title, " ")
+        return sizesIn(rest).none { size -> asked.any { sameSize(it, size) } }
+    }
+
+    /** "Gehäuse 8TB ohne HDD!": a word of the search named as left out, so the thing searched for is not in it. */
+    private fun leavesOutWhatWasAsked(listing: Listing, parsed: ParsedQuery): Boolean {
+        val words = parsed.positiveTokens.filter { !isASize(it) && it.length >= 3 && it.any(Char::isLetter) }
+        if (words.isEmpty()) return false
+        val title = normalize(listing.title.lowercase())
+        return words.any { w -> Regex("""\b(ohne|without|sans|senza|sin|zonder)\s+(\p{L}+\s+)?${Regex.escape(w.lowercase())}\b""").containsMatchIn(title) }
     }
 
     /**
@@ -581,7 +630,8 @@ object RelevanceFilter {
         Regex("""(\d{1,2})\s*x\s*(\d{1,4}(?:[.,]\d)?\s?(?:gb|tb|mb))""", RegexOption.IGNORE_CASE)
             .findAll(title)
             .any { m ->
-                val count = m.groupValues[1].toIntOrNull() ?: return@any false
+                // "1x 4TB" is one drive among others ("3x 2TB und 1x 4TB"), not the size in pieces.
+                val count = m.groupValues[1].toIntOrNull()?.takeIf { it >= 2 } ?: return@any false
                 val each = sizeInGigabytes(m.groupValues[2].replace(" ", "")) ?: return@any false
                 count * each == askedGb
             }
@@ -609,6 +659,8 @@ object RelevanceFilter {
             """zbook|precision|optiplex|thinkcentre|thinkstation|ideapad|vivobook|zenbook|""" +
             """surface\s?(pro|laptop)|chromebook|mac\s?studio|steam\s?deck|rog\s?ally|""" +
             """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
+            // A video recorder for cameras ships with its drive inside: "Hiseeu NVR … 4TB HDD".
+            """nvr|dvr|videorekorder|(video)?registratore|time\s?capsule|""" +
             // "PC SN730" is the name Western Digital sells a drive under, not a computer.
             """pc(?!\s*sn\d)|""" +
             // The same machines as the markets in other languages name them.
@@ -730,7 +782,7 @@ object RelevanceFilter {
             // What a drive is put into rather than the drive: a search for a 2 TB M.2 came back led
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
             // what fits inside it.
-            """dockingstation|adapterkarten?|einbaurahmen)\b|""" +
+            """dockingstation|adapterkarten?|adapter|einbaurahmen)\b|\bpower\s?supply\b|""" +
             // A heatsink is sold on a drive as often as on its own ("990 PRO mit Kühlkörper"), so
             // it is the thing on offer only where the title says what it is for: "MSI SPATIUM
             // Kühlkörper für M580 PCIe 5.0 NVMe M.2 2TB" is the cooler.
@@ -959,6 +1011,8 @@ object RelevanceFilter {
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
+                takesTheSizeAsked(listing, parsed) -> DropReason.ACCESSORY
+                leavesOutWhatWasAsked(listing, parsed) -> DropReason.ACCESSORY
                 // A part off the vehicle, named without a "für": a trim strip, a sill plate, a
                 // wheel bolt, an OEM number. Only for a search that names a vehicle — a model
                 // without its make is not enough to send a search to the car sites, but it is

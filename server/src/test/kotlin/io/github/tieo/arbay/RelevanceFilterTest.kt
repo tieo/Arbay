@@ -835,6 +835,36 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `what takes a drive of the size asked for is not the drive`() {
+        // Live answers for "6TB HDD", "10TB HDD", "14TB HDD", "8TB HDD", "4TB HDD", "3TB HDD", "18TB HDD".
+        fun reasons(query: String, vararg titles: String) = RelevanceFilter.partition(
+            titles.map { listing(it) } + listing("Seagate Exos Festplatte HDD SATA $query"),
+            SearchQuery(text = query, category = MarketGroup.GENERAL), emptyList(),
+        ).let { r -> r.dropped.associate { it.listing.title to it.reason } to r.kept.map { it.title } }
+        val (six, sixKept) = reasons("6TB HDD",
+            "PS4 Data Bank HDD Upgrade bis 6TB",
+            "AC/DC Adapter for LaCie 2big USB3 TBT2 6TB USB3.0 Professional Hard Disk Drive HDD HD 12V 5A Power Supply Cord Cable")
+        assertEquals(listOf("Seagate Exos Festplatte HDD SATA 6TB HDD"), sixKept, six.toString())
+        val (ten, tenKept) = reasons("10TB HDD", "PCI-E x1 Controller-Karte mit 8 SATA-3.0-Anschlüssen für 6 Gbit/s Übertragung und 10 TB HDD-Unterstützung für Windows")
+        assertEquals(DropReason.ACCESSORY, ten.values.single(), tenKept.toString())
+        val (fourteen, _) = reasons("14TB HDD", "JideTech 4K PoE NVR 8-Port, erweiterbar bis zu 20-K-Netzwerk-Videorekorder, passend für 14TB HDD")
+        assertEquals(1, fourteen.size, fourteen.toString())
+        val (eight, _) = reasons("8TB HDD", "G-Technology G-Raid mit Thunderbold Gehäuse 8TB ohne HDD!")
+        assertEquals(DropReason.ACCESSORY, eight.values.single())
+        val (devices, _) = reasons("4TB HDD", "Hiseeu nvr registratore video rete 4tb hdd")
+        assertEquals(DropReason.BUILT_INTO_A_DEVICE, devices.values.single())
+        val (capsule, _) = reasons("3TB HDD", "Apple Time Capsule mit 3TB HDD WLAN Router & Backup")
+        assertEquals(DropReason.BUILT_INTO_A_DEVICE, capsule.values.single())
+        val (row, _) = reasons("18TB HDD", "Ultraschnelle 6/14/16/18TB Externe Festplatte USB3.2 Datensicherungsspeicher HDD")
+        assertEquals(DropReason.ONE_OF_SEVERAL_SIZES, row.values.single())
+        val (lot, _) = reasons("4TB HDD", "4x HDD 2,5 Zoll Festplatte 3x 2TB und 1x 4TB")
+        assertEquals(DropReason.ONE_OF_SEVERAL_SIZES, lot.values.single())
+        // A drive stating its size plainly beside a limit is still the drive.
+        val (_, kept) = reasons("8TB HDD", "WD Red 8TB HDD NAS bis 8 Bays")
+        assertTrue("WD Red 8TB HDD NAS bis 8 Bays" in kept, kept.toString())
+    }
+
+    @Test
     fun `a model number is required even where no title in the answer writes it`() {
         // Vinted, live, for "Toshiba MG09ACA18TE": remote controls and televisions, none with the number.
         val kept = search("Toshiba MG09ACA18TE", listOf(

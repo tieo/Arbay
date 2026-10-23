@@ -44,7 +44,10 @@ enum class Condition {
         // Negated, the word says the opposite: "nicht defekt", "kein Defekt", "keine Defekte".
         private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekt|defect|kaputt|kapot|broken)\b""")
         private val defectPhrase = Regex(
-            """als\s+defekt|defekt\s+verkauft|wird\s+nicht\s+(mehr\s+)?erkannt|nicht\s+(mehr\s+)?funktionsf(ä|ae)hig|""" +
+            """als\s+defekt|defekt\s+verkauft|nicht\s+(mehr\s+)?erkannt|nicht\s+(mehr\s+)?funktionsf(ä|ae)hig|""" +
+                // "Ohne Funktion Defekt für Ersatzteilegewinnung", "Als Ersatzteil / defekt", "lässt
+                // sich nicht initialisieren": two drives sold broken in their text and not their title.
+                """ohne\s+funktion|als\s+ersatzteil|ersatzteil\w*gewinnung|l(ä|ae)sst\s+sich\s+nicht\s+initialisieren|""" +
                 """funktioniert\s+nicht\s+mehr|f(ü|ue)r\s+bastler|an\s+bastler|bastlerware|for\s+(parts|spares)|""" +
                 """not\s+working|spares\s+or\s+repair|pour\s+pi(è|e)ces|hors\s+service|ne\s+fonctionne\s+(pas|plus)|""" +
                 """non\s+funzionante|per\s+ricambi|voor\s+onderdelen|werkt\s+niet""",
