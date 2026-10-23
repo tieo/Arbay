@@ -1363,4 +1363,11 @@ class RelevanceFilterTest {
         assertEquals(1.0, RelevanceFilter.score(listing("WD Blue SN550 2TB NVMe SSD inkl. USB Case"), q2))
         assertEquals(1.0, RelevanceFilter.score(listing("Crucial P310 SSD 2 To M.2 2280 PCIe Gen4 NVMe"), q2))
     }
+
+    @Test
+    fun `a docking station that takes drives up to the size is not a drive`() {
+        val dock = listing("SSD und Festplatten Docking Station USB 3.0, HDD Docking Station, Dockingstation für Festplatten für 2,5 und 3,5 Zoll SATA HDD/SSD 32TB mit SD/TF-Kartenleser, Unterstützt Offline-Cloning,UASP", 2899)
+        val drive = listing("Seagate Exos 32TB HDD SATA", 60000)
+        assertEquals(listOf(drive.title), search("32TB HDD", listOf(dock, drive)).map { it.title })
+    }
 }

@@ -11,6 +11,9 @@ class SoldAsDefectiveTest {
         // Kleinanzeigen, live: a 1TB drive at 50 euro, broken by its own text only.
         assertTrue(Condition.soldAsDefective("SSD M2 NVME 1TB 1000GB CRUCIAL", "Wird im mein pc nicht erkannt wird als defekt verkauft"))
         assertTrue(Condition.soldAsDefective("WD_BLACK SN770 int. M.2 NVMe SSD 2TB DEFEKT", null))
+        assertTrue(Condition.soldAsDefective("3 Defekte HDD Festplatten insgesamt fast 5TB", null))
+        assertTrue(Condition.soldAsDefective("8TB Seagate HDD Festplatte", "☆ 8TB Seagate HDD Festplatte ( Defekt )\n☆ Die Festplatte läuft nicht an."))
+        assertTrue(Condition.soldAsDefective("Seagate 4TB", "Platte läuft nicht mehr an, für Datenrettung"))
         assertTrue(Condition.soldAsDefective("Samsung 970 EVO 1TB", "Für Bastler, startet nicht"))
         // Kleinanzeigen, live: two hard drives for a 4TB and a 10TB search, broken in their text.
         assertTrue(Condition.soldAsDefective("Synology HDD 4TB 3.5 Zoll SATA Festplatte", "Ohne Funktion Defekt für Ersatzteilegewinnung"))

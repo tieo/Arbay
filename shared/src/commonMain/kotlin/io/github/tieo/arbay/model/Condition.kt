@@ -42,12 +42,16 @@ enum class Condition {
         private val partsLabel = Regex("""ricambi|non\s+funzionante|pi(è|e)ces\s+d(é|e)tach|para\s+piezas|no\s+funciona""")
 
         // Negated, the word says the opposite: "nicht defekt", "kein Defekt", "keine Defekte".
-        private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekt|defect|kaputt|kapot|broken)\b""")
+        // "3 Defekte HDD Festplatten" names them broken as plainly as "defekt" does.
+        private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekte?|defect|kaputt|kapot|broken)\b""")
         private val defectPhrase = Regex(
             """als\s+defekt|defekt\s+verkauft|nicht\s+(mehr\s+)?erkannt|nicht\s+(mehr\s+)?funktionsf(ä|ae)hig|""" +
                 // "Ohne Funktion Defekt für Ersatzteilegewinnung", "Als Ersatzteil / defekt", "lässt
                 // sich nicht initialisieren": two drives sold broken in their text and not their title.
                 """ohne\s+funktion|als\s+ersatzteil|ersatzteil\w*gewinnung|l(ä|ae)sst\s+sich\s+nicht\s+initialisieren|""" +
+                // "8TB Seagate HDD Festplatte ( Defekt ) … Die Festplatte läuft nicht an": a drive
+                // that does not spin up, its defect set apart in brackets.
+                """\(\s*defekt\s*\)|l(ä|ae)uft\s+nicht\s+(mehr\s+)?an\b|springt\s+nicht\s+(mehr\s+)?an\b|""" +
                 """funktioniert\s+nicht\s+mehr|f(ü|ue)r\s+bastler|an\s+bastler|bastlerware|for\s+(parts|spares)|""" +
                 """not\s+working|spares\s+or\s+repair|pour\s+pi(è|e)ces|hors\s+service|ne\s+fonctionne\s+(pas|plus)|""" +
                 """non\s+funzionante|per\s+ricambi|voor\s+onderdelen|werkt\s+niet""",

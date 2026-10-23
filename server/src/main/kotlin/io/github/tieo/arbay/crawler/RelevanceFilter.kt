@@ -827,7 +827,13 @@ object RelevanceFilter {
         val match = accessoryNoun.findAll(listing.title)
             .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
         val before = listing.title.take(match.range.first)
-        if (comesWith.containsMatchIn(before)) return false
+        // "mit", "und" make the noun an extra only where the thing searched for stands ahead of
+        // them: "WH-1000XM5 mit Tasche" is the headphones, and "SSD und Festplatten Docking Station"
+        // is a dock for both, which at €29 stood as the cheapest 32 TB drive.
+        comesWith.find(before)?.let { with ->
+            val head = before.take(with.range.first)
+            if (firstTokenPosition(head, parsed.positiveTokens) != null || saidAboutTheDevice(head, parsed)) return false
+        }
         return !saidAboutTheDevice(before, parsed)
     }
 
