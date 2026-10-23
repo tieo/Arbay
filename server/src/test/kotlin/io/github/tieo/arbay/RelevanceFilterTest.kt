@@ -1406,4 +1406,15 @@ class RelevanceFilterTest {
         // A drive said to suit one stays a drive.
         assertEquals(1, search("8TB HDD", listOf(listing("Seagate IronWolf 8TB HDD für Synology DS918+", 15000))).size)
     }
+
+    @Test
+    fun `a size under a terabyte written in terabytes is that size, not a cache`() {
+        assertTrue(search("30TB HDD", listOf(listing("HPE 0.30TB HDD 2.5 518006-002", 24005))).isEmpty())
+        assertEquals(1, search("18TB HDD", listOf(listing("Seagate Exos 18TB HDD 256MB Cache", 25000))).size)
+    }
+
+    @Test
+    fun `a QNAP with drives in it is the NAS`() {
+        assertTrue(search("32TB HDD", listOf(listing("Qnap TS-432X 4x HDD 32TB NAS 10GbE 2,5G 4GB RAM PCIe Gen 3", 215111))).isEmpty())
+    }
 }

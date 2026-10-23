@@ -1,0 +1,19 @@
+S.M.A.R.T ATA ATTRIBUTES
+
+18 vielble, O hidden
+
+Status ID Name Value Threshold Ideal caitureRate O History
+
+(0x01) Read Error Rate © 996 INU
+2(0*02) Throughput Performance ® 129 54 INN
+30x03) Spin-Up Time © m. 2 2% INN
+40x04) StartiStop Count © 2094 0 INN
+Reallocated Sectors Count 0 5 low 3%
+
+7(0x07) Seek Error Rate O wo 67 UN
+GEEEED > (009) sek Time Performance © 28 20 III
+80x00) Power-On Hours © s 0 UN
+Spin Retry Count 0 60 low 5%
+
+12(0x06) Power Cycle Count © un ven UT
+22 (0x16) Current Heilum Level ® 19 25 Mt

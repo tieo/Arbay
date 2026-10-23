@@ -88,7 +88,8 @@ object SmartScreens {
         UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
         REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported[\s_]+uncorrect|erreurs\s+signal|erreurs\s+qui\s+n.ont\s+pas""")),
         HOURS(Regex("""(?i)betriebsstunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
-        HELIUM(Regex("""(?i)helium""")),
+        // The OCR swaps its letters ("Current Heilum Level").
+        HELIUM(Regex("""(?i)he(li|il)um""")),
     }
 
     private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")

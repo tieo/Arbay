@@ -190,4 +190,10 @@ class SmartScreensTest {
         assertEquals(DriveVerdict.FAILING, r.verdict)
         assertTrue(r.findings.any { "Helium 19" in it }, r.findings.toString())
     }
+
+    @Test
+    fun `helium is found where the OCR swapped its letters`() {
+        val r = assertNotNull(SmartScreens.parse(text("scrutiny_helium_misspelt"), 2))
+        assertEquals(DriveVerdict.FAILING, r.verdict)
+    }
 }

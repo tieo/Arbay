@@ -588,7 +588,13 @@ object RelevanceFilter {
      */
     private fun statesAnotherSize(listing: Listing, parsed: ParsedQuery): Boolean {
         val asked = askedSizes(parsed).ifEmpty { return false }
-        val offered = sizesIn(listing.title.replace(memorySize, " ")).filter { it >= asked.min() / 50 }
+        // A size far under the one asked is a cache or a memory ("256MB Cache"), unless it is written
+        // in terabytes: "HPE 0.30TB" is a 300 GB drive, and dropped from the sizes it passed for 30 TB.
+        val title = listing.title.replace(memorySize, " ")
+        val inTerabytes = sizeInTitle.findAll(gluedThousands(title))
+            .filter { it.groupValues[2].lowercase() in setOf("tb", "to", "terabyte", "terabytes") }
+            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        val offered = (sizesIn(title).filter { it >= asked.min() / 50 } + inTerabytes).distinct()
         if (offered.isEmpty()) return false
         if (offered.any { size -> asked.any { sameSize(it, size) } }) return false
         return asked.none { addsUpToTheAskedSize(listing.title, it) }
@@ -737,7 +743,8 @@ object RelevanceFilter {
      */
     private val driveHolder = Regex(
         """\b(terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
-            """\d[\s-]?bay|xpanstor|media\s?player|mediaplayer|himedia)(?!\w)""",
+            // QNAP makes no drives, so its name alone is the NAS: "Qnap TS-432X 4x HDD 32TB NAS".
+            """qnap|ts-\d{3,4}\w*|\d[\s-]?bay|xpanstor|media\s?player|mediaplayer|himedia)(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
     private val saidToFit = Regex("""(?i)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
