@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -87,7 +88,7 @@ fun SellScreen(session: Session, draftId: String) {
         bottomBar = {
             if (d != null && (!posted || sell.unsaved(d))) {
                 val problem = d.problem() ?: if (account?.signedIn != true) "Sign in to Kleinanzeigen first" else null
-                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = arbay.pad, vertical = 8.dp)) {
+                Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = arbay.pad, vertical = 8.dp)) {
                     problem?.let { Muted(it) }
                     Button(enabled = problem == null && busy == null, onClick = { if (posted) sell.save() else sell.post() }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (posted) "Save on Kleinanzeigen" else "Post on Kleinanzeigen")
