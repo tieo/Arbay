@@ -537,16 +537,18 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     id.substringAfter(':').takeIf { it.all(Char::isDigit) }?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
                 })
             }
+            val crawler = CrawlerRegistry.crawlerFor(platform)
+                ?: throw BadRequestException("No crawler for $platform")
             io.github.tieo.arbay.crawler.DetailCache.get(id)
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
                 // eBay's description was read from its page only later; a page read before is read again.
                 ?.takeUnless { platform.name.startsWith("EBAY") && it.description == null }
+                // So is the page of a market whose gallery is read, where it was read before galleries were.
+                ?.takeUnless { crawler is io.github.tieo.arbay.crawler.ReadsGalleries && it.photos.isEmpty() }
                 ?.let { return@get call.respond(it.priced()) }
             // Checked only before a fetch: a page already read is served without resolving its host,
             // so it is still there when the server cannot reach the internet.
             val url = requirePublicHttpUrl(rawUrl)
-            val crawler = CrawlerRegistry.crawlerFor(platform)
-                ?: throw BadRequestException("No crawler for $platform")
             val stub = Listing(
                 id = id, platformId = platform, externalId = id, url = url, title = "",
                 price = Money(0, Currency.EUR), scrapedAt = kotlin.time.Clock.System.now(),
