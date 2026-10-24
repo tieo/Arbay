@@ -1442,5 +1442,14 @@ class RelevanceFilterTest {
         // A decimal is matched however the title writes it.
         assertEquals(2, search("2,5 zoll ssd 1tb", listOf(listing("Samsung 870 EVO 1TB 2.5\" SATA SSD", 6000), listing("Crucial MX500 1TB SSD 2,5 Zoll", 5500))).size)
         assertEquals(1, search("usb 3.0 stick 64gb", listOf(listing("SanDisk Ultra 64GB USB 3.0 Stick", 800))).size)
+        // And required like any number, on a market whose answer mostly leaves it out.
+        val enclosures = listOf(
+            listing("externes Festplattengehäuse Seagate Basic Drive 2,5 SATA USB 3.0 15mm in OVP", 595),
+            listing("Hurricane MD25U3 2.5\" Externes Festplattengehäuse USB 3.0 schwarz", 675),
+            listing("Externes Festplattengehäuse 2.5 Zoll USB 3.1 USB-C 10Gbps SATA HDD SSD Case", 699),
+            listing("ICY BOX Festplattengehäuse 3,5 Zoll USB 3.0 mit Netzteil", 2500),
+        )
+        assertEquals(listOf("ICY BOX Festplattengehäuse 3,5 Zoll USB 3.0 mit Netzteil"),
+            search("festplattengehäuse 3,5 zoll usb 3.0 netzteil", enclosures).map { it.title })
     }
 }

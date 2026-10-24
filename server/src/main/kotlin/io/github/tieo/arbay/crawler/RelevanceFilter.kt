@@ -1119,7 +1119,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } || isACompound(token) || (isAModelCode(token) && parsed.positiveTokens.size > 1) ||
+                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && parsed.positiveTokens.size > 1) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             // A requirement made only of words the whole answer carries decides nothing. Asked for
@@ -1308,6 +1308,10 @@ object RelevanceFilter {
     }
 
     private const val MODEL_CODE_LENGTH = 6
+
+    /** A decimal as [normalize] joins it ("3.5" is "3p5"): a measure, required like any number. */
+    private fun isADecimal(token: String): Boolean = DECIMAL.matches(token)
+    private val DECIMAL = Regex("""\d+p\d+""")
 
     /** Whether the word is a compound naming one thing: letters enough of them that nobody types
      *  it meaning a category. "Parkettschleifmaschine" is a machine for parquet and nothing else,
