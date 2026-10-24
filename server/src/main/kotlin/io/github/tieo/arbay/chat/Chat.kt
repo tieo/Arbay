@@ -36,6 +36,8 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -129,8 +131,10 @@ object Chat {
         }
     }
 
-    /** The user's account on every market Arbay can sign in to. */
-    suspend fun accounts(): List<ChatAccount> = sidecars.keys.map { account(it) }
+    /** The user's account on every market Arbay can sign in to, asked of every market's browser at once. */
+    suspend fun accounts(): List<ChatAccount> = kotlinx.coroutines.coroutineScope {
+        sidecars.keys.map { market -> async { account(market) } }.awaitAll()
+    }
 
     /** Starts a sign-in on the site's own pages through the proxy; returns the id the browser's cookie carries. */
     fun beginProxySignIn(): String = signInProxy.begin()
