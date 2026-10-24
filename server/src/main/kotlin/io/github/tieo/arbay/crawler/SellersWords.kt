@@ -29,7 +29,11 @@ object SellersWords {
 
     // The asking price itself called net, with no gross written anywhere: "Preis Netto zzgl MwSt.",
     // "Nettopreis". A plain "netto" elsewhere is something else ("Netto Export ins EU-Ausland möglich").
-    private val priceCalledNet = Regex("""\bpreis\W{0,3}(?:netto|zzgl)|\bnettopreis\b|\bnetto\W{0,3}zzgl""", RegexOption.IGNORE_CASE)
+    // An export price is a net price for another buyer: "Export Preis netto: 15.950,- E" beside an
+    // asking price of 18,950 € that is the gross.
+    private val priceCalledNet = Regex("""(?<!export\W{0,3})\bpreis\W{0,3}(?:netto|zzgl)|(?<!export)\bnettopreis\b|\bnetto\W{0,3}zzgl""", RegexOption.IGNORE_CASE)
+    // A net amount written out: "netto: 15.950,-", "15.950 € netto".
+    private val statedNet = Regex("""netto\W{0,4}(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})|(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})\s*(?:€|eur)?\s*netto""", RegexOption.IGNORE_CASE)
     private val vatIncluded = Regex("""mwst\.?\s*ausweisbar|inkl\.?\s*(?:19\s*%\s*)?mwst""", RegexOption.IGNORE_CASE)
 
     private fun number(s: String) = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
@@ -56,6 +60,8 @@ object SellersWords {
         val stated = gross.findAll(text).mapNotNull { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] }) }.toList()
         stated.firstOrNull { it > asked && it <= asked * 1.2 }?.let { return copy(price = Money(it * 100L, Currency.EUR)) }
         if (stated.isNotEmpty() || vatIncluded.containsMatchIn(text) || !priceCalledNet.containsMatchIn(text)) return this
+        // A net amount below the asking price makes the asking price the gross.
+        if (statedNet.findAll(text).any { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] })?.let { it < asked } == true }) return this
         val settings = io.github.tieo.arbay.repo.ImportSettingsStore.current
         if (!settings.enabled || originCountry(settings.homeCountry).uppercase() != settings.homeCountry.uppercase()) return this
         return copy(price = Money(price.amount + price.amount * settings.importVatPercent / 100, Currency.EUR))

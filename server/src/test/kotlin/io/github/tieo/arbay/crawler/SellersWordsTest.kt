@@ -55,6 +55,9 @@ Laufleistung: 297000"""
         // "Netto" about something else, or VAT already in the price, leaves it.
         val export = van("NETTO EXPORT INS EU-AUSLAND ODER DRITTLAND MÖGLICH", euros = 22_250, km = 99_663)
         assertEquals(22_250_00, SellersWords.apply(export).price.amount)
+        // mobile.de Schrobenhausen, live 2026-10-24: the export price is the net, the asking price the gross.
+        val exported = van("Weitere Infos gibt es per Telefon: 0175/7463771Export Preis netto: 15.950,- EModell: VW Crafter 35 D MLH", euros = 18_950, km = 88_999)
+        assertEquals(18_950_00, SellersWords.apply(exported).price.amount)
         val shown = van("Nettopreis, MwSt. ausweisbar", euros = 20_000, km = 99_000)
         assertEquals(20_000_00, SellersWords.apply(shown).price.amount)
     }
