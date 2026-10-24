@@ -1466,5 +1466,8 @@ class RelevanceFilterTest {
             listing("Toshiba MG09 Enterprise 18TB, SATA, 3,5 Zoll Interne Festplatte (MG09ACA18TE)", 24000),
         )).map { it.title }
         assertEquals(listOf("Toshiba MG09 Enterprise 18TB, SATA, 3,5 Zoll Interne Festplatte (MG09ACA18TE)"), kept)
+        // Nor does another model of the same maker borrow it from its neighbours.
+        val toshibas = (1..5).map { listing("Toshiba MG09ACA18TE 18TB Nr $it", 27000L + it) } + listing("Toshiba MG07ACA14TE 14TB Enterprise HDD", 29700)
+        assertTrue(search("MG09ACA18TE", toshibas).none { "MG07" in it.title })
     }
 }
