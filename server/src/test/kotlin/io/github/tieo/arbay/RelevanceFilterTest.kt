@@ -1417,4 +1417,16 @@ class RelevanceFilterTest {
     fun `a QNAP with drives in it is the NAS`() {
         assertTrue(search("32TB HDD", listOf(listing("Qnap TS-432X 4x HDD 32TB NAS 10GbE 2,5G 4GB RAM PCIe Gen 3", 215111))).isEmpty())
     }
+
+    @Test
+    fun `a model line asked for is not left out of the title`() {
+        val kept = search("toshiba mg09", listOf(
+            listing("Telecomando Toshiba CT8508", 385),
+            listing("Toshiba V28A00095300 Menü Button Board für Toshiba 37XV633D", 175),
+            listing("Alimentazione Pc", 175),
+            listing("Toshiba MG09ACA18TE 18TB HDD", 25000),
+        )).map { it.title }
+        assertEquals(listOf("Toshiba MG09ACA18TE 18TB HDD"), kept)
+        assertTrue(search("sapphire rx580", listOf(listing("Sapphire RX5800 Nitro", 20000))).isEmpty())
+    }
 }

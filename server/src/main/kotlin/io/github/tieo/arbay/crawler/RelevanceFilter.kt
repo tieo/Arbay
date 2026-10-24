@@ -264,6 +264,12 @@ object RelevanceFilter {
                         }
                     ) return true
                 }
+                // A model line is the head of the full model number: "MG09" begins "MG09ACA18TE".
+                // A letter has to follow, so RX580 does not reach RX5800.
+                if (isAModelCode(token) && titleWords.any { word ->
+                        word.length > token.length && word.startsWith(token) && word[token.length].isLetter()
+                    }
+                ) return true
                 // Compact matching with word-boundary guard (catches hyphen-split tokens).
                 // e.g. "xt5" (from query "X-T5") matches "fujifilm x t5" via compact "fujifilmxt5".
                 // e.g. "usbc" (from "USB-C") matches "usb c" via compact "usbc".
@@ -1284,12 +1290,16 @@ object RelevanceFilter {
      * answered with Toshiba remote controls and televisions, and every one of them passed on
      * "Toshiba" because no title in the answer wrote the number. Required only beside other words:
      * those are what such listings pass on, while a search that is the number alone is left to a
-     * market that files it as a field and never prints it (Geizhals). Short codes ("M.2", "S25")
-     * are left to the market's own answer, since they are written out of as many titles as into them.
+     * market that files it as a field and never prints it (Geizhals). A shorter code names a model
+     * line where it has two letters and two digits at least ("MG09", "SN770", "RX580"): asked for
+     * a Toshiba MG09, Vinted answered with the same remote controls. Codes with one digit ("M.2",
+     * "S25", "DDR4", "USB3", "Gen4") are a slot, a phone generation or a standard, written out of as
+     * many titles as into them, and are left to the market's own answer.
      */
     private fun isAModelCode(token: String): Boolean {
         val t = token.replace(NON_ALNUM, "")
-        return t.length >= MODEL_CODE_LENGTH && t.any { it.isLetter() } && t.any { it.isDigit() } && !isASize(t)
+        if (isASize(t) || t.none { it.isLetter() } || t.none { it.isDigit() }) return false
+        return t.length >= MODEL_CODE_LENGTH || (t.count { it.isLetter() } >= 2 && t.count { it.isDigit() } >= 2)
     }
 
     private const val MODEL_CODE_LENGTH = 6
