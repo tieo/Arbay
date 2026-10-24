@@ -707,7 +707,7 @@ object RelevanceFilter {
      */
     private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (hostDevice.containsMatchIn(queryText) || phoneOrTablet.containsMatchIn(queryText)) return false
-        if (!driveHolder.containsMatchIn(queryText) && holdsTheDrives(listing.title)) return true
+        if (!driveHolder.containsMatchIn(queryText) && !enclosureWord.containsMatchIn(queryText) && holdsTheDrives(listing.title)) return true
         if (isADeviceOfThatSize(listing, parsed)) return true
         // The rule weighs how much of the search falls either side of the machine's name, so it
         // needs more than one word to weigh. Asked for a part number alone, everything sits on one
@@ -751,6 +751,11 @@ object RelevanceFilter {
         """\b(terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
             // QNAP makes no drives, so its name alone is the NAS: "Qnap TS-432X 4x HDD 32TB NAS".
             """qnap|ts-\d{3,4}\w*|\d[\s-]?bay|xpanstor|media\s?player|mediaplayer|himedia)(?!\w)""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** A search for the box itself: "4 bay festplattengehäuse usb 3.5" asks for the bays. */
+    private val enclosureWord = Regex(
+        """(gehäuse|gehaeuse|enclosure|docking|\bdock\b|jbod|\bdas\b|\bschacht|\d[\s-]?fach\b)""",
         RegexOption.IGNORE_CASE,
     )
     private val saidToFit = Regex("""(?i)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
@@ -1101,7 +1106,7 @@ object RelevanceFilter {
                 if (t.length <= 2) {
                     normalize(text.lowercase()).split(" ").any { it.replace(NON_ALNUM, "") == t }
                 } else {
-                    text.lowercase().replace(NON_ALNUM, "").contains(t)
+                    normalize(text.lowercase()).replace(NON_ALNUM, "").contains(t)
                 }
             }.toDouble() / listings.size
         }
@@ -1444,6 +1449,12 @@ object RelevanceFilter {
             // in the same shape ("m2") — split, the title says "m 2" and the query token "m2"
             // never matches it, which dropped every M.2 drive on every market.
             .replace(Regex("""\b([a-z])\.(\d)""", RegexOption.IGNORE_CASE), "$1$2")
+            // A decimal is one word the same way: the query's "3.5" became "35" while a title's
+            // "3.5 Zoll" and "2.5/3.5“" split into "3" and "5", and every 3.5-inch enclosure was
+            // off target. Joined with a letter, so it is a measure of its own rather than a model
+            // generation that has to follow the word before it ("Switch 2"). Not before a unit,
+            // where the size is read off the raw title instead.
+            .replace(Regex("""(?<![\d.,])(\d)[.,](\d)(?![\d.,]|\s*(tb|gb|mb|kb)\b)""", RegexOption.IGNORE_CASE), "$1p$2")
             .replace(".", " ")  // Strip period (e.g. "Hüllen." → "Huellen", "z.B." → "z B")
             .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
             // French/Spanish accents (Vinted DE, Marktplaats, etc.)

@@ -1429,4 +1429,18 @@ class RelevanceFilterTest {
         assertEquals(listOf("Toshiba MG09ACA18TE 18TB HDD"), kept)
         assertTrue(search("sapphire rx580", listOf(listing("Sapphire RX5800 Nitro", 20000))).isEmpty())
     }
+
+    @Test
+    fun `a 4-bay enclosure for 3,5-inch drives is what a search for one asks`() {
+        val titles = listOf(
+            "Festplattengehäuse, CENMATE 10Gbps Aluminium 4 Bay Gehäuse mit Kühllüfter für 2.5/3.5 SATA HDD/SSD mit USB A/C 3.2 Kable",
+            "ICY BOX 4-fach Externes Festplattengehäuse für 3,5 Zoll SATA I,II,III Festplatten, USB 3.0 (UASP) & eSATA Anschluss",
+            "CENMATE 4 Bay Festplattengehäuse mit Lüfter für 2.5/3.5“ SATA HDD/SSD,5Gbps",
+        )
+        val kept = search("4 bay festplattengehäuse usb 3.5", titles.map { listing(it, 12000) }).map { it.title }
+        assertEquals(titles, kept)
+        // A decimal is matched however the title writes it.
+        assertEquals(2, search("2,5 zoll ssd 1tb", listOf(listing("Samsung 870 EVO 1TB 2.5\" SATA SSD", 6000), listing("Crucial MX500 1TB SSD 2,5 Zoll", 5500))).size)
+        assertEquals(1, search("usb 3.0 stick 64gb", listOf(listing("SanDisk Ultra 64GB USB 3.0 Stick", 800))).size)
+    }
 }
