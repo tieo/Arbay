@@ -334,6 +334,10 @@ class MarketBrowser:
             raise SignedOut(f"not signed in to {self.NAME}")
 
     async def status(self) -> dict:
+        # While the user signs in, the page is theirs: a status check that took it back to the home
+        # page threw away the login page the user was on.
+        if self.signing:
+            return {"ok": True, "signedIn": False}
         try:
             if not await self.on_site_host():
                 await self.go(self.HOME)
