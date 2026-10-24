@@ -58,6 +58,9 @@ Laufleistung: 297000"""
         // mobile.de Schrobenhausen, live 2026-10-24: the export price is the net, the asking price the gross.
         val exported = van("Weitere Infos gibt es per Telefon: 0175/7463771Export Preis netto: 15.950,- EModell: VW Crafter 35 D MLH", euros = 18_950, km = 88_999)
         assertEquals(18_950_00, SellersWords.apply(exported).price.amount)
+        // AutoScout24 Riedlingen, live 2026-10-24: a net figure beside a gross asking price.
+        val ownNet = van("Zul. Gesamtgewicht 3,50 t\n\n Ihr Nettopreis 20.672 €\nFahrzeugnummer: 020223", euros = 23_900, km = 119_292)
+        assertEquals(23_900_00, SellersWords.apply(ownNet).price.amount)
         val shown = van("Nettopreis, MwSt. ausweisbar", euros = 20_000, km = 99_000)
         assertEquals(20_000_00, SellersWords.apply(shown).price.amount)
     }

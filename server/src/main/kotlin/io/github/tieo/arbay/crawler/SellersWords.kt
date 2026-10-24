@@ -27,13 +27,16 @@ object SellersWords {
     private val net = Regex("""\b(?:netto\w*|zzgl\.?\s*(?:19\s*%\s*)?mwst\.?|zuzüglich\s+(?:der\s+)?mwst)""", RegexOption.IGNORE_CASE)
     private val gross = Regex("""brutto\W{0,4}(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})|(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})\s*(?:€|eur)?\s*brutto""", RegexOption.IGNORE_CASE)
 
-    // The asking price itself called net, with no gross written anywhere: "Preis Netto zzgl MwSt.",
-    // "Nettopreis". A plain "netto" elsewhere is something else ("Netto Export ins EU-Ausland möglich").
-    // An export price is a net price for another buyer: "Export Preis netto: 15.950,- E" beside an
-    // asking price of 18,950 € that is the gross.
-    private val priceCalledNet = Regex("""(?<!export\W{0,3})\bpreis\W{0,3}(?:netto|zzgl)|(?<!export)\bnettopreis\b|\bnetto\W{0,3}zzgl""", RegexOption.IGNORE_CASE)
-    // A net amount written out: "netto: 15.950,-", "15.950 € netto".
-    private val statedNet = Regex("""netto\W{0,4}(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})|(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})\s*(?:€|eur)?\s*netto""", RegexOption.IGNORE_CASE)
+    // The asking price said to have VAT on top, with no gross written anywhere: "Preis Netto zzgl
+    // MwSt.", "Preis zzgl. 19% MwSt". A net figure of its own ("Ihr Nettopreis 20.672 €" under a
+    // gross asking price of 23,900 €) is no such statement, and an export price ("Export Preis
+    // netto: 15.950,- E") is a net price for another buyer.
+    private val priceCalledNet = Regex(
+        """(?<!export\W{0,3})\b(?:preis|netto)\W{0,3}(?:netto\W{0,3})?(?:zzgl\.?|zuzüglich)\s*(?:\d+\s*%\s*)?mwst""",
+        RegexOption.IGNORE_CASE,
+    )
+    // A net amount written out: "netto: 15.950,-", "Nettopreis 20.672 €", "15.950 € netto".
+    private val statedNet = Regex("""netto\w*\W{0,4}(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})|(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})\s*(?:€|eur)?\s*netto""", RegexOption.IGNORE_CASE)
     private val vatIncluded = Regex("""mwst\.?\s*ausweisbar|inkl\.?\s*(?:19\s*%\s*)?mwst""", RegexOption.IGNORE_CASE)
 
     private fun number(s: String) = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
