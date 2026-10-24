@@ -22,6 +22,8 @@ line written is {"ok": true, "ready": true}. Failures answer {"ok": false, "erro
   {"op": "signin_click", "x": .., "y": ..}          -> clicks the screen at a point of its picture; answers like signin_state
   {"op": "signin_keys", "text": "..", "key": ".."}  -> types text, or presses one named key (X keysym); answers like signin_state
   {"op": "signin_done"}                             -> leaves the login page; answers like status
+  {"op": "set_cookies", "cookies": [{name, value, domain, path, secure, httpOnly, expires}]}
+                                                    -> signed in with a session the user already has; answers like status
 
 Requires: zendriver, google-chrome-stable, xdotool, a display in DISPLAY (Xvfb, started by the server).
 """
@@ -469,6 +471,21 @@ class MarketBrowser:
         await self.go(self.HOME, 2)
         return await self.status()
 
+    async def set_cookies(self, cookies: list) -> dict:
+        """The site's cookies from a session the user already has, set in this browser so it is
+        signed in too; nothing of the user's password passes."""
+        params = []
+        for c in cookies:
+            param = cdp.network.CookieParam(name=c["name"], value=c["value"], domain=c["domain"], path=c.get("path") or "/",
+                                            secure=bool(c.get("secure")), http_only=bool(c.get("httpOnly")))
+            if c.get("expires") is not None:
+                param.expires = cdp.network.TimeSinceEpoch(float(c["expires"]))
+            params.append(param)
+        await within("set cookies", self.tab.send(cdp.network.set_cookies(params)))
+        self.signing = False
+        await self.go(self.HOME)
+        return await self.status()
+
     # --- the operations every market answers ---
 
     async def handle_common(self, op: str, req: dict) -> dict | None:
@@ -486,6 +503,8 @@ class MarketBrowser:
             return await self.signin_keys(req.get("text"), req.get("key"))
         if op == "signin_done":
             return await self.signin_done()
+        if op == "set_cookies":
+            return await self.set_cookies(req.get("cookies") or [])
         return None
 
     async def handle(self, req: dict) -> dict:

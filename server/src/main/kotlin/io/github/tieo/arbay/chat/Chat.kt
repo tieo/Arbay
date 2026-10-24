@@ -150,6 +150,18 @@ object Chat {
         return signedIn
     }
 
+    /**
+     * Signs [market]'s browser in with the cookies of a session the user already has in a browser of
+     * their own, handed over whole; no password passes. The account as it then stands.
+     */
+    suspend fun takeSession(market: PlatformId, cookies: JsonArray): ChatAccount {
+        val sidecar = sidecarFor(market)
+        sidecar.call("set_cookies", 90_000, "cookies" to cookies)
+        signingIn -= sidecar.market
+        Live.changed(LiveKind.CHAT)
+        return account(market)
+    }
+
     suspend fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep {
         val sidecar = sidecarFor(market)
         return step(sidecar.call("signin", 90_000)).also { if (it.step != SignInAsk.DONE) signingIn += sidecar.market }
