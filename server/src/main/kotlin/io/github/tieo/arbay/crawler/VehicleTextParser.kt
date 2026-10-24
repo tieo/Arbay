@@ -222,6 +222,12 @@ object VehicleTextParser {
         )
     }
 
+    // The mileage in thousands: "Nur 44TKm", "132 TKM", "85 Tsd. km", "120 tausend km", "44,5 tkm".
+    private val thousandsKmRegex = Regex(
+        """(?<![0-9.,])([0-9]{1,3})(?:[.,]([0-9]))?[ \u00a0]?(?:tkm|tsd\.?[ \u00a0]?km|tausend[ \u00a0]?km)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun digits(s: String): Int? = s.replace(Regex("""[.\s\u00a0]"""), "").toIntOrNull()
 
     private fun parseMileage(text: String): Int? {
@@ -232,7 +238,10 @@ object VehicleTextParser {
             .map { it.groupValues[1] }
         val labelBefore = labeledMileageRegex.findAll(text).map { it.groupValues[1] }
         val serviceLog = serviceLogMileageRegex.findAll(text).map { it.groupValues[1] }
-        return (unitAfter + labelBefore + serviceLog)
+        val inThousands = thousandsKmRegex.findAll(text).map { m ->
+            (m.groupValues[1].toInt() * 1000 + (m.groupValues[2].toIntOrNull() ?: 0) * 100).toString()
+        }
+        return (unitAfter + labelBefore + serviceLog + inThousands)
             .mapNotNull { digits(it) }
             .filter { it in 1..2_000_000 }
             .maxOrNull()

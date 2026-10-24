@@ -21,6 +21,14 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun readsMileageWrittenInThousands() {
+        // Kleinanzeigen Salzhemmendorf, live 2026-10-24.
+        assertEquals(44_000, VehicleTextParser.parse("VW Crafter, 3 Jahre alt wegen Neuanschaffung abzugeben. Nur 44TKm, AHK, Rückfahrkamera")!!.mileageKm)
+        assertEquals(132_000, VehicleTextParser.parse("VW Crafter / 177 PS / 132 TKM / Würth Ausbau")!!.mileageKm)
+        assertEquals(85_500, VehicleTextParser.parse("Crafter 85,5 Tsd. km Automatik")!!.mileageKm)
+    }
+
+    @Test
     fun convertsPsToKw() {
         val v = VehicleTextParser.parse("Golf VII 1.5 TSI 150 PS Schaltgetriebe Benzin Baujahr 2019")!!
         assertEquals(2019, v.firstRegYear)
