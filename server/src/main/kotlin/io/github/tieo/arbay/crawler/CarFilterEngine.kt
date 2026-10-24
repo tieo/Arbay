@@ -412,10 +412,11 @@ object CarFilterEngine {
             (partNamedEarly.containsMatchIn(title) && fitsAVehicle.containsMatchIn(title))
     }
 
-    // An item of a van's equipment as a title lists it, between commas, stars, slashes or pluses.
+    // An item of a van's equipment as a title lists it, ended by a comma, star, slash, plus or the
+    // dot of an abbreviation ("L2H1 Autom. DACHTRÄGER").
     private val equipmentItem = Regex(
-        """(?:^|[,*/+|])\s*(ahk|anh(ä|ae)ngerkupplung|klima\w*|navi\w*|kamera|r(ü|ue)ckfahrkamera|pdc|""" +
-            """standh\w*|sthz|shz|sitzheizung|tempomat|acc|led|automatik|dsg)\s*(?=[,*/+|]|$)""",
+        """(?:^|[,*/+|\s])(ahk|anh(ä|ae)ngerkupplung|klima\w*|navi\w*|kamera|r(ü|ue)ckfahrkamera|pdc|""" +
+            """standh\w*|sthz|shz|sitzheizung|tempomat|acc|led|autom|automatik|dsg)\s*(?=[,*/+|.]|$)""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -425,7 +426,7 @@ object CarFilterEngine {
     private fun namedOutsideEquipment(pattern: Regex, title: String): Boolean =
         pattern.findAll(title).any { match ->
             val before = title.substring(0, match.range.first)
-            before.trimEnd().lastOrNull()?.let { it in ",*/+|" } != true || !equipmentItem.containsMatchIn(before)
+            before.trimEnd().lastOrNull()?.let { it in ",*/+|." } != true || !equipmentItem.containsMatchIn(before)
         }
 
     /** An OEM part number, which is what a parts seller titles a part with and what a whole
