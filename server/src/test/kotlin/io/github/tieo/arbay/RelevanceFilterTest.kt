@@ -749,6 +749,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a part number's revision suffix is not a model word`() {
+        // eBay.fr, live, for "2TB NVMe": a 2.5" SATA hard disk with part number 1FM101-002 was kept
+        // as NVMe because most other listings ending in "-002" were NVMe drives.
+        val kept = search("2TB NVMe", listOf(
+            listing("Dell 2TB NVMe PCIe SSD 0ABCD1-002"),
+            listing("HPE 2TB NVMe SSD P10224-002"),
+            listing("Lenovo 2TB NVMe M.2 SSD 5SD0Z-002"),
+            listing("Samsung 990 PRO 2TB NVMe"),
+            listing("HDD Seagate 2TB 2.5\" 6G SATA 1FM101-002 ST2000NX0253"),
+        )).map { it.title }
+        assertTrue(kept.none { it.startsWith("HDD Seagate") }, kept.toString())
+        assertTrue("Samsung 990 PRO 2TB NVMe" in kept, kept.toString())
+    }
+
+    @Test
     fun `a heatsink for a drive is not the drive, a drive with one is`() {
         // eBay, live, for "2TB M.2": the cooler was kept as a 2TB drive.
         val kept = search("2TB M.2", listOf(

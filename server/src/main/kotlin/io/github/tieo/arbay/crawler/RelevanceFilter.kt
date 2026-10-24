@@ -1247,7 +1247,7 @@ object RelevanceFilter {
         return result
     }
 
-    /** The words in a title that can name a model: a number of three or four digits ("990"), or
+    /** The words in a title that can name a model: a number of three or four digits not led by a zero ("990"), or
      *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a
      *  form factor or a lane count ("M.2", "x4"), which SATA drives carry as well. Sizes are what
      *  was asked, not which product it is. */
@@ -1255,7 +1255,9 @@ object RelevanceFilter {
         val words = normalize(gluedThousands(title.lowercase())).split(" ")
         return words.filterIndexed { i, w ->
             w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
-                (if (w.all { it.isDigit() }) w.length in 3..4 else w.length >= 3) &&
+                // A number led by a zero is a part number's revision ("1FM101-002", "718292-001"),
+                // shared by drives of every kind; no product is named 002.
+                (if (w.all { it.isDigit() }) w.length in 3..4 && w[0] != '0' else w.length >= 3) &&
                 !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) &&
                 // A number with its unit after it is a size written apart: "2000go" reads as
                 // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
