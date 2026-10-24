@@ -378,9 +378,14 @@ class MarketBrowser:
         return {"ok": True, "step": step, "error": " ".join(dict.fromkeys(errors)) or None, **await self.picture()}
 
     async def step_quick(self) -> str:
-        """The first field the page shows still empty, in the order a login asks them: a page that
-        asks e-mail and password together (willhaben) asks the e-mail first. With every shown field
-        filled, the last one shown is what the page still waits on."""
+        """The field being typed into; else the first the page shows still empty, in the order a
+        login asks them: a page that asks e-mail and password together (willhaben) asks the e-mail
+        first. With every shown field filled, the last one shown is what the page still waits on."""
+        for name in ("email", "password", "code"):
+            focused = await self.tab.evaluate(
+                f"(() => {{ const e = document.activeElement; return !!e && e.matches({json.dumps(self.STEP_FIELDS[name])}); }})()")
+            if focused:
+                return name
         shown = []
         for name in ("email", "password", "code"):
             for element, _ in await self.visible(self.STEP_FIELDS[name]):

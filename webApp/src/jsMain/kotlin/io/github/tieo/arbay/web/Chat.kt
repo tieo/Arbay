@@ -244,7 +244,8 @@ private fun PictureSignIn(app: WebApp, step: SignInStep, market: PlatformId) {
                 }
             }
         }
-        var mirror by remember { mutableStateOf("") }
+        // A new field on the page starts empty here too.
+        var mirror by remember(step.step) { mutableStateOf("") }
         Input(if (step.step == SignInAsk.PASSWORD) InputType.Password else InputType.Text) {
             classes("sign-in-typing")
             placeholder("Type on the page")

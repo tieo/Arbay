@@ -310,7 +310,8 @@ private fun SignInSteps(step: SignInStep, market: PlatformId, onType: (String) -
         )
         // The phone's keyboard, typing into the page: what is added goes in as typed, what is taken
         // away as that many backspaces, and the keyboard's own Enter as Enter.
-        var mirror by remember { mutableStateOf("") }
+        // A new field on the page starts empty here too.
+        var mirror by remember(step.step) { mutableStateOf("") }
         OutlinedTextField(
             value = mirror,
             onValueChange = { next ->
