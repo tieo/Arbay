@@ -2,6 +2,7 @@ package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.KleinanzeigenDetailParser
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleField
 import kotlin.test.Test
@@ -95,5 +96,35 @@ class KleinanzeigenDetailParserTest {
         assertEquals(990_000, KleinanzeigenDetailParser.askingPrice(html)?.amount)
         assertEquals(13_500, KleinanzeigenDetailParser.askingPrice("adPriceType: 'FIXED', adPrice: 135.00,")?.amount)
         assertEquals(null, KleinanzeigenDetailParser.askingPrice("adPriceType: 'GIVE_AWAY', adPrice: 0.00,"))
+    }
+
+    @Test
+    fun `the seller's box gives the account's age and its rating badges`() {
+        val rated = org.jsoup.Jsoup.parse("""
+            <div id="viewad-contact"><span class="userprofile-vip"><a href="/s-bestandsliste.html?userId=1">Markus S.</a></span>
+            <div class="profile-userbadges">
+              <span class="userbadge"><a class="userbadge-tag"><i></i>TOP&nbsp;Zufriedenheit</a></span>
+              <span class="userbadge"><a class="userbadge-tag"><i></i>Sehr freundlich</a></span>
+            </div>
+            <span class="userprofile-vip-details-text">Privater Nutzer</span>
+            <span class="userprofile-vip-details-text">Aktiv seit 02.03.2014</span></div>
+        """)
+        val seller = KleinanzeigenDetailParser.seller(rated)!!
+        assertEquals("Markus S.", seller.name)
+        assertEquals(io.github.tieo.arbay.model.SellerType.PRIVATE, seller.type)
+        assertEquals(kotlinx.datetime.LocalDate(2014, 3, 2), seller.since)
+        assertEquals(listOf("TOP Zufriedenheit", "Sehr freundlich"), seller.badges)
+        // An account opened the day it posts, never rated: the shape of a scam on Kleinanzeigen.
+        val fresh = org.jsoup.Jsoup.parse("""
+            <div id="viewad-contact"><span class="userprofile-vip"><a>S</a></span>
+            <span class="userprofile-vip-details-text">Privater Nutzer</span>
+            <span class="userprofile-vip-details-text">Aktiv seit 24.10.2026</span></div>
+        """)
+        val new = KleinanzeigenDetailParser.seller(fresh)!!
+        assertEquals(emptyList(), new.badges)
+        assertEquals("sold by S, private, member since 2026-10-24, no rating badges", new.fact)
+        val dealer = KleinanzeigenDetailParser.seller(org.jsoup.Jsoup.parse(html))!!
+        assertEquals(io.github.tieo.arbay.model.SellerType.BUSINESS, dealer.type)
+        assertEquals(kotlinx.datetime.LocalDate(2013, 9, 14), dealer.since)
     }
 }

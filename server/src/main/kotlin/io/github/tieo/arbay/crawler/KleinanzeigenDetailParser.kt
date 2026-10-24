@@ -80,6 +80,31 @@ object KleinanzeigenDetailParser {
         )
     }
 
+    /**
+     * The seller's box beside the ad: their name, private or commercial, the day the account was
+     * opened and the badges their ratings earned. Null where the page has no such box.
+     */
+    fun seller(doc: org.jsoup.nodes.Document): io.github.tieo.arbay.model.SellerProfile? {
+        val box = doc.selectFirst("#viewad-contact") ?: return null
+        val details = box.select(".userprofile-vip-details-text").map { it.text().trim() }
+        val since = details.firstNotNullOfOrNull { activeSince.find(it) }?.destructured?.let { (d, m, y) ->
+            runCatching { kotlinx.datetime.LocalDate(y.toInt(), m.toInt(), d.toInt()) }.getOrNull()
+        }
+        val profile = io.github.tieo.arbay.model.SellerProfile(
+            name = box.selectFirst(".userprofile-vip")?.text()?.trim()?.takeIf { it.isNotEmpty() },
+            type = when {
+                details.any { it.startsWith("Privat") } -> io.github.tieo.arbay.model.SellerType.PRIVATE
+                details.any { it.startsWith("Gewerblich") } -> io.github.tieo.arbay.model.SellerType.BUSINESS
+                else -> null
+            },
+            since = since,
+            badges = box.select(".profile-userbadges .userbadge-tag").map { it.text().replace('\u00a0', ' ').trim() }.filter { it.isNotEmpty() },
+        )
+        return profile.takeIf { it.name != null || it.since != null || it.badges.isNotEmpty() }
+    }
+
+    private val activeSince = Regex("""Aktiv seit (\d{1,2})\.(\d{1,2})\.(\d{4})""")
+
     private val months = mapOf(
         "januar" to 1, "februar" to 2, "märz" to 3, "maerz" to 3, "april" to 4, "mai" to 5,
         "juni" to 6, "juli" to 7, "august" to 8, "september" to 9, "oktober" to 10,

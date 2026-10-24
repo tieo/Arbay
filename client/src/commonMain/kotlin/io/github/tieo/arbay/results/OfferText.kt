@@ -8,6 +8,8 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.SellerProfile
+import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.VehicleInfo
 import io.github.tieo.arbay.model.importVat
 import kotlinx.datetime.TimeZone
@@ -21,7 +23,7 @@ import kotlin.math.round
  * place stands in where the card had none. [stock] is how many the page says are left ("3 left",
  * "over 10 left", "sold out"), where it says.
  */
-data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?, val stock: String? = null, val soldBroken: Boolean = false)
+data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?, val stock: String? = null, val soldBroken: Boolean = false, val seller: SellerProfile? = null)
 
 fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     val vehicle = fromItsPage?.vehicle?.let { page ->
@@ -29,7 +31,7 @@ fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     } ?: listing.vehicle
     val description = fromItsPage?.description?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
     val stock = fromItsPage?.available?.let { n -> if (fromItsPage.moreAvailable) "over $n left" else if (n == 0) "sold out" else if (n == 1) "last one" else "$n left" }
-    return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true)
+    return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true, fromItsPage?.seller)
 }
 
 /** The short facts of an offer, each one a few words: condition, how many are left, place,
@@ -46,8 +48,11 @@ fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     listing.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
     if (listing.shipping?.free == true) add("free delivery")
     if (listing.negotiable) add("negotiable")
-    listing.seller?.takeIf { !it.name.isNullOrBlank() }?.let { s -> add("sold by ${s.name}" + (s.rating?.let { " · $it★" } ?: "")) }
+    val profile = page.seller
+    if (profile != null) add(profile.fact)
+    else listing.seller?.takeIf { !it.name.isNullOrBlank() }?.let { s -> add("sold by ${s.name}" + (s.rating?.let { " · $it★" } ?: "")) }
 }
+
 
 /** How an offer's price sits against the middle one, when it is far enough off to be worth saying. */
 fun PriceSummary.againstMiddle(listing: Listing): String? =

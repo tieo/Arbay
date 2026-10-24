@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.model
 
 import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 
 /**
@@ -28,6 +29,9 @@ data class ListingDetail(
     /** How many reviews the dealer's stars rest on, where only the page has the whole number:
      *  a mobile.de result card counts some of them (12 where the page says 474). */
     val sellerReviews: Int? = null,
+    /** Who sells it, as the page shows them where the card names nobody: a Kleinanzeigen card
+     *  carries an account number only. */
+    val seller: SellerProfile? = null,
     /** Every photo of the ad's gallery, where the card carried only the first. */
     val photos: List<String> = emptyList(),
     /** How many the listing still has, where its page says ("3 verfügbar", "Letzter Artikel");
@@ -38,6 +42,32 @@ data class ListingDetail(
      *  which a card without the text cannot show. */
     val soldBroken: Boolean = false,
 )
+
+/**
+ * A seller as their ad's page presents them. An account opened the day it posts a cheap ad, with
+ * no rating yet, is how a scam looks on Kleinanzeigen; one years old with "TOP Zufriedenheit" is
+ * how a trustworthy seller does.
+ */
+@Serializable
+data class SellerProfile(
+    val name: String? = null,
+    val type: SellerType? = null,
+    /** The day the account was opened ("Aktiv seit 24.10.2026"). */
+    val since: LocalDate? = null,
+    /** The badges the market gave the seller for their ratings, as it words them
+     *  ("TOP Zufriedenheit", "Sehr freundlich", "Zuverlässig"); none on an account never rated. */
+    val badges: List<String> = emptyList(),
+)
+
+/** The seller in a few words, with how long the account has existed and what its ratings earned:
+ *  "sold by Markus S., private, member since 2014-03-02, TOP Zufriedenheit, Freundlich". An
+ *  account without badges says so, since that is the warning a new account carries. */
+val SellerProfile.fact: String get() = listOfNotNull(
+    "sold by ${name ?: "a seller"}",
+    when (type) { SellerType.PRIVATE -> "private"; SellerType.BUSINESS -> "business"; null -> null },
+    since?.let { "member since $it" },
+    badges.joinToString(", ").ifEmpty { if (since != null) "no rating badges" else null },
+).joinToString(", ")
 
 /**
  * Whether an ad can still be bought, as its own page says right now. Kleinanzeigen keeps a page up

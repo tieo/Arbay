@@ -478,6 +478,7 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
                 description = description,
                 shipping = KleinanzeigenDetailParser.shipping(doc),
                 photos = KleinanzeigenDetailParser.gallery(doc),
+                seller = KleinanzeigenDetailParser.seller(doc),
             ).takeIf { it.vehicle != null || it.description != null || it.shipping != null || it.photos.isNotEmpty() }
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))

@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.mcp
 
 import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.wholePoints
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.ChatSettings
@@ -399,7 +400,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
             // is read now, where the market says it, so a sold van does not read as on offer.
             val state = adNowLine(l)
-            head + "\n" + state + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
+            // The seller's account age and badges decide whether an offer can be trusted, so they
+            // are said in words rather than left inside the page's details.
+            val seller = (body["seller"] as? JsonObject)?.let {
+                runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.SellerProfile.serializer(), it) }.getOrNull()
+            }?.let { "Seller: ${it.fact}.\n" }.orEmpty()
+            head + "\n" + state + seller + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
