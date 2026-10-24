@@ -105,9 +105,20 @@ object VehicleTextParser {
     // battery electric van.
     private val typeKey = Regex("""\b(?:hsn|tsn)\b[\s/:.]*(?:(?:hsn|tsn)\b[\s/:.]*)?\w{3,4}(?:[\s/:,.]+(?:(?:zu\s*)?(?:2|tsn)\b[\s/:.]*)?\w{3}\b)?""", RegexOption.IGNORE_CASE)
 
+    // A dealer's list of search words for its whole stock, on one line after its label: a Greven
+    // Automotive Crafter's "Trefwoorden: … Elektrisch - Hybride - 4x4 - AWD - 4WD - L1H1 …" names
+    // every drive, fuel and size it sells, none of them this van's.
+    private val keywordList = Regex(
+        """\b(?:trefwoorden|zoekwoorden|zoektermen|keywords|tags|suchbegriffe|suchw(?:ö|oe)rter|stichw(?:ö|oe)rter|schlagw(?:ö|oe)rter)\s*:[^\n]*""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** [text] without a dealer's list of search words, which states nothing about the vehicle. */
+    fun withoutKeywordList(text: String): String = keywordList.replace(text, " ")
+
     fun parse(raw: String?): VehicleInfo? {
         if (raw.isNullOrBlank()) return null
-        val text = typeKey.replace(raw, " ")
+        val text = typeKey.replace(withoutKeywordList(raw), " ")
         val info = VehicleInfo(
             firstRegYear = parseYear(text),
             mileageKm = parseMileage(text),

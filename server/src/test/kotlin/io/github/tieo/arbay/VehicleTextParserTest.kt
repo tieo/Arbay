@@ -197,6 +197,11 @@ class VehicleTextParserTest {
         assertEquals(Drivetrain.FWD, VehicleTextParser.parse("Volkswagen Crafter Kasten 35 mittellang Hochdach FWD")!!.drivetrain)
         assertEquals(Drivetrain.RWD, VehicleTextParser.parse("Crafter Pritsche 50 mittellang RWD Koffer")!!.drivetrain)
         assertEquals(null, VehicleTextParser.parse("VW Crafter 35 Kasten 2.0 TDI Automatik")!!.drivetrain)
+        // A dealer's search words for its whole stock name every drive and fuel it sells.
+        val stocked = VehicleTextParser.parse("Volkswagen Crafter 2.0 TDI L3H2 140PK Automaat\n" +
+            "Trefwoorden: Bedrijfswagen - Elektrisch - Hybride - Luchtvering - 4x4 - AWD - 4WD - L1H1 - L4H3\n Maten \nLengte/hoogte: L3H2")!!
+        assertEquals(null, stocked.drivetrain)
+        assertEquals(Fuel.DIESEL, stocked.fuel)
     }
 
     @Test

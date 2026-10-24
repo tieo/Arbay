@@ -63,7 +63,8 @@ object VanDimensions {
      */
     fun read(text: String?, modelHint: String? = null, wheelbaseMm: Int? = null): Reading {
         if (text.isNullOrBlank()) return Reading(null, null, false, false)
-        return if (isCrafter(text, modelHint)) readCrafter(text, wheelbaseMm) else readCommon(text)
+        val own = VehicleTextParser.withoutKeywordList(text)
+        return if (isCrafter(own, modelHint)) readCrafter(own, wheelbaseMm) else readCommon(own)
     }
 
     // TruckScout24 writes make and model as one word: "VWCrafter".
