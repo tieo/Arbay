@@ -376,7 +376,10 @@ class SavedSearchMonitor(
         synchronized(stateLock) {
             silent = product.id !in seen
             val known = seen.getOrPut(product.id) { mutableSetOf() }
-            fresh = found.keys.filter { it !in known }
+            // One eBay item is listed on every eBay site under the same number: a Künzle edge
+            // sander alerted from ebay.fr came again the next morning from ebay.de.
+            val knownOffers = known.mapTo(HashSet(), ::offerKey)
+            fresh = found.keys.filter { offerKey(it) !in knownOffers }.distinctBy(::offerKey)
             known.addAll(found.keys)
             if (fresh.isNotEmpty() && !silent) {
                 unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
@@ -852,3 +855,7 @@ private suspend fun readAdText(listing: Listing): String? = try {
 } catch (_: Exception) {
     null
 }
+
+/** What makes two listing ids one offer: an eBay item's number, whichever eBay site it is on. */
+internal fun offerKey(listingId: String): String =
+    if (listingId.startsWith("EBAY_")) "EBAY:" + listingId.substringAfter(':') else listingId

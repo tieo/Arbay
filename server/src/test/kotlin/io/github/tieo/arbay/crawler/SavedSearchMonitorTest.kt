@@ -299,4 +299,10 @@ class SavedSearchMonitorTest {
             products.delete(product.id)
         }
     }
+
+    @Test
+    fun `one eBay item on two eBay sites is one offer, other markets keep their own ids`() {
+        assertEquals(offerKey("EBAY_FR:377593213616"), offerKey("EBAY_DE:377593213616"))
+        assertEquals("KLEINANZEIGEN:3549820022", offerKey("KLEINANZEIGEN:3549820022"))
+    }
 }
