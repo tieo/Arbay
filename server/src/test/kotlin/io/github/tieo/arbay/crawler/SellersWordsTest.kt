@@ -48,6 +48,18 @@ Laufleistung: 297000"""
     }
 
     @Test
+    fun `a price called net with no gross gets the buyer's VAT`() {
+        // Kleinanzeigen Bassenheim, live 2026-10-24.
+        val net = van("❗AHK 3.000 kg\n\n❗️Preis Netto zzgl MwSt.\n\nGerne nehmen wir ihre gebrauchten Nutzfahrzeuge in Zahlung.", euros = 27_900, km = 92_000)
+        assertEquals(33_201_00, SellersWords.apply(net).price.amount)
+        // "Netto" about something else, or VAT already in the price, leaves it.
+        val export = van("NETTO EXPORT INS EU-AUSLAND ODER DRITTLAND MÖGLICH", euros = 22_250, km = 99_663)
+        assertEquals(22_250_00, SellersWords.apply(export).price.amount)
+        val shown = van("Nettopreis, MwSt. ausweisbar", euros = 20_000, km = 99_000)
+        assertEquals(20_000_00, SellersWords.apply(shown).price.amount)
+    }
+
+    @Test
     fun `a page with no fields but the seller's words is read from its words`() {
         // A Kleinanzeigen commercial vehicle, live 2026-10-16: the page's only field is "Art: Transporter".
         val text = "Volkswagen Crafter 2.0 TDI\n- 1. Hand\n- HSN/TSN: 0603/BEV\n- EZ. 10.07.2014\n" +

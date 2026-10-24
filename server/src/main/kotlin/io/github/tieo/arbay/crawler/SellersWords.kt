@@ -4,6 +4,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.VehicleField
+import io.github.tieo.arbay.model.originCountry
 
 /**
  * What a seller wrote in the ad over what they ticked or typed into the market's form.
@@ -26,6 +27,11 @@ object SellersWords {
     private val net = Regex("""\b(?:netto\w*|zzgl\.?\s*(?:19\s*%\s*)?mwst\.?|zuzüglich\s+(?:der\s+)?mwst)""", RegexOption.IGNORE_CASE)
     private val gross = Regex("""brutto\W{0,4}(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})|(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})\s*(?:€|eur)?\s*brutto""", RegexOption.IGNORE_CASE)
 
+    // The asking price itself called net, with no gross written anywhere: "Preis Netto zzgl MwSt.",
+    // "Nettopreis". A plain "netto" elsewhere is something else ("Netto Export ins EU-Ausland möglich").
+    private val priceCalledNet = Regex("""\bpreis\W{0,3}(?:netto|zzgl)|\bnettopreis\b|\bnetto\W{0,3}zzgl""", RegexOption.IGNORE_CASE)
+    private val vatIncluded = Regex("""mwst\.?\s*ausweisbar|inkl\.?\s*(?:19\s*%\s*)?mwst""", RegexOption.IGNORE_CASE)
+
     private fun number(s: String) = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
 
     fun apply(listing: Listing): Listing {
@@ -40,13 +46,18 @@ object SellersWords {
         return copy(vehicle = v.copy(mileageKm = stated, verified = v.verified - VehicleField.MILEAGE))
     }
 
-    /** The gross a private buyer pays, where the text calls the asking price net and states it.
-     *  Only a gross within VAT's reach of the asking price counts: up to a fifth more. */
+    /** The gross a private buyer pays, where the text calls the asking price net: the gross it
+     *  states, within VAT's reach of the asking price (up to a fifth more), else, from a seller in
+     *  the buyer's own country who states none, the asking price with the buyer's VAT added. A
+     *  Bassenheim Crafter at 27,900 € said only "Preis Netto zzgl MwSt.", and cost 33,201 €. */
     private fun Listing.withGrossPrice(text: String): Listing {
         if (price.currency != Currency.EUR || !net.containsMatchIn(text)) return this
         val asked = price.amount / 100
-        val brutto = gross.findAll(text).mapNotNull { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] }) }
-            .firstOrNull { it > asked && it <= asked * 1.2 } ?: return this
-        return copy(price = Money(brutto * 100L, Currency.EUR))
+        val stated = gross.findAll(text).mapNotNull { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] }) }.toList()
+        stated.firstOrNull { it > asked && it <= asked * 1.2 }?.let { return copy(price = Money(it * 100L, Currency.EUR)) }
+        if (stated.isNotEmpty() || vatIncluded.containsMatchIn(text) || !priceCalledNet.containsMatchIn(text)) return this
+        val settings = io.github.tieo.arbay.repo.ImportSettingsStore.current
+        if (!settings.enabled || originCountry(settings.homeCountry).uppercase() != settings.homeCountry.uppercase()) return this
+        return copy(price = Money(price.amount + price.amount * settings.importVatPercent / 100, Currency.EUR))
     }
 }
