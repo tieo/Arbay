@@ -280,17 +280,35 @@ private suspend fun carPostFilter(
     val enriched = listings.map { VehicleTextParser.enrich(it) }
     val model = CarQueryResolver.resolve(searchQuery.positiveText)?.modelSlug
     val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent, modelHint = model)
-    val detailed = DetailEnricher.enrich(onTheCard.kept, filters, crawler)
+    // A van size the card only hints at is a range its page may narrow, so such a van has its page
+    // read before it goes: AutoScout24 titled a Crafter "Trend LANG", long or longer, and its page's
+    // trim line says "30 Mittellang".
+    val (sizeHintedOnly, droppedOnCard) = onTheCard.dropped.partition { (listing, criterion) ->
+        val v = listing.vehicle
+        (criterion == "length" && v?.isVerified(VehicleField.VAN_LENGTH) != true) ||
+            (criterion == "height" && v?.isVerified(VehicleField.VAN_HEIGHT) != true)
+    }
+    val detailed = DetailEnricher.enrich(onTheCard.kept + sizeHintedOnly.map { it.first }, filters, crawler)
     val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent, modelHint = model)
+    // A word the reader blocked is matched on the title before any page is read; a page's trim line
+    // names the model too ("Ausstattungslinie: 30 Mittellang FWD Trendline" under a mobile.de card
+    // that says only "Volkswagen Crafter"), so it is matched there as well.
+    val asked = RelevanceFilter.parseQuery(searchQuery)
+    val blocked = afterDetail.kept.mapNotNull { listing ->
+        CarFilterEngine.trimLine(listing)?.let { RelevanceFilter.blockedWord(listing.copy(title = it), asked) }
+            ?.let { word -> listing to word }
+    }
+    val blockedIds = blocked.mapTo(HashSet()) { it.first.id }
     // What the criteria removed, named by the criterion that removed it — both passes, since a
     // listing can fail on its card and another only once its own page has been read.
-    val dropped = (onTheCard.dropped + afterDetail.dropped).map { (listing, criterion) ->
+    val dropped = (droppedOnCard + afterDetail.dropped).map { (listing, criterion) ->
         DroppedListing(listing, DropReason.VEHICLE_CRITERIA, criterion)
-    }
+    } + blocked.map { (listing, word) -> DroppedListing(listing, DropReason.BLOCKED_WORD, word) }
     // A free-form ideal-car description ranks (not filters) the survivors by local semantic
     // similarity, so the best matches surface first. Skipped when none was given.
     val filtered = filters.idealDescription?.takeIf { it.isNotBlank() }
-        ?.let { CarCriteriaScorer.rank(afterDetail.kept, it) } ?: afterDetail.kept
+        ?.let { CarCriteriaScorer.rank(afterDetail.kept.filter { it.id !in blockedIds }, it) }
+        ?: afterDetail.kept.filter { it.id !in blockedIds }
     return filtered to dropped
 }
 

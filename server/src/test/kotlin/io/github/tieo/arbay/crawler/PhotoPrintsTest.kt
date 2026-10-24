@@ -137,4 +137,12 @@ class PhotoPrintsTest {
         assertFalse(PhotoPrints.apart(aubing, munich) { byName[it.place] })
         assertTrue(PhotoPrints.apart(aubing, munich.copy(place = "Köln")) { byName[it.place] })
     }
+
+    @Test
+    fun `one dealer under two names at one place is not apart`() {
+        val autoscout = PhotoPrints.Entry("AUTOSCOUT24:67e9cb14", "https://as/1", place = "Fellbach", lat = 48.81, lon = 9.27, seller = "Hahn Automobile GmbH + Co. KG")
+        val mobile = PhotoPrints.Entry("MOBILE_DE:52283147360992", "https://mobile/1", place = "Fellbach", lat = 48.81, lon = 9.28, seller = "Nutzfahrzeug Zentrum Rems-Murr")
+        assertFalse(PhotoPrints.apart(autoscout, mobile) { null })
+        assertTrue(PhotoPrints.apart(autoscout.copy(lat = null, lon = null, place = null), mobile.copy(lat = null, lon = null, place = null)) { null })
+    }
 }

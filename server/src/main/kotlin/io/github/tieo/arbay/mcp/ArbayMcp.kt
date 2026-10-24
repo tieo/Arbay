@@ -388,7 +388,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // A page Arbay could not fetch says nothing about the ad, so it is not reported as one
             // that has nothing more to say: with the server offline every ad read that way.
             if (!detail.status.isSuccess()) return@tool head + "\nArbay could not read the ad page: " + detail.bodyAsText().ifBlank { detail.status.toString() }
-            if (detail.status.value == 204) return@tool head + "\nThe market gave no more than this."
+            // A page that gives nothing may be an ad taken down, so whether it is up is still read.
+            if (detail.status.value == 204) return@tool head + "\n" + adNowLine(l) + "The market gave no more than this."
             // A detail carries a vehicle block for every listing; for anything but a vehicle it is
             // all empty and only buries the description, so it is left out.
             val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()

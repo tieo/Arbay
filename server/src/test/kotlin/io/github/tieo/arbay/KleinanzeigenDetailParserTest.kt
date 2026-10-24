@@ -83,6 +83,11 @@ class KleinanzeigenDetailParserTest {
             KleinanzeigenDetailParser.adState(live.replace("showPausedVeil: false", "showPausedVeil: true")),
         )
         assertEquals(null, KleinanzeigenDetailParser.adState("<html><body>nothing here</body></html>"))
+        // An ad removed for good answers with its category's results (Haselünne Crafter, 2026-10-24).
+        assertEquals(
+            io.github.tieo.arbay.model.AdState.DELETED,
+            KleinanzeigenDetailParser.adState("""<script>{"pageType":"SRPB"}</script><ul id="srchrslt-adtable"></ul>"""),
+        )
     }
 
     @Test

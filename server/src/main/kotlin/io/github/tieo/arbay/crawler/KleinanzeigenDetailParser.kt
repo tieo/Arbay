@@ -29,8 +29,10 @@ object KleinanzeigenDetailParser {
     /**
      * The ad's state from the page's own settings: `showDeletedVeil: true` puts "Gelöscht" over the
      * photos, `showPausedVeil: true` a paused one. The page itself stays reachable either way and
-     * the text never says so. Null where the page carries neither setting. A reserved ad has no
-     * setting of its own on the page, so reserved is not told apart from live here.
+     * the text never says so. An ad removed for good has no page left: its address answers with
+     * the results of its category and town, a page that declares itself a list of ads, so that
+     * counts as deleted too. Null where the page is neither. A reserved ad has no setting of its
+     * own on the page, so reserved is not told apart from live here.
      */
     fun adState(html: String): io.github.tieo.arbay.model.AdState? {
         val deleted = deletedVeil.find(html)?.groupValues?.get(1)
@@ -39,9 +41,13 @@ object KleinanzeigenDetailParser {
             deleted == "true" -> io.github.tieo.arbay.model.AdState.DELETED
             paused == "true" -> io.github.tieo.arbay.model.AdState.PAUSED
             deleted != null || paused != null -> io.github.tieo.arbay.model.AdState.LIVE
+            resultsPage.containsMatchIn(html) && "srchrslt-adtable" in html -> io.github.tieo.arbay.model.AdState.DELETED
             else -> null
         }
     }
+
+    // What a list of ads calls itself in the page's tracking data: SRPB a search's results, BROWSE a category's.
+    private val resultsPage = Regex(""""pageType":"(SRPB|SRP|BROWSE)"""")
 
     private val categoryLink = Regex("""/c(\d+)(?:$|[/?])""")
     private val photoAddress = Regex("""https://img\.kleinanzeigen\.de/api/v1/prod-ads/images/[0-9a-f]{2}/[0-9a-f-]{36}""")

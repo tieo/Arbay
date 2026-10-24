@@ -13,6 +13,16 @@ class VanDimensionsTest {
     // ── other vans: the common scale ──────────────────────────────────────────────────────────
 
     @Test
+    fun `a page's trim line outweighs a title's lang`() {
+        // Bebra, 2026-10-24: the title alone reads long or longer; the page's trim line settles it medium.
+        val title = "Volkswagen Crafter 2.0d DSG FWD Trend LANG+KLIM+KAM+NAV+AHK"
+        assertEquals(VanSize.LONG, VanDimensions.read(title).length)
+        val d = VanDimensions.read("$title Ausstattungslinie: 30 Mittellang FWD Trendline >> 3-SITZE")
+        assertEquals(VanSize.MEDIUM, d.length)
+        assertTrue(d.lengthSure)
+    }
+
+    @Test
     fun `a code on another van is read as written and is sure`() {
         val d = VanDimensions.read("Fiat Ducato L3H2 Kastenwagen")
         assertEquals(VanSize.LONG, d.length)

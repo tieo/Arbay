@@ -235,6 +235,11 @@ object CarFilterEngine {
     internal fun vehicleKind(listing: Listing): String? =
         listing.description.orEmpty().lineSequence().map { it.trim() }.firstOrNull { it.startsWith("Transporter oder Lkw bis 7,5 t,") }
 
+    /** The model and trim a page states from the maker's catalogue, as mobile.de sets it into the
+     *  text: "Ausstattungslinie: 35 mittellang Hochdach FWD". */
+    fun trimLine(listing: Listing): String? =
+        listing.description.orEmpty().lineSequence().map { it.trim() }.firstOrNull { it.startsWith("Ausstattungslinie:") }
+
     /** As long as the longest title a market allows: AutoScout24 and mobile.de stop near 100 characters. */
     private const val HEADLINE_CHARS = 120
 
@@ -244,7 +249,7 @@ object CarFilterEngine {
     internal fun isOpenBody(listing: Listing): Boolean {
         val lines = listing.description.orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
         val named = listOfNotNull(
-            listing.title, headline(listing), lines.firstOrNull { it.startsWith("Ausstattungslinie:") },
+            listing.title, headline(listing), trimLine(listing),
             lines.firstOrNull { it.startsWith("Aufbau:") }, vehicleKind(listing),
         )
         return named.any { openBody.containsMatchIn(it.lowercase()) }

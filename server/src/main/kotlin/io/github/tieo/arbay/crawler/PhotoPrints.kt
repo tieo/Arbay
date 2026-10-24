@@ -243,9 +243,12 @@ object PhotoPrints {
         return runCatching { Geocoder.resolve(loc.country, loc.zip, loc.city) }.getOrNull()
     }
 
-    /** Whether two ads were placed by different sellers or in different places. [where] places an
-     *  entry printed without a point: by the postcode of its archived listing, else by its place's
-     *  name, which for a district ("Aubing") the postcode list does not know. */
+    /** Whether two ads were placed in different places, or by different sellers where the places
+     *  cannot be told. A dealer names itself differently on each market: one Fellbach Crafter was
+     *  "Hahn Automobile GmbH + Co. KG" on AutoScout24 and "Nutzfahrzeug Zentrum Rems-Murr" on
+     *  mobile.de, at one address. [where] places an entry printed without a point: by the postcode
+     *  of its archived listing, else by its place's name, which for a district ("Aubing") the
+     *  postcode list does not know. */
     internal fun apart(
         a: Entry,
         b: Entry,
@@ -254,10 +257,10 @@ object PhotoPrints {
                 ?: e.place?.let { runCatching { Geocoder.resolve(null, null, it) }.getOrNull() }
         },
     ): Boolean {
-        if (a.seller != null && b.seller != null && !a.seller.equals(b.seller, ignoreCase = true)) return true
         val pointA = if (a.lat != null && a.lon != null) a.lat to a.lon else where(a)
         val pointB = if (b.lat != null && b.lon != null) b.lat to b.lon else where(b)
         if (pointA != null && pointB != null) return Geocoder.haversine(pointA.first, pointA.second, pointB.first, pointB.second) > SAME_PLACE_KM
+        if (a.seller != null && b.seller != null && !a.seller.equals(b.seller, ignoreCase = true)) return true
         val pa = placeKey(a) ?: return false
         val pb = placeKey(b) ?: return false
         return pa != pb
