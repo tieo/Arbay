@@ -14,6 +14,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import org.jsoup.Jsoup
+import org.slf4j.LoggerFactory
 
 class EbayDeCrawler(
     private val client: HttpClient,
@@ -56,17 +57,19 @@ class EbayDeCrawler(
 
     /**
      * [url] read in [EbayBrowser], the Chrome eBay lets through, once it shows one of [markers].
-     * eBay's edge serves its error page to a request now and then, and to the first ones of a
-     * Chrome it has not seen before, and lets the next one through, so the page is asked for again
-     * after a pause before it is taken as refused. Null where it is, which leaves the caller its
-     * other tiers.
+     * eBay's edge serves its error page to a request now and then, and to the first pages of an
+     * eBay site the Chrome has not read before, for up to about a minute (ebay.es on 2026-10-24:
+     * refused three times over 50 s, then open for good), so the page is asked for again on a
+     * widening pause before it is taken as refused. The browser is free to other pages in the
+     * pauses. Null where it is refused, which leaves the caller its other tiers.
      */
     private suspend fun ebayPage(url: String, markers: List<String>): String? {
-        for (attempt in 1..3) {
+        for (pause in REFUSED_PAUSES_MS + 0L) {
             val page = EbayBrowser.get(url, markers) ?: return null
             if (page.page == "content") return page.html
-            if (page.page != "errorpage") return null
-            delay(attempt * 5_000L)
+            log.info("{}: Chrome got {} for {}", domain, page.page, url)
+            if (page.page != "errorpage" || pause == 0L) return null
+            delay(pause)
         }
         return null
     }
@@ -698,10 +701,12 @@ class EbayDeCrawler(
 
     companion object {
         /** How long a refusal to the plain clients holds before they are tried again. */
+        private val log = LoggerFactory.getLogger(EbayDeCrawler::class.java)
         private const val PLAIN_RETRY_MS = 60 * 60 * 1000L
         /** On a search page with offers and on one without; on an item page. */
         private val SEARCH_MARKERS = listOf("srp-results")
         private val ITEM_MARKERS = listOf("x-item-title")
+        private val REFUSED_PAUSES_MS = listOf(5_000L, 15_000L, 30_000L, 45_000L)
         /** The text of eBay's description page, one line per paragraph or break the seller made. */
         internal fun descriptionText(page: String): String? {
             val doc = Jsoup.parse(page)
