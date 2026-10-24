@@ -270,6 +270,9 @@ fun offerFor(platform: PlatformId, askingEur: Int?, shipping: Shipping?, allInEu
     return Offer(price, direct, shippingEur, note)
 }
 
+/** The name of the user's account on this market: one eBay account answers for every eBay site. */
+val PlatformId.accountName: String get() = if (name.startsWith("EBAY")) "eBay" else displayName
+
 /** The markets whose sellers Arbay can write to. */
 val PlatformId.canMessage: Boolean get() = this == PlatformId.KLEINANZEIGEN
 

@@ -595,8 +595,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         // ── Talking to sellers ──
 
-        tool("seller_account", "Whether Arbay is signed in to the user's Kleinanzeigen account.") {
-            getJsonElement("/api/chat/account").toString()
+        tool("seller_account", "Whether Arbay is signed in to the user's account on each market it can sign in to (Kleinanzeigen, eBay, willhaben).") {
+            getJsonElement("/api/chat/accounts").toString()
         }
 
         tool("list_texts", "The user's own texts for sellers, with their fill-ins.") {

@@ -55,7 +55,7 @@ fun SettingsScreen(app: WebApp) {
             LookSection()
             CurrencySection()
             H2({ classes("group-title") }) { Text("The server, for every device") }
-            Setting("Kleinanzeigen") { AccountSection(app) }
+            Setting("Market accounts") { AccountSection(app) }
             Setting("Your texts for sellers") { TextsSection(app) }
             ServerSections(app)
         }

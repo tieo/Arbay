@@ -95,7 +95,7 @@ object ChatWatch {
                     learning = false
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: ChatBrowser.ChatFailure) {
+                } catch (e: ChatFailure) {
                     // Signed out or the chat browser restarting: the next round tries again.
                     log.debug("chat watch round skipped: {}", e.message)
                 } catch (e: Exception) {

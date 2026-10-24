@@ -2,6 +2,7 @@ package io.github.tieo.arbay.selling
 
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.chat.ChatBrowser
+import io.github.tieo.arbay.chat.ChatFailure
 import io.github.tieo.arbay.crawler.CopiesAds
 import io.github.tieo.arbay.crawler.CrawlerRegistry
 import io.github.tieo.arbay.live.Live
@@ -161,7 +162,7 @@ object Selling {
                 "buyNow" to next.buyNow.takeIf { it != old.buyNow },
                 "send" to send,
             )
-        } catch (e: ChatBrowser.ChatFailure) {
+        } catch (e: ChatFailure) {
             e.detail?.let { keepFailedPage(old, it, e) }
             throw SellingFailure(e.message ?: "The ad could not be changed")
         }
@@ -203,7 +204,7 @@ object Selling {
                 "photos" to JsonArray(draft.photos.map { JsonPrimitive(DataDir.file("selling/$id/$it.jpg").absolutePath) }),
                 "send" to send,
             )
-        } catch (e: ChatBrowser.ChatFailure) {
+        } catch (e: ChatFailure) {
             e.detail?.let { keepFailedPage(draft, it, e) }
             return PostAdResult(draft, e.message) to e.detail
         }

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import io.github.tieo.arbay.chat.Chat
 import io.github.tieo.arbay.chat.ChatBrowser
+import io.github.tieo.arbay.chat.ChatFailure
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.SignInInput
@@ -26,12 +27,14 @@ private data class ReplyBody(val text: String)
 /** The user's conversations with sellers, through their own Kleinanzeigen account. */
 fun Route.chatRoutes() {
     route("/api/chat") {
-        get("/account") { call.respond(Chat.account()) }
+        // Kleinanzeigen where a request names no market, as the apps before other markets ask.
+        get("/account") { call.respond(Chat.account(call.market())) }
+        get("/accounts") { call.respond(Chat.accounts()) }
         // Signing in from inside the app; what is typed is passed to the page and not kept.
-        post("/signin") { call.chat { call.respond(Chat.beginSignIn()) } }
-        get("/signin") { call.chat { call.respond(Chat.signInStep()) } }
-        post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>())) } }
-        post("/signin/cancel") { call.respond(Chat.cancelSignIn()) }
+        post("/signin") { call.chat { call.respond(Chat.beginSignIn(call.market())) } }
+        get("/signin") { call.chat { call.respond(Chat.signInStep(call.market())) } }
+        post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>(), call.market())) } }
+        post("/signin/cancel") { call.chat { call.respond(Chat.cancelSignIn(call.market())) } }
         // Signing in on the site's own pages, shown inside the app through the proxy. The session cookie
         // is only sent to the proxy's paths, so the browser holds an id and nothing of the site's.
         post("/signin/proxy") {
@@ -111,13 +114,19 @@ fun Route.chatRoutes() {
     }
 }
 
+/** The market a request names in its `market` parameter, Kleinanzeigen where it names none. */
+private fun ApplicationCall.market(): io.github.tieo.arbay.model.PlatformId =
+    request.queryParameters["market"]?.let { name ->
+        runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(name) }.getOrNull() ?: throw BadRequestException("Unknown market $name")
+    } ?: io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN
+
 /** A signed-out account is the user's to fix (409); the browser failing is the server's (502). */
 private suspend fun ApplicationCall.chat(block: suspend () -> Unit) {
     try {
         block()
-    } catch (e: ChatBrowser.ChatFailure) {
+    } catch (e: ChatFailure) {
         respondText(
-            if (e.signedOut) "Not signed in to Kleinanzeigen" else (e.message ?: "Kleinanzeigen did not answer"),
+            if (e.signedOut) "Not signed in" else (e.message ?: "The market did not answer"),
             status = if (e.signedOut) HttpStatusCode.Conflict else HttpStatusCode.BadGateway,
         )
     }

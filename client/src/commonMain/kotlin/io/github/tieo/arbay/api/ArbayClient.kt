@@ -241,20 +241,26 @@ class ArbayClient(
         }
     }
 
-    // ── Talking to sellers through the user's own Kleinanzeigen account ──
+    // ── Talking to sellers through the user's own market accounts ──
 
     suspend fun chatAccount(): ChatAccount = client.get("$baseUrl/api/chat/account").body()
 
-    suspend fun beginChatSignIn(): SignInStep = client.post("$baseUrl/api/chat/signin").body()
-    suspend fun chatSignInStep(): SignInStep = client.get("$baseUrl/api/chat/signin").body()
+    /** The user's account on every market Arbay can sign in to. */
+    suspend fun chatAccounts(): List<ChatAccount> = client.get("$baseUrl/api/chat/accounts").body()
 
-    suspend fun chatSignInInput(input: SignInInput): SignInStep =
-        client.post("$baseUrl/api/chat/signin/input") {
+    suspend fun beginChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
+        client.post("$baseUrl/api/chat/signin?market=${market.name}").body()
+    suspend fun chatSignInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
+        client.get("$baseUrl/api/chat/signin?market=${market.name}").body()
+
+    suspend fun chatSignInInput(input: SignInInput, market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
+        client.post("$baseUrl/api/chat/signin/input?market=${market.name}") {
             contentType(ContentType.Application.Json)
             setBody(input)
         }.body()
 
-    suspend fun cancelChatSignIn(): ChatAccount = client.post("$baseUrl/api/chat/signin/cancel").body()
+    suspend fun cancelChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount =
+        client.post("$baseUrl/api/chat/signin/cancel?market=${market.name}").body()
 
     /** Starts signing in on the site's own pages, shown through the server's proxy; the account says where. */
     suspend fun beginChatProxySignIn(): ChatAccount = client.post("$baseUrl/api/chat/signin/proxy").body()

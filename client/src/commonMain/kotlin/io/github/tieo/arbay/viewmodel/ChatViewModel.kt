@@ -12,6 +12,7 @@ import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.SendRequest
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.model.SignInStep
@@ -46,7 +47,12 @@ class ChatViewModel(
     private val rendersASample = sampleAccount != null
 
     private val _account = MutableStateFlow(sampleAccount)
+    /** The Kleinanzeigen account, the one the inbox and the seller messages go through. */
     val account: StateFlow<ChatAccount?> = _account.asStateFlow()
+
+    private val _accounts = MutableStateFlow(listOfNotNull(sampleAccount))
+    /** The user's account on every market Arbay can sign in to. */
+    val accounts: StateFlow<List<ChatAccount>> = _accounts.asStateFlow()
 
     private val _conversations = MutableStateFlow(sampleConversations)
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
@@ -115,10 +121,17 @@ class ChatViewModel(
         viewModelScope.launch {
             _loading.value = true
             attempt {
-                val account = client.chatAccount()
+                val accounts = client.chatAccounts()
+                _accounts.value = accounts
+                val account = accounts.firstOrNull { it.market == PlatformId.KLEINANZEIGEN } ?: client.chatAccount()
                 _account.value = account
                 // A sign-in going on in Arbay's browser shows here too, at the step it has reached.
-                if (account.signingIn && account.proxySignIn == null && _signIn.value == null) followSignIn()
+                accounts.firstOrNull { it.signingIn && it.proxySignIn == null }?.let { signing ->
+                    if (_signIn.value == null) {
+                        _signInMarket.value = signing.market
+                        followSignIn()
+                    }
+                }
                 _outbox.value = client.outbox()
                 if (account.signedIn) _conversations.value = client.conversations()
             }
@@ -209,7 +222,16 @@ class ChatViewModel(
     private val _signInBusy = MutableStateFlow(false)
     val signInBusy: StateFlow<Boolean> = _signInBusy.asStateFlow()
 
-    fun beginSignIn() = signInStep { client.beginChatSignIn() }
+    private val _signInMarket = MutableStateFlow(PlatformId.KLEINANZEIGEN)
+    /** The market the sign-in going on is for; one goes on at a time. */
+    val signInMarket: StateFlow<PlatformId> = _signInMarket.asStateFlow()
+
+    fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN) {
+        signInFollower?.cancel()
+        _signIn.value = null
+        _signInMarket.value = market
+        signInStep { client.beginChatSignIn(market) }
+    }
 
     /** Starts the sign-in on the site's own pages; the account then carries the page to show, until it is signed in. */
     fun beginProxySignIn() {
@@ -218,21 +240,26 @@ class ChatViewModel(
     }
 
     /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */
-    fun signInWith(value: String) = signInStep { client.chatSignInInput(SignInInput(value = value)) }
+    fun signInWith(value: String) = signInStep { client.chatSignInInput(SignInInput(value = value), _signInMarket.value) }
 
     /** Tap the page at a point of its picture, in the page's own pixels. */
-    fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y)) }
+    fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y), _signInMarket.value) }
 
     /** Characters typed on the page's picture, passed on as typed. */
-    fun signInType(text: String) = signInStep { client.chatSignInInput(SignInInput(text = text)) }
+    fun signInType(text: String) = signInStep { client.chatSignInInput(SignInInput(text = text), _signInMarket.value) }
 
     /** One named key pressed on the page's picture: Return, BackSpace, Tab... */
-    fun signInKey(key: String) = signInStep { client.chatSignInInput(SignInInput(key = key)) }
+    fun signInKey(key: String) = signInStep { client.chatSignInInput(SignInInput(key = key), _signInMarket.value) }
 
     fun cancelSignIn() = viewModelScope.launch {
         signInFollower?.cancel()
         _signIn.value = null
-        attempt { _account.value = client.cancelChatSignIn() }
+        val market = _signInMarket.value
+        attempt {
+            val left = client.cancelChatSignIn(market)
+            if (market == PlatformId.KLEINANZEIGEN) _account.value = left
+            _accounts.update { all -> all.map { if (it.market == left.market) left else it } }
+        }
     }
 
     /** One input at a time and in the order given, so keys reach the page as they were typed. */
@@ -263,12 +290,12 @@ class ChatViewModel(
     private fun followSignIn() {
         if (rendersASample || signInFollower?.isActive == true) return
         signInFollower = viewModelScope.launch {
-            if (_signIn.value == null) attempt { show(client.chatSignInStep()) }
+            if (_signIn.value == null) attempt { show(client.chatSignInStep(_signInMarket.value)) }
             while (isActive && _signIn.value != null) {
                 // Often enough that the picture reads as the page itself.
                 delay(1_500)
                 if (_signInBusy.value) continue
-                attempt { show(client.chatSignInStep()) }
+                attempt { show(client.chatSignInStep(_signInMarket.value)) }
             }
         }
     }
@@ -282,7 +309,7 @@ class ChatViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _error.value = e.message ?: "Kleinanzeigen could not be reached"
+            _error.value = e.message ?: "The server could not be reached"
         }
     }
 }

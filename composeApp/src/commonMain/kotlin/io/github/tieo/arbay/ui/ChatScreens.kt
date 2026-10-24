@@ -67,6 +67,8 @@ import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInStep
+import io.github.tieo.arbay.model.accountName
+import io.github.tieo.arbay.model.PlatformId
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.input.ImeAction
@@ -259,24 +261,26 @@ private fun Bubble(m: ChatMessage) {
     }
 }
 
-/** Whether Arbay can write from the user's Kleinanzeigen account, and signing in to it from here. */
+/** The user's account on every market Arbay can sign in to, and signing in to one from here. */
 @Composable
 fun AccountPanel(session: Session) {
     val chat = session.chat
-    val account by chat.account.collectAsState()
+    val accounts by chat.accounts.collectAsState()
     val signIn by chat.signIn.collectAsState()
+    val signInMarket by chat.signInMarket.collectAsState()
     val busy by chat.signInBusy.collectAsState()
-    val a = account
     Panel {
-        Text("Kleinanzeigen", style = MaterialTheme.typography.titleMedium)
-        val step = signIn
-        when {
-            step != null -> SignInSteps(step, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
-            a == null -> Busy()
-            a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
-            else -> {
-                a.problem?.let { Muted(it) }
-                if (busy) Busy() else Button(onClick = { chat.beginSignIn() }) { Text("Sign in") }
+        if (accounts.isEmpty()) Busy()
+        accounts.forEach { a ->
+            Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
+            val step = signIn?.takeIf { signInMarket == a.market }
+            when {
+                step != null -> SignInSteps(step, a.market, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
+                a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
+                else -> {
+                    a.problem?.let { Muted(it) }
+                    if (busy && signInMarket == a.market) Busy() else Button(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
+                }
             }
         }
     }
@@ -287,14 +291,14 @@ fun AccountPanel(session: Session) {
  * its picture, which takes taps for anything else it shows.
  */
 @Composable
-private fun SignInSteps(step: SignInStep, onType: (String) -> Unit, onKey: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
+private fun SignInSteps(step: SignInStep, market: PlatformId, onType: (String) -> Unit, onKey: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
     step.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     TextButton(onClick = onCancel) { Text("Cancel") }
     step.picture?.let { picture ->
         var size by remember { mutableStateOf(IntSize.Zero) }
         AsyncImage(
             model = "data:image/jpeg;base64,$picture",
-            contentDescription = "The Kleinanzeigen sign-in page",
+            contentDescription = "The ${market.accountName} sign-in page",
             modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).border(1.dp, arbay.line, MaterialTheme.shapes.small)
                 .onSizeChanged { size = it }
                 .pointerInput(step.width, step.height) {

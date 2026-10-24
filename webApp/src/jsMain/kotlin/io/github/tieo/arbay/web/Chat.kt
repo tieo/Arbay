@@ -26,6 +26,10 @@ import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
 import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.canMessage
+import io.github.tieo.arbay.model.accountName
+import io.github.tieo.arbay.model.SignInStep
+import io.github.tieo.arbay.model.SignInAsk
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
@@ -191,22 +195,76 @@ private fun Bubble(m: ChatMessage) {
     }
 }
 
-/** Whether Arbay can write from the user's Kleinanzeigen account, and signing in to it from here. */
+/** The user's account on every market Arbay can sign in to, and signing in to one from here. */
 @Composable
 fun AccountSection(app: WebApp) {
     val chat = app.chat
-    val account by chat.account.collectAsState()
+    val accounts by chat.accounts.collectAsState()
+    val signIn by chat.signIn.collectAsState()
+    val signInMarket by chat.signInMarket.collectAsState()
+    val busy by chat.signInBusy.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
-    val a = account
-    H3 { Text("Kleinanzeigen") }
-    val proxy = a?.proxySignIn?.takeIf { !a.signedIn }
-    when {
-        proxy != null -> SignInFrame(app, proxy)
-        a == null -> Busy()
-        a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
-        else -> {
-            a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
-            Div({ classes("actions") }) { PrimaryButton("Sign in") { chat.beginProxySignIn() } }
+    if (accounts.isEmpty()) Busy()
+    accounts.forEach { a ->
+        H3 { Text(a.market.accountName) }
+        val proxy = a.proxySignIn?.takeIf { !a.signedIn }
+        val step = signIn?.takeIf { signInMarket == a.market }
+        when {
+            proxy != null -> SignInFrame(app, proxy)
+            step != null -> PictureSignIn(app, step, a.market)
+            a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
+            busy && signInMarket == a.market -> Busy()
+            else -> {
+                a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
+                // Kleinanzeigen's own pages show through the proxy; every other market's as a picture of Arbay's browser.
+                Div({ classes("actions") }) {
+                    PrimaryButton("Sign in") { if (a.market == PlatformId.KLEINANZEIGEN) chat.beginProxySignIn() else chat.beginSignIn(a.market) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The market's login page in Arbay's browser, as it stands: a click on its picture clicks the page
+ * there, and what is typed in the field below goes into the page as typed, Enter included.
+ */
+@Composable
+private fun PictureSignIn(app: WebApp, step: SignInStep, market: PlatformId) {
+    val chat = app.chat
+    step.error?.let { P({ classes("small", "sign-in-error") }) { Text(it) } }
+    Div({ classes("inline-form") }) { QuietButton("Cancel") { chat.cancelSignIn() } }
+    step.picture?.let { picture ->
+        Img(src = "data:image/jpeg;base64,$picture", alt = "The ${market.accountName} sign-in page") {
+            classes("sign-in-picture")
+            onClick { event ->
+                val image = event.target as? org.w3c.dom.HTMLImageElement ?: return@onClick
+                if (image.clientWidth > 0 && step.width > 0) {
+                    chat.signInTap(event.offsetX * step.width / image.clientWidth, event.offsetY * step.height / image.clientHeight)
+                }
+            }
+        }
+        var mirror by remember { mutableStateOf("") }
+        Input(if (step.step == SignInAsk.PASSWORD) InputType.Password else InputType.Text) {
+            classes("sign-in-typing")
+            placeholder("Type on the page")
+            value(mirror)
+            onInput { event ->
+                val next = event.value
+                when {
+                    next.startsWith(mirror) -> next.removePrefix(mirror).takeIf { it.isNotEmpty() }?.let(chat::signInType)
+                    mirror.startsWith(next) -> repeat(mirror.length - next.length) { chat.signInKey("BackSpace") }
+                    else -> { repeat(mirror.length) { chat.signInKey("BackSpace") }; if (next.isNotEmpty()) chat.signInType(next) }
+                }
+                mirror = next
+            }
+            onKeyDown { event ->
+                if (event.key == "Enter") {
+                    event.preventDefault()
+                    chat.signInKey("Return")
+                    mirror = ""
+                }
+            }
         }
     }
 }

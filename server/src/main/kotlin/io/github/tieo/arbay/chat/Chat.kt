@@ -72,7 +72,17 @@ object Chat {
 
     private val outbox = mutableListOf<OutgoingMessage>()
     private var settings: ChatSettings
-    @Volatile private var signingIn = false
+
+    /** Every market the user can sign in to, each with the browser that holds its session. */
+    val sidecars: Map<PlatformId, MarketSidecar> = listOf(ChatBrowser, EbayChatBrowser, WillhabenChatBrowser).associateBy { it.market }
+
+    /** The browser of [market]; one eBay account answers for every eBay site. */
+    fun sidecarFor(market: PlatformId): MarketSidecar =
+        sidecars[if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market]
+            ?: throw ChatFailure("Arbay cannot sign in to ${market.displayName}", signedOut = false)
+
+    /** The markets a sign-in is going on in. */
+    private val signingIn = java.util.concurrent.ConcurrentHashMap.newKeySet<PlatformId>()
 
     /** Sign-ins on the site's own pages, shown through the proxy; their cookies go to the sidecar when done. */
     val signInProxy = SignInProxy(handOver = ::handOverCookies)
@@ -97,28 +107,36 @@ object Chat {
 
     // --- account ---
 
-    suspend fun account(): ChatAccount {
-        val proxying = signInProxy.isActive()
+    /** The user's account on [market]: signed in or not, and whether a sign-in is going on. */
+    suspend fun account(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount {
+        val sidecar = sidecarFor(market)
+        // Only Kleinanzeigen's own pages are shown through the proxy.
+        val proxying = sidecar.market == PlatformId.KLEINANZEIGEN && signInProxy.isActive()
         val proxyPath = if (proxying) SignInHosts.START else null
+        val signing = sidecar.market in signingIn || proxying
         return try {
-            val s = ChatBrowser.call("status")
+            val s = sidecar.call("status")
             ChatAccount(
+                market = sidecar.market,
                 signedIn = s["signedIn"]?.bool() == true,
                 name = s["name"]?.str(),
-                signingIn = signingIn || proxying,
+                signingIn = signing,
                 problem = s["problem"]?.str(),
                 proxySignIn = proxyPath,
             )
-        } catch (e: ChatBrowser.ChatFailure) {
-            ChatAccount(signingIn = signingIn || proxying, problem = e.message, proxySignIn = proxyPath)
+        } catch (e: ChatFailure) {
+            ChatAccount(market = sidecar.market, signingIn = signing, problem = e.message, proxySignIn = proxyPath)
         }
     }
+
+    /** The user's account on every market Arbay can sign in to. */
+    suspend fun accounts(): List<ChatAccount> = sidecars.keys.map { account(it) }
 
     /** Starts a sign-in on the site's own pages through the proxy; returns the id the browser's cookie carries. */
     fun beginProxySignIn(): String = signInProxy.begin()
 
     /** The account while a sign-in through the proxy goes on: the browser shows the page it starts at. */
-    fun proxyAccount(): ChatAccount = ChatAccount(signingIn = true, proxySignIn = SignInHosts.START)
+    fun proxyAccount(): ChatAccount = ChatAccount(market = PlatformId.KLEINANZEIGEN, signingIn = true, proxySignIn = SignInHosts.START)
 
     /** Gives the cookies of a proxied sign-in to the sidecar's browser; true when that browser is then signed in. */
     private suspend fun handOverCookies(cookies: List<ProxyCookie>): Boolean {
@@ -128,34 +146,37 @@ object Chat {
         return signedIn
     }
 
-    suspend fun beginSignIn(): SignInStep = step(ChatBrowser.call("signin")).also { signingIn = it.step != SignInAsk.DONE }
+    suspend fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep {
+        val sidecar = sidecarFor(market)
+        return step(sidecar.call("signin", 90_000)).also { if (it.step != SignInAsk.DONE) signingIn += sidecar.market }
+    }
 
-    suspend fun signInStep(): SignInStep = step(ChatBrowser.call("signin_state")).also(::finishedIfDone)
+    suspend fun signInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
+        step(sidecarFor(market).call("signin_state")).also { finishedIfDone(market, it) }
 
     /** Types [input]'s value into what the page asks for, or clicks its point; nothing is kept. */
-    suspend fun signInWith(input: SignInInput): SignInStep {
+    suspend fun signInWith(input: SignInInput, market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep {
+        val sidecar = sidecarFor(market)
         val answer = when {
-            input.value != null -> ChatBrowser.call("signin_fill", 60_000, "value" to input.value)
-            input.text != null || input.key != null -> ChatBrowser.call("signin_keys", 60_000, "text" to input.text, "key" to input.key)
-            else -> ChatBrowser.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
+            input.value != null -> sidecar.call("signin_fill", 60_000, "value" to input.value)
+            input.text != null || input.key != null -> sidecar.call("signin_keys", 60_000, "text" to input.text, "key" to input.key)
+            else -> sidecar.call("signin_click", 60_000, "x" to (input.x ?: 0.0), "y" to (input.y ?: 0.0))
         }
-        return step(answer).also(::finishedIfDone)
+        return step(answer).also { finishedIfDone(market, it) }
     }
 
     /** A page that has moved on to the signed-in site, by any device's input or by itself, ends the sign-in. */
-    private fun finishedIfDone(step: SignInStep) {
-        if (step.step == SignInAsk.DONE && signingIn) {
-            signingIn = false
-            Live.changed(LiveKind.CHAT)
-        }
+    private fun finishedIfDone(market: PlatformId, step: SignInStep) {
+        if (step.step == SignInAsk.DONE && signingIn.remove(sidecarFor(market).market)) Live.changed(LiveKind.CHAT)
     }
 
-    suspend fun cancelSignIn(): ChatAccount {
-        val proxied = signInProxy.end()
-        signingIn = false
+    suspend fun cancelSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount {
+        val sidecar = sidecarFor(market)
+        val proxied = sidecar.market == PlatformId.KLEINANZEIGEN && signInProxy.end()
+        signingIn -= sidecar.market
         // A sign-in through the proxy has no page open in the sidecar's browser to leave.
-        if (!proxied) ChatBrowser.call("signin_done")
-        return account()
+        if (!proxied) sidecar.call("signin_done")
+        return account(market)
     }
 
     private fun step(o: JsonObject) = SignInStep(
@@ -201,7 +222,7 @@ object Chat {
                 return
             }
         }
-        throw ChatBrowser.ChatFailure("the reply was sent but does not show in the conversation; Kleinanzeigen answered: $answer", signedOut = false)
+        throw ChatFailure("the reply was sent but does not show in the conversation; Kleinanzeigen answered: $answer", signedOut = false)
     }
 
     // --- sending to several sellers ---
@@ -249,7 +270,7 @@ object Chat {
             ChatBrowser.call("contact", 120_000, "adId" to adId, "text" to due.text)
         }
         result.getOrNull()?.get("requests")?.let { log.info("Contact form for {} sent: {}", due.listingId, it) }
-        (result.exceptionOrNull() as? ChatBrowser.ChatFailure)?.detail?.let { keepFailedPage(due, it, result.exceptionOrNull() as Exception) }
+        (result.exceptionOrNull() as? ChatFailure)?.detail?.let { keepFailedPage(due, it, result.exceptionOrNull() as Exception) }
         synchronized(outbox) {
             val i = outbox.indexOfFirst { it.id == due.id }
             if (i >= 0) outbox[i] = result.fold(

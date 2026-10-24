@@ -708,6 +708,9 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .review-answer { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 6px 12px; text-decoration: none; border-left: 2px solid var(--line); margin: 4px 0; }
 .review-answer:hover { border-left-color: var(--accent); }
 .results.wide { grid-column: 2 / 4; }
+.sign-in-picture { display: block; width: 100%; max-width: 1264px; border: 1px solid var(--line); border-radius: var(--radius-small); cursor: pointer; }
+.sign-in-error { color: var(--danger); }
+.sign-in-typing { display: block; width: 100%; max-width: 420px; margin-top: 8px; }
 .sign-in-frame { display: block; width: 100%; max-width: 1264px; height: min(720px, 75vh); border: 1px solid var(--line); border-radius: var(--radius-small); background: #fff; }
 
 /* A chip with its own hide button: the two read as one control, the eye at its right end. */
