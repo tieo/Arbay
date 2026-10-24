@@ -19,13 +19,15 @@ line written is {"ok": true, "ready": true}. Failures answer {"ok": false, "erro
   {"op": "signin"}                                  -> opens the login page; answers like signin_state
   {"op": "signin_state"}                            -> {"ok": true, "step": "email"|"password"|"code"|"other"|"done", "error": .., "picture": <jpeg base64>, "width": .., "height": ..}
   {"op": "signin_fill", "value": ".."}              -> types into the field the page asks for and submits; answers like signin_state
-  {"op": "signin_click", "x": .., "y": ..}          -> clicks the page at a point of its picture; answers like signin_state
+  {"op": "signin_click", "x": .., "y": ..}          -> clicks the screen at a point of its picture; answers like signin_state
   {"op": "signin_keys", "text": "..", "key": ".."}  -> types text, or presses one named key (X keysym); answers like signin_state
   {"op": "signin_done"}                             -> leaves the login page; answers like status
 
 Requires: zendriver, google-chrome-stable, xdotool, a display in DISPLAY (Xvfb, started by the server).
 """
 import asyncio
+import base64
+import io
 import json
 import math
 import os
@@ -170,7 +172,9 @@ class MarketBrowser:
         # The window fills the display the user signs in on, and a restart (the server's, which
         # ends Chrome abruptly) leaves no restore prompt over the page.
         kwargs = {"headless": False, "user_data_dir": self.profile,
-                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble"]}
+                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble",
+                                   # No bar over the page warning of the automation's own flags.
+                                   "--test-type"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
@@ -204,9 +208,16 @@ class MarketBrowser:
         return int(visual.client_width), int(visual.client_height)
 
     async def picture(self) -> dict:
-        shot = await within("screenshot", self.tab.send(cdp.page.capture_screenshot(format_="jpeg", quality=80)))
-        width, height = await self.viewport()
-        return {"picture": shot, "width": width, "height": height}
+        """The browser's whole screen as the user would see it: the page, the address bar that says
+        which site it is, and the browser's own dialogs over it. A passkey prompt is the browser's,
+        not the page's: photographed from the page alone it was never shown, and took every tap."""
+        def grab() -> dict:
+            from PIL import ImageGrab
+            screen = ImageGrab.grab(xdisplay=os.environ.get("DISPLAY")).convert("RGB")
+            out = io.BytesIO()
+            screen.save(out, "JPEG", quality=80)
+            return {"picture": base64.b64encode(out.getvalue()).decode(), "width": screen.width, "height": screen.height}
+        return await asyncio.get_running_loop().run_in_executor(None, grab)
 
     async def calibrate(self) -> tuple[float, float]:
         """The display position of the page's corner, read off one real mouse move over the site's page."""
@@ -427,22 +438,10 @@ class MarketBrowser:
         return await self.signin_state()
 
     async def signin_click(self, x: float, y: float) -> dict:
-        """A tap on the page's picture, made with the display's mouse at the same point."""
-        ox, oy = await self.calibrate_any()
-        await self.hand.click(ox + x, oy + y)
+        """A tap on the screen's picture, made with the display's mouse at the same point."""
+        await self.hand.click(x, y)
         await asyncio.sleep(0.8)
         return await self.signin_state()
-
-    async def calibrate_any(self) -> tuple[float, float]:
-        """The page corner's display position on whatever page is open, the login page included:
-        the window does not move, so a corner measured on the site holds there too."""
-        if self.origin:
-            return self.origin
-        # Measured from the window: the page area sits below the browser's own bars.
-        sizes = await self.tab.evaluate("JSON.stringify([screenX, screenY, outerHeight - innerHeight, outerWidth - innerWidth])")
-        sx, sy, bars, sides = json.loads(sizes)
-        self.origin = (float(sx + sides / 2), float(sy + bars))
-        return self.origin
 
     async def signin_keys(self, text: str | None, key: str | None) -> dict:
         """What the user typed on the page's picture, typed into the page as they typed it. With
