@@ -54,7 +54,6 @@ Requires: zendriver, google-chrome-stable, xdotool, a display in DISPLAY (Xvfb, 
 """
 import asyncio
 import json
-import math
 import os
 import random
 import re
@@ -65,6 +64,8 @@ from urllib.parse import urlparse
 import zendriver as zd
 from zendriver import cdp
 
+from market_browser import Hand, SignedOut, Stuck, log, within
+
 CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_CHAT_PROFILE", os.path.expanduser("~/.arbay/chat-profile"))
 ROOT = "https://www.kleinanzeigen.de"
@@ -73,90 +74,8 @@ LOGIN_URL = ROOT + "/m-einloggen.html"
 LOGIN_HOST = "login.kleinanzeigen.de"
 
 
-def log(line: str) -> None:
-    """One line to the server's log of this browser, with the time, for finding what is slow."""
-    sys.stderr.write(f"{time.strftime('%H:%M:%S')} {line}\n")
-    sys.stderr.flush()
-
-
-async def within(what: str, call, seconds: float = 8):
-    """[call] with a time limit of its own: a page call whose answer is lost while the page changes
-    would otherwise wait for good, and every request after it with it."""
-    try:
-        return await asyncio.wait_for(call, timeout=seconds)
-    except asyncio.TimeoutError:
-        log(f"{what} gave no answer within {seconds:.0f}s")
-        raise RuntimeError(f"the page did not answer ({what})")
-
-
-class SignedOut(Exception):
-    pass
-
-
 class PostFormProblem(Exception):
     """The post form does not offer what the ad asks for; worded for the user."""
-
-
-class Stuck(Exception):
-    """The browser no longer answers, and only a new one will."""
-
-
-class Hand:
-    """The mouse and keyboard of the browser's X display, moved the way a person moves them.
-
-    Characters the X keyboard layout lacks (ä, ü, ß, €) xdotool types by remapping a spare key on
-    the fly, and typed at speed some of them are lost. Those go in through the browser's own text
-    input ([insert]), the way an input method puts in a character, still as trusted input."""
-
-    def __init__(self) -> None:
-        self.x, self.y = 640.0, 450.0
-        self.insert = None
-
-    @staticmethod
-    async def xdo(*args: str) -> None:
-        proc = await asyncio.create_subprocess_exec("xdotool", *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
-        _, err = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError(f"xdotool {args[0]} failed: {err.decode().strip()}")
-
-    async def move(self, x: float, y: float) -> None:
-        """Travel to (x, y) on a slightly bent path, quick in the middle and slow at both ends."""
-        sx, sy = self.x, self.y
-        distance = math.hypot(x - sx, y - sy)
-        steps = max(8, min(45, int(distance / 18)))
-        # One bend point off the straight line, so no two paths are the same.
-        bx = (sx + x) / 2 + random.uniform(-0.25, 0.25) * distance
-        by = (sy + y) / 2 + random.uniform(-0.25, 0.25) * distance
-        chain: list[str] = []
-        for i in range(1, steps + 1):
-            t = i / steps
-            t = t * t * (3 - 2 * t)
-            px = (1 - t) ** 2 * sx + 2 * (1 - t) * t * bx + t ** 2 * x
-            py = (1 - t) ** 2 * sy + 2 * (1 - t) * t * by + t ** 2 * y
-            chain += ["mousemove", str(round(px)), str(round(py)), "sleep", f"{random.uniform(0.006, 0.02):.3f}"]
-        await self.xdo(*chain)
-        self.x, self.y = x, y
-
-    async def click(self, x: float, y: float) -> None:
-        await self.move(x, y)
-        await asyncio.sleep(random.uniform(0.08, 0.3))
-        await self.xdo("mousedown", "1", "sleep", f"{random.uniform(0.05, 0.13):.3f}", "mouseup", "1")
-
-    async def type(self, text: str, fast: bool = False) -> None:
-        """Key by key, each after a pause of its own."""
-        low, high = (0.03, 0.09) if fast else (0.07, 0.22)
-        for ch in text:
-            # "type" takes every argument after it as text, so each key is a call of its own.
-            if ch == "\n":
-                await self.xdo("key", "Return")
-            elif ch.isascii() or self.insert is None:
-                await self.xdo("type", "--delay", "0", "--", ch)
-            else:
-                await self.insert(ch)
-            await asyncio.sleep(random.uniform(low, high))
-
-    async def key(self, *names: str) -> None:
-        await self.xdo("key", *names)
 
 
 class Chat:

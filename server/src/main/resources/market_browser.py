@@ -71,9 +71,11 @@ class Hand:
     the fly, and typed at speed some of them are lost. Those go in through the browser's own text
     input ([insert]), the way an input method puts in a character, still as trusted input."""
 
-    def __init__(self) -> None:
+    def __init__(self, newline: str = "Return") -> None:
         self.x, self.y = 640.0, 450.0
         self.insert = None
+        # The key a line break is typed with: a message form that sends on Return takes Shift+Return.
+        self.newline = newline
 
     @staticmethod
     async def xdo(*args: str) -> None:
@@ -111,7 +113,7 @@ class Hand:
         for ch in text:
             # "type" takes every argument after it as text, so each key is a call of its own.
             if ch == "\n":
-                await self.xdo("key", "shift+Return")
+                await self.xdo("key", self.newline)
             elif ch.isascii() or self.insert is None:
                 await self.xdo("type", "--delay", "0", "--", ch)
             else:
