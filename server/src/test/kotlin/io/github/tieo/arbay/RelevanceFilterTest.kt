@@ -1504,5 +1504,16 @@ class RelevanceFilterTest {
         ))
         assertEquals(listOf("Google Pixel 8 128GB Obsidian"), results.map { it.title })
     }
-}
 
+    @Test
+    fun `a hyphenated model code searched alone is required`() {
+        val results = search("D4-320", listOf(
+            listing("TERRAMASTER D4-320 4bay Gehäuse, USB3.2, 10Gbps, Diskless"),
+            listing("TerraMaster D4 320 Festplattengehäuse"),
+            listing("Diablo 4 D4 ETERNAL NO SEASON Crux of the False Prophet Mats/Kills"),
+            listing("D- Ring O- Ringe geschweißt poliert Metallringe Edelstahl V4A Stahlring Rund"),
+            listing("Spanstick D4 Kleber PU Schaum Spanplatte Bodenbelag Kleber"),
+        ))
+        assertEquals(2, results.size, results.joinToString { it.title })
+    }
+}

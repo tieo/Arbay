@@ -1326,7 +1326,11 @@ object RelevanceFilter {
     private fun isAModelCode(token: String): Boolean {
         val t = token.replace(NON_ALNUM, "")
         if (isASize(t) || t.none { it.isLetter() } || t.none { it.isDigit() }) return false
-        return t.length >= MODEL_CODE_LENGTH || (t.count { it.isLetter() } >= 2 && t.count { it.isDigit() } >= 2)
+        // A letter before a number of three or more digits names a model as surely: "D4-320" is
+        // TerraMaster's four-bay box, and read as no code at all it required nothing, so eBay's
+        // Diablo 4 items and D-rings stood as the cheapest of it.
+        return t.length >= MODEL_CODE_LENGTH || (t.count { it.isLetter() } >= 2 && t.count { it.isDigit() } >= 2) ||
+            t.count { it.isDigit() } >= 3
     }
 
     private const val MODEL_CODE_LENGTH = 6
