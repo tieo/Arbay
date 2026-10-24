@@ -935,6 +935,8 @@ object RelevanceFilter {
         if (abrasiveGrit.containsMatchIn(listing.title) && sizesIn(listing.title).isEmpty()) return true
         // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
         val match = consumableNoun.find(listing.title) ?: return false
+        // Under a vehicle a bare "Schalter" is its gearbox: "MAN TGE 3.140 / L2H2, 6 Gang Schalter".
+        if (match.value.equals("schalter", ignoreCase = true) && namesAVehicle(queryText)) return false
         val before = listing.title.take(match.range.first)
         return !comesWith.containsMatchIn(before) && !saidAboutTheDevice(before, parsed)
     }

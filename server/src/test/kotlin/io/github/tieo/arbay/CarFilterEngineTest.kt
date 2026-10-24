@@ -410,6 +410,21 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun equipmentListedAfterTheVanIsNoPart() {
+        // Kleinanzeigen, 2026-10-24: three vans dropped as accessories for what their titles list.
+        listOf(
+            "Volkswagen Crafter Kasten 35 Mittellang, AHK,Dachträger,",
+            "Volkswagen Crafter 30 2.0 TDI HD VA Navi, AHK, Frontscheibe",
+            "MAN TGE 3.140 / L2H2, 6 Gang Schalter – Bj. 2018 Crafter",
+        ).forEach { title ->
+            assertFalse(CarFilterEngine.namesAVehiclePart(carListing("ka", PlatformId.KLEINANZEIGEN, title, vehicle = VehicleInfo())), title)
+        }
+        listOf("Dachträger VW Crafter", "VW Crafter Frontscheibe neu", "Fensterheberschalter VW Crafter").forEach { title ->
+            assertTrue(CarFilterEngine.namesAVehiclePart(carListing("kp", PlatformId.KLEINANZEIGEN, title, vehicle = VehicleInfo())), title)
+        }
+    }
+
+    @Test
     fun keepsPartWordOnCarOnlyPlatform() {
         // The non-vehicle guards apply only to general classifieds; a car-only platform listing
         // survives a part word in its title even without any parsed specs.

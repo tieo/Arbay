@@ -372,8 +372,10 @@ object CarFilterEngine {
     // Gated on the no-spec branch, so a real car the site gave specs for is never touched.
     // (?U) makes \w match umlauts, so a compound like "Türverkleidung" keeps its head noun intact
     // (without it, ü splits the word and the two-letter stem before the suffix is lost).
+    // "Schalter" alone is the gearbox a van is sold with ("L2H2, 6 Gang Schalter"), not a switch,
+    // and would otherwise read as a "Sc" + "halter".
     private val partSuffix = Regex(
-        """(?U)\b\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
+        """(?U)\b(?!schalter\b)\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
             """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter|""" +
             """scharnier|verst(ä|ae)rker|scheiben?|gitter(sets?|n)?|pumpen?|kn(auf|opf|äufe)|kedern?|filter)\b""",
         RegexOption.IGNORE_CASE,
@@ -403,12 +405,28 @@ object CarFilterEngine {
         } ?: false
         if (hasVehicleSpec) return false
         val title = listing.title
-        return partAccessory.containsMatchIn(title) || partAccessoryLead.containsMatchIn(title) ||
-            partFromDonorVehicle.containsMatchIn(title) || partSuffix.containsMatchIn(title) ||
+        return namedOutsideEquipment(partAccessory, title) || partAccessoryLead.containsMatchIn(title) ||
+            partFromDonorVehicle.containsMatchIn(title) || namedOutsideEquipment(partSuffix, title) ||
             partNumber.containsMatchIn(title) || vagPartNumber.containsMatchIn(title) || isTyreAd(title) ||
             engineWithCode.containsMatchIn(title) || engineLead.containsMatchIn(title) ||
             (partNamedEarly.containsMatchIn(title) && fitsAVehicle.containsMatchIn(title))
     }
+
+    // An item of a van's equipment as a title lists it, between commas, stars, slashes or pluses.
+    private val equipmentItem = Regex(
+        """(?:^|[,*/+|])\s*(ahk|anh(ä|ae)ngerkupplung|klima\w*|navi\w*|kamera|r(ü|ue)ckfahrkamera|pdc|""" +
+            """standh\w*|sthz|shz|sitzheizung|tempomat|acc|led|automatik|dsg)\s*(?=[,*/+|]|$)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Whether [pattern] names a part in [title] anywhere but as one more item of an equipment list:
+     *  "Crafter Kasten 35 Mittellang, AHK, Dachträger" and "2.0 TDI HD VA Navi, AHK, Frontscheibe"
+     *  are vans listing what they come with, a roof rack and a new windscreen among it. */
+    private fun namedOutsideEquipment(pattern: Regex, title: String): Boolean =
+        pattern.findAll(title).any { match ->
+            val before = title.substring(0, match.range.first)
+            before.trimEnd().lastOrNull()?.let { it in ",*/+|" } != true || !equipmentItem.containsMatchIn(before)
+        }
 
     /** An OEM part number, which is what a parts seller titles a part with and what a whole
      *  vehicle is never titled with: "A9018900065", "A0031532728", "804528". Ten digits of it
