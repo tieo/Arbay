@@ -1457,4 +1457,14 @@ class RelevanceFilterTest {
         assertEquals(listOf("Retoo Festplattengehäuse 3,5 Zoll USB 3.0"),
             search("festplattengehäuse 3,5 zoll usb 3.0", described).map { it.title })
     }
+
+    @Test
+    fun `a model number searched alone is required where the answer writes it`() {
+        val kept = search("MG09ACA18TE", listOf(
+            listing("Dichtung Abgaskrümmer für MG TF 1.8 02 bis 09 Victor Teil 18K4K", 1615),
+            listing("Ölfilter für MG MGR 3.9 92 bis 95 Knecht BA32105 Original", 1618),
+            listing("Toshiba MG09 Enterprise 18TB, SATA, 3,5 Zoll Interne Festplatte (MG09ACA18TE)", 24000),
+        )).map { it.title }
+        assertEquals(listOf("Toshiba MG09 Enterprise 18TB, SATA, 3,5 Zoll Interne Festplatte (MG09ACA18TE)"), kept)
+    }
 }

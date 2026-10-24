@@ -1121,7 +1121,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && parsed.positiveTokens.size > 1) ||
+                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && (parsed.positiveTokens.size > 1 || shareCarrying(token) > 0.0)) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             // A requirement made only of words the whole answer carries decides nothing. Asked for
@@ -1295,9 +1295,10 @@ object RelevanceFilter {
      * ("MG09ACA18TE", "ST16000NM000J", "WD80EZAZ"). It names one product, so a listing without it is
      * not that product however many other words it shares: asked for a Toshiba MG09ACA18TE, Vinted
      * answered with Toshiba remote controls and televisions, and every one of them passed on
-     * "Toshiba" because no title in the answer wrote the number. Required only beside other words:
-     * those are what such listings pass on, while a search that is the number alone is left to a
-     * market that files it as a field and never prints it (Geizhals). A shorter code names a model
+     * "Toshiba" because no title in the answer wrote the number. Required beside other words, since
+     * those are what such listings pass on, and alone wherever a listing of the answer writes it:
+     * eBay answered "MG09ACA18TE" with MG car parts. A market that files it as a field and never
+     * prints it (Geizhals) is left to its own search. A shorter code names a model
      * line where it has two letters and two digits at least ("MG09", "SN770", "RX580"): asked for
      * a Toshiba MG09, Vinted answered with the same remote controls. Codes with one digit ("M.2",
      * "S25", "DDR4", "USB3", "Gen4") are a slot, a phone generation or a standard, written out of as
