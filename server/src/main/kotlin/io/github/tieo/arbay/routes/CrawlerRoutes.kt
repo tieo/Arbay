@@ -535,8 +535,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // someone opens it, since an item page costs a browser load on the markets that defend
         // them — a price worth paying for the one listing being read and not for fifty being
         // scrolled past.
-        fun ListingDetail.withBrokenRead() =
-            copy(soldBroken = io.github.tieo.arbay.model.Condition.soldAsDefective("", description))
+        // What the ad's own words say over the market's boxes: sold broken, or only for collection.
+        fun ListingDetail.withBrokenRead() = copy(
+            soldBroken = io.github.tieo.arbay.model.Condition.soldAsDefective("", description),
+            shipping = shipping.asTheTextSays(description),
+        )
 
         get("/listing-detail") {
             val rawUrl = call.queryParameters["url"] ?: throw BadRequestException("Missing url")
