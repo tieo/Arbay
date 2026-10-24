@@ -83,20 +83,19 @@ class EbayDeCrawler(
     private suspend fun browserSearch(query: SearchQuery): List<Listing>? {
         val first = ebayPage(buildSearchUrl(query, 1), SEARCH_MARKERS) ?: return null
         val seenIds = mutableSetOf<String>()
-        var page = parseSearchResults(first)
+        // A search for sold offers asks eBay for its sold listings from the first page on.
+        fun read(html: String) = parseSearchResults(html).map { if (query.soldOnly) it.copy(sold = true) else it }
+        var page = read(first)
         val results = page.filter { seenIds.add(it.externalId) }.toMutableList()
         val cap = query.resultCap()
         var number = 1
         while (page.size >= 20 && results.size < cap && number < query.pageLimit()) {
             number++
             val html = ebayPage(buildSearchUrl(query, number), SEARCH_MARKERS) ?: break
-            page = parseSearchResults(html)
+            page = read(html)
             val fresh = page.filter { seenIds.add(it.externalId) }
             if (fresh.isEmpty()) break
             results += fresh
-        }
-        if (query.soldOnly) ebayPage(buildSearchUrl(query.copy(soldOnly = true), 1), SEARCH_MARKERS)?.let { html ->
-            results += parseSearchResults(html).map { it.copy(sold = true) }.filter { seenIds.add(it.externalId) }
         }
         return results
     }
