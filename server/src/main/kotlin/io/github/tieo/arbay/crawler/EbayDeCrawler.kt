@@ -14,6 +14,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import org.jsoup.Jsoup
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 
 class EbayDeCrawler(
@@ -64,9 +67,9 @@ class EbayDeCrawler(
      * widening pause before it is taken as refused. The browser is free to other pages in the
      * pauses. Null where it is refused, which leaves the caller its other tiers.
      */
-    private suspend fun ebayPage(url: String, markers: List<String>): String? {
+    private suspend fun ebayPage(url: String, markers: List<String>, signedIn: Boolean = false): String? {
         for (pause in REFUSED_PAUSES_MS + 0L) {
-            val page = EbayBrowser.get(url, markers) ?: return null
+            val page = (if (signedIn) accountPage(url, markers) else EbayBrowser.get(url, markers)) ?: return null
             if (page.page == "content") return page.html
             log.info("{}: Chrome got {} for {}", domain, page.page, url)
             if (page.page != "errorpage" || pause == 0L) return null
@@ -76,12 +79,32 @@ class EbayDeCrawler(
     }
 
     /**
+     * [url] read in the user's own signed-in eBay browser: eBay shows its sold listings to nobody
+     * signed out, and sends every other browser to its sign-in page. Null where the account is not
+     * signed in or eBay asks its password again.
+     */
+    private suspend fun accountPage(url: String, markers: List<String>): EbayBrowser.Page? = try {
+        val answer = io.github.tieo.arbay.chat.EbayChatBrowser.call(
+            "page", 60_000, "url" to url, "markers" to kotlinx.serialization.json.JsonArray(markers.map(::JsonPrimitive)), "wait" to 25,
+        )
+        EbayBrowser.Page(
+            html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
+            page = answer["page"]?.jsonPrimitive?.contentOrNull ?: "unknown",
+        )
+    } catch (e: io.github.tieo.arbay.chat.ChatFailure) {
+        log.info("{}: the account's browser could not read {}: {}", domain, url, e.message)
+        null
+    }
+
+    /**
      * The search read in [EbayBrowser], page after page until the search has as many offers as it
      * wants or a page comes back short, then its sold page where asked. Null where the first page
      * was refused.
      */
     private suspend fun browserSearch(query: SearchQuery): List<Listing>? {
-        val first = ebayPage(buildSearchUrl(query, 1), SEARCH_MARKERS) ?: return null
+        // Sold listings show only to a signed-in browser, which is the user's own.
+        val first = ebayPage(buildSearchUrl(query, 1), SEARCH_MARKERS, signedIn = query.soldOnly) ?: return null
         val seenIds = mutableSetOf<String>()
         // A search for sold offers asks eBay for its sold listings from the first page on.
         fun read(html: String) = parseSearchResults(html).map { if (query.soldOnly) it.copy(sold = true) else it }
@@ -91,7 +114,7 @@ class EbayDeCrawler(
         var number = 1
         while (page.size >= 20 && results.size < cap && number < query.pageLimit()) {
             number++
-            val html = ebayPage(buildSearchUrl(query, number), SEARCH_MARKERS) ?: break
+            val html = ebayPage(buildSearchUrl(query, number), SEARCH_MARKERS, signedIn = query.soldOnly) ?: break
             page = read(html)
             val fresh = page.filter { seenIds.add(it.externalId) }
             if (fresh.isEmpty()) break
