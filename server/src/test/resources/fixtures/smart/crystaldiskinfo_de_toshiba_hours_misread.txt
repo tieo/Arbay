@@ -1,0 +1,76 @@
+Ei TOSHIBA MGO9ACAT8TE 18000,2 GB
+Gesamtzustand Firmware [0104 | at
+Seriennummer |XXXXXXXXXXXX ee |
+Eu Schnittstelle |UASP (Serial ATA) Drehzahl 7290 RPM |
+Übertragungsmodus [SATA/600|SATA/E00, | Fingeschaltet [__72mal]
+‚ktuelle Temperate Laufwerksbuchstaben [fr Betriebsstunden | 35337 sta. |
+ss |
+Eigenschaften |S MAR I. APM, NCO ]
+|®| 01 Lesefehlerrate 100 100 50 000000000000
+|@ 02 Datendurchsatz-Leistung 100 100 50 oomocodood0g
+|@ 03 Mittlere Anlaufzeit 100 100 1 0000000022EF
+@ MM Start/Stopp-Zyklen der Spindel 100 100 ta] 00000000142
+| ® 05 Wiederzugewiesene Sektoren 100 100 10 000000000000
+\® 07 Suchfehler 100 100 50 000000000000
+|® 08 Süteder Suchoperationen 100 100 50 Goooocc00000
+|@ 09 Beinebsstunden 12 12 0 — geaooo008409
+® 0A Misstungene Spindelanläufe 100 100 Eu) NCOCOGGOOON
+|@ 0C Geräte-Einschaltvorgange 100 100 je) 000000000048
+| @ 17 Herstellerspezifisch 100 100 75 000000000000
+|@ 18 Herstellerspezifisch 100 100 75. 000000000000
+|® 1B Herstellerspezifisch 100 100 E19) 00000700025
+|® BF Beschleunigungssensor-Fehlerrate 100 100 9 EOOOCGHOOOT
+\® CO Ausschaltungsabbrüche 100 100 0 000000000038
+|@ Ci Laden/Entladen-Zyklen 100 100 ft) 00000900185
+|®| C2 Temperatur 100 100 0 003600170024
+® C4 Wiederzuweisungsereignisse 100 100 10 coooocoooo00
+| @ CS Aktuell ausstehende Sektoren 100 100 0 OGOOGCOC0000
+|® C6 Nicht komigierbare Sektoren 100 100 Q 00000000001
+\® C7 UltraDMA-CRC-Fehler 200 200 ie} 00000000000
+|® DC Festplattenverschiebung 100 100 QO  gp00010A000C
+|®| DE Stunden geladen 13 13 je) 00000000834F
+|@ DF Laden/Entladen-Wiederholungen 100 100 9 GO0000000000
+|® FO Ladereibung 100 100 0 ea0eGa000000
+|@ E2 Ladezeit 100 100 1) 00000000026F
+| ® FO Kopfpositionierungszeit 100 100 1 000000000000
+|@ FI LBA geschrieben (gesamt) 100 100 0 0010667683DF
+\® F2 LBA gelesen [gesamt 100 100 i?) O003518C43EA,
+
+
+E TOSHIBA MGO9ACAT8TE 18000,2 GB
+Gesamtzustand Firmware 10104 | ---- |
+Seriennummer |XXXXXXXXXXXX — | zu BE
+— Schnittstelle 'UASP (Senal ATA) | Drehzahl 7200 RPM
+Übertragungsmodus | SATA/600 | SATA/600 Fingeschaltet | 72 mal!
+‚ktuelle Temperatı Laufwerksbuchstaben | Betriebsstunden 45337 Std, |
+| ee ee eee
+Eigenschaften |SMAR I, APM, NCO |
+® 01 Lesefehlerrate 100 100 50 000000000000
+: 02 Datendurchsatz-Leistung 100 100 50 ooooooo0dda9
+® 0? Mittlere Anlaufzeit 100 100 1 0O00000922EF
+® WM Star/Stopp-Zyklen der Spindel 100 100 1) 000000000142
+® 05 Wiederzugewiesene Sektoren 100 100 10. geaccoo00000
+ie 07 Suchfehler 100 100 50 000000000000
+be 08 Gite der Suchoperationen 100 100 50 KROOIOODON
+® 03 Beitnebsstunden 12 12 9) COOOOO008A09
+® 0A Misslungene Spindetaniaufe 100 100 Y) OHaceaddn000
+@ 0C Geräte-Einschaltvorgange 100 100 a) 000000000048
+'@ 17 Herstellerspezifisch 100 100 75 gagccoo00000
+es 18  Herstellerspezifisch 100 100 75 000000000000
+® 18  Herstellerspezifisch 100 100 x 0000010F0025
+® BF Beschleunigungssensor-Fehlerrate 100 100 0 DROOOGOOOONT
+'® © Ausschaltungsabbrüche 100 100 a) 000000000038
+'® Ci Laden/Entladen-Zyklen 100 100 0 000000000185
+be C2 Temperatur 100 100 ) 003600170024
+® C4 Wiederzuweisungsereignisse 100 100 10 WeeeeCUULhnt
+® CS Aktuell ausstehende Sektoren 100 100 0 ROOT
+'® C6 Nicht komigierbare Sektoren 100 100 a) anedea0a0001
+(© C7 UltraDMA-CRC-Fehler 200 200 a) 000000000000
+® DC Festplattenverschiebung 100 100 ) 0000010A000C
+® DE Stunden geladen 13 13 0 00000000834
+® DF Läden/Entladen-Wiederholungen 100 100 4) KROOCOGHAON
+'® FO Iadereibung 100 100 N)
+'® E2 Ladezeit 100 100 0 00000000026F
+'® FO Kopfpositionierungszeit 100 100 1 gadaece00000
+® FI LBA geschrieben (gesamt) 100 100 0  00106876832DF
+® F2 LBA gelesen [gesamt) 100 100 #) OI519C43EA

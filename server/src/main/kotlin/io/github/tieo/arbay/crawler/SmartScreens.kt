@@ -87,14 +87,15 @@ object SmartScreens {
         PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending[\s_]+sectors?|secteurs\s+en\s+attente|secteurs\W+instables""")),
         UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
         REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported[\s_]+uncorrect|erreurs\s+signal|erreurs\s+qui\s+n.ont\s+pas""")),
-        HOURS(Regex("""(?i)betriebsstunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
+        // The OCR mangles the middle of the word ("Beitnebsstunden", "Beinebsstunden").
+        HOURS(Regex("""(?i)be\w{1,6}stunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
         // The OCR swaps its letters ("Current Heilum Level").
         HELIUM(Regex("""(?i)he(li|il)um""")),
     }
 
     private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")
     // The field beside the label is framed, and the OCR reads its edge as "[", "|", "_", "l" or "I".
-    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours|fonctionnement)[\s|\[\]_:;.lI!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|stunden|hours|heures)""")
+    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours|fonctionnement)[\s|\[\]_:;.lI!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|sta|stunden|hours|heures)""")
     /** smartctl's own verdict on the drive; PASSED says nothing of its sector counts, FAILED says it fails. */
     private val smartctlFailed = Regex("""self-assessment\s+test\s+result:\s*FAILED""", RegexOption.IGNORE_CASE)
     private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
@@ -120,6 +121,9 @@ object SmartScreens {
         val failing: List<String>,
         val word: String?,
         val hours: Long?,
+        /** The hours the screen's header shows, and the ones its power-on row holds. */
+        val header: Long? = null,
+        val table: Long? = null,
     )
 
     /**
@@ -147,9 +151,38 @@ object SmartScreens {
         // mark either reading makes counts.
         val failing = seen.flatMap { it.failing }.distinct()
         return judge(
-            Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreed(seen.map { it.hours })),
+            Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreedHours(seen)),
             photo,
         )
+    }
+
+    /**
+     * The hours the readings agree on; where they differ, the count most of the witnesses read: each
+     * reading's header, and the power-on row once.
+     * A CrystalDiskInfo header read once as 35337 and once as 45337 is told apart by its own power-on
+     * row, 0x8A09, and the "Std" the first reading saw as "sta".
+     */
+    private fun agreedHours(seen: List<Seen>): Long? {
+        // Each reading's header count, or its table's where the header was lost, where all agree:
+        // the table's hex is the weaker witness, read with B as 8.
+        seen.mapNotNull { it.hours }.distinct().singleOrNull()?.let { return it }
+        val headers = seen.mapNotNull { it.header }
+        // The table is one witness however many readings show it: both read the same font, and
+        // read its B as 8 alike (0xB0 as 0x80, 176 hours as 128).
+        val tables = seen.mapNotNull { it.table }.distinct()
+        // A header whose hex, with every B written as 8, is the table's value is the same count.
+        fun asTableReadsIt(hours: Long) = hours.toString(16).uppercase().replace('B', '8').toLong(16)
+        val votes = (headers + tables.map { t -> headers.firstOrNull { asTableReadsIt(it) == t } ?: t })
+            .groupingBy { it }.eachCount()
+        val most = votes.values.maxOrNull()?.takeIf { it >= 2 } ?: return null
+        return votes.filterValues { it == most }.keys.singleOrNull()
+    }
+
+    /** The power-on row's raw value in hex where the OCR left O's in it, which no hex digit is:
+     *  "COOOOO008A09" is 0x8A09 hours. Only its low four bytes count, as with Seagate's. */
+    private fun hoursInRawHex(line: String): Long? {
+        val raw = Regex("""([0-9A-FOoQ]{12})\W*$""").find(line.trim())?.groupValues?.get(1) ?: return null
+        return raw.replace(Regex("[OoQ]"), "0").toLongOrNull(16)?.and(0xFFFFFFFFL)?.takeIf { it in 1..MOST_HOURS }
     }
 
     private fun see(text: String): Seen? {
@@ -184,6 +217,7 @@ object SmartScreens {
                 }
                 ?: proxmoxRow.find(after)?.groupValues?.let { g -> listOf(g[2], g[4], g[3], g[1]) }
                 ?: if (hexScreen) null else decimalRow.find(after)?.groupValues?.drop(1)
+            if (attribute == Attribute.HOURS && row == null && hexScreen) hoursInRawHex(line)?.let { tableHours = it }
             if (row != null) {
                 val (current, worst, threshold, rawDigits) = row
                 val hex = hexScreen && rawDigits.length == 12
@@ -227,10 +261,9 @@ object SmartScreens {
         val word = status.find(text)?.groupValues?.get(1)
             ?: goodTab.find(text)?.value?.takeIf { !warningWord.containsMatchIn(text) }
         // The header's own count comes first: in the table's hex the OCR reads B as 8.
-        val hours = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
+        val header = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
             ?: daysAndHours.find(text)?.let { it.groupValues[1].toLong() * 24 + it.groupValues[3].toLong() }
-            ?: tableHours
-        return Seen(counts, failing, word, hours)
+        return Seen(counts, failing, word, header ?: tableHours, header, tableHours)
     }
 
     private fun judge(seen: Seen, photo: Int): SmartReading {

@@ -196,4 +196,12 @@ class SmartScreensTest {
         val r = assertNotNull(SmartScreens.parse(text("scrutiny_helium_misspelt"), 2))
         assertEquals(DriveVerdict.FAILING, r.verdict)
     }
+
+    @Test
+    fun `hours read two ways are told apart by the power-on row`() {
+        // CrystalDiskInfo's header read as 35337 once and 45337 once; its power-on row says 0x8A09.
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_de_toshiba_hours_misread"), 2))
+        assertEquals(35337L, r.powerOnHours)
+        assertTrue(r.verdict != io.github.tieo.arbay.model.DriveVerdict.FAILING, r.toString())
+    }
 }
