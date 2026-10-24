@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.BodyType
+import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Transmission
@@ -36,6 +37,8 @@ object VehicleTextParser {
     private val kwRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
     // "km" is NOT a power unit — including it read the odometer's last digits as PS.
     private val psRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?(?:ps|hp|hk)\b""", RegexOption.IGNORE_CASE)
+    // The unit written as the label before the figure, as a seller's list does: "PS 180", "PS: 180".
+    private val labeledPsRegex = Regex("""\bps\b[ \u00a0]*:?[ \u00a0]*([0-9]{2,3})(?!\d|[.,]\d)""", RegexOption.IGNORE_CASE)
     // The label may introduce a whole date ("EZ. 10.07.2014"), whose day and month come before
     // the year.
     private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:(?:0?[1-9]|[12]\d|3[01])[/.\-])?(?:0?[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
@@ -117,9 +120,29 @@ object VehicleTextParser {
             fuel = parseFuel(text),
             bodyType = BodyType.parse(text),
             gearbox = parseGearbox(text),
+            drivetrain = parseDrivetrain(text),
             wheelbaseMm = parseWheelbaseMm(text),
         )
         return if (info == VehicleInfo()) null else info
+    }
+
+    // The drive an ad's words name. A Kleinanzeigen van has no drive field, so its "4MOTION" in the
+    // title was all there was to tell, and a front-drive search kept the 4MOTION Crafters it
+    // dropped on mobile.de. Dealers cut the word short to fit a title ("MittellangHoch 4Moti").
+    // An all-wheel drive word wins: VW's own name for the drive is the surer statement.
+    private val allWheelDrive = Regex("""\b(?:4[ -]?motion|4moti\w*|4matic|quattro|allrad\w*|4x4|awd)\b""", RegexOption.IGNORE_CASE)
+    private val frontDrive = Regex("""\b(?:fwd|frontantrieb|vorderradantrieb)\b""", RegexOption.IGNORE_CASE)
+    private val rearDrive = Regex("""\b(?:rwd|heckantrieb|hinterradantrieb)\b""", RegexOption.IGNORE_CASE)
+
+    private fun parseDrivetrain(text: String): Drivetrain? {
+        if (allWheelDrive.containsMatchIn(text)) return Drivetrain.AWD
+        val front = frontDrive.containsMatchIn(text)
+        val rear = rearDrive.containsMatchIn(text)
+        return when {
+            front && !rear -> Drivetrain.FWD
+            rear && !front -> Drivetrain.RWD
+            else -> null
+        }
     }
 
     // Equipment prose names electric parts, never the drive: "Servolenkung elektro-mechanisch",
@@ -251,6 +274,9 @@ object VehicleTextParser {
         kwRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let { if (it in 20..1000) return it }
         // PS/HP fallback → kW (1 PS = 0.7355 kW)
         psRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
+            if (it in 30..1500) return (it * 0.7355).toInt()
+        }
+        labeledPsRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
             if (it in 30..1500) return (it * 0.7355).toInt()
         }
         return null

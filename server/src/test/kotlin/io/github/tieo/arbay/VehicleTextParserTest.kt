@@ -2,6 +2,7 @@ package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Transmission
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -185,6 +186,27 @@ class VehicleTextParserTest {
         assertEquals(Transmission.MANUAL, v.gearbox)
         val a = VehicleTextParser.parse("Crafter 35 TDI Kasten Getriebe: Automatik")!!
         assertEquals(Transmission.AUTOMATIC, a.gearbox)
+    }
+
+    @Test
+    fun driveFromTheAdsWords() {
+        // Kleinanzeigen titles of 4MOTION Crafters that mobile.de lists with a drive field.
+        assertEquals(Drivetrain.AWD, VehicleTextParser.parse("Volkswagen Crafter Kasten 35 MittellangHoch 4Moti AHK/KAM/C")!!.drivetrain)
+        assertEquals(Drivetrain.AWD, VehicleTextParser.parse("Volkswagen CRAFTER 2.0 TDI AUTOMATIK 4MOTION XENON SORTIMO")!!.drivetrain)
+        assertEquals(Drivetrain.AWD, VehicleTextParser.parse("Volkswagen Crafter Kasten *Allrad* *Ausbau* 4MO")!!.drivetrain)
+        assertEquals(Drivetrain.FWD, VehicleTextParser.parse("Volkswagen Crafter Kasten 35 mittellang Hochdach FWD")!!.drivetrain)
+        assertEquals(Drivetrain.RWD, VehicleTextParser.parse("Crafter Pritsche 50 mittellang RWD Koffer")!!.drivetrain)
+        assertEquals(null, VehicleTextParser.parse("VW Crafter 35 Kasten 2.0 TDI Automatik")!!.drivetrain)
+    }
+
+    @Test
+    fun powerLabelledBeforeItsFigure() {
+        // A Bassenheim dealer's list: "❗️PS 180" on a line of its own.
+        val v = VehicleTextParser.parse("VW Crafter\n❗️Laufleistung 92.000 km\n❗️PS 180\n❗️TÜV Service 10/28")!!
+        assertEquals((180 * 0.7355).toInt(), v.powerKw)
+        assertEquals((140 * 0.7355).toInt(), VehicleTextParser.parse("Crafter PS: 140, Automatik")!!.powerKw)
+        // A figure running on is no power: "PS 2.000" is not 2 PS, nor 200.
+        assertEquals(null, VehicleTextParser.parse("Crafter PS 2.000")?.powerKw)
     }
 
     @Test

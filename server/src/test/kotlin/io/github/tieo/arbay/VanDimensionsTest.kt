@@ -101,7 +101,8 @@ class VanDimensionsTest {
     @Test
     fun `a Crafter dealer's short names say mittellang Hochdach`() {
         for (text in listOf("Modell: VW Crafter 35 D MLH", "Volkswagen Crafter 2.0TDI MITTEL HOCH AUTOM",
-                "Crafter Kasten35 DSG Standh mittelhoch Navi", "VW Crafter 30 Kasten MR Hochraum-Kasten")) {
+                "Crafter Kasten35 DSG Standh mittelhoch Navi", "VW Crafter 30 Kasten MR Hochraum-Kasten",
+                "VW Crafter Kasten 35 MittellangHochdach LED/NAVI/PDC")) {
             val d = VanDimensions.read(text)
             assertEquals(VanSize.MEDIUM, d.length, text)
             assertTrue(d.lengthSure, text)
