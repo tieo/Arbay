@@ -1197,7 +1197,7 @@ object RelevanceFilter {
      */
     private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
-            .filter { w -> !isASize(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
+            .filter { w -> !isASize(w) && !isADecimal(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
         if (words.isEmpty() || listings.isEmpty()) return emptyMap()
         val evidence = ModelWordEvidence.installed
         val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }

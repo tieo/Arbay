@@ -1451,5 +1451,10 @@ class RelevanceFilterTest {
         )
         assertEquals(listOf("ICY BOX Festplattengehäuse 3,5 Zoll USB 3.0 mit Netzteil"),
             search("festplattengehäuse 3,5 zoll usb 3.0 netzteil", enclosures).map { it.title })
+        // Nor is it taken as said by a listing that does not say it, however many others do.
+        val described = (1..6).map { listing("Retoo Festplattengehäuse 2,5 Zoll USB 3.0 Nr $it", 500L + it).copy(description = "Für 2,5\" und 3,5\" Laufwerke") } +
+            listing("Retoo Festplattengehäuse 3,5 Zoll USB 3.0", 1500).copy(description = "Für 3,5\" Laufwerke")
+        assertEquals(listOf("Retoo Festplattengehäuse 3,5 Zoll USB 3.0"),
+            search("festplattengehäuse 3,5 zoll usb 3.0", described).map { it.title })
     }
 }
