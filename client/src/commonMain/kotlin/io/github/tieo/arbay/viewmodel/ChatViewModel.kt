@@ -228,6 +228,8 @@ class ChatViewModel(
 
     fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN) {
         signInFollower?.cancel()
+        signInRound++
+        pendingInputs.clear()
         _signIn.value = null
         _signInMarket.value = market
         signInStep { client.beginChatSignIn(market) }
@@ -240,19 +242,53 @@ class ChatViewModel(
     }
 
     /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */
-    fun signInWith(value: String) = signInStep { client.chatSignInInput(SignInInput(value = value), _signInMarket.value) }
+    fun signInWith(value: String) = signInInput(SignInInput(value = value))
 
     /** Tap the page at a point of its picture, in the page's own pixels. */
-    fun signInTap(x: Double, y: Double) = signInStep { client.chatSignInInput(SignInInput(x = x, y = y), _signInMarket.value) }
+    fun signInTap(x: Double, y: Double) = signInInput(SignInInput(x = x, y = y))
 
     /** Characters typed on the page's picture, passed on as typed. */
-    fun signInType(text: String) = signInStep { client.chatSignInInput(SignInInput(text = text), _signInMarket.value) }
+    fun signInType(text: String) = signInInput(SignInInput(text = text))
 
     /** One named key pressed on the page's picture: Return, BackSpace, Tab... */
-    fun signInKey(key: String) = signInStep { client.chatSignInInput(SignInInput(key = key), _signInMarket.value) }
+    fun signInKey(key: String) = signInInput(SignInInput(key = key))
+
+    /** Inputs not yet passed on, in the order given. */
+    private val pendingInputs = ArrayDeque<SignInInput>()
+
+    /**
+     * Passes [input] on after every input before it. Characters typed while the one before is still
+     * on its way go in one request with the ones waiting before them: each request answers with a
+     * new picture of the page, and a word sent a key at a time took a second for every key.
+     */
+    private fun signInInput(input: SignInInput) {
+        // Called and drained on the main thread, so the queue needs no lock.
+        val last = pendingInputs.lastOrNull()
+        if (input.text != null && last?.text != null) pendingInputs[pendingInputs.lastIndex] = last.copy(text = last.text + input.text)
+        else pendingInputs.addLast(input)
+        if (pendingInputs.size > 1) return
+        val market = _signInMarket.value
+        signInStep {
+            var step: SignInStep? = null
+            while (true) {
+                val next = pendingInputs.firstOrNull() ?: break
+                try {
+                    step = client.chatSignInInput(next, market)
+                    pendingInputs.removeFirstOrNull()
+                } catch (e: Exception) {
+                    // What was typed after a failed input would land out of place; the user types it again.
+                    pendingInputs.clear()
+                    throw e
+                }
+            }
+            step ?: client.chatSignInStep(market)
+        }
+    }
 
     fun cancelSignIn() = viewModelScope.launch {
         signInFollower?.cancel()
+        // Keys still on their way belong to the sign-in called off; they go nowhere.
+        signInRound++
         _signIn.value = null
         val market = _signInMarket.value
         attempt {
@@ -265,14 +301,24 @@ class ChatViewModel(
     /** One input at a time and in the order given, so keys reach the page as they were typed. */
     private val signInInputs = Mutex()
 
-    private fun signInStep(call: suspend () -> SignInStep) = viewModelScope.launch {
-        signInInputs.withLock {
-            _signInBusy.value = true
-            attempt {
-                show(call())
-                followSignIn()
+    /** Counts sign-ins begun and called off, so an input queued for one is dropped once it is over. */
+    private var signInRound = 0
+
+    private fun signInStep(call: suspend () -> SignInStep) {
+        val round = signInRound
+        viewModelScope.launch {
+            signInInputs.withLock {
+                if (round != signInRound) return@withLock
+                _signInBusy.value = true
+                attempt {
+                    val step = call()
+                    if (round == signInRound) {
+                        show(step)
+                        followSignIn()
+                    }
+                }
+                _signInBusy.value = false
             }
-            _signInBusy.value = false
         }
     }
 

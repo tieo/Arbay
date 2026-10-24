@@ -434,8 +434,18 @@ class MarketBrowser:
         return self.origin
 
     async def signin_keys(self, text: str | None, key: str | None) -> dict:
-        """What the user typed on the page's picture, typed into the page as they typed it."""
+        """What the user typed on the page's picture, typed into the page as they typed it. With
+        nothing on the page taking keys, the field the page asks for is clicked first, as a person
+        clicks into a form before typing."""
         if text:
+            editing = await self.tab.evaluate(
+                "(() => { const e = document.activeElement; return !!e && (e.isContentEditable || ['INPUT', 'TEXTAREA'].includes(e.tagName)); })()")
+            if not editing:
+                selector = self.STEP_FIELDS.get(await self.step_quick())
+                fields = await self.visible(selector) if selector else []
+                if fields:
+                    await self.press(*fields[0])
+                    await asyncio.sleep(random.uniform(0.2, 0.4))
             await self.hand.type(text, fast=True)
         if key:
             if key not in self.KEYS:
