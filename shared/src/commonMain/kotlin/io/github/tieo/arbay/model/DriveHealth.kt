@@ -50,7 +50,7 @@ data class DriveHealthAsk(val listingId: String, val title: String, val photos: 
 // JavaScript regular expressions refuse.
 private val driveWords = Regex(
     """\b(hdd|ssd|nvme|festplatten?|hard\s?(disk|drive)s?|harddisk|disque\s+dur|disco\s+duro|""" +
-        """exos|ironwolf|ultrastar|skyhawk|barracuda|wd\s?(red|purple|gold|blue|black|green)|caviar|toshiba\s+mg\d+|""" +
+        """exos|ironwolf|ultrastar|skyhawk|barracuda|wd\s?(red|purple|gold|blue|black|green)|caviar|mg(0[4-9]|10)\w*|""" +
         // Titles that name the drive by its line or model number alone: "Western Digital DC HC510
         // 10TB … HUH721010ALE604", "ST8000DM004", "WD80EZAZ".
         """dc\s?hc\d{3}|hu[hs]7\d{5}\w*|st\d{3,5}[a-z]{2}\d{3}|wd\d{2,3}[a-z]{4})\b""",

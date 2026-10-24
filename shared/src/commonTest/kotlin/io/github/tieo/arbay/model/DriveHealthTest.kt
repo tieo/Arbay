@@ -16,5 +16,7 @@ class DriveHealthTest {
         assertTrue(looksLikeADrive("Seagate ST8000DM004 8TB"))
         assertFalse(looksLikeADrive("Google Pixel 9 Pro XL 256 GB Hazel"))
         assertFalse(looksLikeADrive("Stuhl ST1000 Holz"))
+        assertTrue(looksLikeADrive("Toshiba Enterprise MG09 18 TB"))
+        assertFalse(looksLikeADrive("MG ZS EV 2021 Luxury"))
     }
 }
