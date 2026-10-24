@@ -8,7 +8,7 @@ import kotlin.time.Instant
 import kotlinx.serialization.json.*
 import org.jsoup.Jsoup
 
-class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsListingAge, KnowsLocation {
+class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsListingAge, KnowsLocation, KnowsAdState {
     override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER)
 
     override val platformId = PlatformId.WILLHABEN
@@ -54,6 +54,30 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPag
         parseDetail(fetchWithFallback(client, listing.url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500))
     } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
+    }
+
+    override suspend fun adState(url: String): AdState? = try {
+        adStateOf(fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500))
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * An ad page's state, read off its __NEXT_DATA__. An ad that is up carries its status
+     * "active"; a sold or deleted one answers its address with a redirect to its category's
+     * search, which names the ad it came from as fromExpiredAdId.
+     */
+    internal fun adStateOf(html: String): AdState? {
+        val data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return null
+        val props = runCatching { json.parseToJsonElement(data).jsonObject }.getOrNull()
+            ?.get("props")?.jsonObject?.get("pageProps")?.jsonObject ?: return null
+        val status = props["advertDetails"]?.jsonObject?.get("advertStatus")?.jsonObject
+            ?.get("id")?.jsonPrimitive?.contentOrNull
+        return when {
+            status == "active" -> AdState.LIVE
+            props["fromExpiredAdId"]?.jsonPrimitive?.contentOrNull != null -> AdState.DELETED
+            else -> null
+        }
     }
 
     internal fun parseDetail(html: String): ListingDetail? {
