@@ -271,7 +271,8 @@ fun AccountPanel(session: Session) {
     val busy by chat.signInBusy.collectAsState()
     Panel {
         if (accounts.isEmpty()) Busy()
-        accounts.forEach { a ->
+        // One group per market, the groups a full gap apart, whatever each one ends with.
+        Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) { accounts.forEach { a -> Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
             Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
             val step = signIn?.takeIf { signInMarket == a.market }
             when {
@@ -282,7 +283,7 @@ fun AccountPanel(session: Session) {
                     if (busy && signInMarket == a.market) Busy() else Button(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
                 }
             }
-        }
+        } } }
     }
 }
 
