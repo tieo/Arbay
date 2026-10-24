@@ -212,8 +212,13 @@ fun AccountSection(app: WebApp) {
         when {
             proxy != null -> SignInFrame(app, proxy)
             step != null -> PictureSignIn(app, step, a.market)
-            a.signedIn -> P({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
             busy && signInMarket == a.market -> Busy()
+            // A market can ask its password again before a message (eBay does), so a signed-in
+            // account can be signed in afresh too.
+            a.signedIn -> Div({ classes("inline-form") }) {
+                Span({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
+                QuietButton("Sign in again") { if (a.market == PlatformId.KLEINANZEIGEN) chat.beginProxySignIn() else chat.beginSignIn(a.market) }
+            }
             else -> {
                 a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
                 // Kleinanzeigen's own pages show through the proxy; every other market's as a picture of Arbay's browser.

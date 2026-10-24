@@ -277,10 +277,16 @@ fun AccountPanel(session: Session) {
             val step = signIn?.takeIf { signInMarket == a.market }
             when {
                 step != null -> SignInSteps(step, a.market, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
-                a.signedIn -> Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
+                busy && signInMarket == a.market -> Busy()
+                // A market can ask its password again before a message (eBay does), so a signed-in
+                // account can be signed in afresh too.
+                a.signedIn -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
+                    TextButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
+                }
                 else -> {
                     a.problem?.let { Muted(it) }
-                    if (busy && signInMarket == a.market) Busy() else Button(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
+                    Button(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
                 }
             }
         } } }
