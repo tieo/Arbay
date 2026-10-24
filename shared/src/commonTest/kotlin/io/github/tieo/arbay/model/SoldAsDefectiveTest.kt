@@ -19,6 +19,9 @@ class SoldAsDefectiveTest {
         assertTrue(Condition.soldAsDefective("Synology HDD 4TB 3.5 Zoll SATA Festplatte", "Ohne Funktion Defekt für Ersatzteilegewinnung"))
         assertTrue(Condition.soldAsDefective("Western Digital WD Gold 10TB SATA HDD WD102KRYZ Enterprise Serie",
             "Die HDD wurde mit der WD-Software gelöscht, leider wird nun die HDD nicht mehr erkannt und lässt sich nicht initialisieren."))
+        // eBay.de, live: a dealer's broken drives, the word fused to the title by an underscore.
+        assertTrue(Condition.soldAsDefective("Drive HDD 3.5\" WD RED Plus WD120EFBX 12TB 7200RPM SATA III _DAMAGED", null))
+        assertTrue(Condition.soldAsDefective("WD Red Plus 12TB", "Product condition:\nDAMAGED\nCannot be initialized"))
     }
 
     @Test
@@ -26,5 +29,7 @@ class SoldAsDefectiveTest {
         assertFalse(Condition.soldAsDefective("Samsung 990 PRO 2TB nicht defekt", null))
         assertFalse(Condition.soldAsDefective("SK hynix PC801 1TB", "Ausgebaut aus einem defekten Laptop, die SSD läuft einwandfrei."))
         assertFalse(Condition.soldAsDefective("Lexar NM610 PRO 2TB", "Keine Defekte, SMART PASSED"))
+        assertFalse(Condition.soldAsDefective("Seagate IronWolf 8TB not damaged", null))
+        assertFalse(Condition.soldAsDefective("WD Red 4TB undamaged", null))
     }
 }

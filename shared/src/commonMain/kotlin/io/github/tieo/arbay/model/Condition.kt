@@ -43,7 +43,8 @@ enum class Condition {
 
         // Negated, the word says the opposite: "nicht defekt", "kein Defekt", "keine Defekte".
         // "3 Defekte HDD Festplatten" names them broken as plainly as "defekt" does.
-        private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)\b(defekte?|defect|kaputt|kapot|broken)\b""")
+        // "Drive HDD 3.5\" WD RED Plus 12TB _DAMAGED": a Polish dealer's broken drives on eBay.de.
+        private val defectWord = Regex("""(?<!nicht\s)(?<!kein\s)(?<!keine\s)(?<!ohne\s)(?<!not\s)(?<![a-zäöüß0-9])(defekte?|defect|kaputt|kapot|broken|damaged)\b""")
         private val defectPhrase = Regex(
             """als\s+defekt|defekt\s+verkauft|nicht\s+(mehr\s+)?erkannt|nicht\s+(mehr\s+)?funktionsf(ä|ae)hig|""" +
                 // "Ohne Funktion Defekt für Ersatzteilegewinnung", "Als Ersatzteil / defekt", "lässt
@@ -53,7 +54,7 @@ enum class Condition {
                 // that does not spin up, its defect set apart in brackets.
                 """\(\s*defekt\s*\)|l(ä|ae)uft\s+nicht\s+(mehr\s+)?an\b|springt\s+nicht\s+(mehr\s+)?an\b|""" +
                 """funktioniert\s+nicht\s+mehr|f(ü|ue)r\s+bastler|an\s+bastler|bastlerware|for\s+(parts|spares)|""" +
-                """not\s+working|spares\s+or\s+repair|pour\s+pi(è|e)ces|hors\s+service|ne\s+fonctionne\s+(pas|plus)|""" +
+                """not\s+working|can(not|'t)\s+be\s+initiali[sz]ed|spares\s+or\s+repair|pour\s+pi(è|e)ces|hors\s+service|ne\s+fonctionne\s+(pas|plus)|""" +
                 """non\s+funzionante|per\s+ricambi|voor\s+onderdelen|werkt\s+niet""",
         )
 

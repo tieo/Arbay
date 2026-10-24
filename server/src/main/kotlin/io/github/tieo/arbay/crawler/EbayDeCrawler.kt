@@ -20,7 +20,7 @@ class EbayDeCrawler(
     private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.EBAY_DE,
     private val domain: String = "ebay.de",
-) : Crawler, FetchesEveryPage, HasSoldListings, SellsByAuction {
+) : Crawler, FetchesEveryPage, HasSoldListings, SellsByAuction, ReadsGalleries {
 
     /**
      * What eBay keeps on the item page and nowhere on the card: the vehicle specs in "Info zum
@@ -50,7 +50,8 @@ class EbayDeCrawler(
             sellerReviews = sellerFeedback(doc),
             available = stock?.first,
             moreAvailable = stock?.second ?: false,
-        ).takeIf { it.vehicle != null || it.location != null || it.description != null }
+            photos = ebayGallery(doc),
+        ).takeIf { it.vehicle != null || it.location != null || it.description != null || it.photos.isNotEmpty() }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
     }
@@ -807,6 +808,16 @@ class EbayDeCrawler(
  * its wording. A recertified drive sold by a dealer at one price is worth a second at the same
  * price only where there is one.
  */
+/**
+ * The item page's photos in their order, each at the size eBay zooms to (1600 px). The carousel
+ * repeats its items to scroll round, and the page shows other sellers' items with photos of their
+ * own; only the carousel's count, once each.
+ */
+internal fun ebayGallery(doc: org.jsoup.nodes.Document): List<String> =
+    doc.select(".ux-image-carousel-item img").mapNotNull { img ->
+        img.attr("data-zoom-src").ifEmpty { img.attr("src") }.takeIf { it.startsWith("https://") }
+    }.distinct()
+
 internal fun ebayStock(text: String, html: String = ""): Pair<Int, Boolean>? {
     // A sold-out listing keeps its page and its words; only the page's own data says it is out.
     if ("\"outOfStock\":true" in html) return 0 to false
