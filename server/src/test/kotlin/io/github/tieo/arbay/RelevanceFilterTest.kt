@@ -1470,4 +1470,39 @@ class RelevanceFilterTest {
         val toshibas = (1..5).map { listing("Toshiba MG09ACA18TE 18TB Nr $it", 27000L + it) } + listing("Toshiba MG07ACA14TE 14TB Enterprise HDD", 29700)
         assertTrue(search("MG09ACA18TE", toshibas).none { "MG07" in it.title })
     }
+
+    // === A box for drives searched by its own name ===
+
+    @Test
+    fun `a drive enclosure searched by name is kept`() {
+        val results = search("TerraMaster D4", listOf(
+            listing("TERRAMASTER D4-320 10Gbps-Speicher Externes Festplattengehäuse(Diskless)"),
+            listing("TERRAMASTER D4-320 – 4-Bay USB 3.2 10 Gbit/s *NEU*"),
+            listing("TERRAMASTER D4-320 4bay Gehäuse, USB3.2, 10Gbps, Diskless"),
+            listing("Netzteil für TerraMaster D4-320"),
+            listing("Gehäuse für TerraMaster D4 Festplatte"),
+        ))
+        assertEquals(3, results.size, results.joinToString { it.title })
+        assertTrue(results.none { it.title.startsWith("Netzteil") || it.title.startsWith("Gehäuse für") })
+    }
+
+    @Test
+    fun `a box with drives in it is still not the drive searched for`() {
+        val results = search("16TB", listOf(
+            listing("Seagate Exos X16 16TB SATA"),
+            listing("Synology DS920+ 4-Bay mit 4x 16TB"),
+            listing("ORICO 4-Bay Festplattengehäuse für 16TB HDD"),
+        ))
+        assertEquals(listOf("Seagate Exos X16 16TB SATA"), results.map { it.title })
+    }
+
+    @Test
+    fun `a phone housing is still an accessory of the phone`() {
+        val results = search("Pixel 8", listOf(
+            listing("Google Pixel 8 128GB Obsidian"),
+            listing("Pixel 8 Gehäuse Rückseite Ersatz"),
+        ))
+        assertEquals(listOf("Google Pixel 8 128GB Obsidian"), results.map { it.title })
+    }
 }
+

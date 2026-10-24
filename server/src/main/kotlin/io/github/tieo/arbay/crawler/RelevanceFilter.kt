@@ -707,7 +707,8 @@ object RelevanceFilter {
      */
     private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (hostDevice.containsMatchIn(queryText) || phoneOrTablet.containsMatchIn(queryText)) return false
-        if (!driveHolder.containsMatchIn(queryText) && !enclosureWord.containsMatchIn(queryText) && holdsTheDrives(listing.title)) return true
+        if (!driveHolder.containsMatchIn(queryText) && !enclosureWord.containsMatchIn(queryText) && namesADrive(queryText, parsed) &&
+            holdsTheDrives(listing.title)) return true
         if (isADeviceOfThatSize(listing, parsed)) return true
         // The rule weighs how much of the search falls either side of the machine's name, so it
         // needs more than one word to weigh. Asked for a part number alone, everything sits on one
@@ -842,6 +843,19 @@ object RelevanceFilter {
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
+    /** The nouns of [accessoryNoun] that name a box drives go into. */
+    private val driveBox = Regex("""(?i)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|caja\s+externa|behuizing)$""")
+
+    /** Words only storage gear carries: a drive, its interface, its form factor, its bays. */
+    private val storageGear = Regex(
+        """(?i)(festplatt|\bhdd|\bssd|\bsata\b|\bnvme\b|\bm\.2\b|\d[\s-]?bay\b|\bjbod\b|\bdas\b|\b3[.,]5\s?("|''|zoll|inch))""",
+    )
+
+    /** Whether the search asks for a drive, by a size or by what it is: the searches whose answers
+     *  boxes for drives turn up in as something other than what was asked. */
+    private fun namesADrive(queryText: String, parsed: ParsedQuery): Boolean =
+        askedSizes(parsed).isNotEmpty() || io.github.tieo.arbay.model.looksLikeADrive(queryText)
+
     private val forWhat = Regex("""^\s*(f(ü|ue)r|for|pour|per|para|voor)\b""", RegexOption.IGNORE_CASE)
     private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
     private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
@@ -871,6 +885,11 @@ object RelevanceFilter {
         val reports = batteryReport.findAll(listing.title).map { it.range }.toList()
         val match = accessoryNoun.findAll(listing.title)
             .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
+        // A box for drives, sold for no drive in particular, is what a search naming no drive asks
+        // for: "TerraMaster D4" is a four-bay enclosure, and every one of its listings calls itself
+        // a "Festplattengehäuse". One said to be for something is still that something's accessory.
+        if (driveBox.containsMatchIn(match.value) && storageGear.containsMatchIn(listing.title) && !namesADrive(queryText, parsed) &&
+            !forWhat.containsMatchIn(listing.title.substring(match.range.last + 1))) return false
         val before = listing.title.take(match.range.first)
         // A board after the size is the board on offer unless the title calls it new: "256 GB
         // Bundle Neues Mainboard" is a repaired phone, "1,0TB SAMSUNG Momentus Platine" a drive's
