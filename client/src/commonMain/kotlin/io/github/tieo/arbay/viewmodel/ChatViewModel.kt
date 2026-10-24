@@ -264,7 +264,8 @@ class ChatViewModel(
     private fun signInInput(input: SignInInput) {
         // Called and drained on the main thread, so the queue needs no lock.
         val last = pendingInputs.lastOrNull()
-        if (input.text != null && last?.text != null) pendingInputs[pendingInputs.lastIndex] = last.copy(text = last.text + input.text)
+        // The first input is the one on its way, and is never added to.
+        if (input.text != null && last?.text != null && pendingInputs.size > 1) pendingInputs[pendingInputs.lastIndex] = last.copy(text = last.text + input.text)
         else pendingInputs.addLast(input)
         if (pendingInputs.size > 1) return
         val market = _signInMarket.value
