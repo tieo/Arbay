@@ -80,4 +80,15 @@ class ProductFitTest {
         assertNull(fit(unnamed, ModelGuess("Lägler FLIP", "printed on the machine", 0.9, sure = true)))
         assertNotNull(fit(unnamed, ModelGuess("Lägler FLIP", "looks like the Lägler FLIP ads", 0.75, sure = false)))
     }
+
+    @Test
+    fun `a reviewer's verdict outranks the ad's words, and none of them rules it out`() {
+        val workshop = ad("Schleifmaschine Walzenschleifmaschine Bandschleifer Bauknecht", 300)
+        assertNull(fit(workshop, ModelGuess(ModelGuess.NONE_OF_THEM, ModelGuess.CHECKED, 1.0, sure = true)))
+        val figurine = ad("Hummel Parkettschleifmaschine", 600)
+        assertNull(fit(figurine, ModelGuess(ModelGuess.NONE_OF_THEM, ModelGuess.CHECKED, 1.0, sure = true)))
+        val unnamed = ad("Parkettschleifmaschine", 600)
+        val checked = assertNotNull(fit(unnamed, ModelGuess("Lägler PROFIT", ModelGuess.CHECKED, 1.0, sure = true)))
+        assertEquals("Lägler PROFIT (checked)", checked.parts.first { it.wish == FitWish.MODEL }.note)
+    }
 }

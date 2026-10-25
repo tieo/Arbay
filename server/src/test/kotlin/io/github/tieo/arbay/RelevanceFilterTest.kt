@@ -1589,12 +1589,15 @@ class RelevanceFilterTest {
             listing("Schleifpapier für Parkettschleifmaschine", price = 900),
             // A pack of twelve belts named in the singular, let through by an alert at 25 euro.
             listing("Schleifband Parkettschleifmaschine", price = 2500),
+            // A compound naming the belts by the machine they fit, shown on Geizhals at 60 % fit.
+            listing("Makiwork 10-Stk. Bandschleifbänder 750 x 200 mm, K120 Aluminiumoxid für Parkettschleifmaschine", price = 3689),
             listing("Parkett Schleifmaschine Walzenschleifmaschine", price = 40000),
+            listing("Bandschleifmaschine Parkett", price = 50000),
             listing("Parkett-, Bodenschleifmaschine von Scheer", price = 9000),
         )
         val kept = search("parkettschleifmaschine", listings).map { it.title }
         assertEquals(
-            listOf("Parkett Schleifmaschine Walzenschleifmaschine", "Parkett-, Bodenschleifmaschine von Scheer"),
+            listOf("Parkett Schleifmaschine Walzenschleifmaschine", "Bandschleifmaschine Parkett", "Parkett-, Bodenschleifmaschine von Scheer"),
             kept,
             "the machines stay and the paper goes",
         )

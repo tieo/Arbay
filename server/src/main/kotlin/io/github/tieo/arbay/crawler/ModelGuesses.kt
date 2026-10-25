@@ -22,6 +22,9 @@ data class ModelGuess(val model: String, val how: String, val confidence: Double
     companion object {
         const val FROM_PHOTOS = "its photos look like one"
         const val CHECKED = "checked"
+
+        /** The model of a [CHECKED] offer that is none of the search's: not a machine wanted at all. */
+        const val NONE_OF_THEM = ""
     }
 }
 
@@ -68,7 +71,7 @@ object ModelGuesses {
 
     /** The model [listing] was told to be, where one was. */
     fun of(listing: Listing): ModelGuess? {
-        checkOf(listing.id)?.let { name -> return name.takeIf { it.isNotEmpty() }?.let { ModelGuess(it, ModelGuess.CHECKED, 1.0, sure = true) } }
+        checkOf(listing.id)?.let { name -> return ModelGuess(name, ModelGuess.CHECKED, 1.0, sure = true) }
         return synchronized(kept) { kept[listing.id]?.guess }
     }
 

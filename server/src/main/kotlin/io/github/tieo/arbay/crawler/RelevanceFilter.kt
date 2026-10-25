@@ -982,8 +982,9 @@ object RelevanceFilter {
         // German plurals, because the word boundary after the singular is what let an eight euro
         // pack of "Schleifpapiere" through as a floor sander: an ad names what it is selling in
         // whatever number it has of them.
-        """\b(schleifpapiere?|schleifb[aä]nd(er)?|schleifscheiben?|schleifrollen?|schleifgitter|""" +
-            """schleifmittel|staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
+        // A compound's head is what it is: "Bandschleifbänder" are belts for a belt sander.
+        """\b(\p{L}*schleif(papiere?|b[aä]nd(er)?|scheiben?|rollen?|gitter|mittel)|""" +
+            """staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
             """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
             // The electrical spares a machine is stripped for. Named as the thing being sold, so
             // they carry the machine's own name and its price is a fraction of one, which put a

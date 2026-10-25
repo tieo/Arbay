@@ -159,8 +159,8 @@ object ModelLikeness {
 
     // ---- telling -------------------------------------------------------------------------------
 
-    /** A model told from photos and how far ahead of the next it is. */
-    class Told(val model: ModelWish, val score: Double)
+    /** A model told from photos, how far ahead of the next it is, and how alike its most alike reference is. */
+    class Told(val model: ModelWish, val score: Double, val like: Double = 0.0)
 
     private fun dot(a: FloatArray, b: FloatArray): Double {
         var s = 0.0
@@ -176,7 +176,7 @@ object ModelLikeness {
         val byModel = refs.groupBy { it.model }.mapValues { (_, rs) -> rs.maxOf { likeness(photos, it.photos) } }
             .entries.sortedByDescending { it.value }
         val first = byModel.firstOrNull() ?: return null
-        return Told(first.key, first.value - (byModel.getOrNull(1)?.value ?: 0.0))
+        return Told(first.key, first.value - (byModel.getOrNull(1)?.value ?: 0.0), first.value)
     }
 
     /** Model centre: each model scored by its photos' mean direction; the score is the lead over the next model. */
@@ -375,18 +375,29 @@ object ModelLikeness {
     // ---- telling unnamed offers ----------------------------------------------------------------
 
     /** The references of one search with the bars each model is told at, measured once a day. */
-    private class Teller(val against: String, val at: Long, val refs: List<Reference>, val gates: Map<String, Pair<Double, Double>>)
+    private class Teller(
+        val against: String, val at: Long, val refs: List<Reference>, val gates: Map<String, Pair<Double, Double>>,
+        /** Per model, how alike the photos of an offer told it rightly were at the least, nearly: a
+         *  wall planer is nearer a drum sander than anything else here and still nothing like one. */
+        val floors: Map<String, Double>,
+    )
 
     private val tellers = mutableMapOf<String, Teller>()
+
+    /** The share of rightly told offers allowed to be less alike than the floor. */
+    private const val FLOOR_SHARE = 0.1
 
     private const val MEASURED_FOR_MS = 24 * 3600_000L
 
     private fun teller(query: SearchQuery, wishes: ProductWishes, against: String): Teller {
         synchronized(tellers) { tellers[against]?.takeIf { System.currentTimeMillis() - it.at < MEASURED_FOR_MS }?.let { return it } }
         val refs = references(query, wishes)
-        val gates = gates(heldOut(refs, ::nearest).map { it.first.model to it.second })
-        log.info("photo likeness for {} references: told {}", refs.size, gates)
-        return Teller(against, System.currentTimeMillis(), refs, gates).also { synchronized(tellers) { tellers[against] = it } }
+        val held = heldOut(refs, ::nearest)
+        val gates = gates(held.map { it.first.model to it.second })
+        val floors = held.filter { it.first.model == it.second.model }.groupBy({ it.second.model.name }, { it.second.like })
+            .mapValues { (_, likes) -> likes.sorted()[(likes.size * FLOOR_SHARE).toInt().coerceAtMost(likes.size - 1)] }
+        log.info("photo likeness for {} references: told {}, at least as alike as {}", refs.size, gates, floors)
+        return Teller(against, System.currentTimeMillis(), refs, gates, floors).also { synchronized(tellers) { tellers[against] = it } }
     }
 
     /**
@@ -402,6 +413,7 @@ object ModelLikeness {
         if (mine.isEmpty()) return null
         val told = nearest(mine, t.refs.filter { offerKey(it.listing.id) != offerKey(l.id) }) ?: return null
         val (bar, share) = t.gates[told.model.name] ?: return null
-        return if (told.score >= bar) told.model to share else null
+        val floor = t.floors[told.model.name] ?: return null
+        return if (told.score >= bar && told.like >= floor) told.model to share else null
     }
 }

@@ -530,7 +530,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "check_model",
-            "Say which of a saved search's models an offer is, after looking at its photos and text: settles a model the fit told from its photos alone (an alert says \"told from its photos alone, unchecked\"), and makes the offer an example the next offers' photos are told by. Leave model out for none of them.",
+            "Say which of a saved search's models an offer is, after looking at its photos and text: settles a model the fit told from its photos alone (an alert says \"told from its photos alone, unchecked\"), and makes the offer an example the next offers' photos are told by. Leave model out for none of them, which rules the offer out as not a machine wanted; a good machine of a model the wishes do not list belongs in the fit wishes instead.",
             props = {
                 string("saved_search_id", "Saved search id", required = true)
                 string("listing_id", "Offer id", required = true)

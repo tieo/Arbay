@@ -274,8 +274,15 @@ object FitScore {
             val inTitle = namedInTitle.maxByOrNull { it.worth }
             if (inTitle != null && inTitle.worth <= 0.0) return null
             val inText = models.filter { m -> m.worth > 0 && m.words.any { says(text, it) } }.maxByOrNull { it.worth }
-            val seen = guessed?.invoke(listing)?.let { g -> models.firstOrNull { it.name == g.model }?.let { it to g } }
+            val told = guessed?.invoke(listing)
+            // Someone looked and said which it is, or that it is none of them: that outranks its words.
+            if (told?.how == ModelGuess.CHECKED && told.model == ModelGuess.NONE_OF_THEM) return null
+            val seen = told?.let { g -> models.firstOrNull { it.name == g.model }?.let { it to g } }
             when {
+                seen != null && seen.second.how == ModelGuess.CHECKED -> {
+                    if (seen.first.worth <= 0.0) return null
+                    Wish(seen.first.worth, "${seen.first.name} (${ModelGuess.CHECKED})")
+                }
                 inTitle != null -> Wish(inTitle.worth, inTitle.name)
                 inText != null -> Wish(inText.worth * 0.8, "${inText.name} (in the text)")
                 // A model told from the ad's photos or its full text, read since the card came in.

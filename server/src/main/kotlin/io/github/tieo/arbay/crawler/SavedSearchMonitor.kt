@@ -578,8 +578,7 @@ class SavedSearchMonitor(
                 seq = 0, savedSearchId = product.id, searchName = product.name,
                 // A model told from photos alone is a guess until someone looks, and the reader of
                 // this feed is who looks: the verdict goes back through the check_model tool.
-                rule = "fit ${(fit.score * 100).roundToInt()} %" + (ModelGuesses.of(l)?.takeIf { things != null && it.unchecked }
-                    ?.let { ", model ${it.model} told from its photos alone, unchecked" } ?: ""),
+                rule = "fit ${(fit.score * 100).roundToInt()} %" + (if (things == null) "" else modelUnchecked(fit)),
                 listingId = l.id, title = l.title, url = l.url, priceEur = FitScore.priceEur(l).roundToLong(), at = Clock.System.now(),
             )
         })
@@ -890,6 +889,17 @@ private val WHAT_THE_ITEM_IS = setOf(
     io.github.tieo.arbay.model.DropReason.WANTED_AD,
     io.github.tieo.arbay.model.DropReason.RENTAL,
 )
+
+/** What an alert says of an offer's model where nobody has seen it named or checked it: a model told
+ *  from the photos alone, or none found at all, is for the feed's reader to look at and settle. */
+private fun modelUnchecked(fit: FitScore.Fit): String {
+    val note = fit.parts.firstOrNull { it.wish == io.github.tieo.arbay.model.FitWish.MODEL }?.note
+    return when {
+        note == null || note == io.github.tieo.arbay.model.FitPart.NOT_STATED -> ", model not stated, unchecked"
+        note.endsWith("(${ModelGuess.FROM_PHOTOS})") -> ", model ${note.substringBefore(" (")} told from its photos alone, unchecked"
+        else -> ""
+    }
+}
 
 internal fun offerKey(listingId: String): String =
     if (listingId.startsWith("EBAY_")) "EBAY:" + listingId.substringAfter(':') else listingId
