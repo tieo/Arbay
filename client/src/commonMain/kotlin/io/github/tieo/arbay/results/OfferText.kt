@@ -45,6 +45,8 @@ fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     listing.distanceKm?.let { add("${it.toInt()} km away") }
     listing.listingDate?.let { add("posted ${it.toLocalDateTime(TimeZone.currentSystemDefault()).date}") }
     if (listing.saleType == SaleType.AUCTION) add(listing.bidCount?.let { "$it bids" } ?: "auction")
+    if (listing.saleType == SaleType.RENT) add("for rent")
+    listing.rentRates.forEach { add("${it.period.label} ${it.price.format()}") }
     listing.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
     if (listing.shipping?.free == true) add("free delivery")
     if (listing.negotiable) add("negotiable")

@@ -30,6 +30,9 @@ data class PageOffer(
     val mpn: String? = null,
     /** Who sells it, where the page names someone other than the site. */
     val seller: String? = null,
+    /** For something hired out rather than sold, the stretch of time [price] pays for. */
+    val rentPer: io.github.tieo.arbay.model.RentPeriod? = null,
+    val rentRates: List<io.github.tieo.arbay.model.RentRate> = emptyList(),
 )
 
 /**
@@ -58,14 +61,56 @@ object ProductPages {
      * cannot read yet; an article, a forum thread or a manual is not.
      */
     fun sellsSomething(html: String): Boolean {
-        val text = Jsoup.parse(html).body()?.text()?.lowercase() ?: return false
-        return PRICE_IN_TEXT.containsMatchIn(text) && BUY_WORDS.containsMatchIn(text)
+        val doc = Jsoup.parse(html)
+        if (isArticle(doc)) return false
+        val text = doc.body()?.text()?.lowercase() ?: return false
+        // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
+        // shop, its articles too.
+        return PRICE_IN_TEXT.findAll(text).any { m -> m.value.any { it in '1'..'9' } } && BUY_WORDS.containsMatchIn(text)
     }
+
+    /**
+     * Whether the page passes itself off as another shop: it names itself (`og:site_name`) as a
+     * shop whose name is a letter or two off its own address. medymarkt.live serves MediaMarkt's
+     * pages, name and all, to take payments for goods it never sends.
+     */
+    fun impersonates(html: String, pageUrl: String): Boolean {
+        val claimed = Jsoup.parse(html).selectFirst("meta[property=og:site_name]")?.attr("content")
+            ?.lowercase()?.filter { it.isLetterOrDigit() }?.takeIf { it.length >= 5 } ?: return false
+        val own = WebCrawler.siteName(SiteRecipes.domainOf(pageUrl)).filter { it.isLetterOrDigit() }
+        return own != claimed && own !in claimed && claimed !in own && editDistance(own, claimed) <= 2
+    }
+
+    private fun editDistance(a: String, b: String): Int {
+        var prev = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            val cur = IntArray(b.length + 1).also { it[0] = i }
+            for (j in 1..b.length) cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+            prev = cur
+        }
+        return prev[b.length]
+    }
+
+    /**
+     * Whether the page states itself an article: a review or a blog post that names prices and
+     * links shops ("Zum Angebot bei cyberport") sells nothing itself. Read off the type its
+     * structured data gives the page, and only where it names no product beside it.
+     */
+    private fun isArticle(doc: Document): Boolean {
+        val types = doc.select("script[type=application/ld+json]").flatMap { script ->
+            Regex(""""@type"\s*:\s*(\[[^\]]*]|"[^"]*")""").findAll(script.data()).flatMap { m -> Regex(""""([^"]+)"""").findAll(m.groupValues[1]).map { it.groupValues[1].substringAfterLast('/') } }
+        }.toSet()
+        return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
+    }
+
+    private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog")
 
     private val PRICE_IN_TEXT = Regex("""(€|eur|chf|£)\s?\d|\d[\d.,]*\s?(€|eur\b|chf\b)""")
     private val BUY_WORDS = Regex(
         """warenkorb|in den korb|add to (cart|basket)|jetzt kaufen|sofort.?kaufen|kaufen\b|bestellen|""" +
-            """buy now|in den einkaufswagen|panier|carrello|cesta|winkelwagen|zur kasse""",
+            """buy now|in den einkaufswagen|panier|carrello|cesta|winkelwagen|zur kasse|""" +
+            // A rental is had by hiring it, and is read as a rental offer.
+            """\bmieten\b|mietanfrage|\bausleihen\b""",
     )
 
     /**
@@ -202,11 +247,47 @@ object ProductPages {
 
     // ── JSON-LD ──
 
-    private fun jsonLd(doc: Document, pageUrl: String): List<PageOffer> =
-        doc.select("script[type=application/ld+json]").flatMap { script ->
-            val root = runCatching { json.parseToJsonElement(script.data().trim()) }.getOrNull() ?: return@flatMap emptyList()
-            nodes(root).flatMap { productsIn(it) }.mapNotNull { offerOf(it, pageUrl) }
+    /**
+     * A page's JSON-LD, all of its blocks read as one: a shop may state the product in one block
+     * and its offer in another, the product pointing at it by `@id` (voelkner's
+     * `"offers": {"@id": "Y524003#offer"}`), so a reference is looked up across every block.
+     */
+    private fun jsonLd(doc: Document, pageUrl: String): List<PageOffer> {
+        val all = doc.select("script[type=application/ld+json]").mapNotNull { parseLenient(it.data().trim()) }.flatMap { nodes(it) }
+        val byId = all.filter { it.size > 1 }.mapNotNull { n -> n.str("@id")?.let { it to n } }.toMap()
+        return all.flatMap { productsIn(it) }.mapNotNull { offerOf(it, pageUrl, byId) }
+    }
+
+    /**
+     * JSON as shops write it into their pages, which is not always JSON: pearl writes a size's
+     * inch mark into a name unescaped (`"name": "Gehäuse für 2,5"-SATA-HDD"`), others a raw line
+     * break. Where the text does not parse, a quote inside a string that does not end it (no
+     * comma, colon or bracket follows) is escaped, and so is a control character, and the text is
+     * read again.
+     */
+    internal fun parseLenient(text: String): JsonElement? =
+        runCatching { json.parseToJsonElement(text) }.getOrNull()
+            ?: runCatching { json.parseToJsonElement(repaired(text)) }.getOrNull()
+
+    private fun repaired(text: String): String = buildString(text.length + 16) {
+        var inString = false
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                inString && c == '\\' && i + 1 < text.length -> { append(c).append(text[i + 1]); i++ }
+                inString && c == '"' -> {
+                    var j = i + 1
+                    while (j < text.length && text[j].isWhitespace()) j++
+                    if (j >= text.length || text[j] in ",:}]") { inString = false; append(c) } else append("\\\"")
+                }
+                inString && c < ' ' -> append(if (c == '\n') "\\n" else if (c == '\t') "\\t" else " ")
+                c == '"' -> { inString = true; append(c) }
+                else -> append(c)
+            }
+            i++
         }
+    }
 
     /** Every object of a JSON-LD block, whether it came as one, an array or a @graph. */
     private fun nodes(e: JsonElement): List<JsonObject> = when (e) {
@@ -241,18 +322,22 @@ object ProductPages {
                         else -> emptyList()
                     }
                 }
-            else -> emptyList()
+            // A page stating the product as what an action or the page is about: MediaMarkt's
+            // BuyAction carries it as its `object`, others a WebPage its `mainEntity`.
+            else -> listOf("object", "mainEntity").flatMap { k -> (node[k] as? JsonObject)?.let { productsIn(it) }.orEmpty() }
         }
     }
 
     private val PRODUCT_TYPES = setOf("Product", "IndividualProduct", "Vehicle", "Car", "SomeProducts")
 
-    private fun offerOf(product: JsonObject, pageUrl: String): PageOffer? {
+    private fun offerOf(product: JsonObject, pageUrl: String, byId: Map<String, JsonObject> = emptyMap()): PageOffer? {
+        // A reference only: `{"@id": "..."}` standing for a node stated elsewhere on the page.
+        fun deref(o: JsonObject): JsonObject = if (o.size == 1 && o["@id"] != null) byId[o.str("@id")] ?: o else o
         // Some shops put markup into the name ("Festplattengeh<wbr/>äuse", "2,5&#034;").
         val title = product.str("name")?.let { Jsoup.parse(it).text() }?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val offers = when (val o = product["offers"]) {
-            is JsonObject -> listOf(o)
-            is JsonArray -> o.mapNotNull { it as? JsonObject }
+            is JsonObject -> listOf(deref(o))
+            is JsonArray -> o.mapNotNull { (it as? JsonObject)?.let(::deref) }
             else -> emptyList()
         }.flatMap { o ->
             // An AggregateOffer may list its offers; its own lowPrice stands for them otherwise.
@@ -272,7 +357,7 @@ object ProductPages {
             image = imageOf(product["image"])?.let { absolute(it, pageUrl) },
             shipping = shippingOf(offer, price.currency),
             gtin = listOf("gtin13", "gtin", "gtin14", "gtin12", "gtin8").firstNotNullOfOrNull { product.str(it) },
-            mpn = product.str("mpn"),
+            mpn = product.str("mpn") ?: product.str("model"),
             seller = (offer["seller"] as? JsonObject)?.str("name"),
         )
     }
@@ -397,6 +482,21 @@ object ProductPages {
             v.startsWith("refurbishedcondition") -> Condition.REFURBISHED
             v.startsWith("damagedcondition") -> Condition.PARTS_ONLY
             else -> Condition.parse(raw)
+        }
+    }
+
+    /**
+     * The model a shop names only in the offer's address: MediaMarkt titles the HIYORI AOI488
+     * "HIYORI Externes 3,5"-Festplattengehäuse USB 3.0 4 Einschübe" and writes the model into
+     * the slug alone (`/_hiyori-aoi488-festplattengehause-148285129.html`). A word of the last
+     * path segment carrying letters and digits both, which the title leaves out; the shop's own
+     * article number (digits only) is not one.
+     */
+    fun modelInAddress(url: String, title: String): String? {
+        val slug = runCatching { java.net.URI(url).path }.getOrNull()?.substringAfterLast('/')?.substringBeforeLast('.') ?: return null
+        val inTitle = title.lowercase().replace(Regex("""[^\p{L}\p{N}]"""), "")
+        return slug.lowercase().split('-', '_').firstOrNull { w ->
+            w.length in 4..20 && w.any { it.isDigit() } && w.any { it.isLetter() } && w.all { it.isLetterOrDigit() } && w !in inTitle
         }
     }
 

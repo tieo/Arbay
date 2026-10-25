@@ -1288,6 +1288,28 @@ class RelevanceFilterTest {
         assertTrue(rentKept.any { it.contains("Mieten") }, "rental query must keep rental offers")
     }
 
+    @Test
+    fun `a model the seller states apart from the title counts as named`() {
+        // MediaMarkt names the AOI488 only in the offer's address, read into its MPN.
+        val mm = listing("HIYORI Externes 3,5\"-Festplattengehäuse USB 3.0 4 Einschübe für Festplatten, Festplattengehäuse", price = 7599).copy(mpn = "aoi488")
+        val other = listing("HIYORI Externes Festplattengehäuse SSD/HDD Type-C 2.5-Zoll, Festplattengehäuse", price = 2999).copy(mpn = "akt314")
+        val kept = search("hiyori aoi488 festplattengehäuse", listOf(mm, other)).map { it.id }
+        assertEquals(listOf(mm.id), kept)
+    }
+
+    @Test
+    fun `a rental is one by its sale type, whatever its title says`() {
+        // Mietmeile and Loxam title their machines like any shop; the page states they are hired out.
+        val rented = listing("Parkett Walzenschleifmaschine groß", price = 5900)
+            .copy(saleType = io.github.tieo.arbay.model.SaleType.RENT, rentPer = io.github.tieo.arbay.model.RentPeriod.DAY)
+        val sold = listing("Parkettschleifmaschine Lägler Hummel", price = 90000)
+        assertEquals(listOf(sold.title), search("parkettschleifmaschine", listOf(rented, sold)).map { it.title })
+        val rent = listing("Parkettschleifmaschine", price = 4500)
+            .copy(saleType = io.github.tieo.arbay.model.SaleType.RENT, rentPer = io.github.tieo.arbay.model.RentPeriod.DAY)
+        assertTrue(search("parkettschleifmaschine mieten", listOf(rent, listing("Parkettschleifmaschine mieten Berlin", price = 4000))).any { it.id == rent.id },
+            "a rental carries the search's 'mieten' though its title leaves it out")
+    }
+
 
 
     @Test

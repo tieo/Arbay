@@ -139,4 +139,104 @@ class WebMarketTest {
         assertEquals("https://m.example/a", offers[0].url)
         assertEquals("https://m.example/i/a.jpg", offers[0].image)
     }
+
+    @Test
+    fun `a JSON-LD block with an unescaped quote in a name is still read`() {
+        // pearl.de writes a size's inch mark into the name as it is.
+        val html = """<script type="application/ld+json"> {
+            "@type": "Product", "sku": "ZX4189",
+            "name": "Verbatim Festplatten-Gehäuse Store'n'Go für 2,5"-SATA-HDD/-SSD,  USB 3.2 Gen. 1",
+            "description": "Platz für eine 2,5\"-Festplatte.
+            Zweite Zeile",
+            "offers":{"@type":"Offer", "price":"12.99", "priceCurrency":"EUR"} }</script>"""
+        val offer = ProductPages.offers(html, "https://www.pearl.de/a-ZX4189-1162.shtml").single()
+        assertEquals("Verbatim Festplatten-Gehäuse Store'n'Go für 2,5\"-SATA-HDD/-SSD, USB 3.2 Gen. 1", offer.title)
+        assertEquals(Money(1299, Currency.EUR), offer.price)
+    }
+
+    @Test
+    fun `a product's offer stated in another block by its id is read`() {
+        // voelkner.de: the Product points at "Y524003#offer", stated in a block of its own.
+        val html = """<script type="application/ld+json">{"@context":{"@vocab":"https://schema.org/"},"@graph":[{"@type":"Product","@id":"Y524003",
+            "name":"Renkforce RF-6647598 Festplattengehäuse 4 Bay","image":{"@type":"ImageObject","url":"https://asset.re-in.de/i.webp"},
+            "offers":{"@id":"Y524003#offer"},"brand":{"@id":"Y524003#brand"}}]}</script>
+            <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Offer","@id":"Y524003#offer",
+            "priceCurrency":"EUR","availability":"http://schema.org/InStock","itemCondition":"http://schema.org/NewCondition","price":"129.99"}]}</script>"""
+        val offer = ProductPages.offers(html, "https://www.voelkner.de/products/12147583").single()
+        assertEquals("Renkforce RF-6647598 Festplattengehäuse 4 Bay", offer.title)
+        assertEquals(Money(12999, Currency.EUR), offer.price)
+        assertEquals(Condition.NEW, offer.condition)
+    }
+
+    @Test
+    fun `a product stated as what a buy action is about is read`() {
+        // MediaMarkt and Saturn wrap the product in a BuyAction; the strike-through price is not it.
+        val html = """<script type="application/ld+json">{"@context":"https://schema.org/","@type":"BuyAction","object":{"@type":"Product",
+            "name":"HIYORI Externes 3,5\"-Festplattengehäuse USB 3.0 4 Einschübe","gtin13":"9331506106639",
+            "offers":[{"@type":"Offer","price":75.99,"priceCurrency":"EUR","availability":"https://schema.org/InStock",
+            "seller":{"@type":"Organization","name":"Link Carol Shop"},
+            "priceSpecification":{"@type":"UnitPriceSpecification","priceType":"https://schema.org/StrikethroughPrice","price":147.99}}]}}</script>"""
+        val offer = ProductPages.offers(html, "https://www.mediamarkt.de/de/product/_hiyori-148285129.html").single()
+        assertEquals(Money(7599, Currency.EUR), offer.price)
+        assertEquals("Link Carol Shop", offer.seller)
+    }
+
+    @Test
+    fun `an article naming prices and shops sells nothing`() {
+        // technikkram.net's WD Red Plus review, with its affiliate boxes.
+        val html = """<script type="application/ld+json">{"@graph":[{"@type":"WebPage"},{"@type":"BlogPosting","headline":"WD Red Plus im Überblick"}]}</script>
+            <body><p>Preis bei cyberport DE: ca. 469,00 €</p><a>Zum Angebot bei cyberport</a><a>Bei Amazon kaufen</a></body>"""
+        assertFalse(ProductPages.sellsSomething(html))
+    }
+
+    @Test
+    fun `an empty basket's price is no price`() {
+        // globus-baumarkt.de's rental info page: the only amount on it is the header's basket.
+        assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
+    }
+
+    @Test
+    fun `a rental page is a page that offers something`() {
+        assertTrue(ProductPages.sellsSomething("<body><h1>Parkettschleifmaschine mieten</h1><p>45,00 € pro Tag</p><a>Jetzt mieten</a></body>"))
+    }
+
+    @Test
+    fun `a shop passing itself off as another is told by its name`() {
+        val clone = """<head><meta property="og:site_name" content="MediaMarkt"/></head>"""
+        assertTrue(ProductPages.impersonates(clone, "https://medymarkt.live/de/product/_hiyori-akt314-150247181.html"))
+        assertFalse(ProductPages.impersonates(clone, "https://www.mediamarkt.at/de/product/_hiyori-aoi481-148285096.html"))
+        assertFalse(ProductPages.impersonates("""<meta property="og:site_name" content="GLOBUS BAUMARKT"/>""", "https://www.globus-baumarkt.de/info/"))
+        assertFalse(ProductPages.impersonates("""<meta property="og:site_name" content="Saturn"/>""", "https://www.saturn.de/de/product/x.html"))
+    }
+
+    @Test
+    fun `a recipe's pattern reads offers a page holds only in a script`() {
+        // pearl.de's lists split each product across rows; its script states each one whole.
+        val html = """<script>pearlData.productsOnPage.push(new Product('PX2566','Xystec Externes USB-3.0-Gehäuse für 3,5\"-SATA-HDD \"HDE-1335.black\"',32.99,'/a-PX2566-1162.shtml'));
+            pearlData.productsOnPage.push(new Product('ZX4189','Verbatim Festplatten-Gehäuse Store\'n\'Go',12.99,'/a-ZX4189-1162.shtml'));</script>"""
+        val recipe = SiteRecipe(domain = "pearl.de", pattern = """new Product\('[^']*','(?<title>(?:[^'\\]|\\.)*)',(?<price>[\d.]+),'(?<link>[^']*)'""")
+        val offers = SiteRecipes.read(recipe, html, "https://www.pearl.de/mtrkw-4885-4-fach-festplattengehaeuse.shtml")
+        assertEquals(listOf("Xystec Externes USB-3.0-Gehäuse für 3,5\"-SATA-HDD \"HDE-1335.black\"", "Verbatim Festplatten-Gehäuse Store'n'Go"), offers.map { it.title })
+        assertEquals(Money(3299, Currency.EUR), offers[0].price)
+        assertEquals("https://www.pearl.de/a-PX2566-1162.shtml", offers[0].url)
+    }
+
+    @Test
+    fun `a rental recipe reads the day rate and the others beside it`() {
+        val html = """<div class="m"><h3>Parkettschleifmaschine</h3><span class="d">56,00 €</span><span class="w">196,00 €</span></div>"""
+        val recipe = SiteRecipe(domain = "toom.de", item = "div.m", title = "h3", price = "span.d",
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY, rates = mapOf(io.github.tieo.arbay.model.RentPeriod.WEEK to "span.w"))
+        val offer = SiteRecipes.read(recipe, html, "https://toom.de/x").single()
+        assertEquals(Money(5600, Currency.EUR), offer.price)
+        assertEquals(io.github.tieo.arbay.model.RentPeriod.DAY, offer.rentPer)
+        assertEquals(listOf(io.github.tieo.arbay.model.RentRate(io.github.tieo.arbay.model.RentPeriod.WEEK, Money(19600, Currency.EUR))), offer.rentRates)
+    }
+
+    @Test
+    fun `a model a shop writes only into the address is read off it`() {
+        val title = "HIYORI Externes 3,5\"-Festplattengehäuse USB 3.0 4 Einschübe für Festplatten, Festplattengehäuse"
+        assertEquals("aoi488", ProductPages.modelInAddress("https://www.mediamarkt.de/de/product/_hiyori-aoi488-festplattengehause-148285129.html", title))
+        // A model the title names already, and an article number, are not it.
+        assertEquals(null, ProductPages.modelInAddress("https://www.alternate.de/WD/SN7100-2-TB-SSD/html/product/100116699", "SN7100 2 TB, SSD"))
+    }
 }

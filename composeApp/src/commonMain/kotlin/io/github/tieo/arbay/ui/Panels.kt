@@ -172,7 +172,7 @@ private fun MiniOffer(listing: Listing, lowest: Boolean = false, onClick: (() ->
     ) {
         Photo(listing.imageUrls.firstOrNull { it.isNotBlank() }, Modifier.size(44.dp).clip(MaterialTheme.shapes.small))
         Text(listing.title.tidyTitle(), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        PriceText(listing.comparablePrice, lowest = lowest, style = MaterialTheme.typography.bodyMedium)
+        PriceText(listing.comparablePrice, lowest = lowest, style = MaterialTheme.typography.bodyMedium, per = listing.rentPer)
         trailing?.invoke()
     }
 }

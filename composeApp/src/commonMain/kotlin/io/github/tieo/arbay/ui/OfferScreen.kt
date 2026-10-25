@@ -152,7 +152,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 if (isArchived) Panel { Text("No longer on ${listing.platformId.displayName}. This is the copy kept when it was found.", style = MaterialTheme.typography.bodySmall) }
                 Text(listing.title.tidyTitle(), style = MaterialTheme.typography.titleLarge)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds, style = MaterialTheme.typography.headlineMedium)
+                    PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds, style = MaterialTheme.typography.headlineMedium, per = listing.rentPer)
                     listing.oldPrice?.let { Muted(it.format(), style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.LineThrough)) }
                 }
                 state.summary.againstMiddle(listing)?.let { Muted(it, style = MaterialTheme.typography.bodyMedium) }

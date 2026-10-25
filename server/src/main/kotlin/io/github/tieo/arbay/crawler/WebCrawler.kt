@@ -84,7 +84,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
      *  crawls itself (a comparison site linking an eBay item) is that market's offer, which its
      *  own crawler reads better. */
     private fun listingsOf(offers: List<PageOffer>, now: kotlin.time.Instant): List<Listing> =
-        offers.map { it.copy(url = behindAffiliateLink(it.url)) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
+        offers.map { it.copy(url = withoutSession(behindAffiliateLink(it.url))) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -93,12 +93,15 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 url = o.url,
                 title = o.title,
                 price = o.price,
+                saleType = if (o.rentPer != null) io.github.tieo.arbay.model.SaleType.RENT else null,
+                rentPer = o.rentPer,
+                rentRates = o.rentRates,
                 condition = o.condition,
                 imageUrls = listOfNotNull(o.image),
                 seller = Seller(name = o.seller ?: domain, type = SellerType.BUSINESS, url = "https://$domain"),
                 shipping = o.shipping?.let { Shipping(cost = it, free = it.amount == 0L) },
                 gtin = o.gtin,
-                mpn = o.mpn,
+                mpn = o.mpn ?: ProductPages.modelInAddress(o.url, o.title),
                 scrapedAt = now,
             )
         }.distinctBy { it.id }
@@ -180,6 +183,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         } ?: url
     }
 
+    /** An address without the session a shop writes into it (`;jsessionid=…`), which changes on
+     *  every visit and would make the same offer a new one each time it is read. */
+    private fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
+
     /** The links of a results page that are the engine's own redirects to a result. */
     private fun redirectsIn(html: String, engine: Engine): List<String> =
         if (engine.redirects.isEmpty()) emptyList()
@@ -203,19 +210,25 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         val recipe = SiteRecipes.forUrl(url)
         val rendered = recipe?.render == true || RenderedSites.has(domain)
         var html = try {
-            fetchWithFallback(client, url, "Web $domain", browserOnly = rendered)
+            if (rendered) rendered(url) ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
+            else fetchWithFallback(client, url, "Web $domain")
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("Web: {} not fetched: {}", url, e.message?.take(80))
             return Page(Outcome.BLOCKED)
         }
         var offers = offersOn(recipe, html, url)
+        // A shop passing itself off as another sells nothing it sends; its offers are bait.
+        if (ProductPages.impersonates(html, url)) {
+            log.warn("Web: {} passes itself off as another shop, left out", domain)
+            return Page(Outcome.NOTHING_SOLD)
+        }
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
         if (!ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
         // A shop whose offers its own scripts put on the page shows them only to a browser. Read
         // once more in one, a few pages per search since a browser is slow; a site that gives its
         // offers that way is remembered and opened in a browser from then on.
         if (!rendered && (renders == null || renders.getAndDecrement() > 0)) {
-            runCatching { fetchWithBrowser(url, "Web $domain", waitNetworkIdle = true) }.getOrNull()?.let { page ->
+            rendered(url)?.let { page ->
                 html = page
                 offers = offersOn(recipe, page, url)
                 if (offers.isNotEmpty()) {
@@ -303,6 +316,20 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             }
         }
 
+        /**
+         * A shop page as a person's Chrome shows it once its scripts ran: [SearchBrowser], warm and on
+         * a display of its own, waiting until the page carries the marks shops put on their product
+         * data, or [RENDER_TIMEOUT_S] passed. A headless Playwright waiting for the network to go
+         * idle timed out on every MediaMarkt and Saturn page, whose trackers never stop.
+         */
+        internal suspend fun rendered(url: String): String? =
+            SearchBrowser.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
+
+        private val SHOP_MARKERS = listOf("\"offers\"", "itemprop=\"price\"", "product:price:amount", "__NEXT_DATA__")
+        private const val RENDER_TIMEOUT_S = 20
+
+        private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
+
         /** Ad networks an engine's ads pass through on their way to the shop. */
         private val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.", "partners.webmasterplan.", "pvn.", "tc.tradetracker.", "go.skimresources.")
 
@@ -340,6 +367,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             "wikipedia.org", "youtube.com", "reddit.com", "facebook.com", "instagram.com", "tiktok.com", "x.com",
             "twitter.com", "pinterest.com", "pinterest.de", "linkedin.com", "computerbase.de", "heise.de", "chip.de",
             "golem.de", "pcgameshardware.de", "tomshardware.com", "github.com", "stackoverflow.com", "quora.com",
+            // Mail portals, whose front pages carry ads with prices in them.
+            "gmx.net", "gmx.de", "web.de", "t-online.de",
         )
     }
 }

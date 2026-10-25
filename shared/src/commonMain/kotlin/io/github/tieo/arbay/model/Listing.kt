@@ -26,6 +26,10 @@ data class Listing(
     // that it is nearly over — before that, the number means nothing yet.
     val auctionEndsAt: Instant? = null,
     val bidCount: Int? = null,
+    // For a rental ([SaleType.RENT]), the stretch of time [price] pays for; a day wherever the
+    // page states a day rate, so rentals compare with each other. Its other rates beside it.
+    val rentPer: RentPeriod? = null,
+    val rentRates: List<RentRate> = emptyList(),
     val condition: Condition? = null,
     val imageUrls: List<String> = emptyList(),
     val location: Location? = null,
@@ -84,7 +88,24 @@ enum class SaleType(val label: String) {
 
     /** A price that is only the highest bid so far, and rises until the auction ends. */
     AUCTION("Auction"),
+
+    /** Hired out, not sold: the price is what one [Listing.rentPer] of use costs. */
+    RENT("Rent"),
 }
+
+/** The stretch of time a rental's price pays for. */
+@Serializable
+enum class RentPeriod(val label: String) {
+    HALF_DAY("half day"),
+    DAY("day"),
+    WEEKEND("weekend"),
+    WEEK("week"),
+    MONTH("month"),
+}
+
+/** What a rental costs for one [period]. */
+@Serializable
+data class RentRate(val period: RentPeriod, val price: Money)
 
 /** An ad that shows a photo another ad shows too: where it is and where it was placed. */
 @Serializable

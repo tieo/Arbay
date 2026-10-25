@@ -67,9 +67,14 @@ fun Route.webRoutes() {
         get("/recipes") { call.respond(SiteRecipes.all()) }
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()
-            if (recipe.domain.isBlank() || recipe.title.isBlank() || recipe.price.isBlank())
-                throw BadRequestException("A recipe needs its domain, title and price")
+            if (recipe.domain.isBlank()) throw BadRequestException("A recipe needs its domain")
+            if (recipe.pattern == null && (recipe.title.isBlank() || recipe.price.isBlank()))
+                throw BadRequestException("A recipe needs its title and price, or a pattern")
             recipe.urlPattern?.let { runCatching { Regex(it) }.getOrElse { throw BadRequestException("urlPattern is not a regex: ${it.message}") } }
+            recipe.pattern?.let { p ->
+                runCatching { Regex(p) }.getOrElse { throw BadRequestException("pattern is not a regex: ${it.message}") }
+                if ("(?<title>" !in p || "(?<price>" !in p) throw BadRequestException("pattern needs the groups (?<title>...) and (?<price>...)")
+            }
             SiteRecipes.put(recipe)
             // What the searches that met the site before it was learned missed, read now and added
             // to them, the ones still open on a screen included.
@@ -86,7 +91,9 @@ fun Route.webRoutes() {
             val domain = SiteRecipes.domainOf(asked.url)
             val recipe = asked.recipe ?: SiteRecipes.forUrl(asked.url)
             val html = if (asked.kept) SiteGaps.page(domain) ?: throw NotFoundException("No page kept for $domain")
-            else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain", browserOnly = recipe?.render == true)
+            else if (recipe?.render == true || io.github.tieo.arbay.crawler.RenderedSites.has(domain))
+                io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
+            else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")
             val byRecipe = recipe?.let { SiteRecipes.read(it, html, asked.url) }.orEmpty()
             val offers = byRecipe.ifEmpty { ProductPages.offers(html, asked.url) }
             call.respond(WebTried(

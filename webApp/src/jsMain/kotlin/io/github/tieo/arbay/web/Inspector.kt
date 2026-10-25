@@ -163,7 +163,7 @@ private fun MiniOffer(route: Route.Results, listing: Listing, state: ResultsStat
     RouteLink(route.copy(listing = listing.id, panel = null), classes = listOf("mini-offer"), replace = true) {
         Thumb(listing, "mini-thumb")
         Span({ classes("mini-title") }) { Text(listing.title.tidyTitle()) }
-        Price(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds)
+        Price(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds, per = listing.rentPer)
     }
 }
 
@@ -482,7 +482,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         Gallery(listing)
 
         Div({ classes("price-block") }) {
-            Price(listing.comparablePrice, lowest = lowest, big = true)
+            Price(listing.comparablePrice, lowest = lowest, big = true, per = listing.rentPer)
             listing.oldPrice?.let { Span({ classes("old-price") }) { Text(it.format()) } }
             state.summary.againstMiddle(listing)?.let { Span({ classes("muted") }) { Text(it) } }
         }

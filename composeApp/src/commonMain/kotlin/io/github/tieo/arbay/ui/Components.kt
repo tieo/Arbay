@@ -44,6 +44,7 @@ import coil3.compose.AsyncImage
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.imageModel
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.RentPeriod
 import io.github.tieo.arbay.results.PriceSummary
 
 /** Pictures already in hand, by address, for drawing a screen where nothing can be downloaded. */
@@ -68,10 +69,10 @@ private fun Modifier.matchParentSizeCompat() = this.fillMaxWidth().fillMaxHeight
 /** A price as every screen shows it. [lowest] marks the cheapest offer: its own colour and a rule
  *  beneath, so it stays apart without colour. */
 @Composable
-fun PriceText(money: Money, modifier: Modifier = Modifier, lowest: Boolean = false, style: TextStyle = MaterialTheme.typography.titleMedium) {
+fun PriceText(money: Money, modifier: Modifier = Modifier, lowest: Boolean = false, style: TextStyle = MaterialTheme.typography.titleMedium, per: RentPeriod? = null) {
     val base = arbay.priceStyle(style).copy(fontWeight = if (lowest) FontWeight.Bold else FontWeight.SemiBold)
     Text(
-        money.format(),
+        money.format() + (per?.let { "/${it.label}" } ?: ""),
         modifier = modifier,
         style = if (lowest) base.copy(color = arbay.lowest, textDecoration = TextDecoration.Underline) else base,
         maxLines = 1,

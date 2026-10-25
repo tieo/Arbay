@@ -54,6 +54,27 @@ appear once its scripts ran. `searchUrl` is the site's own search with `{q}` for
 then on the site is searched directly on every web search, so set it wherever the site has a
 search.
 
+Where no element holds one whole offer (pearl's lists split each product across rows, and state
+it whole only in a script), `pattern` replaces `item`, `title`, `price`, `link` and `image`: a
+regex over the page's source with the named groups `title` and `price`, and `link` and `image`
+where it has them. Backslash escapes and HTML entities in a group are read.
+
+```json
+{ "domain": "pearl.de", "pattern": "new Product\\('[^']*','(?<title>(?:[^'\\\\]|\\\\.)*)',(?<price>[\\d.]+),'(?<link>[^']*)'" }
+```
+
+A site that hires things out (a Mietpark, a Verleih) gets `"rentPer": "DAY"` with `price` reading
+its day rate, so rentals compare with each other, and its other rates in `rates`, each a selector
+by the time it pays for (`HALF_DAY`, `DAY`, `WEEKEND`, `WEEK`, `MONTH`). Its offers are rentals:
+shown as "45,00 €/day", and left out of every search whose words do not ask to rent.
+
+```json
+{ "domain": "toom.de", "title": "h1", "price": "td.day", "rentPer": "DAY", "rates": {"WEEKEND": "td.weekend", "WEEK": "td.week"} }
+```
+
+A page passing itself off as another shop (its `og:site_name` a letter or two off its own address,
+as medymarkt.live serving MediaMarkt's pages) is never read and never reported.
+
 ## For each reported site
 
 1. Fetch the kept page and read it. Decide what kind of page it is: one product, a list of

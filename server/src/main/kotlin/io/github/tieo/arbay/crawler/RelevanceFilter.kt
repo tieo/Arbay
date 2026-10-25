@@ -208,8 +208,13 @@ object RelevanceFilter {
             }
         }
 
+        // The model the seller states apart from the title (an item's MPN, the model a shop writes
+        // only into the offer's address) is the listing's as much as a word of its title.
+        val statedModel = listing.mpn?.lowercase()?.replace(NON_ALNUM, "")?.takeIf { it.length >= 4 }
+
         fun tokenMatches(token: String): Boolean {
             if (token in implied) return true
+            if (statedModel != null && token.replace(NON_ALNUM, "") == statedModel) return true
             // A size is a number of bytes, written however the seller writes it: a 2TB drive is
             // sold as "2048GB" and "2000GB" as often as "2TB", and only the spelling differs.
             if (isASize(token)) sizeInGigabytes(token)?.let { asked ->
@@ -421,7 +426,7 @@ object RelevanceFilter {
 
     private fun isRentalOffer(listing: Listing, queryText: String): Boolean {
         if (rentalOffer.containsMatchIn(queryText)) return false
-        return rentalOffer.containsMatchIn(listing.title)
+        return listing.saleType == io.github.tieo.arbay.model.SaleType.RENT || rentalOffer.containsMatchIn(listing.title)
     }
 
     // "<something> für <the thing searched for>" names an accessory made FOR the product, not the
@@ -1257,7 +1262,10 @@ object RelevanceFilter {
                     here || evidence?.shows(m, w) == true
                 }
             }
-            if (shown.isNotEmpty()) result[listing.id] = shown.toSet()
+            // A rental carries the search's own word for renting ("mieten") however its title
+            // names the machine: the market stated it is hired out.
+            val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
+            if (shown.isNotEmpty() || rented.isNotEmpty()) result[listing.id] = (shown + rented).toSet()
         }
         evidence?.record(
             listingModels = listings.indices.associate { listings[it].id to modelWordsOf[it] },

@@ -2,6 +2,8 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.RentPeriod
+import io.github.tieo.arbay.model.RentRate
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
 import kotlin.time.Clock
@@ -30,8 +32,16 @@ data class SiteRecipe(
     val urlPattern: String? = null,
     /** Each offer's box on a page listing several; null where the page is one offer. */
     val item: String? = null,
-    val title: String,
-    val price: String,
+    val title: String = "",
+    val price: String = "",
+    /**
+     * For offers a page holds only in a script, not in its elements: a regex over the page's
+     * source with the named groups `title` and `price`, and `link` and `image` where it has them.
+     * Pearl's lists split each product across rows no box holds, and state it whole only as
+     * `new Product('ZX4189','Verbatim …',12.99,'/a-ZX4189-1162.shtml')`. Replaces [item],
+     * [title], [price], [link] and [image] where set.
+     */
+    val pattern: String? = null,
     /** The currency's code, or a selector for where the page states it; euros where null. */
     val currency: String? = null,
     /** The offer's own page, inside its box. */
@@ -40,6 +50,11 @@ data class SiteRecipe(
     val condition: String? = null,
     /** An element present only on an offer that cannot be bought now. */
     val soldOut: String? = null,
+    /** For a site that hires things out rather than selling them, the stretch of time [price]
+     *  reads the cost of: its day rate wherever it states one, so rentals compare. */
+    val rentPer: RentPeriod? = null,
+    /** A rental's other rates, each a selector inside the offer's box, by the time they pay for. */
+    val rates: Map<RentPeriod, String> = emptyMap(),
     /** Whether the offers only appear once a browser has run the page's scripts. */
     val render: Boolean = false,
     /** The site's own search for some words, with `{q}` where the words go: from then on the site
@@ -89,6 +104,7 @@ object SiteRecipes {
 
     /** The offers [recipe] reads off a page. */
     fun read(recipe: SiteRecipe, html: String, pageUrl: String): List<PageOffer> {
+        if (recipe.pattern != null) return readPattern(recipe, recipe.pattern, html, pageUrl)
         val doc = Jsoup.parse(html, pageUrl)
         val boxes: List<Element> = if (recipe.item == null) listOf(doc.body() ?: return emptyList()) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
@@ -104,9 +120,33 @@ object SiteRecipes {
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
+                rentPer = recipe.rentPer,
+                rentRates = recipe.rates.mapNotNull { (period, spec) ->
+                    pick(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, it) }
+                },
             )
         }.distinctBy { it.url to it.title }
     }
+
+    private fun readPattern(recipe: SiteRecipe, pattern: String, html: String, pageUrl: String): List<PageOffer> {
+        val currency = recipe.currency?.let(ProductPages::currencyOf) ?: Currency.EUR
+        fun group(m: MatchResult, name: String) = runCatching { m.groups[name]?.value }.getOrNull()?.let(::unescaped)?.takeIf { it.isNotBlank() }
+        return Regex(pattern).findAll(html).mapNotNull { m ->
+            val title = group(m, "title") ?: return@mapNotNull null
+            val price = group(m, "price")?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 } ?: return@mapNotNull null
+            PageOffer(
+                title = title,
+                price = price,
+                url = group(m, "link")?.let { ProductPages.absolute(it, pageUrl) } ?: pageUrl,
+                image = group(m, "image")?.let { ProductPages.absolute(it, pageUrl) },
+                rentPer = recipe.rentPer,
+            )
+        }.toList().distinctBy { it.url to it.title }
+    }
+
+    /** A string as a script wrote it: its backslash escapes and HTML entities read. */
+    private fun unescaped(raw: String): String =
+        Jsoup.parse(Regex("""\\(.)""").replace(raw) { it.groupValues[1] }).text().trim()
 
     /** What a `selector@attribute` names inside [scope]: the attribute, or the element's text. */
     private fun pick(scope: Element, spec: String): String? {

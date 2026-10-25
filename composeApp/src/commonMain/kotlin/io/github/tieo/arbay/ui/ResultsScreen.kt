@@ -411,7 +411,7 @@ private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mar
             NoteLine(listing.id)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            PriceText(listing.comparablePrice, lowest = lowest)
+            PriceText(listing.comparablePrice, lowest = lowest, per = listing.rentPer)
             state.open.priceDrops[listing.id]?.let { WasPrice(it.before()) }
             if (listing.saleType == SaleType.AUCTION) Muted(listing.bidCount?.let { "$it bids" } ?: "auction")
             if (fresh) Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary))
@@ -435,7 +435,7 @@ private fun OfferTile(listing: Listing, state: ResultsState, modifier: Modifier,
         }
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds)
+                PriceText(listing.comparablePrice, lowest = listing.id in state.summary.cheapestIds, per = listing.rentPer)
                 state.open.priceDrops[listing.id]?.let { WasPrice(it.before()) }
             }
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

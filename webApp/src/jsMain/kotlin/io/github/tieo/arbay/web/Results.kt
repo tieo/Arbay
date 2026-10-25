@@ -393,7 +393,7 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
                 NoteLine(listing.id)
             }
             Div({ classes("offer-price") }) {
-                Price(listing.comparablePrice, lowest = lowest)
+                Price(listing.comparablePrice, lowest = lowest, per = listing.rentPer)
                 was?.let { WasPrice(it) }
                 if (listing.saleType == SaleType.AUCTION) Span({ classes("muted", "small") }) { Text(listing.bidCount?.let { "$it bids" } ?: "auction") }
             }
@@ -412,7 +412,7 @@ private fun OfferTile(app: WebApp, listing: Listing, copies: List<Listing>, acti
         RouteLink(to, classes = listOf("offer-link"), replace = true) {
             Thumb(listing, "tile-photo")
             Div({ classes("tile-text") }) {
-                Price(listing.comparablePrice, lowest = lowest)
+                Price(listing.comparablePrice, lowest = lowest, per = listing.rentPer)
                 was?.let { WasPrice(it) }
                 Span({ classes("offer-title") }) { Text(listing.title.tidyTitle()) }
                 Span({ classes("offer-meta") }) { Text(sourceLabel(listing, copies)) }

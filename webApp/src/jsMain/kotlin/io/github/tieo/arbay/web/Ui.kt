@@ -6,6 +6,7 @@ import org.w3c.dom.HTMLImageElement
 import androidx.compose.runtime.key
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.RentPeriod
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Input
@@ -158,9 +159,9 @@ fun Switch(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
 /** A price as every screen shows it. [lowest] marks the cheapest offer: the accent colour, and a
  *  rule beneath it so it stays apart without colour. */
 @Composable
-fun Price(money: Money, lowest: Boolean = false, big: Boolean = false) {
+fun Price(money: Money, lowest: Boolean = false, big: Boolean = false, per: RentPeriod? = null) {
     Span({ classes(*listOfNotNull("price", "lowest".takeIf { lowest }, "big".takeIf { big }).toTypedArray()) }) {
-        Text(money.format())
+        Text(money.format() + (per?.let { "/${it.label}" } ?: ""))
     }
 }
 
