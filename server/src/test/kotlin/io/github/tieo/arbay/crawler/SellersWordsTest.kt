@@ -91,4 +91,13 @@ Laufleistung: 297000"""
         assertEquals(78_750, read.mileageKm)
         assertEquals(103, read.powerKw)
     }
+
+    @Test
+    fun `a price that only fills the field gives way to the price the text asks`() {
+        val camper = van("Monatliche Rate: 545,28 EUR. 56.999€ VB bei zeitnaher Übernahme 52.000€ möglich.", euros = 12_345)
+        assertEquals(56_999_00, SellersWords.apply(camper).price.amount)
+        // A real asking price stays, and so does a placeholder with no price in the text.
+        assertEquals(12_300_00, SellersWords.apply(van("56.999€ VB", euros = 12_300)).price.amount)
+        assertEquals(12_345_00, SellersWords.apply(van("Gepflegter Camper", euros = 12_345)).price.amount)
+    }
 }

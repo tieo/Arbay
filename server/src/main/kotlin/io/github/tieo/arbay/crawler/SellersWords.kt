@@ -43,7 +43,22 @@ object SellersWords {
 
     fun apply(listing: Listing): Listing {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
-        return listing.withStatedMileage(text).withGrossPrice(text)
+        return listing.withStatedPrice(text).withStatedMileage(text).withGrossPrice(text)
+    }
+
+    // An amount in euros as the text writes it: "56.999€ VB", "52.000 €", "24900 Euro".
+    private val statedEuros = Regex("""(\d{1,3}(?:\.\d{3})+|\d{4,7})(?:,-|,00)?\s*(?:€|eur\b|euro\b)""", RegexOption.IGNORE_CASE)
+
+    /** The price the text asks where the form's price only fills the field: digits counted up from
+     *  one ("1234", "12345"). A mobile.de Grand California 600 at 12,345 € read "56.999€ VB bei
+     *  zeitnaher Übernahme 52.000€ möglich", and ranked among 25,000 € vans. */
+    private fun Listing.withStatedPrice(text: String): Listing {
+        if (price.currency != Currency.EUR) return this
+        val asked = price.amount / 100
+        val digits = asked.toString()
+        if (price.amount % 100 != 0L || digits.length < 4 || !"123456789".startsWith(digits)) return this
+        val stated = statedEuros.findAll(text).mapNotNull { m -> number(m.groupValues[1]) }.firstOrNull { it > asked } ?: return this
+        return copy(price = Money(stated * 100L, Currency.EUR))
     }
 
     private fun Listing.withStatedMileage(text: String): Listing {
