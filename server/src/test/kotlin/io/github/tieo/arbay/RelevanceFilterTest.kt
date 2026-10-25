@@ -749,6 +749,39 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a 4-bay enclosure is found however its bays are written`() {
+        // Live answers for "4 bay festplattengehäuse" and "yottamaster 4 bay": each of these is
+        // a 4-bay enclosure and each was thrown off as off target.
+        val kept = search("4 bay festplattengehäuse", listOf(
+            listing("Renkforce RF-6647598 3,5\" Festplattengehäuse 4Bay USB-A SATA 6Gb/s 1782976"),
+            listing("FANTEC QB-35US3-6G Externes 4-fach Festplattengehäuse (für 4x 3,5 Zoll SATA)"),
+            listing("Fantec QB-35U31 – 4-Bay HDD Gehäuse – USB 3.1 Gen2 (10Gbit/s) – mit Zubehör"),
+            listing("4 Schacht Festplattengehäuse mit Lüfter für 2.5/3.5“ SATA HDD/SSD"),
+            listing("Conrad Festplattengehäuse 4-Bay USB gekühlt HD3402JSC HDD SATA"),
+            // Other counts of bays stay out.
+            listing("ORICO 5 Bay Festplattengehäuse, USB 3.1 Typ-C"),
+            listing("6 Schacht Festplattengehäuse mit Lüfter für 2.5/3.5“ SATA HDD/SSD"),
+            listing("MAIWO Dual Bay Raid Gehäuse für 3,5\" SATA HDD Festplattengehäuse mit Lüfter"),
+        )).map { it.title }
+        assertEquals(5, kept.size, kept.toString())
+        assertTrue(kept.none { it.startsWith("ORICO") || it.startsWith("6 Schacht") || it.startsWith("MAIWO") }, kept.toString())
+        val yotta = search("yottamaster 4 bay", listOf(
+            listing("Yottamaster DF4RU3 4-Bay RAID Gehäuse USB 3.0 3,5/2,5 HDD SSD RGB-Lüfter"),
+            listing("4 Fach RAID FestplattenGehäuse, Yottamaster Spielorientiert Aluminium Externes HDD Gehäuse"),
+            listing("Yottamaster 4 Bay USB C Festplattengehäuse Ghäuse Für 2,5/3,5\" SATA SSD HDD 88TB"),
+            listing("Yottamaster 5 Bay RAID USB C Festplattengehäuse Aluminium"),
+        )).map { it.title }
+        assertEquals(3, yotta.size, yotta.toString())
+        assertTrue(yotta.none { it.contains("5 Bay") }, yotta.toString())
+        // A generation after its word is still held to it: Splatoon 2 is not a Switch 2.
+        val switch = search("nintendo switch 2", listOf(
+            listing("Splatoon 2 Nintendo Switch"),
+            listing("Nintendo Switch 2 Konsole"),
+        )).map { it.title }
+        assertEquals(listOf("Nintendo Switch 2 Konsole"), switch)
+    }
+
+    @Test
     fun `a part number's revision suffix is not a model word`() {
         // eBay.fr, live, for "2TB NVMe": a 2.5" SATA hard disk with part number 1FM101-002 was kept
         // as NVMe because most other listings ending in "-002" were NVMe drives.

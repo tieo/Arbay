@@ -363,7 +363,13 @@ object RelevanceFilter {
                 // are other phones than the 9 Pro XL. After anything else it is a clothing size,
                 // written wherever the seller puts it ("Jacke Gr. XL").
                 b == "xl" && a in MODEL_QUALIFIER_SUFFIXES
-            if (isNumericBigram || isQualifierBigram) {
+            // A number can count the word after it rather than name a generation of the word
+            // before it: in "Yottamaster 4 Bay" the 4 is how many bays, and a title saying
+            // "Yottamaster DF4RU3 4-Bay" has it where it belongs.
+            val countsTheNext = isNumericBigram && tokens.getOrNull(i + 2)?.let { c ->
+                c.any { it.isLetter() } && (sp.contains(" $b $c ") || sp.endsWith(" $b $c"))
+            } == true
+            if ((isNumericBigram && !countsTheNext) || isQualifierBigram) {
                 if (!sp.contains(" $a $b ") && !sp.endsWith(" $a $b")) {
                     return 0.0
                 }
@@ -1448,6 +1454,8 @@ object RelevanceFilter {
         "ssd" to listOf("nvme", "m key", "solid state"),
         // A make written out by some sellers and by its initials by others.
         "wd" to listOf("western digital", "wd black", "wd blue"),
+        // A drive enclosure named by the drive's English initials: "4-Bay HDD Gehäuse".
+        "festplattengehaeuse" to listOf("hdd gehaeuse", "hdd case", "hdd enclosure", "festplatten gehaeuse"),
     )
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.
@@ -1522,6 +1530,11 @@ object RelevanceFilter {
             // Strip any remaining non-letter/non-digit characters (emojis, decorative symbols like ❗✅⚡)
             // These can prevent KILL_IF_STARTS from matching (e.g. "❗SUCHE❗" escapes "suche " pattern)
             .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            // A count of drive slots, in every way sellers write it: "4-Bay", "4Bay", "4-fach",
+            // "4fach", "4 Schacht", "4 Einschübe". Only "4 Bay" matched a search for a 4-bay
+            // enclosure, and a TerraMaster "4bay Gehäuse" and a Fantec "4-fach Festplattengehäuse"
+            // were thrown off it.
+            .replace(Regex("""\b(\d{1,2})\s*(bays?|fach|schacht|schaechte|einschuebe|einschub)\b"""), "$1 bay")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
