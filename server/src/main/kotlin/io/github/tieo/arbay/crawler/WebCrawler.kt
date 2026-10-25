@@ -259,7 +259,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     }
 
     private fun offersOn(recipe: SiteRecipe?, html: String, url: String): List<PageOffer> = try {
-        SiteRecipes.asTheSiteDeals(url, html, recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { SiteRecipes.withoutOffersReadElsewhere(url, ProductPages.offers(html, url)) })
+        SiteRecipes.asTheSiteDeals(url, html, (if (recipe == null) emptyList() else SiteRecipes.readAt(url, html)).ifEmpty { SiteRecipes.withoutOffersReadElsewhere(url, ProductPages.offers(html, url)) })
     } catch (e: Exception) {
         log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
         emptyList()

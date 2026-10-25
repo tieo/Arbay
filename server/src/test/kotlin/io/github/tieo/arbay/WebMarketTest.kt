@@ -427,4 +427,18 @@ class WebMarketTest {
             SiteRecipes.remove("rp-test.com")
         }
     }
+
+    @Test
+    fun `a page the recipe for its address reads nothing on is read by the site-wide one`() {
+        SiteRecipes.put(SiteRecipe(domain = "wp-test.de", title = "h2.n", price = "span.p", item = "li.item"))
+        SiteRecipes.put(SiteRecipe(domain = "wp-test.de", urlPattern = "\\.html$", title = "h1.m", price = "span.p"))
+        try {
+            val category = """<ul><li class="item"><h2 class="n">Parkettschleifmaschine 79 kg</h2><span class="p">36,00 €</span></li></ul>"""
+            val machine = """<h1 class="m">Parkettschleifmaschine 79 kg</h1><span class="p">36,00 €</span>"""
+            assertEquals(1, SiteRecipes.readAt("https://www.wp-test.de/parkett-dielen.html", category).size)
+            assertEquals("Parkettschleifmaschine 79 kg", SiteRecipes.readAt("https://www.wp-test.de/parkettschleifmaschine-klein.html", machine).single().title)
+        } finally {
+            SiteRecipes.remove("wp-test.de")
+        }
+    }
 }

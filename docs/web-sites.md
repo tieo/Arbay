@@ -49,7 +49,8 @@ Every field holding a selector takes a CSS selector, optionally followed by `@at
 that attribute instead of the element's text. `item` is the box of one offer on a page listing
 several; leave it out where the page is one product. `urlPattern` (a regex on the address) limits
 a recipe to some of the site's pages, so a site can have one recipe for its product pages and one
-for its search results. `render: true` reads the page in a browser, for a site whose offers only
+for its search results. A page is read by the recipes whose `urlPattern` matches its address
+first, and by the site-wide one where they find nothing. `render: true` reads the page in a browser, for a site whose offers only
 appear once its scripts ran. `searchUrl` is the site's own search with `{q}` for the words: from
 then on the site is searched directly on every web search, so set it wherever the site has a
 search. A site its structured data already reads gets a recipe of `domain` and `searchUrl` alone.

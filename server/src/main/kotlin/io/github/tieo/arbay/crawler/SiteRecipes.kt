@@ -105,6 +105,18 @@ object SiteRecipes {
             ?: candidates.firstOrNull { it.urlPattern == null }
     }
 
+    /**
+     * The offers the site's recipes read off a page: those naming its address first, the
+     * site-wide one where they read nothing. werkzeugprofis.de addresses a machine and a category
+     * alike (`/parkettschleifmaschine-klein.html`, `/parkett-dielen.html`); the machine recipe
+     * reads the one, the list recipe the other.
+     */
+    fun readAt(url: String, html: String): List<PageOffer> {
+        val candidates = synchronized(this) { recipes[domainOf(url)] } ?: return emptyList()
+        val matching = candidates.filter { r -> r.urlPattern != null && runCatching { Regex(r.urlPattern).containsMatchIn(url) }.getOrDefault(false) }
+        return (matching + candidates.filter { it.urlPattern == null }).firstNotNullOfOrNull { r -> read(r, html, url).takeIf { it.isNotEmpty() } }.orEmpty()
+    }
+
     /** Keeps [recipe], replacing the site's recipe for the same pages. */
     fun put(recipe: SiteRecipe) {
         val stamped = recipe.copy(domain = recipe.domain.removePrefix("www.").lowercase(), updatedAt = Clock.System.now())

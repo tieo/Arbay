@@ -100,7 +100,8 @@ fun Route.webRoutes() {
             else if (recipe?.render == true || io.github.tieo.arbay.crawler.RenderedSites.has(domain))
                 io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
             else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")
-            val byRecipe = recipe?.let { SiteRecipes.read(it, html, asked.url) }.orEmpty()
+            // A recipe in the request is tried alone; without one, the site's recipes as a search reads them.
+            val byRecipe = asked.recipe?.let { SiteRecipes.read(it, html, asked.url) } ?: SiteRecipes.readAt(asked.url, html)
             val offers = SiteRecipes.asTheSiteDeals(asked.url, html, byRecipe.ifEmpty { SiteRecipes.withoutOffersReadElsewhere(asked.url, ProductPages.offers(html, asked.url)) })
             call.respond(WebTried(
                 offers = offers,
