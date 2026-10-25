@@ -25,9 +25,8 @@ data class ModelGuess(val model: String, val how: String, val confidence: Double
  * "Parkettschleifmaschine" at a good price is as likely a HUMMEL as anything. In turn, each of these:
  * the ad's full text, read from its page, since a card carries only the start of it; the words on
  * the machine in its photos (the maker prints its name and the model's on the housing, and the
- * type plate names both); and last, how much its photos look like those of the offers in the same
- * answer that do name their model, the models that would not do among them, so an edge sander is
- * told apart rather than taken for the nearest wanted machine.
+ * type plate names both). How much its photos look like those of the offers in the same answer that
+ * do name their model is measured each run ([checkLikeness]) and not used until it proves itself.
  *
  * Kept per offer, with the wishes it was told against, so an offer is looked at once.
  */
@@ -79,7 +78,9 @@ object ModelGuesses {
         }
         unnamed.forEach { l ->
             val guess = try {
-                fromText(l, wishes) ?: fromPrint(l, wishes) ?: fromLikeness(l, references)
+                // The photos' likeness is measured below and not yet believed: unmeasured, it is a
+                // guess, and a general image model may well take every grey floor machine for another.
+                fromText(l, wishes) ?: fromPrint(l, wishes)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -108,12 +109,6 @@ object ModelGuesses {
             FitScore.namedModel(FitScore.folded(text), wishes)?.let { return ModelGuess(it.name, "printed on the machine", 0.9, sure = true) }
         }
         return null
-    }
-
-    /** The model whose offers' photos [l]'s look most like, where it is clearly the most alike. */
-    private fun fromLikeness(l: Listing, references: List<Pair<ModelWish, Listing>>): ModelGuess? {
-        val best = likeness(l, references.filter { it.second.id != l.id }) ?: return null
-        return ModelGuess(best.first.name, "looks like the ${best.first.name} ads", 0.75, sure = false)
     }
 
     /** The most alike model and how alike, if it clears [LIKE] and leads the next model by [AHEAD]. */
