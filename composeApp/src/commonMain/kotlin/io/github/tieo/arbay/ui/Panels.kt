@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.outlined.Info
+import io.github.tieo.arbay.results.photoLine
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -313,9 +316,38 @@ private fun WordList(words: List<String>, adding: String, onRemove: (String) -> 
  * a perfect fit, the price that fits fully and the one past which nothing does, the words that rule
  * an offer out and the ones that make it better. Saved as each is changed, as the alert is.
  */
+/** What the photos tell of each model, measured once a day; read when asked, since the first
+ *  measurement of a day takes a while. */
 @Composable
-private fun WishesEditor(wishes: ProductWishes, save: (ProductWishes) -> Unit) {
-    Text("What a good one is", style = MaterialTheme.typography.titleMedium)
+private fun PhotoRecords(session: Session, productId: String, wishes: ProductWishes) {
+    var records by remember(productId, wishes.models) { mutableStateOf<List<io.github.tieo.arbay.model.PhotoModelRecord>?>(null) }
+    LaunchedEffect(productId, wishes.models) { records = runCatching { session.client.photoModels(productId) }.getOrDefault(emptyList()) }
+    val now = records
+    if (now == null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Measuring the photos") }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        now.forEach { r ->
+            Column {
+                Text(r.model, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                if (r.toldFromPhotos) Text(photoLine(r), style = MaterialTheme.typography.bodySmall)
+                else Muted(photoLine(r), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WishesEditor(session: Session, productId: String, wishes: ProductWishes, save: (ProductWishes) -> Unit) {
+    var photos by remember(productId) { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("What a good one is", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        IconButton(onClick = { photos = !photos }) {
+            Icon(Icons.Outlined.Info, "What the photos tell", tint = if (photos) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    if (photos) PhotoRecords(session, productId, wishes)
     wishes.models.forEach { model ->
         // Dragged here and saved where the thumb is let go.
         var worth by remember(model.name, model.worth) { mutableStateOf((model.worth * 100).roundToInt()) }
@@ -397,7 +429,7 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     // A search for a thing is weighed by what makes a good one; a vehicle search by its criteria.
     if (!state.open.view.isCar) {
         HorizontalDivider(color = arbay.line)
-        WishesEditor(bookmark.searchQuery.productWishes ?: ProductWishes()) { session.products.setProductWishes(bookmark, it) }
+        WishesEditor(session, bookmark.id, bookmark.searchQuery.productWishes ?: ProductWishes()) { session.products.setProductWishes(bookmark, it) }
     }
     HorizontalDivider(color = arbay.line)
     Text("Tell me when a find is", style = MaterialTheme.typography.titleMedium)

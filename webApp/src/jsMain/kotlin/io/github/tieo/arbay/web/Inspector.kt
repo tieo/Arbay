@@ -36,6 +36,8 @@ import io.github.tieo.arbay.model.looksLikeADrive
 import io.github.tieo.arbay.model.DriveHealth
 import io.github.tieo.arbay.results.fitPercent
 import io.github.tieo.arbay.results.fitRows
+import io.github.tieo.arbay.model.PhotoModelRecord
+import io.github.tieo.arbay.results.photoLine
 import io.github.tieo.arbay.model.FitPart
 import io.github.tieo.arbay.results.ModelChoice
 import io.github.tieo.arbay.results.modelChoice
@@ -359,7 +361,7 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         }
 
         // A search for a thing is weighed by what makes a good one; a vehicle search by its criteria.
-        if (!state.open.view.isCar) WishesEditor(bookmark.searchQuery.productWishes ?: ProductWishes()) {
+        if (!state.open.view.isCar) WishesEditor(app, bookmark.id, bookmark.searchQuery.productWishes ?: ProductWishes()) {
             app.products.setProductWishes(bookmark, it)
         }
 
@@ -408,8 +410,13 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
  * an offer out and the ones that make it better. Saved as each is changed, as the alert is.
  */
 @Composable
-private fun WishesEditor(wishes: ProductWishes, save: (ProductWishes) -> Unit) {
-    H3 { Text("What a good one is") }
+private fun WishesEditor(app: WebApp, productId: String, wishes: ProductWishes, save: (ProductWishes) -> Unit) {
+    var photos by remember(productId) { mutableStateOf(false) }
+    Div({ classes("heading-row") }) {
+        H3 { Text("What a good one is") }
+        IconButton(Glyph.Info, "What the photos tell", pressed = photos) { photos = !photos }
+    }
+    if (photos) PhotoRecords(app, productId, wishes)
     Div({ classes("models") }) {
         wishes.models.forEach { model ->
             // Dragged here and saved where the thumb is let go.
@@ -674,6 +681,25 @@ private fun FitBreakdown(listing: Listing, wishes: ProductWishes?, check: (Strin
                 }
             }
             Span({ classes(*listOfNotNull("fit-points", "lost".takeIf { row.points < row.of }).toTypedArray()) }) { Text("${row.points}/${row.of}") }
+        }
+    }
+}
+
+/** What the photos tell of each model, measured once a day; read when asked, since the first
+ *  measurement of a day takes a while. */
+@Composable
+private fun PhotoRecords(app: WebApp, productId: String, wishes: ProductWishes) {
+    var records by remember(productId, wishes.models) { mutableStateOf<List<PhotoModelRecord>?>(null) }
+    LaunchedEffect(productId, wishes.models) { records = runCatching { app.client.photoModels(productId) }.getOrDefault(emptyList()) }
+    val now = records
+    if (now == null) {
+        Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Measuring the photos") } }
+        return
+    }
+    Div({ classes("photo-records") }) {
+        now.forEach { r ->
+            Span({ classes("model-name") }) { Text(r.model) }
+            Span({ classes(*listOfNotNull("muted", "small", "told".takeIf { r.toldFromPhotos }).toTypedArray()) }) { Text(photoLine(r)) }
         }
     }
 }

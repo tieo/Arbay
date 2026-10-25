@@ -37,3 +37,11 @@ data class ModelWish(val name: String, val words: List<String>, val worth: Doubl
 /** A reviewer's verdict on which of a search's models an offer is; null for none of them. */
 @Serializable
 data class ModelCheck(val model: String? = null)
+
+/**
+ * How the photos of a search's offers tell one of its models, measured on the archived offers that
+ * name it: whether an offer naming no model is told this one from its photos, and of the offers told
+ * it in the measurement, how many were right. [examples] is how many offers name it to learn from.
+ */
+@Serializable
+data class PhotoModelRecord(val model: String, val toldFromPhotos: Boolean, val told: Int, val right: Int, val examples: Int)

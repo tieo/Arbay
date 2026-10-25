@@ -60,10 +60,23 @@ object ModelLikeness {
         return PhotoLikeness.measure(examples(query, wishes)) { if ((worth[it] ?: 0.0) > 0.0) "good" else "worthless" }
     }
 
+    private fun teller(query: SearchQuery, wishes: ProductWishes) = tellers.get(ModelGuesses.key(wishes)) {
+        PhotoLikeness.Teller.of(examples(query, wishes), "the models of \"${query.text}\"")
+    }
+
+    /** What the photos tell of each of [wishes]' models, as the day's measurement found. */
+    fun records(query: SearchQuery, wishes: ProductWishes): List<io.github.tieo.arbay.model.PhotoModelRecord> {
+        val teller = teller(query, wishes)
+        val examples = teller.refs.groupingBy { it.label }.eachCount()
+        return wishes.models.map { m ->
+            val (told, right) = teller.records[m.name] ?: (0 to 0)
+            io.github.tieo.arbay.model.PhotoModelRecord(m.name, m.name in teller.gates, told, right, examples[m.name] ?: 0)
+        }
+    }
+
     /** The model [l]'s photos look like, where that model is told right often enough, with its record as confidence. */
-    fun tell(l: Listing, query: SearchQuery, wishes: ProductWishes, against: String): Pair<ModelWish, Double>? {
-        val teller = tellers.get(against) { PhotoLikeness.Teller.of(examples(query, wishes), "the models of \"${query.text}\"") }
-        val (name, share) = teller.tell(l) ?: return null
+    fun tell(l: Listing, query: SearchQuery, wishes: ProductWishes): Pair<ModelWish, Double>? {
+        val (name, share) = teller(query, wishes).tell(l) ?: return null
         return wishes.models.firstOrNull { it.name == name }?.let { it to share }
     }
 }

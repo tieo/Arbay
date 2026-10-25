@@ -143,6 +143,10 @@ class ArbayClient(
             setBody(product)
         }.body()
 
+    /** What the photos tell of each of the saved search's models, as the day's measurement found. */
+    suspend fun photoModels(productId: String): List<io.github.tieo.arbay.model.PhotoModelRecord> =
+        client.get("$baseUrl/api/products/$productId/photo-models").body()
+
     /** Say which of the saved search's models an offer is, or null for none of them. */
     suspend fun checkModel(productId: String, listingId: String, model: String?) {
         client.put("$baseUrl/api/products/$productId/model-checks/${listingId.encodeURLPathPart()}") {

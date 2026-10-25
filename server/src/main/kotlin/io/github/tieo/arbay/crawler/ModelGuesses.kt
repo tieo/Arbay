@@ -78,7 +78,7 @@ object ModelGuesses {
     /** A reviewer's verdict on what [listingId] is: one of the search's models by name, or null for none of them. */
     fun check(listingId: String, model: String?) = PhotoFactChecks.set(FACT, listingId, model.orEmpty())
 
-    private fun key(wishes: ProductWishes) = wishes.models.joinToString("|") { it.name + ":" + it.words.joinToString(",") }
+    internal fun key(wishes: ProductWishes) = wishes.models.joinToString("|") { it.name + ":" + it.words.joinToString(",") }
 
     /** Tell the model of every offer among [listings] that names none, as far as each can be told. */
     suspend fun identify(listings: Collection<Listing>, query: SearchQuery, wishes: ProductWishes) {
@@ -92,7 +92,7 @@ object ModelGuesses {
         if (unnamed.isEmpty()) return
         unnamed.forEach { l ->
             val guess = try {
-                fromText(l, wishes) ?: fromPrint(l, wishes) ?: fromLikeness(l, query, wishes, against)
+                fromText(l, wishes) ?: fromPrint(l, wishes) ?: fromLikeness(l, query, wishes)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -106,8 +106,8 @@ object ModelGuesses {
     }
 
     /** The model the offer's photos look like, where that model's photos were measured to be told right. */
-    private fun fromLikeness(l: Listing, query: SearchQuery, wishes: ProductWishes, against: String): ModelGuess? =
-        ModelLikeness.tell(l, query, wishes, against)?.let { (model, right) -> ModelGuess(model.name, ModelGuess.FROM_PHOTOS, right, sure = false) }
+    private fun fromLikeness(l: Listing, query: SearchQuery, wishes: ProductWishes): ModelGuess? =
+        ModelLikeness.tell(l, query, wishes)?.let { (model, right) -> ModelGuess(model.name, ModelGuess.FROM_PHOTOS, right, sure = false) }
 
     /** The model the ad's full text names, read from its page. */
     private suspend fun fromText(l: Listing, wishes: ProductWishes): ModelGuess? {

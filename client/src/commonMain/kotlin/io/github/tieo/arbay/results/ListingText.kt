@@ -164,6 +164,14 @@ fun modelChoice(row: FitRow, wishes: io.github.tieo.arbay.model.ProductWishes?):
     return ModelChoice(row.note?.substringBefore(" (")?.takeIf { it in names }, names)
 }
 
+/** What the photos tell of one model, in a line: told and how often right, or why not. */
+fun photoLine(r: io.github.tieo.arbay.model.PhotoModelRecord): String = when {
+    r.toldFromPhotos -> "from photos · right ${r.right} of ${r.told}"
+    r.examples == 0 -> "not from photos · no ad names it yet"
+    r.examples < 5 -> "not from photos · ${if (r.examples == 1) "1 ad names it" else "${r.examples} ads name it"}"
+    else -> "not from photos · right ${r.right} of ${r.told}"
+}
+
 /** The fit in whole percent, as its rows add up. */
 fun fitPercent(listing: Listing): Int? = listing.matchScore?.let { (it * 100).roundToInt() }
 

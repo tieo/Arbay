@@ -363,6 +363,9 @@ object PhotoLikeness {
         /** Per value, how alike the photos of an offer told it rightly were at the least, nearly: a
          *  wall planer is nearer a drum sander than anything else here and still nothing like one. */
         val floors: Map<String, Double>,
+        /** Per value, how many offers were told it in the measurement and how many of those rightly:
+         *  at the bar it is told from where it has one, at no bar where it has none. */
+        val records: Map<String, Pair<Int, Int>>,
         val at: Long = System.currentTimeMillis(),
     ) {
         /**
@@ -386,8 +389,13 @@ object PhotoLikeness {
                 val gates = gates(held.map { it.first.label to it.second })
                 val floors = held.filter { it.first.label == it.second.label }.groupBy({ it.second.label }, { it.second.like })
                     .mapValues { (_, likes) -> likes.sorted()[(likes.size * FLOOR_SHARE).toInt().coerceAtMost(likes.size - 1)] }
+                val records = (held.map { it.first.label } + held.map { it.second.label }).distinct().associateWith { label ->
+                    val bar = gates[label]?.first ?: 0.0
+                    val over = held.filter { it.second.label == label && it.second.score >= bar }
+                    over.size to over.count { it.first.label == label }
+                }
                 log.info("photo likeness for {}, {} examples: told {}, at least as alike as {}", what, refs.size, gates, floors)
-                return Teller(refs, gates, floors)
+                return Teller(refs, gates, floors, records)
             }
         }
     }

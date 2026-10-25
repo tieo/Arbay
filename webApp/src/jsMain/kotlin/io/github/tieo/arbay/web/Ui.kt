@@ -19,6 +19,7 @@ import org.jetbrains.compose.web.dom.Text
  * an `<svg>`; [Icon] wraps it.
  */
 enum class Glyph(val svg: String) {
+    Info("""<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>"""),
     Search("""<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>"""),
     Car("""<path d="M5 17h14v-5l-2-5H7l-2 5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/><path d="M5 12h14"/>"""),
     Gift("""<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>"""),

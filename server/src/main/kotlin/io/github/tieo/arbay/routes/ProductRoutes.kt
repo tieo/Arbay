@@ -59,6 +59,17 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             })
         }
 
+        // What the photos tell of each of this search's models, as the day's measurement found.
+        get("/{id}/photo-models") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")
+            val wishes = product.searchQuery.productWishes?.takeUnless { it.models.isEmpty() }
+                ?: return@get call.respond(emptyList<io.github.tieo.arbay.model.PhotoModelRecord>())
+            call.respond(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                io.github.tieo.arbay.crawler.ModelLikeness.records(product.searchQuery, wishes)
+            })
+        }
+
         // A reviewer's verdict on which of this search's models an offer is, or none of them.
         put("/{id}/model-checks/{listingId}") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
