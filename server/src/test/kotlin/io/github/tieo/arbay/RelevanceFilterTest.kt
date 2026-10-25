@@ -339,6 +339,9 @@ class RelevanceFilterTest {
             listing("Hummel Drum #P161 - OEM - BRAND NEW - Lagler Hummel Drum", 68470),
             listing("Lagler P278 Universal Contactor For Hummel Sanding Machines", 48569),
             listing("Lägler Hummel Ersatzteil Antriebsriemen", 4500),
+            // Kleinanzeigen and Marktplaats, live: the tensioning unit and a sanding drum.
+            listing("Lägler Hummel Spann Aggregat Drive unit", 39000),
+            listing("Nieuwe schuurwals Parketschuurmachine Hummel", 42500),
         )
         val machines = listOf(
             listing("parkettschleifmaschine lagler Hummel jahr 2025", 450000),
@@ -367,8 +370,15 @@ class RelevanceFilterTest {
             listing("Goebel Hummel Porzellan Figuren Sammlung", 31570),
             listing("Hummel Dänemark Laudrup Euro 1992", 31570),
             listing("Randschleifmaschine Parkettschleifmaschine", 61500),
+            // Vinted, live: kept as a Hummel because three Hummels in the answer were built in 2024.
+            listing("Match Attax Euro 2024 Booster Konvolut Restposten 500 Packs à 8 Karten", 36820),
         )
-        assertEquals(machines.map { it.title }.toSet(), RelevanceFilter.filter(machines + namesakes, hummel).map { it.title }.toSet())
+        val built2024 = listOf(
+            listing("Lägler Hummel BJ 2024 , Parkett Schleifmaschine", 490000),
+            listing("Lägler Hummel Baujahr 2024 top Zustand inkl. MwSt.", 549900),
+            listing("Lägler Hummel BJ 2024 Top Zustand mit Garantie", 609900),
+        )
+        assertEquals((machines + built2024).map { it.title }.toSet(), RelevanceFilter.filter(machines + built2024 + namesakes, hummel).map { it.title }.toSet())
     }
 
     @Test

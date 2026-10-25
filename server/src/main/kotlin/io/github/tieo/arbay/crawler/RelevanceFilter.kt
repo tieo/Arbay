@@ -993,6 +993,9 @@ object RelevanceFilter {
             // Part# P064 - OEM", "Hummel Drum #P161", "Fan Insert - Complete Assembly". "OEM" alone
             // is not one: a drive sold loose from a laptop is an OEM drive.
             """part(?=\s*(#|no\b|number))|spare\s+parts?|replacement\s+parts?|complete\s+assembly|tensioner|contactor|""" +
+            // A sanding machine's drum, tensioning unit or drive sold apart: "Lägler Hummel Spann
+            // Aggregat Drive unit", "Nieuwe schuurwals Parketschuurmachine Hummel".
+            """schleifwalzen?|schuurwals|spann\s?aggregat|antriebseinheit|drive\s+unit|motor\s+complete|""" +
             """(?<=#\s?)\p{L}{0,2}\d{3,}|""" +
             // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
             // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.
@@ -1372,7 +1375,7 @@ object RelevanceFilter {
                 // A number led by a zero is a part number's revision ("1FM101-002", "718292-001"),
                 // shared by drives of every kind; no product is named 002.
                 (if (w.all { it.isDigit() }) w.length in 3..4 && w[0] != '0' else w.length >= 3) &&
-                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) && !countWord.matches(w) &&
+                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) && !countWord.matches(w) && !isAYear(w) &&
                 // A number with its unit after it is a size written apart: "2000go" reads as
                 // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
                 // M.2 drive, because most listings saying 2000 GB were.
@@ -1381,6 +1384,11 @@ object RelevanceFilter {
     }
 
     private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
+
+    /** A year a thing was built or a season it is for names no product: three "Lägler Hummel BJ
+     *  2024" made a box of "Match Attax Euro 2024" football cards a Hummel by its "2024". */
+    private fun isAYear(word: String): Boolean =
+        word.length == 4 && word.all { it.isDigit() } && word.toInt() in 1950..(java.time.Year.now().value + 1)
 
     /** How many of a thing, or how big, which names no product: a "3er-Set" of brushes is not a
      *  "3er-Parkettschleifset", and "120x40" mm says nothing of what it measures. */
