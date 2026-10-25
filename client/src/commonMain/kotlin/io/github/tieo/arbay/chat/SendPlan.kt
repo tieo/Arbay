@@ -77,7 +77,7 @@ fun List<SendLine>.toRequest(searchId: String?, allInEur: Double?): SendRequest 
 )
 
 /** Whether a line still has a fill-in nobody could complete, which would reach the seller as "{preis}". */
-val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis(\+\d+|_direkt)?|titel|versand)}""").containsMatchIn(text)
+val SendLine.hasOpenFillIn: Boolean get() = Regex("""\{(preis(\+\d+|_direkt)?|titel|versand)\}""").containsMatchIn(text)
 
 private fun formatEuro(eur: Double): String {
     val cents = kotlin.math.round(eur * 100).toLong()

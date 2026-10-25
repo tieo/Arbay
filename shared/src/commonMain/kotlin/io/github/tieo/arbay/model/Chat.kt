@@ -288,7 +288,7 @@ val TEMPLATE_FILL_INS: List<Pair<String, String>> = listOf(
 /** [text] with its fill-ins completed for one listing. */
 fun fillIn(text: String, price: Int?, title: String, shipping: String?, directPrice: Int? = null): String =
     text.replace("{preis_direkt}", directPrice?.toString() ?: "{preis_direkt}")
-        .replace(Regex("""\{preis\+(\d+)}""")) { m -> price?.let { (it + m.groupValues[1].toInt()).toString() } ?: m.value }
+        .replace(Regex("""\{preis\+(\d+)\}""")) { m -> price?.let { (it + m.groupValues[1].toInt()).toString() } ?: m.value }
         .replace("{preis}", price?.toString() ?: "{preis}")
         .replace("{titel}", title)
         .replace("{versand}", shipping ?: "{versand}")
