@@ -121,7 +121,8 @@ as medymarkt.live serving MediaMarkt's pages) is never read and never reported.
    as every Arbay change is.
 7. A site that blocks every way in, or turns out to sell nothing, is given up on with
    `POST /api/web/gaps/<domain>/given-up`, so the searches waiting on it finish, and said so in the
-   report.
+   report. A site given up on is neither reported again nor guessed at until a recipe for it is
+   kept, so a page quoting another shop's prices does not show them as its own.
 
 Never send anything to a seller and never buy anything. Report to the user as a short table: each
 site, what kind of page it was, what was done (recipe kept, code changed, false report fixed,

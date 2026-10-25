@@ -237,7 +237,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             return Page(Outcome.NOTHING_SOLD)
         }
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
-        if (!ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
+        if (SiteGaps.isGivenUp(domain) || !ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
         // A shop whose offers its own scripts put on the page shows them only to a browser. Read
         // once more in one, a few pages per search since a browser is slow; a site that gives its
         // offers that way is remembered and opened in a browser from then on.

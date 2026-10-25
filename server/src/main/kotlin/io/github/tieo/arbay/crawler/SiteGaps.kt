@@ -93,6 +93,26 @@ object SiteGaps {
 
     private const val PAGES_KEPT_PER_SITE = 50
 
+    /**
+     * The sites given up on: they sell nothing after all (dielen-schleifen.de quotes Bauhaus's
+     * rental prices beside its sanding paper) or block every way in. Their pages are neither
+     * reported again nor guessed at, which read the quoted price as the site's own offer, until
+     * a recipe for the site is kept.
+     */
+    private val givenUpFile = DataDir.file("web_given_up.json")
+    private var givenUp: Set<String> = givenUpFile.readStore(log) { json.decodeFromString<Set<String>>(it) } ?: emptySet()
+
+    fun isGivenUp(domain: String): Boolean = synchronized(this) { domain in givenUp }
+
+    fun giveUp(domain: String) = setGivenUp(givenUp + domain)
+
+    fun takeBack(domain: String) { if (isGivenUp(domain)) setGivenUp(givenUp - domain) }
+
+    private fun setGivenUp(domains: Set<String>) = synchronized(this) {
+        givenUp = domains
+        runCatching { givenUpFile.writeTextAtomically(json.encodeToString(domains)) }.onFailure { log.error("given-up sites not written: {}", it.message) }
+    }
+
     /** The page as Arbay fetched it when it reported [domain]. */
     fun page(domain: String): String? = pageFile(domain).takeIf { it.isFile }?.readText()
 

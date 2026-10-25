@@ -381,4 +381,16 @@ class WebMarketTest {
         assertEquals(Money(3998, Currency.EUR), offers[0].price)
         assertEquals("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/", offers[0].url)
     }
+
+    @Test
+    fun `a site given up on stays given up until it gets a recipe`() {
+        val site = "given-up-test.de"
+        io.github.tieo.arbay.crawler.SiteGaps.giveUp(site)
+        try {
+            assertTrue(io.github.tieo.arbay.crawler.SiteGaps.isGivenUp(site))
+        } finally {
+            io.github.tieo.arbay.crawler.SiteGaps.takeBack(site)
+        }
+        assertFalse(io.github.tieo.arbay.crawler.SiteGaps.isGivenUp(site))
+    }
 }

@@ -63,6 +63,7 @@ fun Route.webRoutes() {
         // searches waiting on it stop waiting.
         post("/gaps/{domain}/given-up") {
             val domain = call.parameters["domain"] ?: throw BadRequestException("Missing domain")
+            SiteGaps.giveUp(SiteRecipes.domainOf("https://$domain/"))
             SiteGaps.learned.emit(SiteGaps.Learned(domain, emptyMap()))
             call.respond(HttpStatusCode.NoContent)
         }
@@ -79,6 +80,7 @@ fun Route.webRoutes() {
                 if ("(?<title>" !in p || "(?<price>" !in p) throw BadRequestException("pattern needs the groups (?<title>...) and (?<price>...)")
             }
             SiteRecipes.put(recipe)
+            SiteGaps.takeBack(SiteRecipes.domainOf("https://${recipe.domain}/"))
             // What the searches that met the site before it was learned missed, read now and added
             // to them, the ones still open on a screen included.
             val learned = (CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler)
