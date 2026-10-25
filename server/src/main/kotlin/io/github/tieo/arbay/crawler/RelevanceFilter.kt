@@ -1082,6 +1082,10 @@ object RelevanceFilter {
         val shortPartCode = partCode?.takeLast(7)?.takeIf { partCode.length == 11 && partCode.all(Char::isDigit) }
         val partDescriptions = partCode?.let { PartDescriptions.learn(listings + PartNumberReference.known(it), it, shortPartCode) }
         val partPhrasings = partDescriptions?.phrasings.orEmpty()
+        // One model code alone ("IB-3740-C31") is matched loosely by some markets' own search, and
+        // where no listing of an answer prints it, nothing is required of that answer's titles.
+        val namesOneModel = partCode == null && asParsed.orGroups.isEmpty() &&
+            asParsed.positiveTokens.singleOrNull()?.let { isAModelCode(it) } == true
         val parsed = if (partCode == null) asParsed else {
             val code = partCode
             val short = shortPartCode
@@ -1112,6 +1116,7 @@ object RelevanceFilter {
                 // as the E30's fuel breather cover.
                 namesOnePart && !isThePart(listing, partCode!!, shortPartCode, partDescriptions) -> DropReason.OFF_TARGET
                 namesOnePart -> null
+                namesOneModel && score(listing, asParsed) <= 0.0 && namesANeighbouringModel(listing.title, query.text) -> DropReason.OFF_TARGET
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
@@ -1274,6 +1279,32 @@ object RelevanceFilter {
         )
         return result
     }
+
+    /**
+     * Whether [title] names a different model built from a piece of the one [typed]: Back Market
+     * answered "IB-3740-C31" with an I-Tec "C31HDMIDPDOCKPD" dock, its own search having matched the
+     * "C31", and Crucial's CT16G4SFD832A shares all but the size with the CT32G4SFD832A. A title
+     * word that is only a piece of the code ("IB-3740-C" written without its 31) is not another
+     * model; one that adds to a piece, or shares a long head or tail with the whole code, is.
+     */
+    private fun namesANeighbouringModel(title: String, typed: String): Boolean {
+        val code = normalize(typed.lowercase()).replace(NON_ALNUM, "")
+        val pieces = normalize(typed.lowercase()).split(NON_ALNUM)
+            .filter { it.length >= 3 && it.any(Char::isDigit) && it != code }
+        // Every word with a digit, not only the ones [modelWords] takes for a name: a memory code
+        // begins with its size ("CT16G4…") and is a size there.
+        val words = normalize(title.lowercase()).split(NON_ALNUM).filter { it.length >= 3 && it.any(Char::isDigit) }
+        return words.any { w ->
+            w != code && code !in w && w !in pieces && (
+                pieces.any { it in w } ||
+                    (w.length >= NEIGHBOUR_SHARED && (pieces + code).any { c ->
+                        w.commonPrefixWith(c).length >= NEIGHBOUR_SHARED || w.commonSuffixWith(c).length >= NEIGHBOUR_SHARED
+                    })
+                )
+        }
+    }
+
+    private const val NEIGHBOUR_SHARED = 5
 
     /** The words in a title that can name a model: a number of three or four digits not led by a zero ("990"), or
      *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a

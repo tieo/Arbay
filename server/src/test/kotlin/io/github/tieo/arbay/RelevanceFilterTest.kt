@@ -279,6 +279,23 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a model next to the one searched for is not it`() {
+        // Back Market, live, answered "IB-3740-C31" with one listing: an I-Tec dock whose code
+        // begins with the "C31". No listing of that answer printed the code, so nothing was asked of
+        // it, and the dock stood as the cheapest of the enclosure at 82 €.
+        val dock = listing("I-Tec C31HDMIDPDOCKPD Docking-Station")
+        assertEquals(emptyList(), RelevanceFilter.filter(listOf(dock), SearchQuery(text = "IB-3740-C31", category = MarketGroup.GENERAL)))
+        // The box itself, written without its 31, is still it.
+        val shortName = listing("ICY BOX Externes 4-Fach System 3,5\" SATA USB 3.1 Type-C IB-3740-C")
+        assertEquals(1, RelevanceFilter.filter(listOf(shortName), SearchQuery(text = "IB-3740-C31", category = MarketGroup.GENERAL)).size)
+        // A module one size down shares everything but the size with the one searched for.
+        val crucial = SearchQuery(text = "CT32G4SFD832A", category = MarketGroup.GENERAL)
+        assertEquals(emptyList(), RelevanceFilter.filter(listOf(listing("Crucial CT16G4SFD832A 16GB DDR4 3200 SODIMM")), crucial))
+        // A seller who never prints the number is left to the market's own search, as before.
+        assertEquals(1, RelevanceFilter.filter(listOf(listing("Crucial 32GB DDR4 3200 SO-DIMM Arbeitsspeicher")), crucial).size)
+    }
+
+    @Test
     fun `a search is offered the other names sellers write its words under`() {
         // pearl counts bays as "4-fach", MediaMarkt as "4 Einschübe": a market answering only titles
         // carrying "bay" never shows them unless it is asked in their words.
