@@ -385,7 +385,7 @@ class RelevanceFilterTest {
     fun `each of a maker's belt sanders is found by its own name, and its edge sanders are not`() {
         val belt = SearchQuery(
             text = "lägler hummel",
-            aliases = listOf("lägler elf", "lägler profit", "lägler superhummel", "hummel parkettschleifmaschine"),
+            aliases = listOf("lägler elf", "lägler profit", "lägler superhummel", "hummel parkettschleifmaschine", "levigatrice hummel"),
             category = MarketGroup.GENERAL,
         )
         // Live titles from the "parkettschleifmaschine" search.
@@ -399,6 +399,8 @@ class RelevanceFilterTest {
             listing("Lägler Flip Parkettschleifmaschine für Holzbearbeitung mit Staubsack, manuell", 39999),
             listing("Lägler ELAN Randschleifer / Parkettschleifmaschine - voll funktionsfähig", 49000),
             listing("Lägler TRIO Parkettschleifmaschine inkl. Zubehör und Schleifpapier", 250000),
+            // eBay IT, live: a Festool hand sander kept by the Italian "levigatrice hummel".
+            listing("Levigatrice FESTOOL RTSC 400-Basic (Solo corpo + Systainer SYS3 M 187)", 35181),
         )
         assertEquals(sanders.map { it.title }.toSet(), RelevanceFilter.filter(sanders + others, belt).map { it.title }.toSet())
     }
@@ -1035,6 +1037,22 @@ class RelevanceFilterTest {
         )).map { it.title }
         assertEquals(5, kept.size, kept.toString())
         assertTrue(kept.none { it.contains("1 - 4 TB") }, "a range is still priced at its smallest")
+    }
+
+    @Test
+    fun `what a search threw away teaches nothing about the next answer`() {
+        // Vinted, live, answered "lägler hummel" with Goebel's Hummel figurines. Learned from, the
+        // figurine 187 made eBay Italy's Festool sander with a "SYS3 M 187" Systainer a Hummel.
+        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
+        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        try {
+            val hummel = SearchQuery(text = "lägler hummel", aliases = listOf("levigatrice hummel"), category = MarketGroup.GENERAL)
+            RelevanceFilter.filter((1..8).map { listing("Goebel Hummel Figur 187 Sammlung Nummer $it") }, hummel)
+            val festool = listing("Levigatrice FESTOOL RTSC 400-Basic (Solo corpo + Systainer SYS3 M 187)", 35181)
+            assertEquals(emptyList(), RelevanceFilter.filter(listOf(festool), hummel))
+        } finally {
+            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+        }
     }
 
     @Test

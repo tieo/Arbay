@@ -1288,6 +1288,7 @@ object RelevanceFilter {
             }
             listing to s
         }.sortedByDescending { it.second }.map { it.first }
+        recordModelEvidence(kept, parsed)
         return Partitioned(kept, dropped)
     }
 
@@ -1327,12 +1328,26 @@ object RelevanceFilter {
             val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
             if (shown.isNotEmpty() || rented.isNotEmpty()) result[listing.id] = (shown + rented).toSet()
         }
-        evidence?.record(
-            listingModels = listings.indices.associate { listings[it].id to modelWordsOf[it] },
-            carried = listings.indices.associate { i -> listings[i].id to words.filter { carries.getValue(it)[i] }.toSet() },
+        return result
+    }
+
+    /**
+     * What the listings a search kept show about their model words, for the answers too small to
+     * show it themselves. Only the kept ones: Vinted answered "lägler hummel" with Goebel's Hummel
+     * figurines, and learned from them, figurine 187 made a Festool sander sold with a "SYS3 M 187"
+     * Systainer a Hummel in every later answer.
+     */
+    private fun recordModelEvidence(kept: List<Listing>, parsed: ParsedQuery) {
+        val evidence = ModelWordEvidence.installed ?: return
+        val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
+            .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
+        if (words.isEmpty() || kept.isEmpty()) return
+        val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
+        evidence.record(
+            listingModels = kept.associate { it.id to modelWords(it.title) },
+            carried = kept.associate { l -> l.id to words.filter { score(l, single(it)) == 1.0 }.toSet() },
             words = words,
         )
-        return result
     }
 
     /**
