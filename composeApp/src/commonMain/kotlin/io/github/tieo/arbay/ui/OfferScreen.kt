@@ -78,6 +78,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.style.TextAlign
 import io.github.tieo.arbay.results.fitPercent
 import io.github.tieo.arbay.results.fitRows
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.results.ModelChoice
+import io.github.tieo.arbay.results.modelChoice
 import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
@@ -182,7 +189,9 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 val facts = offerFacts(listing, page)
                 if (facts.isNotEmpty()) Choices { facts.forEach { Box(Modifier.padding(vertical = 3.dp)) { Fact(it) } } }
 
-                FitBreakdown(listing)
+                FitBreakdown(listing, state.open.bookmark?.searchQuery?.productWishes) { model ->
+                    state.open.bookmark?.let { session.products.checkModel(it, listing.id, model) }
+                }
                 DriveHealthSection(health, readingDrive)
 
                 page.vehicle?.let { v ->
@@ -227,8 +236,10 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
  * the points went.
  */
 @Composable
-private fun FitBreakdown(listing: Listing) {
+private fun FitBreakdown(listing: Listing, wishes: io.github.tieo.arbay.model.ProductWishes?, check: (String?) -> Unit) {
     val rows = fitRows(listing)
+    // What the reader set the model to here, shown until the next search weighs it in.
+    var checked by remember(listing.id) { mutableStateOf<ModelPicked?>(null) }
     val percent = fitPercent(listing) ?: return
     if (rows.isEmpty()) return
     val most = rows.maxOf { it.of }.toFloat()
@@ -238,7 +249,9 @@ private fun FitBreakdown(listing: Listing) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(0.42f)) {
                 Text(row.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                row.note?.let { Muted(it, maxLines = 1, style = MaterialTheme.typography.bodySmall.copy(fontStyle = if (row.known) FontStyle.Normal else FontStyle.Italic)) }
+                val choice = modelChoice(row, wishes)
+                if (choice != null) ModelPick(choice, checked) { checked = it; check(it.model) }
+                else row.note?.let { Muted(it, maxLines = 1, style = MaterialTheme.typography.bodySmall.copy(fontStyle = if (row.known) FontStyle.Normal else FontStyle.Italic)) }
             }
             Box(Modifier.weight(0.40f)) {
                 Box(
@@ -254,6 +267,33 @@ private fun FitBreakdown(listing: Listing) {
                 "${row.points}/${row.of}", Modifier.weight(0.18f), style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.End, color = if (row.points < row.of) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** A model the reader picked for an offer; null [model] for none of the search's. */
+private data class ModelPicked(val model: String?)
+
+/** The model an offer's fit read off its text or photos, or found nowhere, as a pick of the search's
+ *  models: the reader who sees which machine it is says so. */
+@Composable
+private fun ModelPick(choice: ModelChoice, checked: ModelPicked?, pick: (ModelPicked) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shown = when {
+        checked != null -> checked.model ?: "none of these"
+        else -> choice.current ?: FitPart.NOT_STATED
+    }
+    Box {
+        Row(
+            Modifier.clip(CircleShape).clickable { open = true }.padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Muted(shown, maxLines = 1, style = MaterialTheme.typography.bodySmall)
+            Icon(Icons.Outlined.ArrowDropDown, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            choice.models.forEach { m -> DropdownMenuItem(text = { Text(m) }, onClick = { open = false; pick(ModelPicked(m)) }) }
+            DropdownMenuItem(text = { Text("none of these") }, onClick = { open = false; pick(ModelPicked(null)) })
         }
     }
 }

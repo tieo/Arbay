@@ -1,10 +1,9 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.classifier.ClipImageModel
 import io.github.tieo.arbay.model.Listing
-import io.github.tieo.arbay.model.ModelWish
 import io.github.tieo.arbay.model.ProductWishes
+import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
 import kotlinx.coroutines.CancellationException
@@ -13,20 +12,33 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 
 /** The model an offer was told to be though its card names none, and how it was told. [sure] is
- *  a model named in so many words (the ad's full text, or printed on the machine in a photo);
- *  a likeness of photos is not, and never rules an offer out on its own. */
+ *  a model named in so many words (the ad's full text, printed on the machine in a photo) or checked
+ *  by a reviewer; a likeness of photos is not, and never rules an offer out on its own. */
 @Serializable
-data class ModelGuess(val model: String, val how: String, val confidence: Double, val sure: Boolean)
+data class ModelGuess(val model: String, val how: String, val confidence: Double, val sure: Boolean) {
+    /** Told from the photos' likeness alone and not yet looked at by anyone. */
+    val unchecked: Boolean get() = how == FROM_PHOTOS
+
+    companion object {
+        const val FROM_PHOTOS = "its photos look like one"
+        const val CHECKED = "checked"
+    }
+}
 
 /**
  * The model of an offer whose title and card text name none, told from what else the ad shows.
  *
  * A search weighed by [ProductWishes] scores an unnamed model as not stated, and an ad titled
  * "Parkettschleifmaschine" at a good price is as likely a HUMMEL as anything. In turn, each of these:
- * the ad's full text, read from its page, since a card carries only the start of it; the words on
- * the machine in its photos (the maker prints its name and the model's on the housing, and the
- * type plate names both). How much its photos look like those of the offers in the same answer that
- * do name their model is measured each run ([checkLikeness]) and not used until it proves itself.
+ * a reviewer's verdict ([check]); the ad's full text, read from its page, since a card carries only
+ * the start of it; the words on the machine in its photos (the maker prints its name and the model's
+ * on the housing, and the type plate names both); how much its photos look like those of the
+ * archived offers naming their model ([ModelLikeness]), only for a model whose photos were measured
+ * to be told right often enough, and with that record as the confidence.
+ *
+ * A photo likeness is a guess until someone looks: an alert it carries says so, and the verdict given
+ * back ([check]) both settles the offer and makes it one of the references the next offers are told
+ * from, so every look improves what the photos tell.
  *
  * Kept per offer, with the wishes it was told against, so an offer is looked at once.
  */
@@ -34,6 +46,7 @@ object ModelGuesses {
     private val log = LoggerFactory.getLogger(ModelGuesses::class.java)
     private val json = Json { ignoreUnknownKeys = true }
     private val file = DataDir.file("model_guesses.json")
+    private val checkedFile = DataDir.file("model_checks.json")
 
     @Serializable
     private data class Kept(val guess: ModelGuess? = null, val against: String)
@@ -42,8 +55,10 @@ object ModelGuesses {
         json.decodeFromString<Map<String, Kept>>(it)
     }?.toMutableMap() ?: mutableMapOf()
 
-    /** Photos compared per offer: the first few show the machine; the rest are details and papers. */
-    private const val PHOTOS_COMPARED = 3
+    /** A reviewer's verdict per offer (every market copy alike): the model's name, or "" for none of them. */
+    private val checked: MutableMap<String, String> = checkedFile.readStore(log) {
+        json.decodeFromString<Map<String, String>>(it)
+    }?.toMutableMap() ?: mutableMapOf()
 
     /** Photos read for printed words per offer. */
     private const val PHOTOS_READ = 4
@@ -51,36 +66,41 @@ object ModelGuesses {
     /** Offers looked at per run, cheapest first: the cheap ones are the ones a good fit hides in. */
     private const val MOST_PER_RUN = 25
 
-    /** How alike two photos of the same model are at least, and how far ahead of the next model the
-     *  best has to be (CLIP image embeddings, cosine): set from [checkLikeness] on real answers. */
-    internal var LIKE = 0.90
-    internal var AHEAD = 0.03
-
     /** The model [listing] was told to be, where one was. */
-    fun of(listing: Listing): ModelGuess? = synchronized(kept) { kept[listing.id]?.guess }
+    fun of(listing: Listing): ModelGuess? {
+        checkOf(listing.id)?.let { name -> return name.takeIf { it.isNotEmpty() }?.let { ModelGuess(it, ModelGuess.CHECKED, 1.0, sure = true) } }
+        return synchronized(kept) { kept[listing.id]?.guess }
+    }
+
+    /** The reviewer's verdict on [listingId]: a model's name, "" for none of the search's models, null when never checked. */
+    fun checkOf(listingId: String): String? = synchronized(checked) { checked[offerKey(listingId)] }
+
+    /** Every verdict given, by offer. */
+    fun checks(): Map<String, String> = synchronized(checked) { checked.toMap() }
+
+    /** A reviewer's verdict on what [listingId] is: one of the search's models by name, or null for none of them. */
+    fun check(listingId: String, model: String?) {
+        val all = synchronized(checked) { checked[offerKey(listingId)] = model.orEmpty(); checked.toMap() }
+        runCatching { checkedFile.writeTextAtomically(json.encodeToString(all)) }
+            .onFailure { log.warn("model checks not kept: {}", it.message) }
+        log.info("model of {} checked: {}", listingId, model ?: "none of them")
+    }
 
     private fun key(wishes: ProductWishes) = wishes.models.joinToString("|") { it.name + ":" + it.words.joinToString(",") }
 
     /** Tell the model of every offer among [listings] that names none, as far as each can be told. */
-    suspend fun identify(listings: Collection<Listing>, wishes: ProductWishes) {
+    suspend fun identify(listings: Collection<Listing>, query: SearchQuery, wishes: ProductWishes) {
         if (wishes.models.isEmpty()) return
         val against = key(wishes)
         fun named(l: Listing) = FitScore.namedModel(FitScore.folded("${l.title}\n${l.description.orEmpty()}"), wishes)
-        val unnamed = listings.filter { named(it) == null }
+        val unnamed = listings.filter { named(it) == null && checkOf(it.id) == null }
             .filter { l -> synchronized(kept) { kept[l.id]?.against != against } }
             .sortedBy { FitScore.priceEur(it) }
             .take(MOST_PER_RUN)
         if (unnamed.isEmpty()) return
-        // The offers that name one model in their title are what the others' photos are held against.
-        val references = listings.mapNotNull { l ->
-            val models = wishes.models.filter { m -> m.words.any { FitScore.says(FitScore.folded(l.title), it) } }
-            models.singleOrNull()?.let { it to l }
-        }
         unnamed.forEach { l ->
             val guess = try {
-                // The photos' likeness is measured below and not yet believed: unmeasured, it is a
-                // guess, and a general image model may well take every grey floor machine for another.
-                fromText(l, wishes) ?: fromPrint(l, wishes)
+                fromText(l, wishes) ?: fromPrint(l, wishes) ?: fromLikeness(l, query, wishes, against)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -90,9 +110,12 @@ object ModelGuesses {
             synchronized(kept) { kept[l.id] = Kept(guess, against) }
             if (guess != null) log.info("model of {} ({}): {} from {}", l.id, l.title.take(50), guess.model, guess.how)
         }
-        checkLikeness(references)
         persist()
     }
+
+    /** The model the offer's photos look like, where that model's photos were measured to be told right. */
+    private fun fromLikeness(l: Listing, query: SearchQuery, wishes: ProductWishes, against: String): ModelGuess? =
+        ModelLikeness.tell(l, query, wishes, against)?.let { (model, right) -> ModelGuess(model.name, ModelGuess.FROM_PHOTOS, right, sure = false) }
 
     /** The model the ad's full text names, read from its page. */
     private suspend fun fromText(l: Listing, wishes: ProductWishes): ModelGuess? {
@@ -109,51 +132,6 @@ object ModelGuesses {
             FitScore.namedModel(FitScore.folded(text), wishes)?.let { return ModelGuess(it.name, "printed on the machine", 0.9, sure = true) }
         }
         return null
-    }
-
-    /** The most alike model and how alike, if it clears [LIKE] and leads the next model by [AHEAD]. */
-    private fun likeness(l: Listing, references: List<Pair<ModelWish, Listing>>): Pair<ModelWish, Double>? {
-        val mine = embeddings(l).takeIf { it.isNotEmpty() } ?: return null
-        val byModel = references.groupBy({ it.first }, { it.second }).mapValues { (_, ls) ->
-            ls.maxOfOrNull { other -> embeddings(other).maxOfOrNull { theirs -> mine.maxOf { dot(it, theirs) } } ?: 0.0 } ?: 0.0
-        }.entries.sortedByDescending { it.value }
-        val first = byModel.firstOrNull() ?: return null
-        val second = byModel.getOrNull(1)?.value ?: 0.0
-        return if (first.value >= LIKE && first.value - second >= AHEAD) first.key to first.value else null
-    }
-
-    /**
-     * How often the photos alone tell the right model, measured on the offers whose title names it:
-     * each held out in turn and told from the rest. Logged per run, so the bars above are set from
-     * what the markets show rather than guessed.
-     */
-    private fun checkLikeness(references: List<Pair<ModelWish, Listing>>) {
-        if (references.size < 6) return
-        var told = 0; var right = 0
-        references.forEach { (model, l) ->
-            val guess = likeness(l, references.filter { it.second.id != l.id }) ?: return@forEach
-            told++
-            if (guess.first.name == model.name) right++
-        }
-        log.info("photo likeness on {} offers naming their model: told {}, right {} (bar {} ahead {})", references.size, told, right, LIKE, AHEAD)
-    }
-
-    private val embedded = object : LinkedHashMap<String, List<FloatArray>>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: Map.Entry<String, List<FloatArray>>?) = size > 2_000
-    }
-
-    private fun embeddings(l: Listing): List<FloatArray> {
-        synchronized(embedded) { embedded[l.id]?.let { return it } }
-        val all = l.imageUrls.take(PHOTOS_COMPARED).mapNotNull { ClipImageModel.embedUrl(it) }
-        if (all.isNotEmpty()) synchronized(embedded) { embedded[l.id] = all }
-        return all
-    }
-
-    /** Cosine of two L2-normalised embeddings. */
-    private fun dot(a: FloatArray, b: FloatArray): Double {
-        var s = 0.0
-        for (i in a.indices) s += a[i] * b[i]
-        return s
     }
 
     private suspend fun detail(l: Listing) = DetailCache.get(l.id)

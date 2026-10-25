@@ -154,6 +154,16 @@ object ListingArchive {
         }
     }
 
+    /** Every archived listing, read one file at a time; one that no longer reads is passed over. */
+    fun all(): Sequence<Listing> =
+        (listingsDir.listFiles { f -> f.extension == "json" } ?: emptyArray()).asSequence().mapNotNull { f ->
+            try { json.decodeFromString<Listing>(f.readText()) } catch (e: Exception) { null }
+        }
+
+    /** The mirrored photos of an archived [listing], in the order its ad shows them. */
+    fun photoFiles(listing: Listing): List<File> =
+        listing.imageUrls.mapNotNull { imageFile(listing.id, it.substringAfterLast('/')) }
+
     /** One of a listing's mirrored images, addressed by the filename [get] handed back in its
      *  imageUrls. Guards against a filename walking out of that listing's own directory. */
     fun imageFile(id: String, filename: String): File? {

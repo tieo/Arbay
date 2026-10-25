@@ -529,6 +529,23 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
+            "check_model",
+            "Say which of a saved search's models an offer is, after looking at its photos and text: settles a model the fit told from its photos alone (an alert says \"told from its photos alone, unchecked\"), and makes the offer an example the next offers' photos are told by. Leave model out for none of them.",
+            props = {
+                string("saved_search_id", "Saved search id", required = true)
+                string("listing_id", "Offer id", required = true)
+                string("model", "The model's name as the search's fit wishes name it; left out for none of them")
+            },
+        ) { args ->
+            val model = args.str("model")
+            val r = http.put("$base/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/model-checks/${args.str("listing_id")!!.encodeURLPathPart()}") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("model", model?.let(::JsonPrimitive) ?: JsonNull) }.toString())
+            }
+            if (r.status.isSuccess()) "Checked: ${model ?: "none of the search's models"}." else "Not checked: ${r.bodyAsText()}"
+        }
+
+        tool(
             "hide_offers", "Put offers away so no device shows them again, or bring them back.",
             props = { stringArray("listing_ids", "Offer ids", required = true); boolean("bring_back", "Show them again instead") },
         ) { args ->

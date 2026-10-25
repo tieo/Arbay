@@ -171,6 +171,18 @@ class ProductViewModel(
         updateProduct(product.copy(searchQuery = product.searchQuery.copy(productWishes = wishes.takeUnless { it.isEmpty })))
     }
 
+    /** Which of the bookmark's models an offer is, or null for none of them: settles a model guessed
+     *  from photos, and makes the offer one the next offers' photos are told by. */
+    fun checkModel(product: TrackedProduct, listingId: String, model: String?) {
+        viewModelScope.launch {
+            try {
+                client.checkModel(product.id, listingId, model)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+                _error.value = e.message
+            }
+        }
+    }
+
     /** Set this bookmark's notification subfilters and persist. */
     fun setNotificationSubfilters(product: TrackedProduct, subfilters: List<NotificationSubfilter>) {
         updateProduct(product.copy(notificationSubfilters = subfilters))

@@ -543,7 +543,7 @@ class SavedSearchMonitor(
         val fresh = record(product, shown)
         // An offer naming no model is told one from its full text, its photos' print or their
         // likeness to the offers that do, before it is weighed.
-        if (things != null) ModelGuesses.identify(shown.values, things)
+        if (things != null) ModelGuesses.identify(shown.values, q, things)
         // What the top of the search scores today, every offer counted once.
         val scores = bestCopyEach(
             shown.values.mapNotNull { l ->
@@ -575,7 +575,11 @@ class SavedSearchMonitor(
         if (worth.isEmpty()) return
         AlertFeed.record(worth.map { (l, fit) ->
             FoundAlert(
-                seq = 0, savedSearchId = product.id, searchName = product.name, rule = "fit ${(fit.score * 100).roundToInt()} %",
+                seq = 0, savedSearchId = product.id, searchName = product.name,
+                // A model told from photos alone is a guess until someone looks, and the reader of
+                // this feed is who looks: the verdict goes back through the check_model tool.
+                rule = "fit ${(fit.score * 100).roundToInt()} %" + (ModelGuesses.of(l)?.takeIf { things != null && it.unchecked }
+                    ?.let { ", model ${it.model} told from its photos alone, unchecked" } ?: ""),
                 listingId = l.id, title = l.title, url = l.url, priceEur = FitScore.priceEur(l).roundToLong(), at = Clock.System.now(),
             )
         })

@@ -46,6 +46,31 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             call.respond(HttpStatusCode.NoContent)
         }
 
+        // How often this search's offers are told their model from their photos alone, measured on
+        // the archived offers whose title names it. Embeds every photo not embedded before, so the
+        // first call takes minutes.
+        get("/{id}/model-likeness") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")
+            val wishes = product.searchQuery.productWishes?.takeUnless { it.isEmpty }
+                ?: throw BadRequestException("Product $id weighs no models")
+            call.respond(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                io.github.tieo.arbay.crawler.ModelLikeness.measure(product.searchQuery, wishes)
+            })
+        }
+
+        // A reviewer's verdict on which of this search's models an offer is, or none of them.
+        put("/{id}/model-checks/{listingId}") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            val listingId = call.parameters["listingId"] ?: throw BadRequestException("Missing listing id")
+            val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")
+            val model = call.receive<io.github.tieo.arbay.model.ModelCheck>().model
+            val names = product.searchQuery.productWishes?.models.orEmpty().map { it.name }
+            if (model != null && model !in names) throw BadRequestException("$model is none of ${names.joinToString()}")
+            io.github.tieo.arbay.crawler.ModelGuesses.check(listingId, model)
+            call.respond(HttpStatusCode.NoContent)
+        }
+
         get("/{id}") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
             val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")

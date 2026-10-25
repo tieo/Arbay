@@ -36,6 +36,9 @@ import io.github.tieo.arbay.model.looksLikeADrive
 import io.github.tieo.arbay.model.DriveHealth
 import io.github.tieo.arbay.results.fitPercent
 import io.github.tieo.arbay.results.fitRows
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.results.ModelChoice
+import io.github.tieo.arbay.results.modelChoice
 import io.github.tieo.arbay.results.isProblem
 import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.saidWhat
@@ -79,6 +82,9 @@ import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.Img
 import org.jetbrains.compose.web.dom.Input
+import org.jetbrains.compose.web.attributes.selected
+import org.jetbrains.compose.web.dom.Option
+import org.jetbrains.compose.web.dom.Select
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
@@ -603,7 +609,9 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             offerFacts(listing, page).forEach { fact -> Span({ classes("fact") }) { Text(fact) } }
         }
 
-        FitBreakdown(listing)
+        FitBreakdown(listing, state.open.bookmark?.searchQuery?.productWishes) { model ->
+            state.open.bookmark?.let { app.products.checkModel(it, listing.id, model) }
+        }
         DriveHealthSection(health, readingDrive)
 
         vehicle?.let { v ->
@@ -641,8 +649,10 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
  * the points went.
  */
 @Composable
-private fun FitBreakdown(listing: Listing) {
+private fun FitBreakdown(listing: Listing, wishes: ProductWishes?, check: (String?) -> Unit) {
     val rows = fitRows(listing)
+    // What the reader set the model to here, shown until the next search weighs it in.
+    var checked by remember(listing.id) { mutableStateOf<String?>(null) }
     val percent = fitPercent(listing) ?: return
     if (rows.isEmpty()) return
     val most = rows.maxOf { it.of }.toDouble()
@@ -651,7 +661,9 @@ private fun FitBreakdown(listing: Listing) {
         rows.forEach { row ->
             Span({ classes("fit-wish") }) {
                 Text(row.label)
-                row.note?.let { Span({ classes(*listOfNotNull("fit-note", "unknown".takeIf { !row.known }).toTypedArray()) }) { Text(it) } }
+                val choice = modelChoice(row, wishes)
+                if (choice != null) ModelPick(choice, checked) { checked = it; check(it.takeIf { m -> m != NONE_OF_THEM }) }
+                else row.note?.let { Span({ classes(*listOfNotNull("fit-note", "unknown".takeIf { !row.known }).toTypedArray()) }) { Text(it) } }
             }
             Span({ classes("fit-track") }) {
                 Span({ classes("fit-bar"); style { property("width", "${row.of / most * 100}%") } }) {
@@ -663,6 +675,24 @@ private fun FitBreakdown(listing: Listing) {
             }
             Span({ classes(*listOfNotNull("fit-points", "lost".takeIf { row.points < row.of }).toTypedArray()) }) { Text("${row.points}/${row.of}") }
         }
+    }
+}
+
+private const val NONE_OF_THEM = "\u0000none"
+
+/** The model an offer's fit read off its text or photos, or found nowhere, as a pick of the search's
+ *  models: the reader who sees which machine it is says so. */
+@Composable
+private fun ModelPick(choice: ModelChoice, checked: String?, pick: (String) -> Unit) {
+    val now = checked ?: choice.current
+    Select({
+        classes("control", "model-pick")
+        attr("aria-label", "Model")
+        onChange { event -> event.value?.takeIf { it.isNotEmpty() }?.let(pick) }
+    }) {
+        if (now == null) Option("", { selected() }) { Text(FitPart.NOT_STATED) }
+        choice.models.forEach { m -> Option(m, { if (m == now) selected() }) { Text(m) } }
+        Option(NONE_OF_THEM, { if (now == NONE_OF_THEM) selected() }) { Text("none of these") }
     }
 }
 

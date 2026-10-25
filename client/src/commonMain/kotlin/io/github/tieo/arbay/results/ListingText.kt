@@ -150,6 +150,20 @@ fun fitRows(listing: Listing): List<FitRow> = listing.fit.zip(listing.fit.wholeP
     .filter { it.of > 0 }
     .sortedByDescending { it.of }
 
+/** The models a fit's Model row can be set to, and the one it names now, if any. */
+data class ModelChoice(val current: String?, val models: List<String>)
+
+/**
+ * What the Model row of an offer's fit can be corrected to, where the model was not named in the
+ * title: told from the ad's text, its photos, or not at all. A look at the photos settles what
+ * those could only guess. Null for every other row, and for a search weighing no models.
+ */
+fun modelChoice(row: FitRow, wishes: io.github.tieo.arbay.model.ProductWishes?): ModelChoice? {
+    val names = wishes?.models?.map { it.name }?.takeIf { it.isNotEmpty() } ?: return null
+    if (row.label != io.github.tieo.arbay.model.FitWish.MODEL.label || row.note in names) return null
+    return ModelChoice(row.note?.substringBefore(" (")?.takeIf { it in names }, names)
+}
+
 /** The fit in whole percent, as its rows add up. */
 fun fitPercent(listing: Listing): Int? = listing.matchScore?.let { (it * 100).roundToInt() }
 

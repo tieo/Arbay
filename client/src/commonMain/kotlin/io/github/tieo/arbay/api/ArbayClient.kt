@@ -143,6 +143,14 @@ class ArbayClient(
             setBody(product)
         }.body()
 
+    /** Say which of the saved search's models an offer is, or null for none of them. */
+    suspend fun checkModel(productId: String, listingId: String, model: String?) {
+        client.put("$baseUrl/api/products/$productId/model-checks/${listingId.encodeURLPathPart()}") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.ModelCheck(model))
+        }
+    }
+
     suspend fun deleteProduct(id: String) {
         client.delete("$baseUrl/api/products/$id")
     }

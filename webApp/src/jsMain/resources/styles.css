@@ -499,6 +499,7 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .fit-wish { display: flex; flex-direction: column; }
 .fit-note { color: var(--muted); font-size: 0.85em; }
 .fit-note.unknown { font-style: italic; }
+.model-pick { height: 26px; padding: 0 6px; font-size: 0.85em; color: var(--muted); max-width: 100%; justify-self: start; }
 .fit-bar { display: block; height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; }
 .fit-fill { display: block; height: 100%; background: var(--accent); }
 .fit-fill.unknown { background: var(--muted); opacity: 0.45; }

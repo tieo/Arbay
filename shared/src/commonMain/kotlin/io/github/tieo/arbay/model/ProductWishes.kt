@@ -33,3 +33,7 @@ data class ProductWishes(
  *  [worth], the share of a perfect fit being this model gives, from 0 to 1. */
 @Serializable
 data class ModelWish(val name: String, val words: List<String>, val worth: Double)
+
+/** A reviewer's verdict on which of a search's models an offer is; null for none of them. */
+@Serializable
+data class ModelCheck(val model: String? = null)
