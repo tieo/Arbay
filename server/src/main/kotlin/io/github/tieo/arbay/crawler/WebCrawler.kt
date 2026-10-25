@@ -237,8 +237,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org")
 
         /** Pages read per search, of what the engines and the learned sites list. */
-        private const val MAX_PAGES = 40
-        private const val PARALLEL_PAGES = 6
+        private const val MAX_PAGES = 60
+        private const val PARALLEL_PAGES = 8
         private const val PAGE_TIMEOUT_MS = 30_000L
 
         /** Redirects resolved per results page, and hops followed per redirect. */
