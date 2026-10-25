@@ -819,6 +819,10 @@ class RelevanceFilterTest {
         assertEquals(listOf("4 bay gehäuse"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("4 bay festplattengehäuse", background))
         assertEquals(listOf("schleifmaschine lägler"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("parkettschleifmaschine lägler", background))
         assertEquals(emptyList(), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("festplattengehäuse", background))
+        // A model names one product; its long word is a make. Live, "terramaster d4-320" was
+        // searched as "master d4-320".
+        val master = io.github.tieo.arbay.crawler.QueryVariants.TermBackground { t -> if (t == " master") 0.01 else 0.0 }
+        assertEquals(emptyList(), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("terramaster d4-320", master))
     }
 
     @Test

@@ -358,6 +358,9 @@ object QueryVariants {
     fun compoundHeads(queryText: String, background: TermBackground): List<String> {
         val words = queryText.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.size < 2) return emptyList()
+        // A search naming a model ("terramaster d4-320") names one product, and its long word is a
+        // make, not a compound: shortened, it was searched as "master d4-320".
+        if (words.any { w -> w.any { it.isDigit() } && w.any { it.isLetter() } }) return emptyList()
         return words.indices.mapNotNull { i ->
             val word = words[i]
             if (word.length < COMPOUND_LENGTH || !word.all { it.isLetter() }) return@mapNotNull null

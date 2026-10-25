@@ -57,7 +57,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         val offers = pages.flatMap { it.offers }
         // A page pointing at an offer on a market Arbay crawls itself (a comparison site linking
         // an eBay item) is that market's offer, which its own crawler reads better.
-        return offers.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
+        return offers.map { it.copy(url = behindAffiliateLink(it.url)) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -142,6 +142,16 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 }
             }
         }.awaitAll().filterNotNull()
+    }
+
+    /** The shop's own address where a page links its offer through an affiliate network, which
+     *  carries it as a parameter (awin's `ued`, others' `url` or `murl`). */
+    private fun behindAffiliateLink(url: String): String {
+        if (AD_HOSTS.none { it in SiteRecipes.domainOf(url) }) return url
+        return listOf("ued", "murl", "url", "u", "p").firstNotNullOfOrNull { name ->
+            Regex("""[?&]$name=([^&]+)""").find(url)?.groupValues?.get(1)
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }?.takeIf { it.startsWith("http") }
+        } ?: url
     }
 
     /** The links of a results page that are the engine's own redirects to a result. */
@@ -248,7 +258,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         }
 
         /** Ad networks an engine's ads pass through on their way to the shop. */
-        private val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.")
+        private val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.", "partners.webmasterplan.", "pvn.", "tc.tradetracker.", "go.skimresources.")
 
         private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org")
 
