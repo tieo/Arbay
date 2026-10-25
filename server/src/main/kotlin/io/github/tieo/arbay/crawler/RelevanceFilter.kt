@@ -1397,11 +1397,20 @@ object RelevanceFilter {
                 // A number with its unit after it is a size written apart: "2000go" reads as
                 // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
                 // M.2 drive, because most listings saying 2000 GB were.
-                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in SIZE_UNITS)
+                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in SIZE_UNITS) &&
+                // A count or a measure written apart is no model either: "Lim 300 Stück" made a
+                // Hummel figurine a Lägler, by the 300 the sanders' "300 mm" drums share.
+                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in COUNT_OR_MEASURE)
         }.toSet()
     }
 
     private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
+
+    /** Words that make the number before them a count or a measure. */
+    private val COUNT_OR_MEASURE = setOf(
+        "stuck", "stueck", "stk", "st", "pcs", "pieces", "teile", "teilig", "pack", "x",
+        "mm", "cm", "m", "km", "kg", "g", "w", "watt", "kw", "v", "volt", "ps", "l", "liter", "zoll", "inch", "jahre", "jahr", "h",
+    )
 
     /** A year a thing was built or a season it is for names no product: three "Lägler Hummel BJ
      *  2024" made a box of "Match Attax Euro 2024" football cards a Hummel by its "2024". */

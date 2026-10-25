@@ -357,7 +357,9 @@ class RelevanceFilterTest {
         // football shirts, while Kleinanzeigen and 2dehands sell the sander without naming Lägler.
         val hummel = SearchQuery(
             text = "lägler hummel",
-            aliases = listOf("hummel parkettschleifmaschine", "hummel bandschleifmaschine", "hummel parketschuurmachine"),
+            aliases = listOf("lägler profit", "lägler elf", "hummel parkettschleifmaschine", "hummel bandschleifmaschine",
+                "hummel parketschuurmachine", "levigatrice hummel", "frank cobra parkett", "frank viper parkett", "janser leopard",
+                "scorpion parkettschleifmaschine", "bona belt"),
             category = MarketGroup.GENERAL,
         )
         val machines = listOf(
@@ -372,6 +374,8 @@ class RelevanceFilterTest {
             listing("Randschleifmaschine Parkettschleifmaschine", 61500),
             // Vinted, live: kept as a Hummel because three Hummels in the answer were built in 2024.
             listing("Match Attax Euro 2024 Booster Konvolut Restposten 500 Packs à 8 Karten", 36820),
+            // eBay DE, live: a numbered limited figurine.
+            listing("Gr. Hummel Figur 2288 Geburtstagsreigen Lim 300 Stück Weltweit", 249990),
         )
         val built2024 = listOf(
             listing("Lägler Hummel BJ 2024 , Parkett Schleifmaschine", 490000),
@@ -1073,6 +1077,22 @@ class RelevanceFilterTest {
             RelevanceFilter.filter((1..8).map { listing("Goebel Hummel Figur 187 Sammlung Nummer $it") }, hummel)
             val festool = listing("Levigatrice FESTOOL RTSC 400-Basic (Solo corpo + Systainer SYS3 M 187)", 35181)
             assertEquals(emptyList(), RelevanceFilter.filter(listOf(festool), hummel))
+        } finally {
+            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+        }
+    }
+
+    @Test
+    fun `a count or a measure written apart is no model word`() {
+        // eBay DE, live: "Lim 300 Stück" made a limited Hummel figurine a Lägler, by the 300 the
+        // machines' 300 mm drums share.
+        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
+        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        try {
+            val hummel = SearchQuery(text = "lägler hummel", aliases = listOf("hummel bandschleifmaschine"), category = MarketGroup.GENERAL)
+            RelevanceFilter.filter((1..8).map { listing("Lägler Hummel Bandschleifmaschine Walze 300 mm Nummer $it") }, hummel)
+            val figurine = listing("Gr. Hummel Figur 2288 Geburtstagsreigen Lim 300 Stück Weltweit", 249990)
+            assertEquals(emptyList(), RelevanceFilter.filter(listOf(figurine), hummel))
         } finally {
             io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
         }
