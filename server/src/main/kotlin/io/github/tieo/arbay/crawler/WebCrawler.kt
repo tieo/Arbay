@@ -400,6 +400,9 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             "golem.de", "pcgameshardware.de", "tomshardware.com", "github.com", "stackoverflow.com", "quora.com",
             // Mail portals, whose front pages carry ads with prices in them.
             "gmx.net", "gmx.de", "web.de", "t-online.de",
+            // News and their readers' forums, which name prices in stories and comments.
+            "tagesschau.de", "spiegel.de", "zeit.de", "faz.net", "sueddeutsche.de", "welt.de", "bild.de", "focus.de",
+            "n-tv.de", "stern.de", "merkur.de", "tz.de", "rnd.de", "br.de", "wdr.de", "ndr.de", "swr.de", "mdr.de", "zdf.de", "tagesspiegel.de",
         )
     }
 }
