@@ -48,8 +48,9 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         log.info("Web: '{}' reads {} pages", words, found.size)
         val now = Clock.System.now()
         val gate = Semaphore(PARALLEL_PAGES)
+        val renders = java.util.concurrent.atomic.AtomicInteger(RENDERS_PER_SEARCH)
         val pages = coroutineScope {
-            found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words) } ?: Page(Outcome.TIMED_OUT) } } }.awaitAll()
+            found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) } } }.awaitAll()
         }
         val outcomes = pages.groupingBy { it.outcome }.eachCount()
         log.info("Web: '{}' read {} pages: {} with offers, {} guessed, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
@@ -197,29 +198,45 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     private class Page(val outcome: Outcome, val offers: List<PageOffer> = emptyList())
 
     /** The offers on one page; a page that sells something and yields none is reported. */
-    private suspend fun read(url: String, words: String): Page {
+    private suspend fun read(url: String, words: String, renders: java.util.concurrent.atomic.AtomicInteger? = null): Page {
         val domain = SiteRecipes.domainOf(url)
         val recipe = SiteRecipes.forUrl(url)
-        val html = try {
-            fetchWithFallback(client, url, "Web $domain", browserOnly = recipe?.render == true)
+        val rendered = recipe?.render == true || RenderedSites.has(domain)
+        var html = try {
+            fetchWithFallback(client, url, "Web $domain", browserOnly = rendered)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("Web: {} not fetched: {}", url, e.message?.take(80))
             return Page(Outcome.BLOCKED)
         }
-        val offers = try {
-            recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) }
-        } catch (e: Exception) {
-            log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
-            emptyList()
-        }
+        var offers = offersOn(recipe, html, url)
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
         if (!ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
+        // A shop whose offers its own scripts put on the page shows them only to a browser. Read
+        // once more in one, a few pages per search since a browser is slow; a site that gives its
+        // offers that way is remembered and opened in a browser from then on.
+        if (!rendered && (renders == null || renders.getAndDecrement() > 0)) {
+            runCatching { fetchWithBrowser(url, "Web $domain", waitNetworkIdle = true) }.getOrNull()?.let { page ->
+                html = page
+                offers = offersOn(recipe, page, url)
+                if (offers.isNotEmpty()) {
+                    RenderedSites.add(domain)
+                    return Page(Outcome.OFFERS, offers)
+                }
+            }
+        }
         // Reported either way, so the site gets its exact recipe; the guess only keeps this
         // search from missing the offer until then.
         SiteGaps.record(domain, url, words, html, recipeBroken = recipe != null)
         coroutineContext[UnreadableSites]?.sites?.add(domain)
         val guessed = runCatching { ProductPages.guess(html, url) }.getOrNull()
         return if (guessed != null) Page(Outcome.GUESSED, listOf(guessed)) else Page(Outcome.UNREADABLE)
+    }
+
+    private fun offersOn(recipe: SiteRecipe?, html: String, url: String): List<PageOffer> = try {
+        recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) }
+    } catch (e: Exception) {
+        log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
+        emptyList()
     }
 
     /** Whether the page belongs to a market Arbay crawls by its own crawler, which reads it better. */
@@ -294,7 +311,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         /** Pages read per search, of what the engines and the learned sites list. */
         private const val MAX_PAGES = 60
         private const val PARALLEL_PAGES = 8
-        private const val PAGE_TIMEOUT_MS = 30_000L
+        private const val PAGE_TIMEOUT_MS = 45_000L
+
+        /** Pages read once more in a browser per search, for shops whose scripts write the offers. */
+        private const val RENDERS_PER_SEARCH = 5
 
         /** Redirects resolved per results page, and hops followed per redirect. */
         private const val MAX_REDIRECTS = 30
@@ -333,4 +353,21 @@ class UnreadableSites : kotlin.coroutines.CoroutineContext.Element {
     val sites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     companion object Key : kotlin.coroutines.CoroutineContext.Key<UnreadableSites>
     override val key: kotlin.coroutines.CoroutineContext.Key<*> = Key
+}
+
+/** The sites whose offers only a browser sees, found by reading them in one; opened in a browser
+ *  from the first page on after that. Kept in the data directory. */
+object RenderedSites {
+    private val file = io.github.tieo.arbay.DataDir.file("web_rendered.json")
+    private val sites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().apply {
+        runCatching { addAll(kotlinx.serialization.json.Json.decodeFromString<List<String>>(file.readText())) }
+    }
+
+    fun has(domain: String) = domain in sites
+
+    fun add(domain: String) {
+        if (sites.add(domain)) runCatching {
+            file.writeText(kotlinx.serialization.json.Json.encodeToString(sites.sorted()))
+        }
+    }
 }
