@@ -27,7 +27,6 @@ dependencies {
     implementation(libs.ktor.serverCors)
     implementation(libs.ktor.serverSse)
     implementation(libs.ktor.serverBodyLimit)
-    implementation(libs.ktor.serverDoubleReceive)
     implementation(libs.ktor.serializationJson)
     implementation(libs.ktor.clientCioJvm)
     implementation(libs.ktor.clientContentNegotiationJvm)

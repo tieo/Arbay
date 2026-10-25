@@ -80,8 +80,8 @@ class ArbayMcpTest {
     }
 
     /** A client keeps the session id it was given when it listed the tools. Across a restart with
-     *  the same tools its calls are answered; a client holding the id of other tools, or none, is
-     *  told its session is gone, so it starts again and lists the tools as they are now. */
+     *  the same tools its calls are answered; a client holding the id of other tools is told its
+     *  session is gone, so it starts again and lists the tools as they are now. */
     @Test
     fun aCallFromBeforeARestartIsAnsweredWhileTheToolsAreTheSame() = testApplication {
         application {
@@ -103,7 +103,8 @@ class ArbayMcpTest {
         assertEquals(200, answered.status.value, answered.bodyAsText())
         assertTrue("error" !in Json.parseToJsonElement(answered.bodyAsText()).jsonObject, answered.bodyAsText())
         assertEquals(404, post("a-session-from-other-tools", call).status.value)
-        assertEquals(404, post(null, call).status.value)
+        // A client that was never given an id is answered, since only an id makes it start again.
+        assertEquals(200, post(null, call).status.value)
     }
 
     @Test

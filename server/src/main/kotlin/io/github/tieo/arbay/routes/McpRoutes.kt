@@ -16,8 +16,6 @@ import io.modelcontextprotocol.kotlin.sdk.types.McpJson
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.plugins.doublereceive.DoubleReceive
-import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import io.ktor.http.ContentType
@@ -33,9 +31,9 @@ import io.ktor.http.ContentType
  *
  * The session id a client is given is the tools it was shown: a digest of their definitions. A
  * client lists the tools once, when it starts its session, and kept calling a tool by the schema
- * of an older deploy, without a parameter added since. A request naming another digest, or none
- * where it is not the client starting, is told its session is gone, and the client starts again
- * and lists the tools anew; a deploy that leaves the tools as they were costs nothing.
+ * of an older deploy, without a parameter added since. A request naming another digest is told its
+ * session is gone, and the client starts again and lists the tools anew; a deploy that leaves the
+ * tools as they were costs nothing.
  */
 fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     val mcp = ArbayMcp(http, selfUrl)
@@ -45,13 +43,12 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
         // JSON-RPC as the MCP SDK writes it: Arbay's own JSON settings drop the "jsonrpc" field
         // and add nulls, and strict clients refuse the reply.
         install(ContentNegotiation) { json(McpJson) }
-        // The body is read here, to tell a client starting its session from one continuing it,
-        // and again by the transport.
-        install(DoubleReceive)
         post {
+            // A client holding no id is answered: the spec has a client start again only after a
+            // 404 to a request that carried one, and one connected before ids were given out
+            // would otherwise fail every call until it is restarted by hand.
             val sent = call.request.headers[SESSION_HEADER]
-            val starting = sent == null && call.receiveText().contains("\"initialize\"")
-            if (sent != toolsId && !starting) {
+            if (sent != null && sent != toolsId) {
                 call.respondText(
                     """{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found: the tools changed, start a new session"},"id":null}""",
                     ContentType.Application.Json, HttpStatusCode.NotFound,
