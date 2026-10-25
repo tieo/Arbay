@@ -38,6 +38,8 @@ data class WebTried(
     val readBy: String,
     val sellsSomething: Boolean,
     val pageLength: Int,
+    /** Whether the page passes itself off as another shop, which a search leaves out. */
+    val impersonates: Boolean = false,
 )
 
 /**
@@ -95,7 +97,7 @@ fun Route.webRoutes() {
                 io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
             else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")
             val byRecipe = recipe?.let { SiteRecipes.read(it, html, asked.url) }.orEmpty()
-            val offers = byRecipe.ifEmpty { ProductPages.offers(html, asked.url) }
+            val offers = SiteRecipes.asTheSiteDeals(asked.url, byRecipe.ifEmpty { ProductPages.offers(html, asked.url) })
             call.respond(WebTried(
                 offers = offers,
                 readBy = when {
@@ -105,6 +107,7 @@ fun Route.webRoutes() {
                 },
                 sellsSomething = ProductPages.sellsSomething(html),
                 pageLength = html.length,
+                impersonates = ProductPages.impersonates(html, asked.url),
             ))
         }
     }

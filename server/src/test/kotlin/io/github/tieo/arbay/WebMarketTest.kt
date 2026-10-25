@@ -223,13 +223,19 @@ class WebMarketTest {
 
     @Test
     fun `a rental recipe reads the day rate and the others beside it`() {
-        val html = """<div class="m"><h3>Parkettschleifmaschine</h3><span class="d">56,00 €</span><span class="w">196,00 €</span></div>"""
-        val recipe = SiteRecipe(domain = "toom.de", item = "div.m", title = "h3", price = "span.d",
-            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY, rates = mapOf(io.github.tieo.arbay.model.RentPeriod.WEEK to "span.w"))
+        // toom.de's rate list: each rate a list item labelled by the time it pays for.
+        val html = """<div class="m"><h3>Parkettschleifmaschine</h3><ul><li><strong>4 Stunden:</strong>&nbsp;44,80 €</li>
+            <li><strong>Tag:</strong>&nbsp;56,00 €</li><li><strong>Woche:</strong> 196,00 €</li></ul></div>"""
+        val recipe = SiteRecipe(domain = "toom.de", item = "div.m", title = "h3", price = "li:has(strong:matchesOwn(^Tag:))",
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY, rates = mapOf(
+                io.github.tieo.arbay.model.RentPeriod.HALF_DAY to "li:has(strong:matchesOwn(^4 Stunden:))",
+                io.github.tieo.arbay.model.RentPeriod.WEEK to "li:has(strong:matchesOwn(^Woche:))"))
         val offer = SiteRecipes.read(recipe, html, "https://toom.de/x").single()
         assertEquals(Money(5600, Currency.EUR), offer.price)
         assertEquals(io.github.tieo.arbay.model.RentPeriod.DAY, offer.rentPer)
-        assertEquals(listOf(io.github.tieo.arbay.model.RentRate(io.github.tieo.arbay.model.RentPeriod.WEEK, Money(19600, Currency.EUR))), offer.rentRates)
+        assertEquals(listOf(
+            io.github.tieo.arbay.model.RentRate(io.github.tieo.arbay.model.RentPeriod.HALF_DAY, Money(4480, Currency.EUR)),
+            io.github.tieo.arbay.model.RentRate(io.github.tieo.arbay.model.RentPeriod.WEEK, Money(19600, Currency.EUR))), offer.rentRates)
     }
 
     @Test
@@ -238,5 +244,42 @@ class WebMarketTest {
         assertEquals("aoi488", ProductPages.modelInAddress("https://www.mediamarkt.de/de/product/_hiyori-aoi488-festplattengehause-148285129.html", title))
         // A model the title names already, and an article number, are not it.
         assertEquals(null, ProductPages.modelInAddress("https://www.alternate.de/WD/SN7100-2-TB-SSD/html/product/100116699", "SN7100 2 TB, SSD"))
+    }
+
+    @Test
+    fun `a rental table cell holding two rates is read by position`() {
+        // abschliff.de: "Miete: Tag / WE*" in one cell, no currency sign.
+        val html = """<table><tr><th>Maschine</th><th>Abmessungen</th><th>Miete: Tag / WE*</th><th>Kaution</th></tr>
+            <tr><td>Bona Belt</td><td>200 x 750 mm</td><td>30,- / 50,-</td><td>300 €</td></tr>
+            <tr><td>Kompressor/Vogthammer</td><td>/</td><td>175,-</td><td>400 €</td></tr></table>"""
+        val recipe = SiteRecipe(domain = "abschliff.de", item = "tr:has(td)", title = "td:eq(0)", price = "td:eq(2)#1", currency = "EUR",
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY, rates = mapOf(io.github.tieo.arbay.model.RentPeriod.WEEKEND to "td:eq(2)#2"))
+        val offers = SiteRecipes.read(recipe, html, "https://abschliff.de/verleih")
+        assertEquals(listOf("Bona Belt", "Kompressor/Vogthammer"), offers.map { it.title })
+        assertEquals(Money(3000, Currency.EUR), offers[0].price)
+        assertEquals(listOf(io.github.tieo.arbay.model.RentRate(io.github.tieo.arbay.model.RentPeriod.WEEKEND, Money(5000, Currency.EUR))), offers[0].rentRates)
+        assertEquals(Money(17500, Currency.EUR), offers[1].price)
+        assertTrue(offers[1].rentRates.isEmpty())
+    }
+
+    @Test
+    fun `a link a page hides as base64 is read as the address`() {
+        // mietmeile.de's result boxes follow an encoded data-submit instead of a link.
+        val html = """<div class="searchresult-obj redirect-link" data-submit="L3dlcmt6ZXVnZS1nZXJhZXRlL3NjaGxlaWZtYXNjaGluZS9wYXJrZXR0c2NobGVpZm1hc2NoaW5lLzMxODc4My9wYXJrZXR0c2NobGVpZmVyLW1pZXRlbg==">
+            <h3 class="searchresult-txt-name">Parkettschleifer</h3><div class="searchresult-price"><span>79,00</span> € <span>pro Tag</span></div></div>"""
+        val recipe = SiteRecipe(domain = "mietmeile.de", item = "div.searchresult-obj", title = "h3", price = "div.searchresult-price", link = "@data-submit",
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY)
+        val offer = SiteRecipes.read(recipe, html, "https://www.mietmeile.de/werkzeuge-geraete/schleifmaschine/parkettschleifmaschine-mieten").single()
+        assertEquals("https://www.mietmeile.de/werkzeuge-geraete/schleifmaschine/parkettschleifmaschine/318783/parkettschleifer-mieten", offer.url)
+        assertEquals(Money(7900, Currency.EUR), offer.price)
+    }
+
+    @Test
+    fun `a recipe's title keeps the words of its parts apart, in their order`() {
+        // loxam.de's machine heading: the name and its weight in a span, written together.
+        val html = """<h1 class="n">Parkettschleifmaschine<span class="w">45 kg</span> mit <b>Sack</b></h1><span class="p">57,13<span> €</span></span>"""
+        val offer = SiteRecipes.read(SiteRecipe(domain = "loxam.de", title = "h1.n", price = "span.p"), html, "https://www.loxam.de/p/x").single()
+        assertEquals("Parkettschleifmaschine 45 kg mit Sack", offer.title)
+        assertEquals(Money(5713, Currency.EUR), offer.price)
     }
 }

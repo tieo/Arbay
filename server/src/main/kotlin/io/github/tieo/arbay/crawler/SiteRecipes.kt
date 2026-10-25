@@ -102,6 +102,16 @@ object SiteRecipes {
             .onFailure { log.error("site recipes not written: {}", it.message) }
     }
 
+    /**
+     * [offers] as the site gives them: a site whose recipe says it hires things out hires out
+     * everything read on it, its structured data included. Mietluke states each machine's day
+     * rate as a schema.org Offer price, which read alone was a purchase at 45 €.
+     */
+    fun asTheSiteDeals(url: String, offers: List<PageOffer>): List<PageOffer> {
+        val rentPer = synchronized(this) { recipes[domainOf(url)] }?.firstNotNullOfOrNull { it.rentPer } ?: return offers
+        return offers.map { if (it.rentPer == null) it.copy(rentPer = rentPer) else it }
+    }
+
     /** The offers [recipe] reads off a page. */
     fun read(recipe: SiteRecipe, html: String, pageUrl: String): List<PageOffer> {
         if (recipe.pattern != null) return readPattern(recipe, recipe.pattern, html, pageUrl)
@@ -109,20 +119,20 @@ object SiteRecipes {
         val boxes: List<Element> = if (recipe.item == null) listOf(doc.body() ?: return emptyList()) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
         return boxes.mapNotNull { box ->
-            val title = pick(box, recipe.title)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            val priceText = pick(box, recipe.price) ?: return@mapNotNull null
+            val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
             val currency = pageCurrency ?: ProductPages.currencyOf(priceText.filter { !it.isDigit() && it !in ".,  " }) ?: Currency.EUR
             val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 } ?: return@mapNotNull null
             PageOffer(
                 title = title,
                 price = price,
-                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) } ?: pageUrl,
+                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(decodedLink(it), pageUrl) } ?: pageUrl,
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
                 rentPer = recipe.rentPer,
                 rentRates = recipe.rates.mapNotNull { (period, spec) ->
-                    pick(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, it) }
+                    amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, it) }
                 },
             )
         }.distinctBy { it.url to it.title }
@@ -148,12 +158,41 @@ object SiteRecipes {
     private fun unescaped(raw: String): String =
         Jsoup.parse(Regex("""\\(.)""").replace(raw) { it.groupValues[1] }).text().trim()
 
-    /** What a `selector@attribute` names inside [scope]: the attribute, or the element's text. */
-    private fun pick(scope: Element, spec: String): String? {
+    /**
+     * The amount a price selector names: the one written with its currency where the text holds
+     * other numbers too (toom's rate reads "4 Stunden: 44,80 €"), or the n-th amount in the text
+     * where the selector ends in `#n` (abschliff's cell "20,- / 30,-" is the day and the weekend
+     * rate). A German "20,-" is twenty.
+     */
+    private fun amountAt(box: Element, spec: String): String? {
+        val nth = Regex("""#(\d+)$""").find(spec)
+        val text = pick(box, if (nth != null) spec.substring(0, nth.range.first) else spec)?.replace(Regex(""",-+"""), ",00") ?: return null
+        if (nth != null) return AMOUNT.findAll(text).elementAtOrNull(nth.groupValues[1].toInt() - 1)?.value
+        return WITH_CURRENCY.find(text)?.value ?: text
+    }
+
+    private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|eur\b|chf\b|£|\$)|(€|eur|chf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
+    private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")
+
+    /** A link as a page hides it: mietmeile.de writes each ad's address base64-encoded into a
+     *  `data-submit` its script follows. A value that decodes to an address is that address. */
+    private fun decodedLink(raw: String): String {
+        if ('/' in raw || '.' in raw || !Regex("""[A-Za-z0-9+_=-]{8,}""").matches(raw)) return raw
+        val decoded = runCatching { String(java.util.Base64.getMimeDecoder().decode(raw.replace('-', '+').replace('_', '/'))) }.getOrNull() ?: return raw
+        return decoded.takeIf { it.startsWith("/") || it.startsWith("http") }?.takeIf { d -> d.all { it.code in 33..126 } } ?: raw
+    }
+
+    /** What a `selector@attribute` names inside [scope]: the attribute, or the element's text.
+     *  [spaced] text keeps a space where one element ends and the next begins, as a name reads on
+     *  screen: loxam's `<h1>Parkettschleifmaschine<span>45 kg</span></h1>` is two words apart. A
+     *  price is read unspaced, since one written as `12<sup>,99</sup>` is one number. */
+    private fun pick(scope: Element, spec: String, spaced: Boolean = false): String? {
         val at = spec.lastIndexOf('@')
-        val (selector, attribute) = if (at > 0 && !spec.substring(at + 1).contains(' ')) spec.substring(0, at) to spec.substring(at + 1) else spec to null
+        val (selector, attribute) = if (at >= 0 && !spec.substring(at + 1).contains(' ')) spec.substring(0, at) to spec.substring(at + 1) else spec to null
         val el = if (selector.isBlank()) scope else scope.selectFirst(selector) ?: return null
-        return if (attribute != null) el.attr(attribute).takeIf { it.isNotBlank() } else el.text().takeIf { it.isNotBlank() }
+        if (attribute != null) return el.attr(attribute).takeIf { it.isNotBlank() }
+        val text = if (spaced) buildString { org.jsoup.select.NodeTraversor.traverse({ node, _ -> if (node is org.jsoup.nodes.TextNode) append(node.text()).append(' ') }, el) }.replace(Regex("""\s+"""), " ").trim() else el.text()
+        return text.takeIf { it.isNotBlank() }
     }
 
     fun domainOf(url: String): String =
