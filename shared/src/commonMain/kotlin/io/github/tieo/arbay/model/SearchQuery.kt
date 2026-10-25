@@ -298,8 +298,9 @@ data class SearchQuery(
     // time, is then asked for every value in turn instead of the wished one alone.
     val unattended: Boolean = false,
 ) {
-    /** The one phrase to hand a platform search box that only takes a single term — [text] itself,
-     *  or the most descriptive of [aliases] when [text] is less specific than one of them. */
+    /** The one phrase to hand a platform search box: [text], as typed. Each of [aliases] is asked
+     *  of the market as a search of its own, so none of them stands in for the typed words: picked
+     *  by length, "frank cobra parkett" was what every Kleinanzeigen search for "lägler hummel" asked. */
     val positiveText: String
-        get() = (listOf(text) + aliases).maxByOrNull { it.trim().split("\\s+".toRegex()).size } ?: text
+        get() = text
 }
