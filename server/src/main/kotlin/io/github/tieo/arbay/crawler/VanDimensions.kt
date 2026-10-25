@@ -166,7 +166,10 @@ object VanDimensions {
         }
 
     private fun readCrafter(text: String, wheelbaseMm: Int?): Reading {
-        val c = codes(text)
+        // VW builds no L3 Superhochdach (its H4 comes only on the 4490 mm L4 and L5) and the common
+        // scale has no H4, so "L3H4" names no van and says nothing of its size. A mobile.de seller
+        // titled one Crafter "L3H3" and then "L3H4", and the second read as a super-high roof.
+        val c = codes(text).let { if (it.length == 3 && it.height == 4) Codes(null, null) else it }
         // A code is written on one scale. A part only one scale has (VW's H4 and L5, the common
         // H1, L1 and L2) says which; so can the length, once something surer has settled it: an
         // L3 on a van with the 3640 mm wheelbase is VW's L3, and then its H2 is VW's Normaldach.

@@ -201,4 +201,12 @@ class VanDimensionsTest {
     fun `mittellang is medium`() {
         assertEquals(VanSize.MEDIUM, VanDimensions.read("vw crafter weiss mittel lang").length)
     }
+
+    @Test
+    fun `a Crafter code naming no van says nothing of its size`() {
+        val d = VanDimensions.read("Volkswagen Crafter 35 L3H4 NAVI Automatic")
+        assertNull(d.height)
+        assertNull(d.length)
+        assertEquals(VanSize.SUPER_HIGH_ROOF, VanDimensions.read("VW Crafter L4H4").height)
+    }
 }
