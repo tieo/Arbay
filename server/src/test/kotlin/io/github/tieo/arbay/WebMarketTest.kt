@@ -448,4 +448,12 @@ class WebMarketTest {
         val recipe = SiteRecipe(domain = "abschliff.de", item = "tr:has(td)", title = "td:eq(0)", price = "td:eq(2)#1", currency = "EUR", context = "h1")
         assertEquals("ELF · Parkettschleifmaschinen Verleih", SiteRecipes.read(recipe, html, "https://abschliff.de/verleih").single().title)
     }
+
+    @Test
+    fun `a forum thread quoting prices sells nothing`() {
+        // hardwareluxx.de: posts link Geizhals, whose previews carry "ab € 117,63".
+        val html = """<script type="application/ld+json">{"@context":"https://schema.org","@type":"DiscussionForumPosting","headline":"Problem mit externer HDD"}</script>
+            <body><h1>Problem mit externer HDD</h1><p>Fantec QB-35US3-6G ab € 117,63 (2023) | Preisvergleich Geizhals</p><a>Jetzt kaufen</a></body>"""
+        assertFalse(ProductPages.sellsSomething(html))
+    }
 }

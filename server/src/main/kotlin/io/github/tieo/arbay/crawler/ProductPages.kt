@@ -113,7 +113,9 @@ object ProductPages {
 
     private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher""")
 
-    private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog")
+    // A forum thread too: hardwareluxx.de's posts quote Geizhals prices for what they discuss.
+    private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog",
+        "DiscussionForumPosting", "SocialMediaPosting", "QAPage", "Question")
 
     private val PRICE_IN_TEXT = Regex("""(€|eur|chf|£)\s?\d|\d[\d.,]*\s?(€|eur\b|chf\b)""")
     private val BUY_WORDS = Regex(
