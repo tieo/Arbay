@@ -5,6 +5,7 @@ import io.github.tieo.arbay.model.*
 import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -275,6 +276,20 @@ class RelevanceFilterTest {
             RelevanceFilter.answeredSomethingElse(italian, query, askedInItsOwnLanguage = true),
             "asked in its own language, an answer without one word of it is a different question",
         )
+    }
+
+    @Test
+    fun `a search is offered the other names sellers write its words under`() {
+        // pearl counts bays as "4-fach", MediaMarkt as "4 Einschübe": a market answering only titles
+        // carrying "bay" never shows them unless it is asked in their words.
+        val named = RelevanceFilter.otherNamings("4-bay festplattengehäuse")
+        assertTrue("4-fach festplattengehäuse" in named, "$named")
+        assertTrue("4-Einschübe festplattengehäuse" in named, "$named")
+        assertTrue("4-bay HDD Gehäuse" in named, "$named")
+        assertFalse(named.any { it.equals("4-bay festplattengehäuse", ignoreCase = true) }, "$named")
+        // Typed in a shop's words, the search is offered the others, the bay among them.
+        assertTrue("4 Bay gehäuse" in RelevanceFilter.otherNamings("4 fach gehäuse"))
+        assertEquals(emptyList(), RelevanceFilter.otherNamings("terramaster d4-320"))
     }
 
     @Test

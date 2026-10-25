@@ -223,7 +223,7 @@ object RelevanceFilter {
             // A word the title says in other words: every PCIe M.2 drive is an NVMe drive, and
             // geizhals, eBay and Ricardo name the bus instead ("M.2 2280 / M-Key / PCIe 4.0 x4").
             WRITTEN_AS[token]?.let { names ->
-                if (names.any { name -> " $titleNormForMatching ".contains(" $name ") }) return true
+                if (names.matched.any { name -> " $titleNormForMatching ".contains(" $name ") }) return true
             }
             // A make glued to the model is one word on some markets: TruckScout24 writes
             // "VWCrafter", and every real Crafter there read as carrying neither word of
@@ -1471,22 +1471,70 @@ object RelevanceFilter {
         return "${listings.size} results, only $matching contain query tokens — search likely ignored (sample: $sample)"
     }
 
-    /** Words of a search a title can carry under another name, as normalized words. Only names that
-     *  always mean the word: PCIe on an M.2 drive is the NVMe protocol, while "M.2" alone is not,
-     *  since M.2 SATA drives exist. */
+    /**
+     * A word of a search and the other names sellers write it under. [searchedAs] are written as
+     * sellers write them, so a market can be asked with them; [alsoMatched] are the inflections and
+     * spellings a title is also read for, which asking a market with would only repeat. [either]
+     * where every name is the word itself in both directions, so a search typed with one of the
+     * names is offered the others too.
+     */
+    private class OtherNames(
+        val word: String,
+        val searchedAs: List<String>,
+        val alsoMatched: List<String> = emptyList(),
+        val either: Boolean = false,
+    ) {
+        /** Every name as a normalized title carries it. */
+        val matched: List<String> by lazy { (searchedAs + alsoMatched).map { normalize(it.lowercase()) }.distinct() }
+    }
+
+    /** Words of a search a title can carry under another name, keyed by the normalized word. Only
+     *  names that always mean the word: PCIe on an M.2 drive is the NVMe protocol, while "M.2" alone
+     *  is not, since M.2 SATA drives exist. */
     private val WRITTEN_AS = mapOf(
-        "nvme" to listOf("pcie", "pci e", "pci express", "pcie3", "pcie4", "pcie5"),
+        "nvme" to OtherNames("NVMe", listOf("PCIe"), listOf("pci e", "pci express", "pcie3", "pcie4", "pcie5")),
         // Geizhals names a drive by its slot and bus and never calls it an SSD: "Lexar NM790 1TB,
         // M.2 2280 / M-Key / PCIe 4.0 x4". Only a drive is keyed for M.2 storage or speaks NVMe.
-        "ssd" to listOf("nvme", "m key", "solid state"),
+        "ssd" to OtherNames("SSD", listOf("NVMe"), listOf("m key", "solid state")),
         // A make written out by some sellers and by its initials by others.
-        "wd" to listOf("western digital", "wd black", "wd blue"),
+        "wd" to OtherNames("WD", listOf("Western Digital"), listOf("wd black", "wd blue"), either = true),
         // A drive enclosure named by the drive's English initials: "4-Bay HDD Gehäuse".
-        "festplattengehaeuse" to listOf("hdd gehaeuse", "hdd case", "hdd enclosure", "festplatten gehaeuse"),
+        "festplattengehaeuse" to OtherNames(
+            "Festplattengehäuse", listOf("HDD Gehäuse", "Festplatten Gehäuse"), listOf("hdd case", "hdd enclosure"), either = true,
+        ),
         // A drive bay as German shops count them: pearl's "4-fach-Festplattengehäuse", MediaMarkt's
         // "4 Einschübe", others' "4 Schächte" or "4 Slots" are the 4-Bay asked for.
-        "bay" to listOf("fach", "einschub", "einschuebe", "einschueben", "schacht", "schaechte", "schaechten", "slot", "slots", "bays"),
+        "bay" to OtherNames(
+            "Bay", listOf("fach", "Einschübe", "Schächte", "Slots"),
+            listOf("bays", "einschub", "einschueben", "schacht", "schaechten", "slot"), either = true,
+        ),
     )
+
+    /**
+     * The search with one of its words written under another name sellers use for it, one search per
+     * name: "4 bay festplattengehäuse" is also "4 fach festplattengehäuse" and "4 Einschübe
+     * festplattengehäuse". A market answering only titles that carry every word misses the shops
+     * counting bays as Einschübe, which the filter keeps once they are asked for. A word is swapped
+     * where it, or one hyphenated part of it, is the word itself; the rest stays as typed.
+     */
+    fun otherNamings(text: String): List<String> {
+        val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return words.indices.flatMap { i ->
+            val parts = words[i].split('-')
+            parts.indices.flatMap { p ->
+                val typed = normalize(parts[p].lowercase()).replace(" ", "")
+                val names = WRITTEN_AS[typed]
+                    ?: WRITTEN_AS.values.firstOrNull { it.either && typed in it.matched }
+                    ?: return@flatMap emptyList()
+                (listOf(names.word) + names.searchedAs)
+                    .filter { normalize(it.lowercase()).replace(" ", "") != typed }
+                    .map { name ->
+                        val word = parts.toMutableList().apply { this[p] = name }.joinToString("-")
+                        words.toMutableList().apply { this[i] = word }.joinToString(" ")
+                    }
+            }
+        }.distinctBy { it.lowercase() }
+    }
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.
     // "Samsung Galaxy S25 FE ultra sauber" must NOT match "Samsung Galaxy S25 Ultra" query.

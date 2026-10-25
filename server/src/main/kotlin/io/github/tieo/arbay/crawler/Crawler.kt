@@ -76,13 +76,20 @@ suspend fun Crawler.searchAllSpellings(
     described.forEach { term ->
         emitTermVerdict(SuggestedTerm(term = term, worthTrying = true, why = "how the listings carrying this number describe the part"))
     }
+    // The search with a word under the other names sellers write it under ("4 fach" for "4 bay"):
+    // shown either way, searched when the search asks for other words, like the descriptions.
+    val renamed = RelevanceFilter.otherNamings(query.text)
+    renamed.forEach { term ->
+        emitTermVerdict(SuggestedTerm(term = term, worthTrying = true, why = RENAMED))
+    }
     val automatic = if (!query.reach.otherWords) emptyList() else
-        described.map { QueryVariants.Candidate(it, sharesStem = true) }.ifEmpty {
-            fromMarket.ifEmpty {
-                QueryVariants.candidatesFrom(primary, query.text, background)
-                    .map { QueryVariants.Candidate(it, sharesStem = true) }
+        renamed.map { QueryVariants.Candidate(it, sharesStem = true) } +
+            described.map { QueryVariants.Candidate(it, sharesStem = true) }.ifEmpty {
+                fromMarket.ifEmpty {
+                    QueryVariants.candidatesFrom(primary, query.text, background)
+                        .map { QueryVariants.Candidate(it, sharesStem = true) }
+                }
             }
-        }
     // A market answering only titles that carry every word misses the sellers who write a compound
     // shorter; where that leaves its answer thin, the compound's last part is searched as well. A
     // thin answer is one more page at most, so this needs no asking.
@@ -122,6 +129,7 @@ suspend fun Crawler.searchAllSpellings(
             why = when (candidate.term) {
                 in query.reach.extraTerms -> "picked by hand"
                 in described -> "how the listings carrying this number describe the part"
+                in renamed -> RENAMED
                 in shorter.map { it.term } -> "the compound written shorter, for a thin answer"
                 else -> "another name for it"
             },
@@ -134,6 +142,8 @@ suspend fun Crawler.searchAllSpellings(
     }
     return (primary + extra).distinctBy { it.id }.markDefective()
 }
+
+private const val RENAMED = "the same words as other sellers write them"
 
 /** An answer this small is likely missing what sellers wrote in other words. */
 private const val THIN_ANSWER = 15
