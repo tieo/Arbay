@@ -395,6 +395,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a page listed through Google's translating proxy is read at the shop's own address`() {
+        assertEquals("https://www.amazon.it/Levigatrici-lamiera/s?rh=n:3121001031,p_6:A20FPJ7ZUTLVQJ",
+            WebCrawler.unproxied("https://www-amazon-it.translate.goog/Levigatrici-lamiera/s?rh=n:3121001031,p_6:A20FPJ7ZUTLVQJ&_x_tr_sl=it&_x_tr_tl=de&_x_tr_hl=de&_x_tr_pto=sc"))
+        assertEquals("https://www.dielen-schleifen.de/miete?x=1",
+            WebCrawler.unproxied("https://www-dielen--schleifen-de.translate.goog/miete?_x_tr_sl=de&x=1"))
+        assertEquals("https://www.e-hoi.de/", WebCrawler.withoutSession("https://www.e-hoi.de/?msockid=063548ec2ade6dcd3b695f112b266c95"))
+    }
+
+    @Test
     fun `an offer's address loses the session and tracking that make it a new one each visit`() {
         assertEquals("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/",
             WebCrawler.withoutSession("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/?utm_source=qwant&utm_medium=referral&utm_campaign=ai_flash"))

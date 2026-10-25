@@ -46,7 +46,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         // Learned sites' own searches first: read by their exact recipes they win over the same
         // offer an engine's page gives less exactly (gerach's card states its rate from three days
         // on, its API one day's), and the page limit never cuts them.
-        val found = (siteSearches(words) + listed).distinct()
+        val found = (siteSearches(words) + listed.map { withoutSession(unproxied(it)) }).distinct()
             .filterNot { coveredElsewhere(it) }
             .take(MAX_PAGES)
         log.info("Web: '{}' reads {} pages", words, found.size)
@@ -88,7 +88,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
      *  crawls itself (a comparison site linking an eBay item) is that market's offer, which its
      *  own crawler reads better. */
     private fun listingsOf(offers: List<PageOffer>, now: kotlin.time.Instant): List<Listing> =
-        offers.map { it.copy(url = withoutSession(behindAffiliateLink(it.url))) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
+        offers.map { it.copy(url = withoutSession(unproxied(behindAffiliateLink(it.url)))) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -355,9 +355,21 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         internal fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
             .replace(TRACKING_PARAM, "").replace(Regex("""[?&]$"""), "").replace("?&", "?")
 
+        /** The shop's own address of a page an engine lists through Google's translating proxy
+         *  (www-amazon-it.translate.goog/…?_x_tr_sl=it for www.amazon.it/…): the proxy's host names
+         *  no shop, so the page would be read as a site of its own, and Amazon's not left to the
+         *  crawler that reads it. The proxy writes the host's dots as dashes and its dashes doubled. */
+        internal fun unproxied(url: String): String {
+            val m = TRANSLATE_PROXY.find(url) ?: return url
+            val host = m.groupValues[2].replace("--", "\u0000").replace('-', '.').replace('\u0000', '-')
+            return withoutSession(m.groupValues[1] + host + m.groupValues[3])
+        }
+
+        private val TRANSLATE_PROXY = Regex("""^(https?://)([a-z0-9-]+)\.translate\.goog(.*)$""", RegexOption.IGNORE_CASE)
+
         /** What an engine or an ad adds to an address to count the visit, which makes the same
          *  offer a new one for every engine that listed it. */
-        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type)=[^&#]*&?""", RegexOption.IGNORE_CASE)
+        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type|msockid|_x_tr_[a-z_]+)=[^&#]*&?""", RegexOption.IGNORE_CASE)
 
         private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
 
