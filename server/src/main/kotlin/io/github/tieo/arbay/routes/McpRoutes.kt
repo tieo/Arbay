@@ -16,24 +16,49 @@ import io.modelcontextprotocol.kotlin.sdk.types.McpJson
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.doublereceive.DoubleReceive
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondText
+import io.ktor.http.ContentType
 
 /**
- * Arbay for an LLM, over MCP's Streamable HTTP at /mcp (see [ArbayMcp]), without sessions.
+ * Arbay for an LLM, over MCP's Streamable HTTP at /mcp (see [ArbayMcp]).
  *
  * Every request is answered by a transport of its own over the one [ArbayMcp], which holds what a
  * client builds up (the offers it has seen, the searches it started). Sessions lived in this
  * server's memory, so every restart, every deploy, told the client its session had expired and
  * cost it a failed call. Who may reach the endpoint is decided in front of the server, as for
  * every other route.
+ *
+ * The session id a client is given is the tools it was shown: a digest of their definitions. A
+ * client lists the tools once, when it starts its session, and kept calling a tool by the schema
+ * of an older deploy, without a parameter added since. A request naming another digest, or none
+ * where it is not the client starting, is told its session is gone, and the client starts again
+ * and lists the tools anew; a deploy that leaves the tools as they were costs nothing.
  */
 fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     val mcp = ArbayMcp(http, selfUrl)
+    val toolsId = toolsDigest(mcp)
 
     route("/mcp") {
         // JSON-RPC as the MCP SDK writes it: Arbay's own JSON settings drop the "jsonrpc" field
         // and add nulls, and strict clients refuse the reply.
         install(ContentNegotiation) { json(McpJson) }
+        // The body is read here, to tell a client starting its session from one continuing it,
+        // and again by the transport.
+        install(DoubleReceive)
         post {
+            val sent = call.request.headers[SESSION_HEADER]
+            val starting = sent == null && call.receiveText().contains("\"initialize\"")
+            if (sent != toolsId && !starting) {
+                call.respondText(
+                    """{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found: the tools changed, start a new session"},"id":null}""",
+                    ContentType.Application.Json, HttpStatusCode.NotFound,
+                )
+                return@post
+            }
+            call.response.header(SESSION_HEADER, toolsId)
             val transport = StreamableHttpServerTransport(StreamableHttpServerTransport.Configuration(enableJsonResponse = true))
             transport.setSessionIdGenerator(null)
             mcp.server().createSession(transport)
@@ -43,6 +68,16 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
         get { call.respond(HttpStatusCode.MethodNotAllowed) }
         delete { call.respond(HttpStatusCode.OK) }
     }
+}
+
+private const val SESSION_HEADER = "Mcp-Session-Id"
+
+/** A digest of every tool's name, description and schemas, the same for the same tools. */
+private fun toolsDigest(mcp: ArbayMcp): String {
+    val tools = mcp.server().tools.values.map { it.tool }.sortedBy { it.name }
+    val text = McpJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(io.modelcontextprotocol.kotlin.sdk.types.Tool.serializer()), tools)
+    return java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+        .joinToString("") { "%02x".format(it) }.take(32)
 }
 
 /** For calling this server's own API, as the MCP tools and the saved-search fit alert do; a search

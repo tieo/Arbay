@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** An MCP client of the SDK's own, talking to Arbay's /mcp through the server's real routes. */
@@ -78,25 +79,31 @@ class ArbayMcpTest {
         assertTrue("error" !in body, reply.bodyAsText())
     }
 
-    /** A client that connected before a restart keeps sending its old session id; the server has
-     *  no memory of it, and the call is answered all the same. */
+    /** A client keeps the session id it was given when it listed the tools. Across a restart with
+     *  the same tools its calls are answered; a client holding the id of other tools, or none, is
+     *  told its session is gone, so it starts again and lists the tools as they are now. */
     @Test
-    fun aCallFromBeforeARestartIsAnswered() = testApplication {
+    fun aCallFromBeforeARestartIsAnsweredWhileTheToolsAreTheSame() = testApplication {
         application {
             install(SSE)
             configureSerialization()
             configureStatusPages()
         }
         routing { chatRoutes(); mcpRoutes("", client) }
-        val reply = client.post("/mcp") {
+        suspend fun post(session: String?, body: String) = client.post("/mcp") {
             header("Accept", "application/json, text/event-stream")
-            header("mcp-session-id", "a-session-from-before-the-restart")
+            session?.let { header("mcp-session-id", it) }
             contentType(ContentType.Application.Json)
-            setBody("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_texts","arguments":{}}}""")
+            setBody(body)
         }
-        assertEquals(200, reply.status.value, reply.bodyAsText())
-        val body = Json.parseToJsonElement(reply.bodyAsText()).jsonObject
-        assertTrue("error" !in body, reply.bodyAsText())
+        val started = post(null, """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}""")
+        val session = assertNotNull(started.headers["mcp-session-id"], "the tools' session id")
+        val call = """{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_texts","arguments":{}}}"""
+        val answered = post(session, call)
+        assertEquals(200, answered.status.value, answered.bodyAsText())
+        assertTrue("error" !in Json.parseToJsonElement(answered.bodyAsText()).jsonObject, answered.bodyAsText())
+        assertEquals(404, post("a-session-from-other-tools", call).status.value)
+        assertEquals(404, post(null, call).status.value)
     }
 
     @Test
@@ -231,6 +238,14 @@ class ArbayMcpTest {
         assertTrue(refused.startsWith("Not changed"), refused)
         mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to van.id, "fit_alert_percent" to 0))
         assertEquals(false, products.getById(van.id)!!.fitAlert.enabled)
+        // A search for a thing weighs a fit once it is given wishes, in the same call as its level.
+        val sanders = """{"models":[{"name":"Lägler HUMMEL","words":["hummel"],"worth":1.0}],"idealPriceEur":450,"maxPriceEur":1500,"ruledOutWords":["400 V"]}"""
+        val thing = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to drive.id, "fit_wishes" to sanders, "fit_alert_percent" to 81)).content.single() as TextContent).text
+        assertContains(thing, "pushes a fit of 81 % or more")
+        assertContains(thing, "Lägler HUMMEL 100 %")
+        assertEquals(1500, products.getById(drive.id)!!.searchQuery.productWishes?.maxPriceEur)
+        val unreadable = (mcp.callTool(name = "change_saved_search", arguments = mapOf("id" to drive.id, "fit_wishes" to "{models")).content.single() as TextContent).text
+        assertTrue(unreadable.startsWith("Not changed"), unreadable)
         products.delete(van.id); products.delete(drive.id)
         mcp.close()
     }
