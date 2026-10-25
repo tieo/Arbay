@@ -49,7 +49,6 @@ object ModelGuesses {
     private val log = LoggerFactory.getLogger(ModelGuesses::class.java)
     private val json = Json { ignoreUnknownKeys = true }
     private val file = DataDir.file("model_guesses.json")
-    private val checkedFile = DataDir.file("model_checks.json")
 
     @Serializable
     private data class Kept(val guess: ModelGuess? = null, val against: String)
@@ -58,10 +57,8 @@ object ModelGuesses {
         json.decodeFromString<Map<String, Kept>>(it)
     }?.toMutableMap() ?: mutableMapOf()
 
-    /** A reviewer's verdict per offer (every market copy alike): the model's name, or "" for none of them. */
-    private val checked: MutableMap<String, String> = checkedFile.readStore(log) {
-        json.decodeFromString<Map<String, String>>(it)
-    }?.toMutableMap() ?: mutableMapOf()
+    /** The fact [PhotoFactChecks] keeps the model's verdicts under. */
+    const val FACT = "model"
 
     /** Photos read for printed words per offer. */
     private const val PHOTOS_READ = 4
@@ -76,18 +73,10 @@ object ModelGuesses {
     }
 
     /** The reviewer's verdict on [listingId]: a model's name, "" for none of the search's models, null when never checked. */
-    fun checkOf(listingId: String): String? = synchronized(checked) { checked[offerKey(listingId)] }
-
-    /** Every verdict given, by offer. */
-    fun checks(): Map<String, String> = synchronized(checked) { checked.toMap() }
+    fun checkOf(listingId: String): String? = PhotoFactChecks.of(FACT, listingId)
 
     /** A reviewer's verdict on what [listingId] is: one of the search's models by name, or null for none of them. */
-    fun check(listingId: String, model: String?) {
-        val all = synchronized(checked) { checked[offerKey(listingId)] = model.orEmpty(); checked.toMap() }
-        runCatching { checkedFile.writeTextAtomically(json.encodeToString(all)) }
-            .onFailure { log.warn("model checks not kept: {}", it.message) }
-        log.info("model of {} checked: {}", listingId, model ?: "none of them")
-    }
+    fun check(listingId: String, model: String?) = PhotoFactChecks.set(FACT, listingId, model.orEmpty())
 
     private fun key(wishes: ProductWishes) = wishes.models.joinToString("|") { it.name + ":" + it.words.joinToString(",") }
 

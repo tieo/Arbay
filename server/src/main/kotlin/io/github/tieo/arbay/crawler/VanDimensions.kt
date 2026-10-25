@@ -74,6 +74,10 @@ object VanDimensions {
         RegexOption.IGNORE_CASE,
     )
 
+    /** The van model [text] names, folded to one word ("crafter", "sprinter"), or null for none known. */
+    fun modelOf(text: String): String? =
+        if (crafterWord.containsMatchIn(text)) "crafter" else otherVanModel.find(text)?.value?.lowercase()
+
     private fun isCrafter(text: String, modelHint: String?): Boolean =
         crafterWord.containsMatchIn(text) ||
             (modelHint?.contains("crafter", ignoreCase = true) == true && !otherVanModel.containsMatchIn(text))

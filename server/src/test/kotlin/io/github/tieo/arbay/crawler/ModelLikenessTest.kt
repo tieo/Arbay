@@ -50,13 +50,25 @@ class ModelLikenessTest {
     @Test
     fun `a model is told from photos only from the lead where it was right often enough`() {
         val hummel = sanders.models[0]; val cobra = sanders.models[1]
-        fun told(truth: ModelWish, as_: ModelWish, lead: Double) = truth to ModelLikeness.Told(as_, lead)
+        fun told(truth: ModelWish, as_: ModelWish, lead: Double) = truth.name to PhotoLikeness.Told(as_.name, lead)
         // HUMMEL: right five of five from a lead of 0.03, wrong below it. Cobra: never right.
         val record = List(5) { told(hummel, hummel, 0.04) } + List(3) { told(cobra, hummel, 0.025) } +
             List(6) { told(hummel, cobra, 0.06) }
-        val gates = ModelLikeness.gates(record)
+        val gates = PhotoLikeness.gates(record)
         assertEquals(0.03, gates.getValue("Lägler HUMMEL").first)
         assertEquals(1.0, gates.getValue("Lägler HUMMEL").second)
         assertNull(gates["Frank Cobra C"])
+    }
+
+    @Test
+    fun `a value right only as often as the examples' mix makes it is not told`() {
+        fun told(truth: String, as_: String) = truth to PhotoLikeness.Told(as_, 0.05)
+        // High told right nine times in ten, where 85 % of the vans are high anyway: barely better
+        // than telling every van high. Normal roofs told rightly are believed.
+        val record = List(90) { told("high", "high") } + List(10) { told("normal", "high") } +
+            List(6) { told("normal", "normal") }
+        val gates = PhotoLikeness.gates(record)
+        assertNull(gates["high"])
+        assertEquals(1.0, gates.getValue("normal").second)
     }
 }
