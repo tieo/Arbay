@@ -22,6 +22,7 @@ import io.github.tieo.arbay.routes.placeRoutes
 import io.github.tieo.arbay.routes.productRoutes
 import io.github.tieo.arbay.routes.taxonomyRoutes
 import io.github.tieo.arbay.routes.webAppRoutes
+import io.github.tieo.arbay.routes.webRoutes
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 
@@ -54,6 +55,7 @@ fun Application.configureRouting() {
         liveRoutes()
         mcpRoutes("http://127.0.0.1:$SERVER_PORT")
         placeRoutes()
+        webRoutes()
         webAppRoutes()
     }
 }

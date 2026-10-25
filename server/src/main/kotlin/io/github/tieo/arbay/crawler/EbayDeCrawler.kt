@@ -83,11 +83,11 @@ class EbayDeCrawler(
      * signed out, and sends every other browser to its sign-in page. Null where the account is not
      * signed in or eBay asks its password again.
      */
-    private suspend fun accountPage(url: String, markers: List<String>): EbayBrowser.Page? = try {
+    private suspend fun accountPage(url: String, markers: List<String>): WarmBrowser.Page? = try {
         val answer = io.github.tieo.arbay.chat.EbayChatBrowser.call(
             "page", 60_000, "url" to url, "markers" to kotlinx.serialization.json.JsonArray(markers.map(::JsonPrimitive)), "wait" to 25,
         )
-        EbayBrowser.Page(
+        WarmBrowser.Page(
             html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
             page = answer["page"]?.jsonPrimitive?.contentOrNull ?: "unknown",

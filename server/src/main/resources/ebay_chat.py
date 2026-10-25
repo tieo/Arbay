@@ -4,7 +4,7 @@ The user's own eBay account, driven through a real Chrome that keeps its profile
 market_browser.py for how it is driven and how the user signs in). One account answers for every eBay
 site Arbay reads: an item is reached by its number on ebay.de whichever site listed it.
 
-This browser is the user's: the crawler reads eBay through a Chrome of its own (ebay_browser.py), so
+This browser is the user's: the crawler reads eBay through a Chrome of its own (warm_browser.py), so
 the pace of searching never lands on the account. Only what eBay shows nobody signed out, its sold
 listings, is read here.
 
@@ -48,7 +48,7 @@ class Ebay(MarketBrowser):
 
     async def page(self, url: str, markers: list, timeout: float) -> dict:
         """[url] read as the signed-in user, for what eBay shows only to one: its sold listings send
-        any other browser to the sign-in page. Answers like ebay_browser.py's get."""
+        any other browser to the sign-in page. Answers like warm_browser.py's get."""
         await self.ensure_signed_in()
         await self.tab.get(url)
         html, kind = "", "unknown"

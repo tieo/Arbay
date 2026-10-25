@@ -23,17 +23,22 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
 /**
- * The Chrome every eBay page is read through, kept running by ebay_browser.py.
- *
- * eBay's edge serves its error page to every client that does not look like a person's browser,
- * and a freshly started Chrome is one of them; a Chrome that keeps its profile and reads one page
- * after another is not. So there is one, for the life of the server, on a display of its own (:96),
- * its profile in the data directory so its cookies outlive restarts. Its pages are read one at a
- * time, which is also the pace eBay lets through.
+ * A Chrome a site is read through, kept running by warm_browser.py: one per site that turns away
+ * anything not looking like a person's browser, for the life of the server, on a display of its
+ * own, its profile in the data directory so its cookies outlive restarts. Its pages are read one at
+ * a time, which is also the pace such a site lets through.
  */
-object EbayBrowser {
-    private val log = LoggerFactory.getLogger(EbayBrowser::class.java)
-    private const val DISPLAY = ":96"
+open class WarmBrowser(
+    private val name: String,
+    private val display: Int,
+    private val profileDir: String,
+    private val logName: String,
+    /** Text only the site's error page carries. */
+    private val errors: List<String> = emptyList(),
+    /** The buttons of a consent screen the site puts before its pages. */
+    private val accept: List<String> = emptyList(),
+) {
+    private val log = LoggerFactory.getLogger("${WarmBrowser::class.java.name}.$name")
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Mutex()
 
@@ -42,19 +47,21 @@ object EbayBrowser {
     private var input: BufferedWriter? = null
     private var output: BufferedReader? = null
 
-    /** A page as the browser read it: [page] says whether it is the page asked for ("content"), eBay's
-     *  error page, its challenge, or none of them. */
+    /** A page as the browser read it: [page] says whether it is the page asked for ("content"), the
+     *  site's error page, a challenge, or none of them. */
     class Page(val html: String, val url: String, val page: String)
 
     /**
-     * Reads [url] and waits until one of [markers] shows in it, eBay's error page shows, or [timeoutS]
-     * passes. Null where the browser could not be started or did not answer, which leaves the
-     * caller its other ways in.
+     * Reads [url] and waits until one of [markers] shows in it, the site's error page shows, or
+     * [timeoutS] passes. Null where the browser could not be started or did not answer, which
+     * leaves the caller its other ways in.
      */
     suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30): Page? = lock.withLock {
         val request = JsonObject(mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
+            "errors" to JsonArray(errors.map(::JsonPrimitive)),
+            "accept" to JsonArray(accept.map(::JsonPrimitive)),
         ))
         val answer = try {
             withContext(Dispatchers.IO) {
@@ -65,12 +72,12 @@ object EbayBrowser {
                 }
             }
         } catch (e: Exception) {
-            log.warn("eBay browser did not answer for {}: {}", url, e.message)
+            log.warn("{} browser did not answer for {}: {}", name, url, e.message)
             stop()
             return@withLock null
         }
         if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
-            log.warn("eBay browser failed {}: {}", url, answer["error"]?.jsonPrimitive?.contentOrNull)
+            log.warn("{} browser failed {}: {}", name, url, answer["error"]?.jsonPrimitive?.contentOrNull)
             if (answer["stuck"]?.jsonPrimitive?.booleanOrNull == true) stop()
             return@withLock null
         }
@@ -84,20 +91,20 @@ object EbayBrowser {
     private fun exchange(line: String): JsonObject {
         ensureRunning()
         input!!.apply { write(line); newLine(); flush() }
-        val reply = output!!.readLine() ?: throw IllegalStateException("eBay browser exited")
+        val reply = output!!.readLine() ?: throw IllegalStateException("$name browser exited")
         return json.parseToJsonElement(reply).jsonObject
     }
 
     private fun ensureRunning() {
         if (process?.isAlive == true) return
         ensureXvfb()
-        val script = File(StealthBrowserClient.scriptDir, "ebay_browser.py")
+        val script = File(StealthBrowserClient.scriptDir, "warm_browser.py")
         val started = ProcessBuilder("python3", script.absolutePath)
             .directory(StealthBrowserClient.scriptDir)
-            .redirectError(ProcessBuilder.Redirect.appendTo(DataDir.file("logs/ebay-browser.log").apply { parentFile.mkdirs() }))
+            .redirectError(ProcessBuilder.Redirect.appendTo(DataDir.file("logs/$logName").apply { parentFile.mkdirs() }))
             .also {
-                it.environment()["DISPLAY"] = DISPLAY
-                it.environment()["ARBAY_EBAY_PROFILE"] = DataDir.file("ebay-profile").absolutePath
+                it.environment()["DISPLAY"] = ":$display"
+                it.environment()["ARBAY_BROWSER_PROFILE"] = DataDir.file(profileDir).absolutePath
             }
             .start()
         process = started
@@ -105,16 +112,16 @@ object EbayBrowser {
         output = started.inputStream.bufferedReader()
         val ready = output!!.readLine() ?: run {
             stop()
-            throw IllegalStateException("eBay browser exited on start; see logs/ebay-browser.log")
+            throw IllegalStateException("$name browser exited on start; see logs/$logName")
         }
-        log.info("eBay browser started: {}", ready)
+        log.info("{} browser started: {}", name, ready)
     }
 
     private fun ensureXvfb() {
         if (xvfb?.isAlive == true) return
-        File("/tmp/.X96-lock").delete()
-        File("/tmp/.X11-unix/X96").delete()
-        xvfb = ProcessBuilder("Xvfb", DISPLAY, "-screen", "0", "1280x900x24", "-nolisten", "tcp")
+        File("/tmp/.X$display-lock").delete()
+        File("/tmp/.X11-unix/X$display").delete()
+        xvfb = ProcessBuilder("Xvfb", ":$display", "-screen", "0", "1280x900x24", "-nolisten", "tcp")
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
             .start()
@@ -131,3 +138,21 @@ object EbayBrowser {
         output = null
     }
 }
+
+/**
+ * The Chrome every eBay page is read through. eBay's edge serves its error page to every client
+ * that does not look like a person's browser, and a freshly started Chrome is one of them; a Chrome
+ * that keeps its profile and reads one page after another is not.
+ */
+object EbayBrowser : WarmBrowser("eBay", 96, "ebay-profile", "ebay-browser.log", errors = listOf("went wrong"))
+
+/**
+ * The Chrome the search engines that refuse a plain request are asked through. Google has answered
+ * only browsers that run its scripts since 2025, and SearXNG's Google and Qwant got "access denied"
+ * from the server for that, while a person's Chrome on the same address searches normally. Its
+ * consent screen is accepted once and remembered in the profile.
+ */
+object SearchBrowser : WarmBrowser(
+    "search", 91, "search-profile", "search-browser.log",
+    accept = listOf("Alle akzeptieren", "Accept all", "Akzeptieren", "Tout accepter", "Accetta tutto"),
+)

@@ -52,4 +52,7 @@ enum class PlatformId(
     BILBASEN("Bilbasen", "https://www.bilbasen.dk", country = "DK"),
     BYTBIL("Bytbil", "https://www.bytbil.com", country = "SE"),
     SAUTO("Sauto", "https://www.sauto.cz", country = "CZ"),
+    // Every shop a search engine lists, read by the structured data shops publish for search
+    // engines or by a recipe learned per site; it has no address of its own.
+    WEB("Web", ""),
 }

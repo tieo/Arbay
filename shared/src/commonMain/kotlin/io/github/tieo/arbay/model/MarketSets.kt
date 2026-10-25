@@ -40,7 +40,7 @@ object MarketSets {
         PlatformId.IDEALO, PlatformId.GEIZHALS, PlatformId.BACKMARKET_DE, PlatformId.REBUY,
         PlatformId.REFURBED, PlatformId.VINTED_DE, PlatformId.WILLHABEN, PlatformId.MARKTPLAATS,
         PlatformId.EBAY_IT, PlatformId.EBAY_FR, PlatformId.EBAY_ES, PlatformId.TWEEDEHANDS,
-        PlatformId.RICARDO, PlatformId.SUBITO,
+        PlatformId.RICARDO, PlatformId.SUBITO, PlatformId.WEB,
     )
 
     /** Where a home is found. Its own group rather than folded into general: a housing-shaped
