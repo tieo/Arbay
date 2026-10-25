@@ -1483,6 +1483,9 @@ object RelevanceFilter {
         "wd" to listOf("western digital", "wd black", "wd blue"),
         // A drive enclosure named by the drive's English initials: "4-Bay HDD Gehäuse".
         "festplattengehaeuse" to listOf("hdd gehaeuse", "hdd case", "hdd enclosure", "festplatten gehaeuse"),
+        // A drive bay as German shops count them: pearl's "4-fach-Festplattengehäuse", MediaMarkt's
+        // "4 Einschübe", others' "4 Schächte" or "4 Slots" are the 4-Bay asked for.
+        "bay" to listOf("fach", "einschub", "einschuebe", "einschueben", "schacht", "schaechte", "schaechten", "slot", "slots", "bays"),
     )
 
     // Model variant qualifier tokens that must appear adjacent to their preceding query token.

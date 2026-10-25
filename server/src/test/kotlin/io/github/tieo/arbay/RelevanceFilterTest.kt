@@ -1289,6 +1289,18 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a bay is what shops count as fach, Einschübe, Schächte or slots`() {
+        val listings = listOf(
+            listing("Xystec 4-fach-Festplatten-Gehäuse für 3.5\" & 2.5\" (SATA), RAID, USB", price = 14999),
+            listing("HIYORI Externes 3,5\"-Festplattengehäuse USB 3.0 4 Einschübe für Festplatten", price = 7599),
+            listing("Icy Box Festplattengehäuse mit 4 Schächten USB-C", price = 15900),
+            listing("Festplattengehäuse 2,5 Zoll USB 3.0", price = 999),
+        )
+        val kept = search("4 bay festplattengehäuse", listings).map { it.price.amount }
+        assertEquals(setOf(14999L, 7599L, 15900L), kept.toSet())
+    }
+
+    @Test
     fun `a model the seller states apart from the title counts as named`() {
         // MediaMarkt names the AOI488 only in the offer's address, read into its MPN.
         val mm = listing("HIYORI Externes 3,5\"-Festplattengehäuse USB 3.0 4 Einschübe für Festplatten, Festplattengehäuse", price = 7599).copy(mpn = "aoi488")

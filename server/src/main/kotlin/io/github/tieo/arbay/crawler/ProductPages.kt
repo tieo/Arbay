@@ -66,7 +66,10 @@ object ProductPages {
         val text = doc.body()?.text()?.lowercase() ?: return false
         // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
         // shop, its articles too.
-        return PRICE_IN_TEXT.findAll(text).any { m -> m.value.any { it in '1'..'9' } } && BUY_WORDS.containsMatchIn(text)
+        // Nor is what delivery costs: "Versandkosten ab 5,95 €" stands in a shop's header.
+        return PRICE_IN_TEXT.findAll(text).any { m ->
+            m.value.any { it in '1'..'9' } && !SHIPPING_BEFORE.containsMatchIn(text.substring(maxOf(0, m.range.first - 30), m.range.first))
+        } && BUY_WORDS.containsMatchIn(text)
     }
 
     /**
@@ -102,6 +105,8 @@ object ProductPages {
         }.toSet()
         return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
     }
+
+    private val SHIPPING_BEFORE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione""")
 
     private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog")
 
@@ -407,7 +412,8 @@ object ProductPages {
     // ── Microdata ──
 
     private fun microdata(doc: Document, pageUrl: String): List<PageOffer> =
-        doc.select("[itemscope][itemtype*=schema.org/Product]").mapNotNull { product ->
+        // By its type alone: reichelt states every product's type and leaves out `itemscope`.
+        doc.select("[itemtype*=schema.org/Product]").mapNotNull { product ->
             val title = prop(product, "name")?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val currency = currencyOf(prop(product, "priceCurrency")) ?: Currency.EUR
             val price = (prop(product, "price") ?: prop(product, "lowPrice"))?.let { amount(it, currency) }

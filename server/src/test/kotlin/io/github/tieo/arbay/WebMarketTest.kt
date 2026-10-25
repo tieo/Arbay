@@ -282,4 +282,21 @@ class WebMarketTest {
         assertEquals("Parkettschleifmaschine 45 kg mit Sack", offer.title)
         assertEquals(Money(5713, Currency.EUR), offer.price)
     }
+
+    @Test
+    fun `microdata is read by its type where the page leaves out itemscope`() {
+        // reichelt.de's search results.
+        val html = """<div class="al_gallery_article" itemtype="http://schema.org/Product"><meta itemprop="name" content="Dockingstation 2x M.2 NVME, USB 3.1">
+            <div itemprop="name">Artikel-Nr.: LOGILINK QP0033 Dockingstation 2x M.2 NVME, USB 3.1</div>
+            <div itemprop="offers"><meta itemprop="price" content="69.99"><meta itemprop="priceCurrency" content="EUR"></div></div>"""
+        val offer = ProductPages.offers(html, "https://www.reichelt.de/de/de/shop/suche?search=dockingstation").single()
+        assertEquals("Dockingstation 2x M.2 NVME, USB 3.1", offer.title)
+        assertEquals(Money(6999, Currency.EUR), offer.price)
+    }
+
+    @Test
+    fun `a category page whose only amounts are the basket and delivery sells nothing`() {
+        // reichelt.de's category landing, which lists sub-categories.
+        assertFalse(ProductPages.sellsSomething("<body><a>0 Warenkorb 0,00 €</a><span>Versandkosten ab 5,95 €</span><h1>Festplatten</h1><a>Jetzt kaufen</a></body>"))
+    }
 }
