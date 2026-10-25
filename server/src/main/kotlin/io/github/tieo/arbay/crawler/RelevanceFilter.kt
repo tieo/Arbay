@@ -996,6 +996,9 @@ object RelevanceFilter {
             // A sanding machine's drum, tensioning unit or drive sold apart: "Lägler Hummel Spann
             // Aggregat Drive unit", "Nieuwe schuurwals Parketschuurmachine Hummel".
             """schleifwalzen?|schuurwals|spann\s?aggregat|antriebseinheit|drive\s+unit|motor\s+complete|""" +
+            // What eBay Italy sells for a Hummel: its dolly, a 240 V to 120 V power adapter, the fan
+            // insert as a "gruppo completo".
+            """dolly|alimentatore|inserto\s+ventola|gruppo\s+completo|""" +
             """(?<=#\s?)\p{L}{0,2}\d{3,}|""" +
             // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
             // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.

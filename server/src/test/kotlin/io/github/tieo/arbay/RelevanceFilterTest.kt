@@ -406,6 +406,29 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a sander's dolly, adapter and spares in Italian are not the sander`() {
+        val belt = SearchQuery(
+            text = "lägler hummel",
+            aliases = listOf("lägler elf", "lägler profit", "lägler superhummel", "hummel parkettschleifmaschine",
+                "hummel bandschleifmaschine", "hummel parketschuurmachine", "levigatrice hummel"),
+            category = MarketGroup.GENERAL,
+        )
+        // eBay IT and eBay DE, live, kept under a 700 € alert.
+        val notMachines = listOf(
+            listing("Levigatrice per pavimenti Hummel Dolly", 31044),
+            listing("Hummel Alimentatore Levigatrice a Nastro 240V da Doppia Prese 120V", 33833),
+            listing("P169 - Lagler - Inserto ventola Hummel - Gruppo completo", 57579),
+            listing("Uimoso 1500W Bandschleifmaschine mit 3 Schleifbändern,einstellbar 600-6000 U/min", 121380),
+        )
+        val machines = listOf(
+            listing("Fußbodenschleifmaschine LÄGLER Profit", 89000),
+            listing("Parkettschleifmaschine Lägler Elf 1", 95000),
+        )
+        val kept = RelevanceFilter.partition(notMachines + machines, belt)
+        assertEquals(machines.map { it.title }.toSet(), kept.kept.map { it.title }.toSet(), kept.dropped.map { it.listing.title to it.reason }.toString())
+    }
+
+    @Test
     fun `a search is offered the other names sellers write its words under`() {
         // pearl counts bays as "4-fach", MediaMarkt as "4 Einschübe": a market answering only titles
         // carrying "bay" never shows them unless it is asked in their words.
