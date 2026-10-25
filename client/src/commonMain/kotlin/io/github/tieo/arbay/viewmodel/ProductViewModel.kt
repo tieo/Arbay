@@ -166,6 +166,11 @@ class ProductViewModel(
         updateProduct(product.copy(fitAlert = product.fitAlert.copy(enabled = minScore != null, minScore = minScore ?: product.fitAlert.minScore)))
     }
 
+    /** What makes a good one, for a search for a thing: its fit wishes, cleared when empty. */
+    fun setProductWishes(product: TrackedProduct, wishes: io.github.tieo.arbay.model.ProductWishes) {
+        updateProduct(product.copy(searchQuery = product.searchQuery.copy(productWishes = wishes.takeUnless { it.isEmpty })))
+    }
+
     /** Set this bookmark's notification subfilters and persist. */
     fun setNotificationSubfilters(product: TrackedProduct, subfilters: List<NotificationSubfilter>) {
         updateProduct(product.copy(notificationSubfilters = subfilters))

@@ -17,6 +17,8 @@ import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.AUCTION_LEAD_CHOICES
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ModelWish
+import io.github.tieo.arbay.model.ProductWishes
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.PlatformId
@@ -350,8 +352,13 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
             }
         }
 
+        // A search for a thing is weighed by what makes a good one; a vehicle search by its criteria.
+        if (!state.open.view.isCar) WishesEditor(bookmark.searchQuery.productWishes ?: ProductWishes()) {
+            app.products.setProductWishes(bookmark, it)
+        }
+
         H3 { Text("Tell me when a find is") }
-        // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
+        // A fit is weighed from a search's wishes; a search with none has nothing to weigh.
         if (bookmark.searchQuery.weighsAFit) {
             val fit = bookmark.fitAlert
             // Dragged here and saved where the thumb is let go, as the free-item score is.
@@ -386,6 +393,85 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
             }
         }
         RuleForm { rule -> app.products.setNotificationSubfilters(bookmark, bookmark.notificationSubfilters + rule) }
+    }
+}
+
+/**
+ * What makes a good one, for a search for a thing: the models that would do, each worth a share of
+ * a perfect fit, the price that fits fully and the one past which nothing does, the words that rule
+ * an offer out and the ones that make it better. Saved as each is changed, as the alert is.
+ */
+@Composable
+private fun WishesEditor(wishes: ProductWishes, save: (ProductWishes) -> Unit) {
+    H3 { Text("What a good one is") }
+    Div({ classes("models") }) {
+        wishes.models.forEach { model ->
+            // Dragged here and saved where the thumb is let go.
+            var worth by remember(model.name, model.worth) { mutableStateOf((model.worth * 100).roundToInt()) }
+            Div({ classes("model") }) {
+                Span({ classes("model-name") }) { Text(model.name) }
+                Input(InputType.Range) {
+                    classes("range")
+                    attr("min", "0"); attr("max", "100")
+                    attr("aria-label", "What ${model.name} is worth")
+                    value(worth.toString())
+                    onInput { worth = it.value?.toInt() ?: worth }
+                    onChange { save(wishes.copy(models = wishes.models.map { m -> if (m.name == model.name) m.copy(worth = worth / 100.0) else m })) }
+                }
+                Span({ classes("model-worth") }) { Text("$worth") }
+                IconButton(Glyph.Close, "Remove ${model.name}") { save(wishes.copy(models = wishes.models.filterNot { it.name == model.name })) }
+                Div({ classes("model-words") }) { Span { Text(model.words.joinToString(" · ")) } }
+            }
+        }
+    }
+    var draft by remember { mutableStateOf("") }
+    Form(attrs = {
+        classes("inline-form")
+        addEventListener("submit") { event ->
+            event.preventDefault()
+            draft.trim().takeIf { it.isNotEmpty() && wishes.models.none { m -> m.name.equals(it, ignoreCase = true) } }?.let { name ->
+                // A new model is named in its ads the way it was typed, and starts as a good one.
+                save(wishes.copy(models = wishes.models + ModelWish(name, listOf(name.lowercase()), 0.8)))
+            }
+            draft = ""
+        }
+    }) {
+        Input(InputType.Text) {
+            classes("control"); placeholder("Model, as ads write it"); attr("aria-label", "Add a model")
+            value(draft); onInput { draft = it.value }
+        }
+        Button(attrs = { classes("quiet"); attr("type", "submit") }) { Text("Add") }
+    }
+    Div({ classes("field") }) {
+        Span({ classes("field-label") }) { Text("Price") }
+        Div({ classes("band") }) {
+            EuroInput(wishes.idealPriceEur, "Fits fully up to") { save(wishes.copy(idealPriceEur = it)) }
+            Span({ classes("muted") }) { Text("to") }
+            EuroInput(wishes.maxPriceEur, "Fits not at all above") { save(wishes.copy(maxPriceEur = it)) }
+            Span({ classes("muted") }) { Text("€") }
+        }
+    }
+    Div({ classes("field") }) {
+        Span({ classes("field-label") }) { Text("Rules it out") }
+        WordList(wishes.ruledOutWords, onRemove = { save(wishes.copy(ruledOutWords = wishes.ruledOutWords - it)) },
+            onAdd = { save(wishes.copy(ruledOutWords = wishes.ruledOutWords + it)) }, adding = "Word")
+    }
+    Div({ classes("field") }) {
+        Span({ classes("field-label") }) { Text("Better with") }
+        WordList(wishes.plusWords, onRemove = { save(wishes.copy(plusWords = wishes.plusWords - it)) },
+            onAdd = { save(wishes.copy(plusWords = wishes.plusWords + it)) }, adding = "Word")
+    }
+}
+
+/** A whole-euro amount, saved when the field is left; empty clears it. */
+@Composable
+private fun EuroInput(eur: Int?, label: String, onSet: (Int?) -> Unit) {
+    var draft by remember(eur) { mutableStateOf(eur?.toString().orEmpty()) }
+    Input(InputType.Number) {
+        classes("control", "band-input"); attr("aria-label", label); attr("title", label)
+        value(draft)
+        onInput { draft = it.value?.toString().orEmpty() }
+        onChange { onSet(draft.toIntOrNull()?.takeIf { it > 0 }) }
     }
 }
 

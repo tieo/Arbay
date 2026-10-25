@@ -51,6 +51,8 @@ import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.DropReason
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ModelWish
+import io.github.tieo.arbay.model.ProductWishes
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.model.displayName
@@ -306,6 +308,72 @@ private fun WordList(words: List<String>, adding: String, onRemove: (String) -> 
     )
 }
 
+/**
+ * What makes a good one, for a search for a thing: the models that would do, each worth a share of
+ * a perfect fit, the price that fits fully and the one past which nothing does, the words that rule
+ * an offer out and the ones that make it better. Saved as each is changed, as the alert is.
+ */
+@Composable
+private fun WishesEditor(wishes: ProductWishes, save: (ProductWishes) -> Unit) {
+    Text("What a good one is", style = MaterialTheme.typography.titleMedium)
+    wishes.models.forEach { model ->
+        // Dragged here and saved where the thumb is let go.
+        var worth by remember(model.name, model.worth) { mutableStateOf((model.worth * 100).roundToInt()) }
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(model.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                Muted("$worth", style = MaterialTheme.typography.bodyMedium)
+                IconButton(onClick = { save(wishes.copy(models = wishes.models.filterNot { it.name == model.name })) }) {
+                    Icon(Icons.Outlined.Close, "Remove ${model.name}")
+                }
+            }
+            Slider(
+                worth.toFloat(), { worth = it.roundToInt() }, valueRange = 0f..100f,
+                onValueChangeFinished = { save(wishes.copy(models = wishes.models.map { m -> if (m.name == model.name) m.copy(worth = worth / 100.0) else m })) },
+            )
+            Muted(model.words.joinToString(" · "))
+        }
+    }
+    var draft by remember { mutableStateOf("") }
+    OutlinedTextField(
+        draft, { draft = it }, Modifier.fillMaxWidth(),
+        placeholder = { Text("Model, as ads write it") }, singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            draft.trim().takeIf { it.isNotEmpty() && wishes.models.none { m -> m.name.equals(it, ignoreCase = true) } }?.let { name ->
+                // A new model is named in its ads the way it was typed, and starts as a good one.
+                save(wishes.copy(models = wishes.models + ModelWish(name, listOf(name.lowercase()), 0.8)))
+            }
+            draft = ""
+        }),
+    )
+    Muted("Price")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        EuroField(wishes.idealPriceEur, "Fits fully up to", Modifier.weight(1f)) { save(wishes.copy(idealPriceEur = it)) }
+        Text("to")
+        EuroField(wishes.maxPriceEur, "Fits not at all above", Modifier.weight(1f)) { save(wishes.copy(maxPriceEur = it)) }
+        Text("€")
+    }
+    Muted("Rules it out")
+    WordList(wishes.ruledOutWords, "Word", onRemove = { save(wishes.copy(ruledOutWords = wishes.ruledOutWords - it)) },
+        onAdd = { save(wishes.copy(ruledOutWords = wishes.ruledOutWords + it)) })
+    Muted("Better with")
+    WordList(wishes.plusWords, "Word", onRemove = { save(wishes.copy(plusWords = wishes.plusWords - it)) },
+        onAdd = { save(wishes.copy(plusWords = wishes.plusWords + it)) })
+}
+
+/** A whole-euro amount, saved on Done; empty clears it. */
+@Composable
+private fun EuroField(eur: Int?, label: String, modifier: Modifier, onSet: (Int?) -> Unit) {
+    var draft by remember(eur) { mutableStateOf(eur?.toString().orEmpty()) }
+    OutlinedTextField(
+        draft, { draft = it.filter(Char::isDigit) }, modifier,
+        placeholder = { Text(label) }, singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onSet(draft.toIntOrNull()?.takeIf { it > 0 }) }),
+    )
+}
+
 /** What one saved search does on its own: whether it looks again in the background, and which finds
  *  are worth a notification. */
 @Composable
@@ -326,9 +394,14 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
             }
         }
     }
+    // A search for a thing is weighed by what makes a good one; a vehicle search by its criteria.
+    if (!state.open.view.isCar) {
+        HorizontalDivider(color = arbay.line)
+        WishesEditor(bookmark.searchQuery.productWishes ?: ProductWishes()) { session.products.setProductWishes(bookmark, it) }
+    }
     HorizontalDivider(color = arbay.line)
     Text("Tell me when a find is", style = MaterialTheme.typography.titleMedium)
-    // A fit is weighed from a vehicle search's wishes; other searches have none to weigh.
+    // A fit is weighed from a search's wishes; a search with none has nothing to weigh.
     if (bookmark.searchQuery.weighsAFit) {
         val fit = bookmark.fitAlert
         // Dragged here and saved where the thumb is let go, as the free-item score is.
