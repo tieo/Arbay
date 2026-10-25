@@ -1012,6 +1012,23 @@ object RelevanceFilter {
         return wantedOrJobAd.containsMatchIn(listing.title)
     }
 
+    // Several vehicles at one price for all of them, said only in the text: a Kleinanzeigen "VW
+    // Crafter" at 27,000 € read "2 FAHRZEUGE ZUM SONDERPREIS ... Beide Fahrzeuge zusammen".
+    private val severalVehicles = Regex(
+        """\b(zwei|drei|vier|beide|[2-9])\s+(fahrzeuge|transporter|autos|wagen|busse)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val onePriceForAll = Regex(
+        """\b(paketpreis|nur\s+zusammen|zusammen\s+(zu|für|fuer)|als\s+paket)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Whether an ad's text sells several vehicles at the one price it asks. */
+    fun sellsSeveralVehiclesAtOnePrice(listing: Listing): Boolean {
+        val text = listing.description ?: return false
+        return severalVehicles.containsMatchIn(text) && onePriceForAll.containsMatchIn(text)
+    }
+
     /**
      * Whether the search is a part number and nothing else: written in digits, seven at least, with
      * no more than a letter or two among them ("16131179011", "16 13 1 179 011", "A9018900065").

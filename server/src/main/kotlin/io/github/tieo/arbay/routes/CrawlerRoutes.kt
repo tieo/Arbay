@@ -304,12 +304,15 @@ private suspend fun carPostFilter(
         CarFilterEngine.trimLine(listing)?.let { RelevanceFilter.blockedWord(listing.copy(title = it), asked) }
             ?.let { word -> listing to word }
     }
-    val blockedIds = blocked.mapTo(HashSet()) { it.first.id }
+    // Only a page says an ad sells several vehicles for its one price.
+    val several = afterDetail.kept.filter { listing -> blocked.none { it.first.id == listing.id } && RelevanceFilter.sellsSeveralVehiclesAtOnePrice(listing) }
+    val blockedIds = blocked.mapTo(HashSet()) { it.first.id } + several.map { it.id }
     // What the criteria removed, named by the criterion that removed it — both passes, since a
     // listing can fail on its card and another only once its own page has been read.
     val dropped = (droppedOnCard + afterDetail.dropped).map { (listing, criterion) ->
         DroppedListing(listing, DropReason.VEHICLE_CRITERIA, criterion)
-    } + blocked.map { (listing, word) -> DroppedListing(listing, DropReason.BLOCKED_WORD, word) }
+    } + blocked.map { (listing, word) -> DroppedListing(listing, DropReason.BLOCKED_WORD, word) } +
+        several.map { DroppedListing(it, DropReason.NOT_A_SINGLE_OFFER) }
     // A free-form ideal-car description ranks (not filters) the survivors by local semantic
     // similarity, so the best matches surface first. Skipped when none was given.
     val filtered = filters.idealDescription?.takeIf { it.isNotBlank() }

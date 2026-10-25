@@ -1722,4 +1722,16 @@ class RelevanceFilterTest {
         ))
         assertEquals(2, results.size, results.joinToString { it.title })
     }
+
+    @Test
+    fun `an ad selling two vehicles at one price says so only in its text`() {
+        val bundle = listing("VW Crafter", 27_000_00).copy(description =
+            "**TOP-ANGEBOT – 2 FAHRZEUGE ZUM SONDERPREIS!** Zwei Fahrzeuge zum unschlagbaren Paketpreis. " +
+                "Beide Fahrzeuge zusammen zu einem besonders günstigen Preis!")
+        assertTrue(RelevanceFilter.sellsSeveralVehiclesAtOnePrice(bundle))
+        val dealer = listing("VW Crafter", 27_000_00).copy(description =
+            "Wir haben 2 Fahrzeuge dieses Typs auf Lager. Assistenzpaket, im Paket enthalten: Kamera. Gesamtpreis inkl. Überführung.")
+        assertFalse(RelevanceFilter.sellsSeveralVehiclesAtOnePrice(dealer))
+        assertFalse(RelevanceFilter.sellsSeveralVehiclesAtOnePrice(listing("VW Crafter")))
+    }
 }
