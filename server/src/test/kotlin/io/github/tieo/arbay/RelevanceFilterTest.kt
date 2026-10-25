@@ -782,6 +782,20 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a count still counts the word typed after it when the market rarely writes that word`() {
+        // The web, live, for "yottamaster 4 bay": a shop's page listed twenty unrelated products,
+        // so "bay" was no longer required, and the 4 was then held to "yottamaster 4" written
+        // together. Both real enclosures were thrown out.
+        val junk = (1..20).map { listing("Faltbarer Kleiderschrank Organizer Modell $it") }
+        val kept = search("yottamaster 4 bay", junk + listOf(
+            listing("Yottamaster Y-Focus 4 Bay External Hard Drive Enclosure"),
+            listing("Yottamaster Y-Pioneer 4 Bay External Hard Drive Enclosure"),
+            listing("YOTTAMASTER Superspeed USB 3.1 PCI-Express Card"),
+        )).map { it.title }
+        assertEquals(listOf("Yottamaster Y-Focus 4 Bay External Hard Drive Enclosure", "Yottamaster Y-Pioneer 4 Bay External Hard Drive Enclosure"), kept.sorted())
+    }
+
+    @Test
     fun `a compound written as its last part is found beside the other words`() {
         // Kleinanzeigen, live: "Verkaufe Icy Box 4 Bay Gehäuse" is a 4-bay drive enclosure.
         val kept = search("4 bay festplattengehäuse", listOf(

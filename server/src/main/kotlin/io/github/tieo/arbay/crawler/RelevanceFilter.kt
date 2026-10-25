@@ -21,6 +21,9 @@ object RelevanceFilter {
          *  for. Read once off every word typed: the words a listing is held to are narrowed to
          *  those its market writes, and a unit typed apart ("256 GB") is rarely written apart. */
         val asksForASize: Boolean = false,
+        /** Every word of the search as typed, in its order, whichever of them a listing is held
+         *  to: what a number counts is the word typed after it, required or not. */
+        val typed: List<String> = emptyList(),
     )
 
     /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
@@ -39,6 +42,7 @@ object RelevanceFilter {
             negativeTokens = query.excludeKeywords.map { normalizeToken(it) },
             orGroups = orGroups,
             asksForASize = (positiveTokens + orGroups.flatten()).any { namesAUnit(it) },
+            typed = positiveTokens,
         )
     }
 
@@ -373,7 +377,10 @@ object RelevanceFilter {
             // A number can count the word after it rather than name a generation of the word
             // before it: in "Yottamaster 4 Bay" the 4 is how many bays, and a title saying
             // "Yottamaster DF4RU3 4-Bay" has it where it belongs.
-            val countsTheNext = isNumericBigram && tokens.getOrNull(i + 2)?.let { c ->
+            // Read off the search as typed: a market that rarely writes "bay" is not held to it,
+            // and the 4 still counts the bays.
+            val typedOrder = parsed.typed.ifEmpty { tokens }
+            val countsTheNext = isNumericBigram && typedOrder.getOrNull(typedOrder.indexOf(b) + 1)?.takeIf { typedOrder.indexOf(b) >= 0 }?.let { c ->
                 c.any { it.isLetter() } && (sp.contains(" $b $c ") || sp.endsWith(" $b $c"))
             } == true
             if ((isNumericBigram && !countsTheNext) || isQualifierBigram) {

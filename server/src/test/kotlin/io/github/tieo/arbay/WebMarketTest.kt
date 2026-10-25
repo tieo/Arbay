@@ -106,4 +106,11 @@ class WebMarketTest {
         assertEquals("ebay", WebCrawler.siteName("ebay.com.au"))
         assertEquals("alternate", WebCrawler.siteName("alternate.de"))
     }
+
+    @Test
+    fun `markup in a product's name is not part of its title`() {
+        val html = """<script type="application/ld+json">{"@type":"Product","name":"4 Bay Festplattengeh<wbr/>äuse 2,5&#034; 3,5&#034;",
+            "offers":{"price":"64.99","priceCurrency":"EUR"}}</script>"""
+        assertEquals("4 Bay Festplattengehäuse 2,5\" 3,5\"", ProductPages.offers(html, "https://a.example/p").single().title)
+    }
 }

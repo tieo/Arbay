@@ -115,7 +115,8 @@ object ProductPages {
     private val PRODUCT_TYPES = setOf("Product", "IndividualProduct", "Vehicle", "Car", "SomeProducts")
 
     private fun offerOf(product: JsonObject, pageUrl: String): PageOffer? {
-        val title = product.str("name")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // Some shops put markup into the name ("Festplattengeh<wbr/>äuse", "2,5&#034;").
+        val title = product.str("name")?.let { Jsoup.parse(it).text() }?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val offers = when (val o = product["offers"]) {
             is JsonObject -> listOf(o)
             is JsonArray -> o.mapNotNull { it as? JsonObject }

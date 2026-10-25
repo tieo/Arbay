@@ -47,10 +47,17 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         log.info("Web: '{}' reads {} pages", words, found.size)
         val now = Clock.System.now()
         val gate = Semaphore(PARALLEL_PAGES)
-        val offers = coroutineScope {
-            found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words) }.orEmpty() } } }.awaitAll()
-        }.flatten()
-        return offers.filter { it.inStock }.map { o ->
+        val pages = coroutineScope {
+            found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words) } ?: Page(Outcome.TIMED_OUT) } } }.awaitAll()
+        }
+        val outcomes = pages.groupingBy { it.outcome }.eachCount()
+        log.info("Web: '{}' read {} pages: {} with offers, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
+            words, pages.size, outcomes[Outcome.OFFERS] ?: 0, outcomes[Outcome.NOTHING_SOLD] ?: 0, outcomes[Outcome.UNREADABLE] ?: 0,
+            outcomes[Outcome.BLOCKED] ?: 0, outcomes[Outcome.TIMED_OUT] ?: 0, pages.sumOf { it.offers.size })
+        val offers = pages.flatMap { it.offers }
+        // A page pointing at an offer on a market Arbay crawls itself (a comparison site linking
+        // an eBay item) is that market's offer, which its own crawler reads better.
+        return offers.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -101,7 +108,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
             return emptyList()
         }
-        val links = (resultLinks(html, engine.host) + resolved(redirectsIn(html, engine), engine)).distinct()
+        // An ad goes through an ad network's redirect before the shop; it is followed like the
+        // engine's own.
+        val (ads, direct) = resultLinks(html, engine.host).partition { url -> AD_HOSTS.any { it in SiteRecipes.domainOf(url) } }
+        val links = (direct + resolved(redirectsIn(html, engine) + ads, engine)).distinct()
         if (links.isEmpty()) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
         }
@@ -126,7 +136,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                             .getOrNull() ?: return@withPermit null
                         url = ProductPages.absolute(next, url)
                         val host = SiteRecipes.domainOf(url)
-                        if (engine.host !in host && ENGINE_HOSTS.none { it in host } && "doubleclick" !in host) return@withPermit url
+                        if (engine.host !in host && ENGINE_HOSTS.none { it in host } && AD_HOSTS.none { it in host }) return@withPermit url
                     }
                     null
                 }
@@ -148,15 +158,18 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     private fun siteSearches(words: String): List<String> =
         SiteRecipes.all().mapNotNull { r -> r.searchUrl?.replace("{q}", words.encodeUrl()) }.distinct()
 
+    private enum class Outcome { OFFERS, NOTHING_SOLD, UNREADABLE, BLOCKED, TIMED_OUT }
+    private class Page(val outcome: Outcome, val offers: List<PageOffer> = emptyList())
+
     /** The offers on one page; a page that sells something and yields none is reported. */
-    private suspend fun read(url: String, words: String): List<PageOffer> {
+    private suspend fun read(url: String, words: String): Page {
         val domain = SiteRecipes.domainOf(url)
         val recipe = SiteRecipes.forUrl(url)
         val html = try {
             fetchWithFallback(client, url, "Web $domain", browserOnly = recipe?.render == true)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("Web: {} not fetched: {}", url, e.message?.take(80))
-            return emptyList()
+            return Page(Outcome.BLOCKED)
         }
         val offers = try {
             recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) }
@@ -164,10 +177,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
             emptyList()
         }
-        if (offers.isEmpty() && ProductPages.sellsSomething(html)) {
-            SiteGaps.record(domain, url, words, html, recipeBroken = recipe != null)
-        }
-        return offers
+        if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
+        if (!ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
+        SiteGaps.record(domain, url, words, html, recipeBroken = recipe != null)
+        return Page(Outcome.UNREADABLE)
     }
 
     /** Whether the page belongs to a market Arbay crawls by its own crawler, which reads it better. */
@@ -233,6 +246,9 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 else -> href
             }
         }
+
+        /** Ad networks an engine's ads pass through on their way to the shop. */
+        private val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.")
 
         private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org")
 
