@@ -136,6 +136,7 @@ object SiteRecipes {
     fun read(recipe: SiteRecipe, html: String, pageUrl: String): List<PageOffer> {
         if (recipe.pattern != null) return readPattern(recipe, recipe.pattern, html, pageUrl)
         if (recipe.items != null) return readJson(recipe, recipe.items, html, pageUrl)
+        if (recipe.title.isBlank() || recipe.price.isBlank()) return emptyList()
         val doc = Jsoup.parse(html, pageUrl)
         val boxes: List<Element> = if (recipe.item == null) listOf(doc.body() ?: return emptyList()) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }

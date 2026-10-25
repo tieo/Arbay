@@ -70,8 +70,9 @@ fun Route.webRoutes() {
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()
             if (recipe.domain.isBlank()) throw BadRequestException("A recipe needs its domain")
-            if (recipe.pattern == null && (recipe.title.isBlank() || recipe.price.isBlank()))
-                throw BadRequestException("A recipe needs its title and price, or a pattern")
+            // A recipe of a search alone is a site whose structured data reads it, searched directly.
+            if (recipe.pattern == null && recipe.searchUrl == null && (recipe.title.isBlank() || recipe.price.isBlank()))
+                throw BadRequestException("A recipe needs its title and price, a pattern, or a searchUrl")
             recipe.urlPattern?.let { runCatching { Regex(it) }.getOrElse { throw BadRequestException("urlPattern is not a regex: ${it.message}") } }
             recipe.pattern?.let { p ->
                 runCatching { Regex(p) }.getOrElse { throw BadRequestException("pattern is not a regex: ${it.message}") }

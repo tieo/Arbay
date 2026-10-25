@@ -329,4 +329,22 @@ class WebMarketTest {
         assertEquals(Money(1785, Currency.EUR), offer.price)
         assertEquals(Money(8568, Currency.EUR), offer.rentRates.single().price)
     }
+
+    @Test
+    fun `a newsletter page whose amounts are a voucher and a minimum order sells nothing`() {
+        // conrad.de's newsletter signup.
+        assertFalse(ProductPages.sellsSomething("""<body><h1>Conrad Business Newsletter abonnieren</h1><p>Exklusiver 10 €-Gutschein ab 100€ Einkaufswert</p>
+            <p>Mindesteinkaufswert: 100€ zzgl. MwSt.</p><p>Versandkostenfrei ab 100,00 €</p><a>Jetzt kaufen</a></body>"""))
+    }
+
+    @Test
+    fun `a price the shop states without VAT is read with it`() {
+        // conrad.de serves business prices: the Renkforce 4-Bay at 109,24 € net, 129,99 € at voelkner.
+        val html = """<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Renkforce RF-6647598 Festplattengehäuse 4 Bay",
+            "offers":{"@type":"Offer","availability":"https://schema.org/InStock",
+              "priceSpecification":{"@type":"PriceSpecification","price":109.24,"priceCurrency":"EUR","valueAddedTaxIncluded":false}}}</script>"""
+        // The net price was rounded from the gross one, so the gross read back is a cent off at most.
+        assertEquals(Money(13000, Currency.EUR), ProductPages.offers(html, "https://www.conrad.de/de/p/renkforce-3323799.html").single().price)
+        assertEquals(Money(13109, Currency.EUR), ProductPages.offers(html, "https://www.conrad.at/de/p/renkforce-3323799.html").single().price)
+    }
 }

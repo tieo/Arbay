@@ -52,7 +52,9 @@ a recipe to some of the site's pages, so a site can have one recipe for its prod
 for its search results. `render: true` reads the page in a browser, for a site whose offers only
 appear once its scripts ran. `searchUrl` is the site's own search with `{q}` for the words: from
 then on the site is searched directly on every web search, so set it wherever the site has a
-search.
+search. A site its structured data already reads gets a recipe of `domain` and `searchUrl` alone.
+A price its structured data marks `"valueAddedTaxIncluded": false` (Conrad's business prices) is
+read with the VAT of the shop's country added.
 
 Where no element holds one whole offer (pearl's lists split each product across rows, and state
 it whole only in a script), `pattern` replaces `item`, `title`, `price`, `link` and `image`: a

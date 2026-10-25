@@ -66,9 +66,11 @@ object ProductPages {
         val text = doc.body()?.text()?.lowercase() ?: return false
         // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
         // shop, its articles too.
-        // Nor is what delivery costs: "Versandkosten ab 5,95 €" stands in a shop's header.
+        // Nor is what delivery costs, a voucher or an order's minimum: "Versandkosten ab 5,95 €"
+        // stands in a shop's header, "10 €-Gutschein ab 100 € Einkaufswert" on its newsletter page.
         return PRICE_IN_TEXT.findAll(text).any { m ->
-            m.value.any { it in '1'..'9' } && !SHIPPING_BEFORE.containsMatchIn(text.substring(maxOf(0, m.range.first - 30), m.range.first))
+            m.value.any { it in '1'..'9' } && !NOT_A_PRICE.containsMatchIn(
+                text.substring(maxOf(0, m.range.first - 30), m.range.first) + " " + text.substring(m.range.last + 1, minOf(text.length, m.range.last + 16)))
         } && BUY_WORDS.containsMatchIn(text)
     }
 
@@ -106,7 +108,7 @@ object ProductPages {
         return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
     }
 
-    private val SHIPPING_BEFORE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione""")
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher""")
 
     private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog")
 
@@ -350,7 +352,7 @@ object ProductPages {
             inner.ifEmpty { listOf(o) }
         }
         // The cheapest offer that can be bought; the cheapest of all where none says.
-        val priced = offers.mapNotNull { o -> priceOf(o)?.let { o to it } }
+        val priced = offers.mapNotNull { o -> priceOf(o)?.let { o to withVatWhereNet(o, it, pageUrl) } }
         val (offer, price) = priced.filter { (o, _) -> inStock(o) }.minByOrNull { it.second.amount }
             ?: priced.minByOrNull { it.second.amount } ?: return null
         return PageOffer(
@@ -376,6 +378,26 @@ object ProductPages {
             ?: return null
         return amount(raw, currency)?.takeIf { it.amount > 0 }
     }
+
+    /**
+     * A price as a person pays it, where the shop states it without VAT: Conrad serves its
+     * business prices to a client it does not know, `"valueAddedTaxIncluded": false`, the
+     * Renkforce 4-Bay at 109,24 € that costs 129,99 €. The VAT of the shop's country is added.
+     */
+    private fun withVatWhereNet(offer: JsonObject, price: Money, pageUrl: String): Money {
+        val net = (listOf(offer) + specifications(offer["priceSpecification"])).any { o ->
+            (o["valueAddedTaxIncluded"] as? JsonPrimitive)?.contentOrNull?.lowercase() == "false"
+        }
+        if (!net) return price
+        val rate = VAT_BY_COUNTRY[SiteRecipes.domainOf(pageUrl).substringAfterLast('.')] ?: VAT_BY_COUNTRY.getValue("de")
+        return price.copy(amount = Math.round(price.amount * (1 + rate)))
+    }
+
+    /** Standard VAT by a shop's country ending. */
+    private val VAT_BY_COUNTRY = mapOf(
+        "de" to 0.19, "at" to 0.20, "ch" to 0.081, "fr" to 0.20, "it" to 0.22, "es" to 0.21, "nl" to 0.21,
+        "be" to 0.21, "pl" to 0.23, "cz" to 0.21, "dk" to 0.25, "se" to 0.25, "uk" to 0.20, "lu" to 0.17,
+    )
 
     private fun specifications(e: JsonElement?): List<JsonObject> = when (e) {
         is JsonObject -> listOf(e)
