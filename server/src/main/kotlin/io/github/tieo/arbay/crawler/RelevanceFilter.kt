@@ -1317,7 +1317,7 @@ object RelevanceFilter {
                 // A number led by a zero is a part number's revision ("1FM101-002", "718292-001"),
                 // shared by drives of every kind; no product is named 002.
                 (if (w.all { it.isDigit() }) w.length in 3..4 && w[0] != '0' else w.length >= 3) &&
-                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) &&
+                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) && !countWord.matches(w) &&
                 // A number with its unit after it is a size written apart: "2000go" reads as
                 // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
                 // M.2 drive, because most listings saying 2000 GB were.
@@ -1326,6 +1326,10 @@ object RelevanceFilter {
     }
 
     private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
+
+    /** How many of a thing, or how big, which names no product: a "3er-Set" of brushes is not a
+     *  "3er-Parkettschleifset", and "120x40" mm says nothing of what it measures. */
+    private val countWord = Regex("""\d+(er|x|fach|teilig|tlg|stk|stueck|pcs|pc|pack|pk|set)|\d+x\d+""")
 
     /** Words a title states a spec in rather than names a product with: a card length, a bus
      *  generation, a lane count. A SATA drive is "M.2 2280" as much as an NVMe one is. */

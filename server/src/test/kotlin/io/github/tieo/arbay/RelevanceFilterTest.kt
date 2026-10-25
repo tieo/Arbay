@@ -1321,6 +1321,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a count in a title names no product that other listings could vouch for`() {
+        // A live "parkettschleifmaschine mieten" answer: rental sets titled "3er-Parkett…" and
+        // "4er-Parkett…" made the "3er" of a brush set read as a parquet sander's model.
+        val listings = listOf(
+            listing("3er-Parkettschleifmaschine - 3 Maschinen im Paket mieten", price = 8235),
+            listing("3er-Parkettschleifset EASY mieten", price = 8235),
+            listing("3er Parkettschleifmaschine Set mieten Berlin", price = 7000),
+            listing("PEARL 3er-Set Hartborsten-Fugen- & Eckenbürsten, Spaltenreinigung, 120x40 mm", price = 399),
+            listing("Parkettschleifmaschine mieten", price = 5600),
+        )
+        val kept = search("parkettschleifmaschine mieten", listings).map { it.title }
+        assertTrue(kept.none { it.startsWith("PEARL") }, kept.toString())
+    }
+
+    @Test
     fun `a bay is what shops count as fach, Einschübe, Schächte or slots`() {
         val listings = listOf(
             listing("Xystec 4-fach-Festplatten-Gehäuse für 3.5\" & 2.5\" (SATA), RAID, USB", price = 14999),
