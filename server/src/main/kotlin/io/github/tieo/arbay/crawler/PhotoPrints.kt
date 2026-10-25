@@ -79,6 +79,8 @@ object PhotoPrints {
         val lon: Double? = null,
         val seller: String? = null,
         val prints: List<Long> = emptyList(),
+        /** The market's number for a dealer's account, where the card gives one. */
+        val dealer: String? = null,
     )
 
     private val file = DataDir.file("photo_prints.json")
@@ -174,6 +176,7 @@ object PhotoPrints {
             id = listing.id, url = listing.url,
             place = location?.city ?: location?.raw, lat = at?.first, lon = at?.second,
             seller = listing.seller?.name, prints = (known?.prints.orEmpty() + prints).distinct(),
+            dealer = listing.dealerAccount,
         )
         synchronized(this) { put(entry); dirty = true }
         return true
@@ -225,9 +228,40 @@ object PhotoPrints {
         val same = shared.filter { (id, n) -> n >= 8 - SAME_PHOTO_BITS && id != own.id }.keys
             .mapNotNull { entries[it] }
             .filter { e -> e.prints.any { java.lang.Long.bitCount(it xor print) <= SAME_PHOTO_BITS } }
+        if (isTemplate(same + own)) return emptyList()
         val elsewhere = same.filter { apart(it, own) }
         return if (elsewhere.distinctBy { placeKey(it) }.size > STOCK_PLACES) emptyList() else elsewhere
     }
+
+    /**
+     * Whether the ads showing one photo include two ads of one dealer's account that are otherwise
+     * different: then the photo is that dealer's own closing picture, put under every van it sells,
+     * and tells nothing about where a van's photos came from. Live, 2026-10-25: Autohaus Seitz put
+     * its last photos under a Memmingen Crafter of 2021, another of 2021 and a Kempten one of 2023,
+     * and each read as a likely scam made of the others' photos. The same van posted twice shares
+     * most of its photos, and stays evidence; so does a private account, where a stolen photo under
+     * two of its ads is how a copier works.
+     */
+    internal fun isTemplate(holders: List<Entry>, dealerOf: (Entry) -> String? = ::dealerOf): Boolean =
+        holders.groupBy(dealerOf).any { (account, ads) ->
+            account != null && ads.indices.any { i ->
+                (i + 1 until ads.size).any { j -> sharedPhotos(ads[i], ads[j]) * 2 < minOf(ads[i].prints.size, ads[j].prints.size) }
+            }
+        }
+
+    private fun sharedPhotos(a: Entry, b: Entry) =
+        a.prints.count { p -> b.prints.any { java.lang.Long.bitCount(it xor p) <= SAME_PHOTO_BITS } }
+
+    /** The dealer's account of an entry, from its archived listing where it was printed without one. */
+    private fun dealerOf(e: Entry): String? =
+        e.dealer ?: io.github.tieo.arbay.repo.ListingArchive.get(e.id)?.dealerAccount
+
+    private val Listing.dealerAccount: String?
+        get() = seller?.takeIf { it.type == io.github.tieo.arbay.model.SellerType.BUSINESS }?.id
+
+    /** A place as a town's name: TruckScout24 places once came with the reader's distance
+     *  attached ("Berlin 524 km"), which no gazetteer knows. */
+    internal fun placeName(place: String) = place.replace(Regex("""\s+\d[\d.,]*\s*km\b.*$""", RegexOption.IGNORE_CASE), "").trim()
 
     private fun placeKey(e: Entry) = e.place?.lowercase()?.let { Regex("""\p{L}+""").find(it)?.value }
 
@@ -254,7 +288,7 @@ object PhotoPrints {
         b: Entry,
         where: (Entry) -> Pair<Double, Double>? = { e ->
             io.github.tieo.arbay.repo.ListingArchive.get(e.id)?.let(::whereIs)
-                ?: e.place?.let { runCatching { Geocoder.resolve(null, null, it) }.getOrNull() }
+                ?: e.place?.let { runCatching { Geocoder.resolve(null, null, placeName(it)) }.getOrNull() }
         },
     ): Boolean {
         val pointA = if (a.lat != null && a.lon != null) a.lat to a.lon else where(a)
@@ -284,7 +318,7 @@ object PhotoPrints {
                 synchronized(this@PhotoPrints) {
                     if (listing.id !in entries) put(Entry(
                         listing.id, listing.url, location?.city ?: location?.raw, location?.latitude, location?.longitude,
-                        listing.seller?.name, listOf(print),
+                        listing.seller?.name, listOf(print), listing.dealerAccount,
                     ))
                 }
                 printed++

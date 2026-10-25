@@ -145,4 +145,28 @@ class PhotoPrintsTest {
         assertFalse(PhotoPrints.apart(autoscout, mobile) { null })
         assertTrue(PhotoPrints.apart(autoscout.copy(lat = null, lon = null, place = null), mobile.copy(lat = null, lon = null, place = null)) { null })
     }
+
+    @Test
+    fun `a dealer's closing photos under its different vans are no copies, a van posted twice is`() {
+        // Autohaus Seitz: two Memmingen Crafters share only their last photos, which a Kempten
+        // Crafter of the same group ends with too.
+        val banner = 0x0F0F_3C3C_5A5A_6969L
+        fun own(n: Int, seed: Long) = List(n) { seed * 1_000_003L + it * 7_919L }
+        val first = PhotoPrints.Entry("KLEINANZEIGEN:3476770115", "https://ka/1", prints = own(16, 1) + banner)
+        val second = PhotoPrints.Entry("KLEINANZEIGEN:3476770238", "https://ka/2", prints = own(15, 2) + banner)
+        val kempten = PhotoPrints.Entry("KLEINANZEIGEN:3549095646", "https://ka/3", prints = own(4, 3) + banner)
+        val dealers = mapOf(first.id to "86544847", second.id to "86544847", kempten.id to "86544924")
+        assertTrue(PhotoPrints.isTemplate(listOf(first, second, kempten)) { dealers[it.id] })
+        // Without a dealer's account, a photo under two ads stays evidence.
+        assertFalse(PhotoPrints.isTemplate(listOf(first, second, kempten)) { null })
+        // One van posted twice shares its photos and says nothing about templates.
+        val repost = first.copy(id = "KLEINANZEIGEN:9", prints = first.prints.drop(1))
+        assertFalse(PhotoPrints.isTemplate(listOf(first, repost, kempten)) { if (it == kempten) "86544924" else "86544847" })
+    }
+
+    @Test
+    fun `a place with the reader's distance attached is the town`() {
+        assertEquals("Berlin", PhotoPrints.placeName("Berlin 524 km"))
+        assertEquals("Halle (Saale)", PhotoPrints.placeName("Halle (Saale)"))
+    }
 }
