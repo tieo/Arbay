@@ -456,4 +456,12 @@ class WebMarketTest {
             <body><h1>Problem mit externer HDD</h1><p>Fantec QB-35US3-6G ab € 117,63 (2023) | Preisvergleich Geizhals</p><a>Jetzt kaufen</a></body>"""
         assertFalse(ProductPages.sellsSomething(html))
     }
+
+    @Test
+    fun `a French word ending in eur before a number is no price`() {
+        // ldlc.pro's sheet of a product no longer sold: "largeur 268 mm", "ordinateur 1 x USB".
+        assertFalse(ProductPages.sellsSomething("""<body><h1>ICY BOX IB-3805-C31 · Occasion</h1><p>Ce produit n'est plus en vente</p>
+            <p>Interface avec l'ordinateur 1 x USB 3.1 Type C</p><p>Largeur 268 mm Hauteur 150 mm</p><a>Panier</a><a>Acheter</a></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><span>EUR 129,99</span><a>Jetzt kaufen</a></body>"))
+    }
 }

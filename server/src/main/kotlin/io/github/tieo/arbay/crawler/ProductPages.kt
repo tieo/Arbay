@@ -117,7 +117,8 @@ object ProductPages {
     private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog",
         "DiscussionForumPosting", "SocialMediaPosting", "QAPage", "Question")
 
-    private val PRICE_IN_TEXT = Regex("""(€|eur|chf|£)\s?\d|\d[\d.,]*\s?(€|eur\b|chf\b)""")
+    // The currency's word stands alone: French "largeur 268 mm" and "ordinateur 1 x USB" are no prices.
+    private val PRICE_IN_TEXT = Regex("""(€|\beur|\bchf|£)\s?\d|\d[\d.,]*\s?(€|\beur\b|\bchf\b)""")
     private val BUY_WORDS = Regex(
         """warenkorb|in den korb|add to (cart|basket)|jetzt kaufen|sofort.?kaufen|kaufen\b|bestellen|""" +
             """buy now|in den einkaufswagen|panier|carrello|cesta|winkelwagen|zur kasse|""" +

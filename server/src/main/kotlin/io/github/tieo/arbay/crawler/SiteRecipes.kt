@@ -288,7 +288,7 @@ object SiteRecipes {
         return WITH_CURRENCY.find(text)?.value ?: text
     }
 
-    private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|eur\b|chf\b|£|\$)|(€|eur|chf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
+    private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|\beur\b|\bchf\b|£|\$)|(€|\beur|\bchf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")
 
     private fun withVat(recipe: SiteRecipe, price: io.github.tieo.arbay.model.Money, doc: Element, pageUrl: String) =
