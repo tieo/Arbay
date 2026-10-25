@@ -205,6 +205,11 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     }
                 }
 
+                page.conditionNote?.takeIf { it.isNotBlank() }?.let {
+                    Gap(4.dp)
+                    SectionTitle("Condition")
+                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                }
                 page.description?.takeIf { it.isNotBlank() }?.let {
                     Gap(4.dp)
                     SectionTitle("Description")

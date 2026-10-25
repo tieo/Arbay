@@ -61,6 +61,10 @@ object DetailCache {
         return e.detail
     }
 
+    /** How long ago [listingId]'s page was read, in milliseconds; null where it was not. */
+    fun ageMs(listingId: String): Long? =
+        entries[listingId]?.let { Clock.System.now().toEpochMilliseconds() - it.storedAtMs }
+
     fun remove(listingId: String) {
         if (entries.remove(listingId) != null) schedulePersist()
     }

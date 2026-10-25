@@ -17,6 +17,10 @@ import org.jsoup.Jsoup
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 
 class EbayDeCrawler(
@@ -54,6 +58,9 @@ class EbayDeCrawler(
             available = stock?.first,
             moreAvailable = stock?.second ?: false,
             photos = ebayGallery(doc),
+            shipping = ebayItemShipping(html),
+            conditionNote = ebaySellerNotes(html),
+            coupon = ebayCoupon(html),
         ).takeIf { it.vehicle != null || it.location != null || it.description != null || it.photos.isNotEmpty() }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         null
@@ -852,3 +859,108 @@ internal fun ebayStock(text: String, html: String = ""): Pair<Int, Boolean>? {
     }
     return null
 }
+
+/**
+ * What sending it costs, from the shipping options eBay's item page carries in its data: the
+ * cheapest service reaching Germany, and whether it can be collected. A card often states nothing:
+ * RaidSonic's "ICY BOX IB-3740-C31 B-Ware" carried no shipping line while its page charged 5,95 €
+ * for DHL. Null where the page states no service that reaches Germany and no collection.
+ */
+internal fun ebayItemShipping(html: String): Shipping? {
+    val options = ebayJsonAfter(html, "\"shippingOptions\":") as? JsonArray ?: return null
+    val services = options.flatMap { o -> (o as? JsonObject)?.get("shippingServices") as? JsonArray ?: JsonArray(emptyList()) }
+        .mapNotNull { it as? JsonObject }
+    val (collected, sent) = services.partition { s ->
+        s["shippingServiceCode"]?.jsonPrimitive?.contentOrNull?.contains("pickup", ignoreCase = true) == true
+    }
+    val costs = sent.filter { s ->
+        (s["shipToLocations"] as? JsonArray).orEmpty().any { it.jsonPrimitive.contentOrNull?.uppercase() in REACHES_GERMANY }
+    }.mapNotNull { s ->
+        val price = ((s["shippingCost"] as? JsonObject)?.get("original") as? JsonObject) ?: return@mapNotNull null
+        val amount = price["amount"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return@mapNotNull null
+        val currency = price["currency"]?.jsonPrimitive?.contentOrNull?.let { c -> Currency.entries.firstOrNull { it.name == c } } ?: return@mapNotNull null
+        Money(kotlin.math.round(amount * 100).toLong(), currency)
+    }
+    if (costs.isEmpty() && collected.isEmpty()) return null
+    val cheapest = costs.minByOrNull { it.amount }
+    return Shipping(cost = cheapest, free = cheapest?.amount == 0L, pickup = collected.isNotEmpty(), available = cheapest != null)
+}
+
+/** The places a shipping service names that include a buyer in Germany. */
+private val REACHES_GERMANY = setOf("DEU", "DE", "EUROPE", "EU", "WORLDWIDE")
+
+/**
+ * What the seller says of the item's condition, which eBay keeps apart from the description
+ * ("Hinweise des Verkäufers": "Kundenretoure Zustand: Gebrauchsspuren können Kratzer vorhanden
+ * sein - Zubehör: vollständig, Eventuell keine OVP"). The page shows it cut short; its data holds it
+ * whole, in whichever language the site runs in.
+ */
+internal fun ebaySellerNotes(html: String): String? {
+    var from = 0
+    while (true) {
+        val at = html.indexOf("\"sellerNotes\":", from).takeIf { it >= 0 } ?: return null
+        from = at + 1
+        val values = (ebayJsonAfter(html.substring(at), "\"sellerNotes\":") as? JsonObject)?.get("values") ?: continue
+        val text = textSpans(values).joinToString("").trim().trim('“', '”', '"', '„').trim()
+        if (text.isNotBlank()) return text
+    }
+}
+
+private fun textSpans(element: JsonElement): List<String> = when (element) {
+    is JsonObject -> if (element["_type"]?.jsonPrimitive?.contentOrNull == "TextSpan") listOfNotNull(element["text"]?.jsonPrimitive?.contentOrNull)
+        // The "Mehr anzeigen"/"Weniger anzeigen" toggle and its help link are the page's, not the seller's.
+        else element.filterKeys { it != "expandCollapseControls" && it != "action" }.values.flatMap(::textSpans)
+    is JsonArray -> element.flatMap(::textSpans)
+    else -> emptyList()
+}
+
+/** The first JSON array or object written right after [key] in a page's embedded data, read to
+ *  its end. The same key also names the page's translated labels ("shippingOptions":"Versandoptionen"),
+ *  which are passed over. */
+internal fun ebayJsonAfter(html: String, key: String): JsonElement? {
+    var from = 0
+    while (true) {
+        val start = html.indexOf(key, from).takeIf { it >= 0 }?.let { it + key.length } ?: return null
+        from = start
+        val open = html.getOrNull(start)?.takeIf { it == '[' || it == '{' } ?: continue
+        val close = if (open == '[') ']' else '}'
+        var depth = 0
+        var inString = false
+        var i = start
+        while (i < html.length) {
+            val c = html[i]
+            if (inString) {
+                if (c == '\\') i++ else if (c == '"') inString = false
+            } else when (c) {
+                '"' -> inString = true
+                open -> depth++
+                close -> if (--depth == 0) {
+                    runCatching { Json.parseToJsonElement(html.substring(start, i + 1)) }.getOrNull()?.let { return it }
+                    break
+                }
+            }
+            i++
+        }
+    }
+}
+
+/**
+ * The price an item page gives with a coupon code, and the code: RaidSonic's 125 € B-Ware box read
+ * "€120,00 mit Gutscheincode" beside "4% Rabatt mit Code PERFECTEBAY4, Endet am 26. Oct., Max.
+ * € 50,00". Null where the page offers none.
+ */
+internal fun ebayCoupon(html: String): Coupon? {
+    val discounted = (ebayJsonAfter(html, "\"priceDiscount\":") as? JsonObject)?.get("value") as? JsonObject ?: return null
+    val amount = discounted["value"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return null
+    val currency = discounted["currency"]?.jsonPrimitive?.contentOrNull?.let { c -> Currency.entries.firstOrNull { it.name == c } } ?: return null
+    val terms = (ebayJsonAfter(html, "\"COUPON\":") as? JsonObject)?.get("sections")?.let { sections ->
+        (sections as? JsonArray)?.flatMap { section -> ((section as? JsonObject)?.get("dataItems") as? JsonArray).orEmpty() }
+            ?.map { item -> textSpans(item).filterNot { it.isBlank() }.joinToString("").trim() }
+            ?.map { it.removeSuffix("Weitere Details").trim() }
+            ?.filter { it.isNotBlank() }
+            ?.joinToString(", ")
+    }?.takeIf { it.isNotBlank() }
+    val code = terms?.let { Regex("""(?i)\bcode\s+([A-Z0-9]{4,})""").find(it)?.groupValues?.get(1) }
+    return Coupon(price = Money(kotlin.math.round(amount * 100).toLong(), currency), code = code, terms = terms)
+}
+

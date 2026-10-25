@@ -520,6 +520,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                     io.github.tieo.arbay.crawler.StealthBrowserClient.fetchRendered(url, marker, waitSeconds = 40)
                 }
+            } else if (call.request.queryParameters["ebay"]?.toBooleanStrictOrNull() == true) {
+                // eBay answers only the warm Chrome its crawler reads through; any other browser
+                // gets its error page.
+                val marker = call.request.queryParameters["wait"] ?: "x-item-title"
+                io.github.tieo.arbay.crawler.EbayBrowser.get(url, listOf(marker))?.html
+                    ?: "The eBay browser did not answer"
             } else if (call.request.queryParameters["browser"]?.toBooleanStrictOrNull() == true) {
                 io.github.tieo.arbay.crawler.fetchWithFallback(
                     io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
@@ -543,7 +549,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
         // scrolled past.
         // What the ad's own words say over the market's boxes: sold broken, or only for collection.
         fun ListingDetail.withBrokenRead() = copy(
-            soldBroken = io.github.tieo.arbay.model.Condition.soldAsDefective("", description),
+            soldBroken = io.github.tieo.arbay.model.Condition.soldAsDefective(conditionNote.orEmpty(), description),
             shipping = shipping.asTheTextSays(description),
         )
 
@@ -570,6 +576,12 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
                 // eBay's description was read from its page only later; a page read before is read again.
                 ?.takeUnless { platform.name.startsWith("EBAY") && it.description == null }
+                // eBay's shipping and coupons were read from its page later still, and a coupon runs
+                // for days ("Endet am 26. Oct."), so an eBay page is read again after a day.
+                ?.takeUnless {
+                    platform.name.startsWith("EBAY") &&
+                        (it.shipping == null || (io.github.tieo.arbay.crawler.DetailCache.ageMs(id) ?: 0) > EBAY_PAGE_FRESH_MS)
+                }
                 // So is the page of a market whose gallery is read, where it was read before galleries were.
                 ?.takeUnless { crawler is io.github.tieo.arbay.crawler.ReadsGalleries && it.photos.isEmpty() }
                 ?.let { return@get call.respond(it.priced()) }
@@ -1225,3 +1237,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
     }
 }
+
+/** How long an eBay item page as read stands for the offer: its coupons run for days. */
+private const val EBAY_PAGE_FRESH_MS = 24L * 60 * 60 * 1000

@@ -4,11 +4,13 @@ import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.Condition
+import io.github.tieo.arbay.model.Coupon
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SellerProfile
+import io.github.tieo.arbay.model.Shipping
 import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.VehicleInfo
 import io.github.tieo.arbay.model.importVat
@@ -23,7 +25,20 @@ import kotlin.math.round
  * place stands in where the card had none. [stock] is how many the page says are left ("3 left",
  * "over 10 left", "sold out"), where it says.
  */
-data class OfferReading(val vehicle: VehicleInfo?, val description: String?, val place: Location?, val stock: String? = null, val soldBroken: Boolean = false, val seller: SellerProfile? = null)
+data class OfferReading(
+    val vehicle: VehicleInfo?,
+    val description: String?,
+    val place: Location?,
+    val stock: String? = null,
+    val soldBroken: Boolean = false,
+    val seller: SellerProfile? = null,
+    /** What it costs to send, from the page where the page states it: eBay's card often says nothing. */
+    val shipping: Shipping? = null,
+    /** The seller's own words on its condition, where the market keeps them apart from the description. */
+    val conditionNote: String? = null,
+    /** A code the page offers a lower price for. */
+    val coupon: Coupon? = null,
+)
 
 fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     val vehicle = fromItsPage?.vehicle?.let { page ->
@@ -31,7 +46,11 @@ fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     } ?: listing.vehicle
     val description = fromItsPage?.description?.takeIf { it.length > (listing.description?.length ?: 0) } ?: listing.description
     val stock = fromItsPage?.available?.let { n -> if (fromItsPage.moreAvailable) "over $n left" else if (n == 0) "sold out" else if (n == 1) "last one" else "$n left" }
-    return OfferReading(vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true, fromItsPage?.seller)
+    val shipping = fromItsPage?.shipping?.takeIf { it.cost != null || it.free || !it.available } ?: listing.shipping
+    return OfferReading(
+        vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true, fromItsPage?.seller,
+        shipping = shipping, conditionNote = fromItsPage?.conditionNote, coupon = fromItsPage?.coupon,
+    )
 }
 
 /** The short facts of an offer, each one a few words: condition, how many are left, place,
@@ -40,6 +59,7 @@ fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     // An ad whose text says it is sold broken reads as one sold for parts, as the card would
     // have said had it carried the text.
     (if (page.soldBroken) Condition.PARTS_ONLY else listing.condition)?.let { add(it.label) }
+    page.coupon?.let { c -> add(c.price.format() + (c.code?.let { " with code $it" } ?: " with a coupon")) }
     page.stock?.let(::add)
     page.place?.let { loc -> listOfNotNull(loc.zip, loc.city ?: loc.raw ?: loc.country).joinToString(" ").takeIf { it.isNotBlank() }?.let(::add) }
     listing.distanceKm?.let { add("${it.toInt()} km away") }
@@ -47,8 +67,9 @@ fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     if (listing.saleType == SaleType.AUCTION) add(listing.bidCount?.let { "$it bids" } ?: "auction")
     if (listing.saleType == SaleType.RENT) add("for rent")
     listing.rentRates.forEach { add("${it.period.label} ${it.price.format()}") }
-    listing.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
-    if (listing.shipping?.free == true) add("free delivery")
+    page.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
+    if (page.shipping?.free == true) add("free delivery")
+    if (page.shipping?.available == false && page.shipping.pickup) add("collection only")
     if (listing.negotiable) add("negotiable")
     val profile = page.seller
     if (profile != null) add(profile.fact)

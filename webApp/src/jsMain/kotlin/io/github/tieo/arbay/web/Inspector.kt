@@ -537,6 +537,10 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             }
         }
 
+        page.conditionNote?.takeIf { it.isNotBlank() }?.let {
+            H3 { Text("Condition") }
+            P({ classes("description") }) { Text(it) }
+        }
         description?.takeIf { it.isNotBlank() }?.let {
             H3 { Text("Description") }
             P({ classes("description") }) { Text(it) }

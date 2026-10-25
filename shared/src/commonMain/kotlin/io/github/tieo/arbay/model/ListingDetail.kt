@@ -38,9 +38,28 @@ data class ListingDetail(
      *  [moreAvailable] where it says only that there are more than that ("Mehr als 10 verfügbar"). */
     val available: Int? = null,
     val moreAvailable: Boolean = false,
+    /** What the seller says of the item's condition where the market keeps it apart from the
+     *  description: eBay's "Hinweise des Verkäufers" ("Kundenretoure, Gebrauchsspuren, Zubehör
+     *  vollständig"). */
+    val conditionNote: String? = null,
+    /** A discount the page offers on top of the price, such as an eBay coupon code. */
+    val coupon: Coupon? = null,
     /** Whether the seller's text says it is sold broken ("läuft nicht an", "als defekt verkauft"),
      *  which a card without the text cannot show. */
     val soldBroken: Boolean = false,
+)
+
+/**
+ * A discount an offer's page gives with a code: eBay's "€120,00 mit Gutscheincode" under a 125 €
+ * price, from "4% Rabatt mit Code PERFECTEBAY4, Endet am 26. Oct., Max. € 50,00".
+ */
+@Serializable
+data class Coupon(
+    /** What the thing costs with the code. */
+    val price: Money,
+    val code: String? = null,
+    /** The page's own words on the discount and its limits. */
+    val terms: String? = null,
 )
 
 /**
