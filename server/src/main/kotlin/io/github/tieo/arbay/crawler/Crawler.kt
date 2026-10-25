@@ -61,8 +61,10 @@ suspend fun Crawler.searchAllSpellings(
 
     // What is actually searched: the words picked by hand, always, and the ones the rules accept
     // only when this search asked for that. Each costs a crawl, which is why neither happens by
-    // itself.
-    val picked = query.reach.extraTerms
+    // itself. The search's other names for the thing are picked by hand as well: a market only
+    // answers what it is asked, and "Lägler Bandschleifmaschine" saved with "lägler elf" never
+    // showed the ELF that Kleinanzeigen lists under that name alone.
+    val picked = (query.reach.extraTerms + query.aliases)
         .map { it.trim() }
         .filter { it.isNotBlank() && !it.equals(query.text, ignoreCase = true) }
         .map { QueryVariants.Candidate(it, sharesStem = true) }
@@ -127,7 +129,7 @@ suspend fun Crawler.searchAllSpellings(
             term = candidate.term,
             worthTrying = true,
             why = when (candidate.term) {
-                in query.reach.extraTerms -> "picked by hand"
+                in query.reach.extraTerms, in query.aliases -> "picked by hand"
                 in described -> "how the listings carrying this number describe the part"
                 in renamed -> RENAMED
                 in shorter.map { it.term } -> "the compound written shorter, for a thin answer"
