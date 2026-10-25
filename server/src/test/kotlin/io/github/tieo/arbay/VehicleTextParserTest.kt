@@ -122,6 +122,20 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun aPrivateSellersManualAndASpeedAreRead() {
+        // Kleinanzeigen 3257554282: a manual camper that passed an automatic search as a 30 km van.
+        val v = VehicleTextParser.parse(
+            "MAN TGE 3.140 / L2H2, 6 Gang Schalter – Bj. 2018 Crafter\nAuffahr- Warn Sensor mit auto. Bremsen bis 30kmH",
+        )!!
+        assertEquals(Transmission.MANUAL, v.gearbox)
+        assertNull(v.mileageKm)
+        assertNull(VehicleTextParser.parse("Crafter, Tempomat ab 30 km/h")?.mileageKm)
+        assertEquals(Transmission.MANUAL, VehicleTextParser.parse("Crafter 6-Gang-Schaltung")!!.gearbox)
+        assertEquals(Transmission.AUTOMATIC, VehicleTextParser.parse("Crafter 8-Gang-Automatik")!!.gearbox)
+        assertEquals(85000, VehicleTextParser.parse("Crafter 2019, 85.000 km, TÜV neu")!!.mileageKm)
+    }
+
+    @Test
     fun realElectricStillDetected() {
         assertEquals(Fuel.ELECTRIC, VehicleTextParser.parse("VW e-Crafter Elektro 2021")!!.fuel)
     }

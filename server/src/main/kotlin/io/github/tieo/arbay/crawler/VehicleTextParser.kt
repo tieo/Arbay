@@ -22,9 +22,10 @@ object VehicleTextParser {
     // The figure ends in a digit and stays on one line: "Baujahr September 2018.\n\nKilometerleistung
     // 144.035" is a year closing one sentence and a label opening the next, not 2018 km. A separator
     // only splits thousands, three digits each, and the figure starts where a number starts:
-    // "BJ 2018 185000Km" is a year and 185,000 km, not one figure of 2,018,185,000.
+    // "BJ 2018 185000Km" is a year and 185,000 km, not one figure of 2,018,185,000. A speed is no
+    // distance: "Bremsen bis 30kmH" made a camper a 30 km van.
     private val mileageRegex = Regex(
-        """(?<![0-9])([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{2,})[ \u00a0]?(?:km|kilometer)""",
+        """(?<![0-9])([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{2,})[ \u00a0]?(?:km|kilometer)(?![ \u00a0]?/[ \u00a0]?h\b|h\b)""",
         RegexOption.IGNORE_CASE,
     )
     // The label written before the figure: "Kilometerleistung 144.035", "Laufleistung: 98.000",
@@ -383,7 +384,11 @@ object VehicleTextParser {
 
     // A gearbox named by its gears alone, as VW's equipment lists name the manual ("Getriebe
     // 6-Gang", "6-Gang-Getriebe"); an automatic's line says so ("8-Gang-Automatik"), read first.
-    private val gearsOnly = Regex("""\bgetriebe:?\s*\d-gang\b|\b\d-gang-?getriebe\b""", RegexOption.IGNORE_CASE)
+    // A private seller names it by how it shifts: "6 Gang Schalter", "6-Gang-Schaltung".
+    private val gearsOnly = Regex(
+        """\bgetriebe:?\s*\d-gang\b|\b\d-gang-?getriebe\b|\b\d[\s-]*gang[\s-]*schalt|\bhandschalt""",
+        RegexOption.IGNORE_CASE,
+    )
 
     private fun parseGearbox(text: String): Transmission? {
         gearboxField.find(text)?.groupValues?.get(1)?.lowercase()?.let {
