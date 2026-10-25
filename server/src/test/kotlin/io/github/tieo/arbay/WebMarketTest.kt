@@ -365,4 +365,20 @@ class WebMarketTest {
             SiteRecipes.remove("conrad-test.de")
         }
     }
+
+    @Test
+    fun `a JSON recipe keeps the entries a nested filter picks and reads a link off an embedded parent`() {
+        // gerach-gruppe.de's WordPress API: machines priced per working day are kept, the weekly one is not;
+        // a machine's own address is dead, its parent (the category page) is not.
+        val body = """[{"title":{"rendered":"&#8211; Parkettschleifmaschine"},"acf":{"mietpreis_einheit":"Arbeitstag","anzahl_1":{"preis_brutto":39.98}},
+              "_embedded":{"up":[{"link":"https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/"}]}},
+            {"title":{"rendered":"Bautrockner"},"acf":{"mietpreis_einheit":"Preis/Woche","anzahl_1":{"preis_brutto":99.0}},"_embedded":{"up":[{"link":"https://x"}]}},
+            {"title":{"rendered":"Rüttelplatte"},"acf":{"mietpreis_einheit":"Kalendertage","anzahl_1":{"preis_brutto":45.0}},"_embedded":{"up":[{"link":"https://www.gerach-gruppe.de/mietpark/verdichtung/"}]}}]"""
+        val recipe = SiteRecipe(domain = "gerach-gruppe.de", items = "[acf.mietpreis_einheit=Arbeitstag|Arbeitstage|Kalendertag|Kalendertage]",
+            title = "title.rendered", price = "acf.anzahl_1.preis_brutto", link = "_embedded.up.link", rentPer = io.github.tieo.arbay.model.RentPeriod.DAY)
+        val offers = SiteRecipes.read(recipe, body, "https://www.gerach-gruppe.de/wp-json/wp/v2/produkte?search=parkett&_embed=up")
+        assertEquals(listOf("Parkettschleifmaschine", "Rüttelplatte"), offers.map { it.title })
+        assertEquals(Money(3998, Currency.EUR), offers[0].price)
+        assertEquals("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/", offers[0].url)
+    }
 }

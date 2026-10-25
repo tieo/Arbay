@@ -200,7 +200,8 @@ object SiteRecipes {
         fun text(e: JsonElement, path: String?) = path?.let { at(e, it) as? JsonPrimitive }?.contentOrNull?.takeIf { it.isNotBlank() }
         fun amount(e: JsonElement, path: String) = text(e, path)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }
         return list.mapNotNull { item ->
-            val title = text(item, recipe.title)?.let { Jsoup.parse(it).text().trim() }?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            // WordPress titles a page's variant "– Parkettschleifmaschine"; the dash is no part of its name.
+            val title = text(item, recipe.title)?.let { Jsoup.parse(it).text().trim().trimStart('–', '—', '-', '|', ' ') }?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val price = amount(item, recipe.price) ?: return@mapNotNull null
             val link = text(item, recipe.link)?.let { l -> if (l.startsWith("/") && recipe.linkBase != null) recipe.linkBase.trimEnd('/') + l else ProductPages.absolute(l, pageUrl) }
             PageOffer(
@@ -214,19 +215,32 @@ object SiteRecipes {
         }.distinctBy { it.url to it.title }
     }
 
-    /** What a path names inside [root]: `a.b[k=v,k2=v2].c`, a list without a filter giving its first entry. */
-    private fun at(root: JsonElement, path: String): JsonElement? =
-        Regex("""([^.\[]+)(?:\[([^\]]*)])?""").findAll(path).fold(root as JsonElement?) { e, seg ->
+    /**
+     * What a path names inside [root]: `a.b[k=v,k2=v2].c`. A filter's key may itself be a path
+     * and its value alternatives (`[acf.mietpreis_einheit=Arbeitstag|Kalendertage]`). A filtered
+     * list at the path's end gives every entry that matches, one inside it the first; a list
+     * without a filter inside the path gives its first entry.
+     */
+    private fun at(root: JsonElement, path: String): JsonElement? {
+        // A path filtering the answer itself, where the answer is a list: "[k=v]".
+        if (path.startsWith("[")) return at(JsonObject(mapOf(ROOT to root)), ROOT + path)
+        val segments = Regex("""([^.\[]+)(?:\[([^\]]*)])?""").findAll(path).toList()
+        return segments.foldIndexed(root as JsonElement?) { i, e, seg ->
             val next = (e as? JsonObject)?.get(seg.groupValues[1]) ?: return null
-            val filter = seg.groupValues[2].split(',').filter { '=' in it }.map { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
+            val filter = seg.groupValues[2].split(',').filter { '=' in it }
+                .map { it.substringBefore('=').trim() to it.substringAfter('=').split('|').map(String::trim).toSet() }
+            val last = i == segments.lastIndex
+            fun matches(entry: JsonElement) = filter.all { (k, vs) -> (at(entry, k) as? JsonPrimitive)?.contentOrNull in vs }
             when {
-                next is JsonArray && filter.isNotEmpty() -> next.firstOrNull { entry ->
-                    filter.all { (k, v) -> ((entry as? JsonObject)?.get(k) as? JsonPrimitive)?.contentOrNull == v }
-                }
-                next is JsonArray && seg.groupValues[2].isEmpty() && seg.range.last < path.length - 1 -> next.firstOrNull()
+                next is JsonArray && filter.isNotEmpty() && last -> JsonArray(next.filter(::matches))
+                next is JsonArray && filter.isNotEmpty() -> next.firstOrNull(::matches)
+                next is JsonArray && !last -> next.firstOrNull()
                 else -> next
             }
         }
+    }
+
+    private const val ROOT = "\u0000"
 
     /** A string as a script wrote it: its backslash escapes and HTML entities read. */
     private fun unescaped(raw: String): String =
