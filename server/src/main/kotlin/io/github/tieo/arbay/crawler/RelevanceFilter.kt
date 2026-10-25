@@ -1413,7 +1413,9 @@ object RelevanceFilter {
             .filter { it.length >= 3 }
         if (tokens.isEmpty() || listings.size < MIN_ANSWER_TO_JUDGE) return null
         val matching = listings.count { listing ->
-            val text = "${listing.title} ${listing.description ?: ""}".lowercase().replace(NON_ALNUM, "")
+            // Folded like the search's words were, umlauts included: a title's "Festplattengehäuse"
+            // is the search's "festplattengehaeuse".
+            val text = normalize("${listing.title} ${listing.description ?: ""}".lowercase()).replace(NON_ALNUM, "")
             tokens.any { text.contains(it) }
         }
         if (matching > 0) return null

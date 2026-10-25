@@ -278,6 +278,23 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a word with an umlaut counts as carried back`() {
+        // The web market, live, for "hiyori aoi488 festplattengehäuse": 84 enclosures from other
+        // makers, every one titled "Festplattengehäuse", thrown away whole as an answer to some
+        // other question because the search's word was folded to "festplattengehaeuse" and the
+        // titles were not.
+        val enclosures = listOf(
+            listing("Festplattengehäuse ICY-BOX IB-377-C31"),
+            listing("Festplattengehäuse LogiLink UA0439"),
+            listing("Laufwerksgehäuse Festplattenadapter Speichergehäuse"),
+            listing("Externes Festplattengehäuse 2,5 Zoll"),
+            listing("4 Bay Festplattengehäuse USB-C"),
+        )
+        val query = SearchQuery(text = "hiyori aoi488 festplattengehäuse", category = MarketGroup.GENERAL)
+        assertNull(RelevanceFilter.answeredSomethingElse(enclosures, query))
+    }
+
+    @Test
     fun `a market that mostly missed still keeps what it matched`() {
         // eBay Italy, live, for "2tb m.2 ssd": a hundred drives of every size, a few of them the
         // one asked for. It ran the search, so its answer is filtered listing by listing.
