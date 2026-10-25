@@ -73,6 +73,9 @@ data class SiteRecipe(
      *  (maschinen-humpert.de: "*Preisangabe netto zzgl. MwSt."): Germany's 19 % is added, so the
      *  price is what a person pays. */
     val pricesNet: Boolean = false,
+    /** Where a site shows net prices only on some pages, what marks them: Conrad shows a client
+     *  it does not know its business prices, its header then reading "Geschäftskunde". */
+    val netWhere: String? = null,
     /** A rental's other rates, each a selector inside the offer's box, by the time they pay for. */
     val rates: Map<RentPeriod, String> = emptyMap(),
     /** Whether the offers only appear once a browser has run the page's scripts. */
@@ -127,9 +130,18 @@ object SiteRecipes {
      * everything read on it, its structured data included. Mietluke states each machine's day
      * rate as a schema.org Offer price, which read alone was a purchase at 45 €.
      */
-    fun asTheSiteDeals(url: String, offers: List<PageOffer>): List<PageOffer> {
-        val rentPer = synchronized(this) { recipes[domainOf(url)] }?.firstNotNullOfOrNull { it.rentPer } ?: return offers
-        return offers.map { if (it.rentPer == null) it.copy(rentPer = rentPer) else it }
+    fun asTheSiteDeals(url: String, html: String, offers: List<PageOffer>): List<PageOffer> {
+        val site = synchronized(this) { recipes[domainOf(url)] } ?: return offers
+        val rentPer = site.firstNotNullOfOrNull { it.rentPer }
+        // A site showing net prices: what its structured data left unsaid gets the VAT a person pays.
+        val net = site.firstOrNull { it.pricesNet }?.let { r -> r.netWhere == null || Jsoup.parse(html).selectFirst(r.netWhere) != null } == true
+        return offers.map { o ->
+            o.copy(
+                rentPer = o.rentPer ?: rentPer,
+                price = if (net && !o.vatStated) ProductPages.withVat(o.price, url) else o.price,
+                vatStated = o.vatStated || net,
+            )
+        }
     }
 
     /** The offers [recipe] reads off a page. */
@@ -144,7 +156,7 @@ object SiteRecipes {
             val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
             val currency = pageCurrency ?: ProductPages.currencyOf(priceText.filter { !it.isDigit() && it !in ".,  " }) ?: Currency.EUR
-            val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 }?.let { withVat(recipe, it) } ?: return@mapNotNull null
+            val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 }?.let { withVat(recipe, it, doc, pageUrl) } ?: return@mapNotNull null
             PageOffer(
                 title = title,
                 price = price,
@@ -153,8 +165,9 @@ object SiteRecipes {
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
                 rentPer = recipe.rentPer,
+                vatStated = true,
                 rentRates = recipe.rates.mapNotNull { (period, spec) ->
-                    amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, withVat(recipe, it)) }
+                    amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, withVat(recipe, it, doc, pageUrl)) }
                 },
             )
         }.distinctBy { it.url to it.title }
@@ -235,10 +248,8 @@ object SiteRecipes {
     private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|eur\b|chf\b|£|\$)|(€|eur|chf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")
 
-    private fun withVat(recipe: SiteRecipe, price: io.github.tieo.arbay.model.Money) =
-        if (recipe.pricesNet) price.copy(amount = Math.round(price.amount * (1 + GERMAN_VAT))) else price
-
-    private const val GERMAN_VAT = 0.19
+    private fun withVat(recipe: SiteRecipe, price: io.github.tieo.arbay.model.Money, doc: Element, pageUrl: String) =
+        if (recipe.pricesNet && (recipe.netWhere == null || doc.selectFirst(recipe.netWhere) != null)) ProductPages.withVat(price, pageUrl) else price
 
     /** A link as a page hides it: mietmeile.de writes each ad's address base64-encoded into a
      *  `data-submit` its script follows. A value that decodes to an address is that address. */

@@ -257,7 +257,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     }
 
     private fun offersOn(recipe: SiteRecipe?, html: String, url: String): List<PageOffer> = try {
-        SiteRecipes.asTheSiteDeals(url, recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) })
+        SiteRecipes.asTheSiteDeals(url, html, recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) })
     } catch (e: Exception) {
         log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
         emptyList()

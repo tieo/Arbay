@@ -1,5 +1,6 @@
 package io.github.tieo.arbay
 
+import io.github.tieo.arbay.crawler.PageOffer
 import io.github.tieo.arbay.crawler.ProductPages
 import io.github.tieo.arbay.crawler.SiteRecipe
 import io.github.tieo.arbay.crawler.SiteRecipes
@@ -346,5 +347,22 @@ class WebMarketTest {
         // The net price was rounded from the gross one, so the gross read back is a cent off at most.
         assertEquals(Money(13000, Currency.EUR), ProductPages.offers(html, "https://www.conrad.de/de/p/renkforce-3323799.html").single().price)
         assertEquals(Money(13109, Currency.EUR), ProductPages.offers(html, "https://www.conrad.at/de/p/renkforce-3323799.html").single().price)
+    }
+
+    @Test
+    fun `a site showing net prices on pages it marks gets VAT on what its structured data left unsaid`() {
+        SiteRecipes.put(SiteRecipe(domain = "conrad-test.de", searchUrl = "https://www.conrad-test.de/s?q={q}", pricesNet = true,
+            netWhere = "[data-e2e=header-customerTypeLabel]:matchesOwn(Geschäftskunde)"))
+        try {
+            val offer = PageOffer("Renkforce RF-6647598 4 Bay", Money(10924, Currency.EUR), "https://www.conrad-test.de/p/1")
+            val business = """<span data-e2e="header-customerTypeLabel">Geschäftskunde</span>"""
+            val url = "https://www.conrad-test.de/de/search.html?search=4+bay"
+            assertEquals(Money(13000, Currency.EUR), SiteRecipes.asTheSiteDeals(url, business, listOf(offer)).single().price)
+            assertEquals(Money(10924, Currency.EUR), SiteRecipes.asTheSiteDeals(url, """<span data-e2e="header-customerTypeLabel">Privatkunde</span>""", listOf(offer)).single().price)
+            // A price whose own data said whether VAT is in it is left as it was read.
+            assertEquals(Money(12999, Currency.EUR), SiteRecipes.asTheSiteDeals(url, business, listOf(offer.copy(price = Money(12999, Currency.EUR), vatStated = true))).single().price)
+        } finally {
+            SiteRecipes.remove("conrad-test.de")
+        }
     }
 }

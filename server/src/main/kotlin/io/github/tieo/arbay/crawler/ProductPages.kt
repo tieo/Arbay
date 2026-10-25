@@ -33,6 +33,9 @@ data class PageOffer(
     /** For something hired out rather than sold, the stretch of time [price] pays for. */
     val rentPer: io.github.tieo.arbay.model.RentPeriod? = null,
     val rentRates: List<io.github.tieo.arbay.model.RentRate> = emptyList(),
+    /** Whether what was read settled the price's VAT: structured data stating it, or a recipe,
+     *  which knows its site. A site that shows net prices adds VAT to the others only. */
+    val vatStated: Boolean = false,
 )
 
 /**
@@ -353,6 +356,7 @@ object ProductPages {
         }
         // The cheapest offer that can be bought; the cheapest of all where none says.
         val priced = offers.mapNotNull { o -> priceOf(o)?.let { o to withVatWhereNet(o, it, pageUrl) } }
+        val vatStated = offers.any { o -> (listOf(o) + specifications(o["priceSpecification"])).any { it["valueAddedTaxIncluded"] != null } }
         val (offer, price) = priced.filter { (o, _) -> inStock(o) }.minByOrNull { it.second.amount }
             ?: priced.minByOrNull { it.second.amount } ?: return null
         return PageOffer(
@@ -366,6 +370,7 @@ object ProductPages {
             gtin = listOf("gtin13", "gtin", "gtin14", "gtin12", "gtin8").firstNotNullOfOrNull { product.str(it) },
             mpn = product.str("mpn") ?: product.str("model"),
             seller = (offer["seller"] as? JsonObject)?.str("name"),
+            vatStated = vatStated,
         )
     }
 
@@ -389,6 +394,11 @@ object ProductPages {
             (o["valueAddedTaxIncluded"] as? JsonPrimitive)?.contentOrNull?.lowercase() == "false"
         }
         if (!net) return price
+        return withVat(price, pageUrl)
+    }
+
+    /** [price] with the standard VAT of the shop's country, read off its address's ending. */
+    internal fun withVat(price: Money, pageUrl: String): Money {
         val rate = VAT_BY_COUNTRY[SiteRecipes.domainOf(pageUrl).substringAfterLast('.')] ?: VAT_BY_COUNTRY.getValue("de")
         return price.copy(amount = Math.round(price.amount * (1 + rate)))
     }
