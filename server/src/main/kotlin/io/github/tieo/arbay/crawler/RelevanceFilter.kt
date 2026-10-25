@@ -881,6 +881,12 @@ object RelevanceFilter {
     private fun namesADrive(queryText: String, parsed: ParsedQuery): Boolean =
         askedSizes(parsed).isNotEmpty() || io.github.tieo.arbay.model.looksLikeADrive(queryText)
 
+    /** "Für" followed by a kind of drive rather than one drive: its size, its interface, or drives as such. */
+    private val forAnyDrive = Regex(
+        """^\s*(f(ü|ue)r|for|pour|per|para|voor)\s+(\d+\s*x\s*)?(\d[.,]5\s*("|''|zoll|inch|\b)|sata\b|hdds?\b|ssds?\b|festplatten\b|hard\s*(disk|drive)s?\b|disques?\b|m\.2\b|nvme\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val forWhat = Regex("""^\s*(f(ü|ue)r|for|pour|per|para|voor)\b""", RegexOption.IGNORE_CASE)
     private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
     private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
@@ -913,8 +919,11 @@ object RelevanceFilter {
         // A box for drives, sold for no drive in particular, is what a search naming no drive asks
         // for: "TerraMaster D4" is a four-bay enclosure, and every one of its listings calls itself
         // a "Festplattengehäuse". One said to be for something is still that something's accessory.
+        // "Für 3,5 Zoll SATA Festplatten" names every drive of a size, which is still none in particular:
+        // Amazon sells the ICY BOX IB-3640SU3 only as "4-fach Externes Festplattengehäuse für 3,5 Zoll SATA".
+        val after = listing.title.substring(match.range.last + 1)
         if (driveBox.containsMatchIn(match.value) && storageGear.containsMatchIn(listing.title) && !namesADrive(queryText, parsed) &&
-            !forWhat.containsMatchIn(listing.title.substring(match.range.last + 1))) return false
+            (!forWhat.containsMatchIn(after) || forAnyDrive.containsMatchIn(after))) return false
         val before = listing.title.take(match.range.first)
         // A board after the size is the board on offer unless the title calls it new: "256 GB
         // Bundle Neues Mainboard" is a repaired phone, "1,0TB SAMSUNG Momentus Platine" a drive's
@@ -1116,7 +1125,7 @@ object RelevanceFilter {
                 // as the E30's fuel breather cover.
                 namesOnePart && !isThePart(listing, partCode!!, shortPartCode, partDescriptions) -> DropReason.OFF_TARGET
                 namesOnePart -> null
-                namesOneModel && score(listing, asParsed) <= 0.0 && namesANeighbouringModel(listing.title, query.text) -> DropReason.OFF_TARGET
+                namesOneModel && score(listing, asParsed) <= 0.0 && namesAnotherModel(listing.title, query.text) -> DropReason.OFF_TARGET
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
@@ -1281,30 +1290,33 @@ object RelevanceFilter {
     }
 
     /**
-     * Whether [title] names a different model built from a piece of the one [typed]: Back Market
-     * answered "IB-3740-C31" with an I-Tec "C31HDMIDPDOCKPD" dock, its own search having matched the
-     * "C31", and Crucial's CT16G4SFD832A shares all but the size with the CT32G4SFD832A. A title
-     * word that is only a piece of the code ("IB-3740-C" written without its 31) is not another
-     * model; one that adds to a piece, or shares a long head or tail with the whole code, is.
+     * Whether [title] names a model of its own that is not the one [typed]. A market's own search
+     * matches a model code loosely, and where no listing of its answer prints the code nothing can
+     * be required of the titles: Back Market answered "IB-3740-C31" with an I-Tec "C31HDMIDPDOCKPD"
+     * dock, eBay answered "IB-3805-C31" with ICY BOX's IB-287-C31 and IB-1817M-C31 cases, and Amazon
+     * answered "IB-3640SU3" with an ORICO 6626C3-C dock and an HP PC with an i5-7400T. A title naming
+     * no model at all ("Crucial 32GB DDR4 3200 SO-DIMM") is still left to the market's search, and a
+     * code written shorter ("IB-3740-C" for the IB-3740-C31) is the same model.
      */
-    private fun namesANeighbouringModel(title: String, typed: String): Boolean {
+    private fun namesAnotherModel(title: String, typed: String): Boolean {
         val code = normalize(typed.lowercase()).replace(NON_ALNUM, "")
-        val pieces = normalize(typed.lowercase()).split(NON_ALNUM)
-            .filter { it.length >= 3 && it.any(Char::isDigit) && it != code }
-        // Every word with a digit, not only the ones [modelWords] takes for a name: a memory code
-        // begins with its size ("CT16G4…") and is a size there.
-        val words = normalize(title.lowercase()).split(NON_ALNUM).filter { it.length >= 3 && it.any(Char::isDigit) }
-        return words.any { w ->
-            w != code && code !in w && w !in pieces && (
-                pieces.any { it in w } ||
-                    (w.length >= NEIGHBOUR_SHARED && (pieces + code).any { c ->
-                        w.commonPrefixWith(c).length >= NEIGHBOUR_SHARED || w.commonSuffixWith(c).length >= NEIGHBOUR_SHARED
-                    })
-                )
-        }
+        return modelCodesIn(title).any { c -> c != code && !code.startsWith(c) && !c.startsWith(code) && code !in c }
     }
 
-    private const val NEIGHBOUR_SHARED = 5
+    /** The model codes a title prints: a word of letters and digits joined by hyphens ("IB-287-C31",
+     *  "6626C3-C") or written as one ("CT16G4SFD832A", "STKL2000400"), with two digits at least, and
+     *  not a spec written the same way ("DDR4-3200", "PC4-25600", "USB3-0"). */
+    private fun modelCodesIn(title: String): List<String> =
+        MODEL_CODE.findAll(title).map { it.value.lowercase().replace(NON_ALNUM, "") }
+            .filter { c ->
+                c.length >= 5 && c.count(Char::isDigit) >= 2 && c.any(Char::isLetter) &&
+                    !SPEC_CODE.containsMatchIn(c) && !isASize(c)
+            }.toList()
+
+    private val MODEL_CODE = Regex("""\b[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)+\b|\b(?=[\p{L}\p{N}]*\p{L})(?=[\p{L}\p{N}]*\p{N})[\p{L}\p{N}]{6,}\b""")
+
+    /** Words that state a spec in the shape of a model code: memory and bus generations, speeds. */
+    private val SPEC_CODE = Regex("""^(lp)?ddr\d|^pc\d|^cl\d|^\d+rx\d|^\d+pins?$|^usb|^sata|^pcie|^gen\d|^m2|^nvme|^wifi|^bt\d|^hdmi\d|^\d+(gb|tb|mb|mhz|ghz|mm|cm|w|v|mah)""")
 
     /** The words in a title that can name a model: a number of three or four digits not led by a zero ("990"), or
      *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a

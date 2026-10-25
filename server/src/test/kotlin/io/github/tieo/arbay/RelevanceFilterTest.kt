@@ -293,6 +293,22 @@ class RelevanceFilterTest {
         assertEquals(emptyList(), RelevanceFilter.filter(listOf(listing("Crucial CT16G4SFD832A 16GB DDR4 3200 SODIMM")), crucial))
         // A seller who never prints the number is left to the market's own search, as before.
         assertEquals(1, RelevanceFilter.filter(listOf(listing("Crucial 32GB DDR4 3200 SO-DIMM Arbeitsspeicher")), crucial).size)
+        assertEquals(1, RelevanceFilter.filter(listOf(listing("Crucial DDR4-3200 32GB SODIMM PC4-25600")), crucial).size)
+        // eBay, live, for "IB-3805-C31": the maker's other cases, each printing its own code.
+        val icyBox = SearchQuery(text = "IB-3805-C31", category = MarketGroup.GENERAL)
+        assertEquals(emptyList(), RelevanceFilter.filter(listOf(
+            listing("ICY BOX IB-287-C31 2,5\" HDD SSD Gehäuse USB 3.1 Typ-C IP66 Wasserdicht"),
+            listing("ICY BOX IB-1807MT-C31 Externes Gehäuse zu PCIe NVMe M.2 60959 B-Ware"),
+            listing("Seagate FireCuda Gaming HDD 2TB, Tragbare Externe Festplatte (STKL2000400)"),
+        ), icyBox))
+        // Amazon, live, for "IB-3640SU3": a dock and a PC, while the box itself is sold under a title
+        // printing no code at all.
+        val quad = SearchQuery(text = "IB-3640SU3", category = MarketGroup.GENERAL)
+        assertEquals(listOf("ICY BOX 4-fach Externes Festplattengehäuse für 3,5 Zoll SATA, USB 3.0 & eSATA"), RelevanceFilter.filter(listOf(
+            listing("ORICO Dual Festplatten Dockingstation, USB 3.2 Gen 2 (6626C3-C)"),
+            listing("HP EliteDesk 800 Mini Desktop PC Core i5-7400T 8GB 240GB"),
+            listing("ICY BOX 4-fach Externes Festplattengehäuse für 3,5 Zoll SATA, USB 3.0 & eSATA"),
+        ), quad).map { it.title })
     }
 
     @Test
