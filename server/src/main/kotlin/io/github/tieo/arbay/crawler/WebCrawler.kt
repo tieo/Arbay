@@ -39,11 +39,14 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val words = query.positiveText
-        // The engines' pages, then each learned site's own search: a site that has a recipe is
+        // The engines' pages and each learned site's own search: a site that has a recipe is
         // asked directly, so it is not left to whether an engine happens to list it.
         val listed = engineResults(words)
         if (listed.isEmpty()) throw CrawlerBlockedException("Web: no search engine answered", ErrorType.SERVICE_UNAVAILABLE_503)
-        val found = (listed + siteSearches(words)).distinct()
+        // Learned sites' own searches first: read by their exact recipes they win over the same
+        // offer an engine's page gives less exactly (gerach's card states its rate from three days
+        // on, its API one day's), and the page limit never cuts them.
+        val found = (siteSearches(words) + listed).distinct()
             .filterNot { coveredElsewhere(it) }
             .take(MAX_PAGES)
         log.info("Web: '{}' reads {} pages", words, found.size)
