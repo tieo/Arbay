@@ -7,9 +7,6 @@ import io.github.tieo.arbay.model.Seller
 import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Shipping
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.request.parameter
-import io.ktor.client.statement.bodyAsText
 import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -19,11 +16,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
 /**
@@ -37,21 +29,17 @@ import org.slf4j.LoggerFactory
  * search reads it. What the pages hold beyond the thing searched for is left to the relevance
  * filter, as on every other market.
  */
-class WebCrawler(
-    private val client: HttpClient,
-    private val searxUrl: String? = System.getenv("ARBAY_SEARXNG_URL"),
-) : Crawler {
+class WebCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.WEB
     private val log = LoggerFactory.getLogger(WebCrawler::class.java)
-    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val base = searxUrl?.trimEnd('/')
-            ?: throw CrawlerBlockedException("Web: no search engine configured (ARBAY_SEARXNG_URL)", ErrorType.SERVICE_UNAVAILABLE_503)
         val words = query.positiveText
-        // The engine's pages, then each learned site's own search: a site that has a recipe is
+        // The engines' pages, then each learned site's own search: a site that has a recipe is
         // asked directly, so it is not left to whether an engine happens to list it.
-        val found = (engineResults(base, words) + browserEngineResults(words) + siteSearches(words)).distinct()
+        val listed = engineResults(words)
+        if (listed.isEmpty()) throw CrawlerBlockedException("Web: no search engine answered", ErrorType.SERVICE_UNAVAILABLE_503)
+        val found = (listed + siteSearches(words)).distinct()
             .filterNot { coveredElsewhere(it) }
             .take(MAX_PAGES)
         log.info("Web: '{}' reads {} pages", words, found.size)
@@ -80,40 +68,43 @@ class WebCrawler(
         }.distinctBy { it.id }
     }
 
-    /** The result pages the engine lists for the words, and for them with a word to buy. */
-    private suspend fun engineResults(base: String, words: String): List<String> =
-        listOf(words, "$words kaufen").flatMap { q ->
-            (1..ENGINE_PAGES).flatMap { page ->
-                try {
-                    val body = client.get("$base/search") {
-                        parameter("q", q); parameter("format", "json"); parameter("language", "de-DE"); parameter("pageno", page)
-                    }.bodyAsText()
-                    val root = json.parseToJsonElement(body) as JsonObject
-                    (root["unresponsive_engines"] as? JsonArray)?.takeIf { it.isNotEmpty() }?.let {
-                        log.debug("Web: engines not answering for '{}': {}", q, it)
-                    }
-                    (root["results"] as? JsonArray).orEmpty().mapNotNull { r ->
-                        (r as? JsonObject)?.get("url")?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("http") }
-                    }
-                } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                    log.warn("Web: search engine failed for '{}': {}", q, e.message?.take(100))
-                    emptyList()
-                }
-            }
-        }
-
     /**
-     * The result pages of the engines that answer only a browser, read in [SearchBrowser]: from the
-     * server's address, Google and Qwant refuse SearXNG's plain requests with "access denied", Brave
-     * with "too many requests", and Startpage answers them with nothing.
+     * The pages every engine lists for the words. The engines that print their results as plain
+     * HTML (Bing, DuckDuckGo) are read over HTTP, the others in [SearchBrowser]: from the server's
+     * address Google and Qwant refuse anything that does not run their scripts, Brave throttles it
+     * and Startpage answers it with nothing. A browser engine's pages come one after another, so
+     * the plain ones are read meanwhile. An engine that lists nothing keeps its page as an error
+     * snapshot, since that is how a changed results page shows.
      */
-    private suspend fun browserEngineResults(words: String): List<String> = BROWSER_ENGINES.flatMap { engine ->
-        val page = SearchBrowser.get(engine.url(words), engine.markers, timeoutS = 25)
-        if (page == null || page.page != "content") {
-            log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page?.page ?: "browser did not answer")
-            return@flatMap emptyList()
+    private suspend fun engineResults(words: String): List<String> = coroutineScope {
+        val plain = ENGINES.filter { !it.browser }.map { e -> async { results(e, words) } }
+        val browser = ENGINES.filter { it.browser }.map { e -> results(e, words) }
+        (plain.awaitAll() + browser).flatten().distinct()
+    }
+
+    private suspend fun results(engine: Engine, words: String): List<String> {
+        val url = engine.url(words)
+        val html = try {
+            if (engine.browser) {
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25)
+                    ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
+                if (page.page != "content") {
+                    ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("no results page (${page.page})"), ErrorType.PARSE_ERROR, url, html = page.html, finalUrl = page.url)
+                    log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page.page)
+                    return emptyList()
+                }
+                page.html
+            } else fetchWithFallback(client, url, "Web ${engine.name}")
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
+            return emptyList()
         }
-        resultLinks(page.html, engine.host).also { log.debug("Web: {} listed {} pages for '{}'", engine.name, it.size, words) }
+        val links = resultLinks(html, engine.host)
+        if (links.isEmpty()) {
+            ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
+        }
+        log.info("Web: {} listed {} pages for '{}'", engine.name, links.size, words)
+        return links
     }
 
     private fun siteSearches(words: String): List<String> =
@@ -144,28 +135,31 @@ class WebCrawler(
     /** Whether the page belongs to a market Arbay crawls by its own crawler, which reads it better. */
     private fun coveredElsewhere(url: String): Boolean {
         val host = SiteRecipes.domainOf(url)
-        return host.isEmpty() || COVERED.any { host == it || host.endsWith(".$it") } ||
+        return host.isEmpty() || siteName(host) in COVERED ||
             SKIPPED.any { host == it || host.endsWith(".$it") } || url.substringBefore('?').lowercase().endsWith(".pdf")
     }
 
     private fun idOf(url: String, title: String): String =
         MessageDigest.getInstance("SHA-1").digest("$url|$title".toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
 
-    /** A search engine read in a browser: its results page for some words, and what shows it arrived. */
-    private class BrowserEngine(val name: String, val host: String, val markers: List<String>, val url: (String) -> String)
+    /** A search engine: its results page for some words, whether only a browser gets it, and what
+     *  shows that page arrived. */
+    private class Engine(val name: String, val host: String, val browser: Boolean, val markers: List<String>, val url: (String) -> String)
 
     companion object {
-        private val BROWSER_ENGINES = listOf(
-            BrowserEngine("Google", "google.", listOf("id=\"rso\"", "id=\"search\"")) { q ->
+        private val ENGINES = listOf(
+            Engine("Bing", "bing.", false, emptyList()) { q -> "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE&count=30" },
+            Engine("DuckDuckGo", "duckduckgo.", false, emptyList()) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
+            Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\"")) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
             },
-            BrowserEngine("Qwant", "qwant.", listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
+            Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
                 "https://www.qwant.com/?q=${q.encodeUrl()}&t=web&locale=de_DE"
             },
-            BrowserEngine("Brave", "brave.", listOf("id=\"results\"", "data-type=\"web\"")) { q ->
+            Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\"")) { q ->
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
-            BrowserEngine("Startpage", "startpage.", listOf("class=\"w-gl", "class=\"result")) { q ->
+            Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
                 "https://www.startpage.com/do/search?q=${q.encodeUrl()}&language=deutsch"
             },
         )
@@ -173,28 +167,48 @@ class WebCrawler(
         /** The pages a results page links to, apart from the engine's own and its redirects'. */
         internal fun resultLinks(html: String, engineHost: String): List<String> =
             org.jsoup.Jsoup.parse(html).select("a[href]").mapNotNull { a ->
-                val href = a.attr("href")
-                // Google wraps some results in its own redirect: /url?q=<the page>&...
-                val target = if (href.startsWith("/url?")) java.net.URLDecoder.decode(href.substringAfter("q=").substringBefore('&'), "UTF-8") else href
-                target.takeIf { it.startsWith("http") }
+                unwrap(a.attr("href"))?.takeIf { it.startsWith("http") }
             }.filter { url ->
                 val host = SiteRecipes.domainOf(url)
                 host.isNotEmpty() && engineHost !in host && ENGINE_HOSTS.none { it in host }
             }.distinct()
 
+        /** The page behind an engine's own redirect: Google's `/url?q=`, DuckDuckGo's `/l/?uddg=`,
+         *  Bing's `/ck/a?...&u=a1<base64 of the address>`. */
+        private fun unwrap(href: String): String? {
+            fun param(name: String) = Regex("""[?&]$name=([^&]+)""").find(href)?.groupValues?.get(1)
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+            return when {
+                href.startsWith("/url?") -> param("q")
+                "duckduckgo.com/l/" in href -> param("uddg")
+                "bing.com/ck/a" in href -> param("u")?.removePrefix("a1")?.let { b ->
+                    runCatching { String(java.util.Base64.getUrlDecoder().decode(b.padEnd((b.length + 3) / 4 * 4, '='))) }.getOrNull()
+                }
+                else -> href
+            }
+        }
+
         private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org")
 
-        /** Pages read per search: the engine's first two pages for two phrasings, and the learned sites. */
+        /** Pages read per search, of what the engines and the learned sites list. */
         private const val MAX_PAGES = 40
-        private const val ENGINE_PAGES = 2
         private const val PARALLEL_PAGES = 6
         private const val PAGE_TIMEOUT_MS = 30_000L
 
-        /** The hosts of every market with a crawler of its own: eBay in every country, Amazon in every country. */
+        /** The names of the markets with a crawler of their own, in every country they run in:
+         *  amazon.co.jp is Amazon as much as amazon.de is. */
         private val COVERED: Set<String> = PlatformId.entries.filter { it != PlatformId.WEB }
-            .map { SiteRecipes.domainOf(it.baseUrl) }.filter { it.isNotEmpty() }.toSet() +
-            setOf("ebay.com", "ebay.de", "ebay.at", "ebay.ch", "ebay.co.uk", "ebay.fr", "ebay.it", "ebay.es", "ebay.nl",
-                "amazon.de", "amazon.com", "amazon.fr", "amazon.it", "amazon.es", "amazon.co.uk", "idealo.de", "geizhals.at", "geizhals.eu")
+            .map { siteName(SiteRecipes.domainOf(it.baseUrl)) }.filter { it.isNotEmpty() }.toSet() +
+            setOf("ebay", "amazon", "idealo", "geizhals")
+
+        /** A host's name without its country or kind: "amazon" for www.amazon.co.jp. */
+        internal fun siteName(host: String): String {
+            val labels = host.split('.').filter { it.isNotEmpty() }
+            if (labels.size < 2) return host
+            // A two-part ending like co.uk or com.au is the country, and the name sits before it.
+            val twoPart = labels.size >= 3 && labels[labels.size - 2] in setOf("co", "com", "org", "net", "ac", "gv", "ne", "or")
+            return labels[labels.size - (if (twoPart) 3 else 2)]
+        }
 
         /** Sites that sell nothing themselves: encyclopedias, video, forums, social networks. */
         private val SKIPPED = setOf(

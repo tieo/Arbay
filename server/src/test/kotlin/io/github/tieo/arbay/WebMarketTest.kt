@@ -89,4 +89,21 @@ class WebMarketTest {
             <a href="https://www.google.com/preferences">Settings</a><a href="https://maps.google.de/x">Maps</a></div>"""
         assertEquals(listOf("https://shop.example/p/1", "https://other.example/p/2"), WebCrawler.resultLinks(html, "google."))
     }
+
+    @Test
+    fun `an engine's redirect gives the page behind it`() {
+        val ddg = """<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fshop.example%2Fp%2F3&amp;rut=abc">Three</a>"""
+        assertEquals(listOf("https://shop.example/p/3"), WebCrawler.resultLinks(ddg, "duckduckgo."))
+        val b64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("https://shop.example/p/4".toByteArray())
+        val bing = """<li class="b_algo"><a href="https://www.bing.com/ck/a?!&amp;&amp;p=x&amp;u=a1$b64&amp;ntb=1">Four</a></li>"""
+        assertEquals(listOf("https://shop.example/p/4"), WebCrawler.resultLinks(bing, "bing."))
+    }
+
+    @Test
+    fun `a market is known by its name in every country`() {
+        assertEquals("amazon", WebCrawler.siteName("amazon.co.jp"))
+        assertEquals("amazon", WebCrawler.siteName("smile.amazon.de"))
+        assertEquals("ebay", WebCrawler.siteName("ebay.com.au"))
+        assertEquals("alternate", WebCrawler.siteName("alternate.de"))
+    }
 }
