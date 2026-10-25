@@ -146,8 +146,11 @@ class SavedSearchMonitor(
     }
 
     /** What every saved search has been doing, for the app's list of them. */
-    fun statuses(): List<SavedSearchStatus> = productRepo.getAll().map { product ->
-        synchronized(stateLock) {
+    fun statuses(): List<SavedSearchStatus> {
+        // A drop found before its offer was put away waits until the search is opened, and a put
+        // away offer is news to nobody however far it comes down.
+        val hidden = io.github.tieo.arbay.repo.UserStateStore.hiddenOffers()
+        return productRepo.getAll().map { product -> synchronized(stateLock) {
             SavedSearchStatus(
                 productId = product.id,
                 watched = product.autoFetch.enabled,
@@ -156,10 +159,10 @@ class SavedSearchMonitor(
                 newListingIds = unopened[product.id]?.toList().orEmpty(),
                 foundAtMillis = foundAt[product.id]?.toMap().orEmpty(),
                 missingTopOffers = TopOffers.missing(product.id),
-                priceDrops = PriceDrops.of(product.id),
+                priceDrops = PriceDrops.of(product.id).filterNot { it.listingId in hidden },
                 unansweredMarkets = unanswered[product.id].orEmpty(),
             )
-        }
+        } }
     }
 
     /** Called when a saved search is opened: what was waiting has now been seen. */
