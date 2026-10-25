@@ -96,7 +96,9 @@ object QueryResultCache {
         var touched = 0
         entries.replaceAll { key, entry ->
             if (!key.startsWith(prefix)) entry
-            else entry.copy(listings = (entry.listings + more).distinctBy { it.id }).also { touched++ }
+            // The new reading wins: a site learned again reads its offers by the better recipe
+            // (gerach's one-day rate over its card's three-day one).
+            else entry.copy(listings = (more + entry.listings).distinctBy { it.id }).also { touched++ }
         }
         return touched
     }

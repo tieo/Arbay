@@ -393,4 +393,14 @@ class WebMarketTest {
         }
         assertFalse(io.github.tieo.arbay.crawler.SiteGaps.isGivenUp(site))
     }
+
+    @Test
+    fun `an offer's address loses the session and tracking that make it a new one each visit`() {
+        assertEquals("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/",
+            WebCrawler.withoutSession("https://www.gerach-gruppe.de/mietpark/fraes-und-schleiftechnik/bodenbearbeitungsmaschinen-mieten/?utm_source=qwant&utm_medium=referral&utm_campaign=ai_flash"))
+        assertEquals("https://www.pearl.de/a-ZX4189-1162.shtml?query=x",
+            WebCrawler.withoutSession("https://www.pearl.de/a-ZX4189-1162.shtml;jsessionid=n073D1260CCA?query=x&gclid=abc"))
+        assertEquals("https://www.voelkner.de/index.php?mp=products&products_id=12147583",
+            WebCrawler.withoutSession("https://www.voelkner.de/index.php?mp=products&products_id=12147583&utm_source=google&gclid=EAIa"))
+    }
 }

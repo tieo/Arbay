@@ -191,14 +191,13 @@ class WebCrawler(private val client: HttpClient) : Crawler {
      *  title (maschinen-humpert.de/vermietung/…-mieten/, "Parkett Eckenschleifer zur Miete"):
      *  its price is a rate, whatever period it is for, and not what the thing costs to buy. */
     private fun hiredOut(o: PageOffer): Boolean {
+        // A site named for hiring out (miet24.de, rentinorio.de) hires out what it lists.
+        if (RENTAL_SITE.containsMatchIn(siteName(SiteRecipes.domainOf(o.url)))) return true
         val said = o.url.substringBefore('?').lowercase() + " " + o.title.lowercase()
         // A machine sold out of a rental fleet is sold: "Rüttelplatte aus der Vermietung".
         return HIRED_OUT.containsMatchIn(said) && !SOLD_FROM_FLEET.containsMatchIn(said)
     }
 
-    /** An address without the session a shop writes into it (`;jsessionid=…`), which changes on
-     *  every visit and would make the same offer a new one each time it is read. */
-    private fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
 
     /** The links of a results page that are the engine's own redirects to a result. */
     private fun redirectsIn(html: String, engine: Engine): List<String> =
@@ -358,6 +357,18 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         private val HIRED_OUT = Regex("""mieten\b|vermietung|verleih|zur.miete|mietger|\brental\b|\bfor.(hire|rent)\b""")
 
         private val SOLD_FROM_FLEET = Regex("""aus.(der.)?(vermietung|miete)|ex.?(vermietung|miet)|mietr(ü|ue)ckl(ä|ae)ufer|gebraucht""")
+
+        /** An address without the session a shop writes into it (`;jsessionid=…`), which changes on
+         *  every visit and would make the same offer a new one each time it is read. The tracking
+         *  an engine adds (`utm_source=qwant`) goes the same way. */
+        internal fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
+            .replace(TRACKING_PARAM, "").replace(Regex("""[?&]$"""), "").replace("?&", "?")
+
+        private val RENTAL_SITE = Regex("""^(miet|rent(al|in|o))|verleih|vermiet|mietpark|rental""")
+
+        /** What an engine or an ad adds to an address to count the visit, which makes the same
+         *  offer a new one for every engine that listed it. */
+        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type)=[^&#]*&?""", RegexOption.IGNORE_CASE)
 
         private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
 
