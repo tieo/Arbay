@@ -304,9 +304,9 @@ class SavedSearchMonitor(
                     }
                     .map { sf to it }
             }
-            // The card rarely says a thing is broken and the ad's text often does; the few
-            // offers worth a push are read before one goes out.
-            .filterNot { (_, l) -> soldBroken(l) }
+            // The card rarely says a thing is broken, or that the seller takes buyers off the
+            // market, and the ad's text often does; the few offers worth a push are read first.
+            .filterNot { (_, l) -> soldBroken(l) || offMarket(l) }
         if (subfilterMatches.isNotEmpty()) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
@@ -569,7 +569,7 @@ class SavedSearchMonitor(
             val better = FitScore.beatenBy(l, online) ?: return@filter true
             log.info("fit alert {}: {} beaten by {}", product.name, l.url, better.url)
             false
-        }
+        }.filterNot { (l, _) -> offMarket(l) }
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return
@@ -649,6 +649,11 @@ class SavedSearchMonitor(
     /** Whether the offer's title or the seller's text says it is sold broken. */
     private suspend fun soldBroken(listing: Listing): Boolean =
         Condition.soldAsDefective(listing.title, adText(listing))
+
+    /** Whether the ad sends its buyer off the market ([io.github.tieo.arbay.model.OffMarket]). */
+    private suspend fun offMarket(listing: Listing): Boolean =
+        io.github.tieo.arbay.model.OffMarket.sign(adText(listing))
+            ?.also { log.info("not alerting {}: sends buyers off the market (\"{}\")", listing.url, it) } != null
 
     /**
      * Subfilter matches to the phone through ntfy as well as the app: one message per run, the

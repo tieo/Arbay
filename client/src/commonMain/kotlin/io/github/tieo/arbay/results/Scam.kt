@@ -13,14 +13,20 @@ import kotlin.time.Duration.Companion.days
  * search for a Pixel 9 Pro XL, offers saw 5 to 25 views a day, and the one at 400 € with 2,053 views
  * after 59 days had five times the views of the other ad posted that day.
  *
- * Also offers whose photos show up in other people's ads ([showsOtherAdsPhotos]).
+ * Also offers whose photos show up in other people's ads ([showsOtherAdsPhotos]), and offers whose
+ * text sends the buyer off the market ([io.github.tieo.arbay.model.OffMarket]).
  *
  * Returns each such offer with the sentence saying why.
  */
 fun likelyScams(listings: List<Listing>, views: Map<String, Int>, now: kotlin.time.Instant = Clock.System.now()): Map<String, String> {
     val forSale = listings.filter { !it.sold }.distinctBy { it.id }
-    return seenTooOften(forSale, views, now) + showsOtherAdsPhotos(forSale)
+    return seenTooOften(forSale, views, now) + showsOtherAdsPhotos(forSale) + sendsOffTheMarket(forSale)
 }
+
+private fun sendsOffTheMarket(forSale: List<Listing>): Map<String, String> =
+    forSale.mapNotNull { l ->
+        io.github.tieo.arbay.model.OffMarket.sign(l.description)?.let { l.id to "Takes buyers off the market: \"$it\"." }
+    }.toMap()
 
 /**
  * Offers that show photos of other people's ads: the server found one of their photos in an ad
