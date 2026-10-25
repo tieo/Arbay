@@ -93,6 +93,7 @@ fun Route.webRoutes() {
             val domain = SiteRecipes.domainOf(asked.url)
             val recipe = asked.recipe ?: SiteRecipes.forUrl(asked.url)
             val html = if (asked.kept) SiteGaps.page(domain) ?: throw NotFoundException("No page kept for $domain")
+            else if (recipe?.items != null) io.github.tieo.arbay.crawler.WebCrawler.apiAnswer(CrawlerRegistry.httpClient, asked.url)
             else if (recipe?.render == true || io.github.tieo.arbay.crawler.RenderedSites.has(domain))
                 io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
             else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")

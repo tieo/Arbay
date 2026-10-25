@@ -9,6 +9,7 @@ import io.github.tieo.arbay.model.Shipping
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
+import io.ktor.client.statement.bodyAsText
 import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -210,7 +211,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         val recipe = SiteRecipes.forUrl(url)
         val rendered = recipe?.render == true || RenderedSites.has(domain)
         var html = try {
-            if (rendered) rendered(url) ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
+            if (recipe?.items != null) apiAnswer(client, url)
+            else if (rendered) rendered(url) ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
             else fetchWithFallback(client, url, "Web $domain")
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.debug("Web: {} not fetched: {}", url, e.message?.take(80))
@@ -324,6 +326,19 @@ class WebCrawler(private val client: HttpClient) : Crawler {
          */
         internal suspend fun rendered(url: String): String? =
             SearchBrowser.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
+
+        /** A site's own API, asked for JSON: SAP Commerce's answers a browser's Accept header in XML. */
+        internal suspend fun apiAnswer(client: HttpClient, url: String): String {
+            val response = client.get(url) {
+                headers {
+                    append("User-Agent", USER_AGENT)
+                    append("Accept", "application/json")
+                    append("Accept-Language", "de-DE,de;q=0.9")
+                }
+            }
+            if (response.status.value >= 400) throw CrawlerBlockedException("API answered ${response.status}", ErrorType.SERVICE_UNAVAILABLE_503)
+            return response.bodyAsText()
+        }
 
         private val SHOP_MARKERS = listOf("\"offers\"", "itemprop=\"price\"", "product:price:amount", "__NEXT_DATA__")
         private const val RENDER_TIMEOUT_S = 20
