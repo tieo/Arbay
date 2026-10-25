@@ -146,6 +146,18 @@ object Geocoder {
         return null
     }
 
+    /** Where "70173 Stuttgart", a postcode alone or a place name alone is, in the home country. */
+    fun place(text: String): Pair<Double, Double>? {
+        val zip = Regex("""\b\d{4,5}\b""").find(text)?.value
+        val city = text.replace(Regex("""\b\d{4,5}\b"""), "").trim().takeIf { it.isNotEmpty() }
+        return resolve(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry, zip, city)
+    }
+
+    /** The user's home, as the free-item profile names it: where a distance is measured from when a
+     *  search brings no position of its own, the watch's searches and an LLM's among them. */
+    fun home(): Pair<Double, Double>? =
+        io.github.tieo.arbay.classifier.FreeItemProfileStore.get()?.location?.takeIf { it.isNotBlank() }?.let(::place)
+
     /** Great-circle distance in km between two coordinates. */
     fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val r = 6371.0

@@ -506,7 +506,7 @@ class SavedSearchMonitor(
         // The user's home as the free-item profile names it, where the alert names none: it is one
         // place for every search, and a search that measured from nowhere weighed every offer's
         // distance as unknown.
-        val home = (settings.home ?: io.github.tieo.arbay.classifier.FreeItemProfileStore.get()?.location)?.let(::homePoint)
+        val home = settings.home?.let(::homePoint) ?: Geocoder.home()
         val crawled = fitCrawl(selfUrl, q, crawl, home, platforms = null)
         // A market that refused the run is asked again once its block cooldown is over: mobile.de
         // answers Access denied for a quarter of an hour now and then and is fine before and after,
@@ -669,11 +669,7 @@ class SavedSearchMonitor(
     }
 
     /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */
-    private fun homePoint(home: String): Pair<Double, Double>? {
-        val zip = Regex("""\b\d{4,5}\b""").find(home)?.value
-        val city = home.replace(Regex("""\b\d{4,5}\b"""), "").trim().takeIf { it.isNotEmpty() }
-        return Geocoder.resolve(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry, zip, city)
-    }
+    private fun homePoint(home: String): Pair<Double, Double>? = Geocoder.place(home)
 
     private fun euros(l: Listing) = "%,d €".format(java.util.Locale.GERMANY, FitScore.priceEur(l).toLong())
 

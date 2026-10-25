@@ -179,9 +179,13 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
             descriptionContains = f.descriptionContains ?: p["inDescription"]?.takeIf { it.isNotBlank() },
         )
     }
+    // Without a position of its own, a search is measured from the user's home, so every offer
+    // still carries its distance and a fit weighs it.
+    val here = p["lat"]?.toDoubleOrNull()?.let { lat -> p["lon"]?.toDoubleOrNull()?.let { lat to it } }
+        ?: io.github.tieo.arbay.crawler.Geocoder.home()
     return base.withCarFilters(filters.takeUnless { it.isEmpty }).copy(
-        userLat = p["lat"]?.toDoubleOrNull(),
-        userLon = p["lon"]?.toDoubleOrNull(),
+        userLat = here?.first,
+        userLon = here?.second,
     )
 }
 
