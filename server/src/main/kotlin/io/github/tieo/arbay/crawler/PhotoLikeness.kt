@@ -15,8 +15,8 @@ import org.slf4j.LoggerFactory
 
 /**
  * A fact about an offer told from how its photos look like those of offers whose fact is known:
- * which of a search's models a machine is ([ModelLikeness]), how tall a van's roof is
- * ([VanRoofFromPhotos]), anything sellers state in words for some offers and show in the photos of all.
+ * which of a search's models a machine is ([ModelLikeness]), or anything else sellers state in words
+ * for some offers and show in the photos of all.
  *
  * The examples are archived offers whose fact is known from their own words or from a reviewer
  * ([PhotoFactChecks]), each with the CLIP embeddings of its first photos. [measure] holds each
