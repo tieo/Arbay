@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.mcp
 
 import io.github.tieo.arbay.live.Live
+import io.github.tieo.arbay.model.kwToPs
 import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.wholePoints
 import io.github.tieo.arbay.model.BlockedDealer
@@ -948,7 +949,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         return listOfNotNull(
             firstRegYear?.let { y -> firstRegMonth?.let { "%02d/%d".format(it, y) } ?: "$y" },
             mileageKm?.let { "%,d km".format(it).replace(',', '.') },
-            powerKw?.let { "${(it * 1.36).toInt()} PS" },
+            powerKw?.let { "${kwToPs(it)} PS" },
             gearbox?.name?.lowercase(),
             listOfNotNull(range(vanLength, vanLengthMax)?.let { "L$it" }, range(vanHeight, vanHeightMax)?.let { "H$it" })
                 .takeIf { it.isNotEmpty() }?.joinToString("", prefix = "size ", postfix = " (common scale)"),

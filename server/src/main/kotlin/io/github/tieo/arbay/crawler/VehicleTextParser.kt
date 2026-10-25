@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.psToKw
 import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Fuel
@@ -285,10 +286,10 @@ object VehicleTextParser {
         kwRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let { if (it in 20..1000) return it }
         // PS/HP fallback → kW (1 PS = 0.7355 kW)
         psRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
-            if (it in 30..1500) return (it * 0.7355).toInt()
+            if (it in 30..1500) return psToKw(it)
         }
         labeledPsRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
-            if (it in 30..1500) return (it * 0.7355).toInt()
+            if (it in 30..1500) return psToKw(it)
         }
         return null
     }

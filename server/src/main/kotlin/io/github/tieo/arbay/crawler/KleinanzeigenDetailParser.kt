@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.psToKw
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleCondition
@@ -159,7 +160,7 @@ object KleinanzeigenDetailParser {
             mileageKm = attrs["kilometerstand"]?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()
                 ?.takeIf { it in 1..2_000_000 },
             powerKw = attrs["leistung"]?.let { Regex("""(\d+)\s*PS""").find(it)?.groupValues?.get(1)?.toIntOrNull() }
-                ?.let { (it * 0.7355).toInt() }?.takeIf { it in 20..1000 },
+                ?.let(::psToKw)?.takeIf { it in 20..1000 },
             fuel = Fuel.parse(attrs["kraftstoffart"]),
             gearbox = when {
                 attrs["getriebe"]?.contains("automat", true) == true -> Transmission.AUTOMATIC

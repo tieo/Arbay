@@ -13,7 +13,7 @@ object MarktplaatsDetailParser {
     fun parse(html: String): VehicleInfo? {
         // Vermogen is quoted in PK (metric horsepower) here, e.g. "142"; 1 PK = 0.7355 kW.
         val powerKw = attr(html, "Vermogen")?.filter { it.isDigit() }?.toIntOrNull()
-            ?.let { (it * 0.7355).toInt() }?.takeIf { it in 20..1000 }
+            ?.let(::psToKw)?.takeIf { it in 20..1000 }
 
         val info = VehicleInfo(
             firstRegYear = attr(html, "Bouwjaar")?.filter { it.isDigit() }?.toIntOrNull()?.takeIf { it in 1900..2100 },

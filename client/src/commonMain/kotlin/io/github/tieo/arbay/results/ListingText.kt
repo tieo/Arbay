@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.grouped
+import io.github.tieo.arbay.model.kwToPs
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Listing
@@ -164,7 +165,7 @@ fun detailSpecs(v: VehicleInfo): List<DetailSpec> = buildList {
         add(DetailSpec("First registered", v.firstRegMonth?.let { m -> monthYear(m, it) } ?: "$it", VehicleField.FIRST_REG_YEAR))
     }
     v.mileageKm?.let { add(DetailSpec("Mileage", "${grouped(it.toLong(), '.')} km", VehicleField.MILEAGE)) }
-    v.powerKw?.let { add(DetailSpec("Power", "$it kW · ${(it * 1.35962).toInt()} hp", VehicleField.POWER)) }
+    v.powerKw?.let { add(DetailSpec("Power", "$it kW · ${kwToPs(it)} hp", VehicleField.POWER)) }
     v.displacementCc?.let { add(DetailSpec("Engine", "$it cc", VehicleField.DISPLACEMENT)) }
     v.fuel?.let { add(DetailSpec("Fuel", it.name.lowercase().replace('_', ' '), VehicleField.FUEL)) }
     v.gearbox?.let { add(DetailSpec("Gearbox", it.name.lowercase(), VehicleField.GEARBOX)) }

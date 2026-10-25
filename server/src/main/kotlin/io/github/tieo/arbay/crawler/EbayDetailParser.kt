@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.psToKw
 import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Transmission
@@ -70,7 +71,7 @@ object EbayDetailParser {
             val n = raw.replace(Regex("""[^0-9]"""), "").toIntOrNull()
             when {
                 n == null -> null
-                raw.contains("ps", ignoreCase = true) -> (n * 0.7355).toInt()
+                raw.contains("ps", ignoreCase = true) -> psToKw(n)
                 else -> n
             }?.takeIf { it in 20..1000 }
         }

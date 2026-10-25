@@ -62,12 +62,35 @@ data class VehicleInfo(
     fun isVerified(field: VehicleField): Boolean = field in verified
 }
 
+/** Metric horsepower per kilowatt. */
+private const val PS_PER_KW = 1.35962
+
+/**
+ * Kilowatts of a power stated in metric horsepower (PS, PK, KM, hk), rounded: an ad's "140 PS"
+ * is 102.97 kW, and cut off at 102 it reads back as 138 PS, a different engine than the 103 kW one
+ * the other markets name for the same van.
+ */
+fun psToKw(ps: Int): Int = kotlin.math.round(ps / PS_PER_KW).toInt()
+
+/** Metric horsepower of [kw], rounded, so 130 kW reads as the 177 PS its maker names. */
+fun kwToPs(kw: Int): Int = kotlin.math.round(kw * PS_PER_KW).toInt()
+
 @Serializable
 enum class Fuel {
     PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID,
     MILD_HYBRID, LPG, CNG, HYDROGEN, ETHANOL, OTHER;
 
     companion object {
+        /**
+         * An engine code standing apart from the letters around it, though a displacement may run
+         * into it ("2.0TDI"): inside a word it names nothing, and "Camping" read as an MPI petrol
+         * engine dropped two diesel camper vans from a diesel search.
+         */
+        private fun code(vararg codes: String) =
+            Regex("""(?<![a-zäöüß])(?:${codes.joinToString("|")})(?![a-zäöüß])""")
+        private val dieselCode = code("tdi", "bluetdi", "hdi", "cdi", "dci", "bluetec", "crdi", "tdci", "jtd", "bluehdi", "d4d")
+        private val petrolCode = code("tsi", "tfsi", "fsi", "gti", "vtec", "thp", "mpi", "vvt")
+
         fun parse(raw: String?): Fuel? {
             val s = raw?.lowercase()?.trim() ?: return null
             return when {
@@ -78,18 +101,16 @@ enum class Fuel {
                     if ("diesel" in s || "nafta" in s) HYBRID_DIESEL else HYBRID_PETROL
                 // Word-boundary match: "Elektro"/"Elektrisch"/"electric"/"BEV" as a fuel, but NOT
                 // "elektrische Fensterheber" (electric windows), "Elektronik" or "elektronisches
-                // Stabilitätsprogramm" and other equipment words.
-                Regex("""\b(elektro(?!nik|nisch)\w*|elektrisch|electric|bev)\b""").containsMatchIn(s) || s == "el" -> ELECTRIC
-                "diesel" in s || "nafta" in s || "tdi" in s || "hdi" in s || "cdi" in s ||
-                    "dci" in s || "bluetec" in s || "crdi" in s || "tdci" in s || "jtd" in s ||
-                    "bluehdi" in s || "d4d" in s -> DIESEL
+                // Stabilitätsprogramm" and other equipment words, nor their abbreviation
+                // "Elektron. Stabilitäts-Programm (ESP)" in a dealer's equipment list.
+                Regex("""\b(elektro(?!nik|nisch|n\.)\w*|elektrisch|electric|bev)\b""").containsMatchIn(s) || s == "el" -> ELECTRIC
+                "diesel" in s || "nafta" in s || dieselCode.containsMatchIn(s) -> DIESEL
                 "benzin" in s || "petrol" in s || "benzine" in s || "gasoline" in s || "benzín" in s ||
-                    "tsi" in s || "tfsi" in s || "fsi" in s || "gti" in s || "vtec" in s ||
-                    "thp" in s || "mpi" in s || "vvt" in s -> PETROL
-                "lpg" in s || "autogas" in s || "flüssiggas" in s -> LPG
-                "cng" in s || "erdgas" in s || "aardgas" in s -> CNG
+                    petrolCode.containsMatchIn(s) -> PETROL
+                "autogas" in s || "flüssiggas" in s || code("lpg").containsMatchIn(s) -> LPG
+                "erdgas" in s || "aardgas" in s || code("cng").containsMatchIn(s) -> CNG
                 "wasserstoff" in s || "hydrogen" in s || "waterstof" in s || "vodík" in s -> HYDROGEN
-                "ethanol" in s || "e85" in s -> ETHANOL
+                "ethanol" in s || code("e85").containsMatchIn(s) -> ETHANOL
                 else -> OTHER
             }
         }

@@ -35,7 +35,7 @@ class VehicleTextParserTest {
         assertEquals(2019, v.firstRegYear)
         assertEquals(Fuel.PETROL, v.fuel)
         assertEquals(Transmission.MANUAL, v.gearbox)
-        // 150 PS * 0.7355 ≈ 110 kW
+        // 150 PS is 110.3 kW
         assertEquals(110, v.powerKw)
     }
 
@@ -100,6 +100,25 @@ class VehicleTextParserTest {
     @Test
     fun electricWordsBesideANamedEngineReadAsThatEngine() {
         assertEquals(Fuel.DIESEL, VehicleTextParser.parse("VW Crafter 2.0 TDI, Elektroinstallation 230V")!!.fuel)
+    }
+
+    @Test
+    fun abbreviatedElectronicsAreNotElectricFuel() {
+        // Kleinanzeigen 3545103471, a diesel Crafter whose card names no engine, only its equipment.
+        val card = "Volkswagen Crafter 35 Kasten L2H2 / Bluetooth, Klima Assistenzsysteme:\n" +
+            "- Anti-Blockier-System (ABS)\n- Elektron. Stabilitäts-Programm (ESP)\n- Fahrassistenz-System: Berganfahr-Assistent"
+        assertNull(VehicleTextParser.parse(card)?.fuel)
+    }
+
+    @Test
+    fun engineCodesInsideWordsAreNoFuel() {
+        // Kleinanzeigen 3257554282 and mobile.de 52453640790720: two diesel campers, read as an MPI
+        // petrol engine from "Camping".
+        assertNull(VehicleTextParser.parse("MAN TGE 3.140 / L2H2, Dachfenster, Camping Fenster in der Schiebetür")?.fuel)
+        assertNull(VehicleTextParser.parse("VW Crafter Camper, ideal für Reisen, Camping, Freizeit und Motorsport")?.fuel)
+        assertEquals(Fuel.DIESEL, VehicleTextParser.parse("Crafter 35 2.0TDI Kasten")!!.fuel)
+        assertEquals(Fuel.PETROL, VehicleTextParser.parse("Golf GTI, Benzin")!!.fuel)
+        assertEquals(Fuel.PETROL, VehicleTextParser.parse("Polo 1.0 MPI Comfortline")!!.fuel)
     }
 
     @Test
@@ -208,8 +227,9 @@ class VehicleTextParserTest {
     fun powerLabelledBeforeItsFigure() {
         // A Bassenheim dealer's list: "❗️PS 180" on a line of its own.
         val v = VehicleTextParser.parse("VW Crafter\n❗️Laufleistung 92.000 km\n❗️PS 180\n❗️TÜV Service 10/28")!!
-        assertEquals((180 * 0.7355).toInt(), v.powerKw)
-        assertEquals((140 * 0.7355).toInt(), VehicleTextParser.parse("Crafter PS: 140, Automatik")!!.powerKw)
+        assertEquals(132, v.powerKw)
+        // 140 PS is the 103 kW engine; cut off at 102 kW it read back as 138 PS.
+        assertEquals(103, VehicleTextParser.parse("Crafter PS: 140, Automatik")!!.powerKw)
         // A figure running on is no power: "PS 2.000" is not 2 PS, nor 200.
         assertEquals(null, VehicleTextParser.parse("Crafter PS 2.000")?.powerKw)
     }

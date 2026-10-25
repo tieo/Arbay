@@ -255,7 +255,7 @@ class OtomotoCrawler(
             mileageKm = machineValues["mileage"]?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
             // engine_power is metric HP (KM): 1 kW = 1.35962 KM, so kW = KM / 1.35962.
             powerKw = machineValues["engine_power"]?.toIntOrNull()
-                ?.let { (it / 1.35962).toInt() }
+                ?.let(::psToKw)
                 ?.takeIf { it in 20..1000 },
             displacementCc = machineValues["engine_capacity"]?.toIntOrNull()?.takeIf { it in 600..8000 },
             fuel = Fuel.parse(machineValues["fuel_type"]),

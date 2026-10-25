@@ -121,7 +121,7 @@ class OlxCrawler(
                 ?.takeIf { it in 600..8000 },
             // OLX's engine_power is metric hp (PS); convert to kW so the power filter enforces.
             powerKw = params["engine_power"]?.filter { it.isDigit() }?.toIntOrNull()
-                ?.let { (it * 0.7355).roundToInt() }?.takeIf { it in 10..1500 },
+                ?.let(::psToKw)?.takeIf { it in 10..1500 },
             fuel = Fuel.parse(params["combustivel"]),
             gearbox = when (params["gearbox"]) {
                 "automatic", "automatica", "automatico" -> Transmission.AUTOMATIC
