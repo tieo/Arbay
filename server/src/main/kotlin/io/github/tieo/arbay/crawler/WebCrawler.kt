@@ -7,6 +7,8 @@ import io.github.tieo.arbay.model.Seller
 import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Shipping
 import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
 import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -99,12 +101,48 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
             return emptyList()
         }
-        val links = resultLinks(html, engine.host)
+        val links = (resultLinks(html, engine.host) + resolved(redirectsIn(html, engine), engine)).distinct()
         if (links.isEmpty()) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
         }
         log.info("Web: {} listed {} pages for '{}'", engine.name, links.size, words)
         return links
+    }
+
+    /**
+     * Where an engine's own redirects lead. Google's results link only to `/goto?url=<token>` and
+     * its Shopping ads to `/aclk?...`, the token encrypted, so the address is what the redirect
+     * answers; read without following it, one request per result, no browser needed.
+     */
+    private suspend fun resolved(redirects: List<String>, engine: Engine): List<String> = coroutineScope {
+        val gate = Semaphore(PARALLEL_PAGES)
+        redirects.map { start ->
+            async {
+                gate.withPermit {
+                    var url = start
+                    // An ad passes through the engine's ad server before the shop.
+                    repeat(MAX_HOPS) {
+                        val next = runCatching { noRedirects.get(url) { headers { append("User-Agent", USER_AGENT) } }.headers["Location"] }
+                            .getOrNull() ?: return@withPermit null
+                        url = ProductPages.absolute(next, url)
+                        val host = SiteRecipes.domainOf(url)
+                        if (engine.host !in host && ENGINE_HOSTS.none { it in host } && "doubleclick" !in host) return@withPermit url
+                    }
+                    null
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    /** The links of a results page that are the engine's own redirects to a result. */
+    private fun redirectsIn(html: String, engine: Engine): List<String> =
+        if (engine.redirects.isEmpty()) emptyList()
+        else org.jsoup.Jsoup.parse(html, engine.url("")).select("a[href]").map { it.absUrl("href") }
+            .filter { href -> engine.redirects.any { it in href } }.distinct().take(MAX_REDIRECTS)
+
+    private val noRedirects = HttpClient(io.ktor.client.engine.cio.CIO) {
+        followRedirects = false
+        engine { requestTimeout = 15_000 }
     }
 
     private fun siteSearches(words: String): List<String> =
@@ -144,13 +182,21 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
     /** A search engine: its results page for some words, whether only a browser gets it, and what
      *  shows that page arrived. */
-    private class Engine(val name: String, val host: String, val browser: Boolean, val markers: List<String>, val url: (String) -> String)
+    private class Engine(
+        val name: String,
+        val host: String,
+        val browser: Boolean,
+        val markers: List<String>,
+        /** Paths of the engine's own redirects its results link to, where it hides the address. */
+        val redirects: List<String> = emptyList(),
+        val url: (String) -> String,
+    )
 
     companion object {
         private val ENGINES = listOf(
             Engine("Bing", "bing.", false, emptyList()) { q -> "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE&count=30" },
             Engine("DuckDuckGo", "duckduckgo.", false, emptyList()) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
-            Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\"")) { q ->
+            Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?")) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
             },
             Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
@@ -194,6 +240,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         private const val MAX_PAGES = 40
         private const val PARALLEL_PAGES = 6
         private const val PAGE_TIMEOUT_MS = 30_000L
+
+        /** Redirects resolved per results page, and hops followed per redirect. */
+        private const val MAX_REDIRECTS = 30
+        private const val MAX_HOPS = 4
 
         /** The names of the markets with a crawler of their own, in every country they run in:
          *  amazon.co.jp is Amazon as much as amazon.de is. */
