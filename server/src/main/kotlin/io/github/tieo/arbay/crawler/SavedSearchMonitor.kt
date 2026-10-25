@@ -503,7 +503,10 @@ class SavedSearchMonitor(
             minPowerKw = null, maxPowerKw = null, drivetrain = null,
             minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
         )
-        val home = settings.home?.let(::homePoint)
+        // The user's home as the free-item profile names it, where the alert names none: it is one
+        // place for every search, and a search that measured from nowhere weighed every offer's
+        // distance as unknown.
+        val home = (settings.home ?: io.github.tieo.arbay.classifier.FreeItemProfileStore.get()?.location)?.let(::homePoint)
         val crawled = fitCrawl(selfUrl, q, crawl, home, platforms = null)
         // A market that refused the run is asked again once its block cooldown is over: mobile.de
         // answers Access denied for a quarter of an hour now and then and is fine before and after,
