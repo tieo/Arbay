@@ -72,6 +72,26 @@ shown as "45,00 €/day", and left out of every search whose words do not ask to
 { "domain": "toom.de", "title": "h1", "price": "td.day", "rentPer": "DAY", "rates": {"WEEKEND": "td.weekend", "WEEK": "td.week"} }
 ```
 
+Everything read on a site with a `rentPer` recipe is a rental, its structured data included, so
+a list recipe can carry a `urlPattern` and leave the machines' own pages to their JSON-LD.
+
+A price selector ending in `#n` reads the n-th amount in the element's text (abschliff's cell
+"20,- / 30,-" is `td:eq(2)#1` for the day, `td:eq(2)#2` for the weekend); without it, the amount
+written with its currency is taken where the text holds other numbers too ("4 Stunden: 44,80 €").
+A bare `@attribute` reads the item box's own attribute, and a link stored base64-encoded (an
+encoded path in a `data-submit`) is decoded.
+
+A site whose offers come from its own JSON API is searched through the API: `searchUrl` points at
+it, `items` is the path to the list of offers in the answer, and `title`, `price`, `link`, `image`
+and `rates` are paths inside each offer. A segment can pick one entry of a list by its fields, and
+`linkBase` goes in front of a link starting with "/".
+
+```json
+{ "domain": "boels.com", "urlPattern": "/api/occ/", "items": "products", "title": "name",
+  "price": "unitPrices[unit=DAY-RENT,netPrice=false].value", "link": "url", "linkBase": "https://www.boels.com/de-de",
+  "rentPer": "DAY", "searchUrl": "https://www.boels.com/api/occ/v2/rentalDE/products/search?query={q}&lang=de&curr=EUR&fields=FULL" }
+```
+
 A page passing itself off as another shop (its `og:site_name` a letter or two off its own address,
 as medymarkt.live serving MediaMarkt's pages) is never read and never reported.
 

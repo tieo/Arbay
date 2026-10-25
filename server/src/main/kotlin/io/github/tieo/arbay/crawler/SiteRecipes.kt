@@ -10,6 +10,11 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.slf4j.LoggerFactory
@@ -42,6 +47,17 @@ data class SiteRecipe(
      * [title], [price], [link] and [image] where set.
      */
     val pattern: String? = null,
+    /**
+     * For a site whose offers come from its own JSON API (searched through [searchUrl]): the path
+     * to the list of offers in the answer, "products". [title], [price], [link], [image] and
+     * [rates] are then paths inside each offer, dot-separated, and a segment may pick one entry of
+     * a list by its fields: Boels' day rate is `unitPrices[unit=DAY-RENT,netPrice=false].value`,
+     * since the list's own `price` is none of its rates.
+     */
+    val items: String? = null,
+    /** What a link starting with "/" is read under, where that is not the page's own address:
+     *  an API at /api/occ/... links its products as "/mieten/<name>/p/<code>". */
+    val linkBase: String? = null,
     /** The currency's code, or a selector for where the page states it; euros where null. */
     val currency: String? = null,
     /** The offer's own page, inside its box. */
@@ -115,6 +131,7 @@ object SiteRecipes {
     /** The offers [recipe] reads off a page. */
     fun read(recipe: SiteRecipe, html: String, pageUrl: String): List<PageOffer> {
         if (recipe.pattern != null) return readPattern(recipe, recipe.pattern, html, pageUrl)
+        if (recipe.items != null) return readJson(recipe, recipe.items, html, pageUrl)
         val doc = Jsoup.parse(html, pageUrl)
         val boxes: List<Element> = if (recipe.item == null) listOf(doc.body() ?: return emptyList()) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
@@ -153,6 +170,45 @@ object SiteRecipes {
             )
         }.toList().distinctBy { it.url to it.title }
     }
+
+    private fun readJson(recipe: SiteRecipe, items: String, body: String, pageUrl: String): List<PageOffer> {
+        val root = runCatching { Json.parseToJsonElement(body.trim()) }.getOrNull() ?: return emptyList()
+        val list = when (val found = at(root, items)) {
+            is JsonArray -> found.toList()
+            null -> emptyList()
+            else -> listOf(found)
+        }
+        val currency = recipe.currency?.let(ProductPages::currencyOf) ?: Currency.EUR
+        fun text(e: JsonElement, path: String?) = path?.let { at(e, it) as? JsonPrimitive }?.contentOrNull?.takeIf { it.isNotBlank() }
+        fun amount(e: JsonElement, path: String) = text(e, path)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }
+        return list.mapNotNull { item ->
+            val title = text(item, recipe.title)?.let { Jsoup.parse(it).text().trim() }?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val price = amount(item, recipe.price) ?: return@mapNotNull null
+            val link = text(item, recipe.link)?.let { l -> if (l.startsWith("/") && recipe.linkBase != null) recipe.linkBase.trimEnd('/') + l else ProductPages.absolute(l, pageUrl) }
+            PageOffer(
+                title = title,
+                price = price,
+                url = link ?: pageUrl,
+                image = text(item, recipe.image)?.let { ProductPages.absolute(it, recipe.linkBase ?: pageUrl) },
+                rentPer = recipe.rentPer,
+                rentRates = recipe.rates.mapNotNull { (period, path) -> amount(item, path)?.let { RentRate(period, it) } },
+            )
+        }.distinctBy { it.url to it.title }
+    }
+
+    /** What a path names inside [root]: `a.b[k=v,k2=v2].c`, a list without a filter giving its first entry. */
+    private fun at(root: JsonElement, path: String): JsonElement? =
+        Regex("""([^.\[]+)(?:\[([^\]]*)])?""").findAll(path).fold(root as JsonElement?) { e, seg ->
+            val next = (e as? JsonObject)?.get(seg.groupValues[1]) ?: return null
+            val filter = seg.groupValues[2].split(',').filter { '=' in it }.map { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
+            when {
+                next is JsonArray && filter.isNotEmpty() -> next.firstOrNull { entry ->
+                    filter.all { (k, v) -> ((entry as? JsonObject)?.get(k) as? JsonPrimitive)?.contentOrNull == v }
+                }
+                next is JsonArray && seg.groupValues[2].isEmpty() && seg.range.last < path.length - 1 -> next.firstOrNull()
+                else -> next
+            }
+        }
 
     /** A string as a script wrote it: its backslash escapes and HTML entities read. */
     private fun unescaped(raw: String): String =

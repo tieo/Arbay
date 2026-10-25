@@ -299,4 +299,23 @@ class WebMarketTest {
         // reichelt.de's category landing, which lists sub-categories.
         assertFalse(ProductPages.sellsSomething("<body><a>0 Warenkorb 0,00 €</a><span>Versandkosten ab 5,95 €</span><h1>Festplatten</h1><a>Jetzt kaufen</a></body>"))
     }
+
+    @Test
+    fun `a JSON recipe reads a site's API, an entry of a list picked by its fields`() {
+        // Boels' product search: its own "price" is none of the rates; the day rate with VAT is.
+        val body = """{"products":[{"code":"11281","name":"<em class=\"search-results-highlight\">Parkettschleifmaschine</em>",
+            "price":{"value":48.48},"url":"/mieten/parkettschleifmaschine/p/11281",
+            "images":[{"format":"zoom","imageType":"PRIMARY","url":"https://mediahub.boels.com/m/z/large-11281.jpg"},
+                      {"format":"product","imageType":"PRIMARY","url":"https://mediahub.boels.com/m/p/11281.jpg"}],
+            "unitPrices":[{"unit":"DAY-RENT","netPrice":true,"value":48.0},{"unit":"DAY-RENT","netPrice":false,"value":57.12},
+                          {"unit":"5DAYPLUS-RENT","netPrice":false,"value":45.696}]}]}"""
+        val recipe = SiteRecipe(domain = "boels.com", items = "products", title = "name", price = "unitPrices[unit=DAY-RENT,netPrice=false].value",
+            link = "url", image = "images[format=product].url", linkBase = "https://www.boels.com/de-de", rentPer = io.github.tieo.arbay.model.RentPeriod.DAY)
+        val offer = SiteRecipes.read(recipe, body, "https://www.boels.com/api/occ/v2/rentalDE/products/search?query=parkett").single()
+        assertEquals("Parkettschleifmaschine", offer.title)
+        assertEquals(Money(5712, Currency.EUR), offer.price)
+        assertEquals("https://www.boels.com/de-de/mieten/parkettschleifmaschine/p/11281", offer.url)
+        assertEquals("https://mediahub.boels.com/m/p/11281.jpg", offer.image)
+        assertEquals(io.github.tieo.arbay.model.RentPeriod.DAY, offer.rentPer)
+    }
 }
