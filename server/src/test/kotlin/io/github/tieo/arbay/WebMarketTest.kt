@@ -441,4 +441,11 @@ class WebMarketTest {
             SiteRecipes.remove("wp-test.de")
         }
     }
+
+    @Test
+    fun `offers named only by their model carry the page's heading`() {
+        val html = """<h1>Parkettschleifmaschinen Verleih</h1><table><tr><td>ELF</td><td>200 x 550 mm</td><td>20,- / 30,-</td></tr></table>"""
+        val recipe = SiteRecipe(domain = "abschliff.de", item = "tr:has(td)", title = "td:eq(0)", price = "td:eq(2)#1", currency = "EUR", context = "h1")
+        assertEquals("ELF · Parkettschleifmaschinen Verleih", SiteRecipes.read(recipe, html, "https://abschliff.de/verleih").single().title)
+    }
 }

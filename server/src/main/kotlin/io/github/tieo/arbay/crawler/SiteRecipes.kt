@@ -47,6 +47,10 @@ data class SiteRecipe(
      * [title], [price], [link] and [image] where set.
      */
     val pattern: String? = null,
+    /** A page-level element naming what the offers are, where each names only its model:
+     *  abschliff.de's table lists "ELF", "Trio" under "Parkettschleifmaschinen Verleih", and the
+     *  title reads "ELF · Parkettschleifmaschinen Verleih". */
+    val context: String? = null,
     /**
      * For a site whose offers come from its own JSON API (searched through [searchUrl]): the path
      * to the list of offers in the answer, "products". [title], [price], [link], [image] and
@@ -175,8 +179,10 @@ object SiteRecipes {
         val doc = Jsoup.parse(html, pageUrl)
         val boxes: List<Element> = if (recipe.item == null) listOf(doc.body() ?: return emptyList()) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
+        val context = recipe.context?.let { pick(doc, it, spaced = true) }
         return boxes.mapNotNull { box ->
-            val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { t -> if (context != null && !t.contains(context, ignoreCase = true)) "$t · $context" else t } ?: return@mapNotNull null
             val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
             val currency = pageCurrency ?: ProductPages.currencyOf(priceText.filter { !it.isDigit() && it !in ".,  " }) ?: Currency.EUR
             val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 }?.let { withVat(recipe, it, doc, pageUrl) } ?: return@mapNotNull null

@@ -84,7 +84,8 @@ a list recipe can carry a `urlPattern` and leave the machines' own pages to thei
 A price selector ending in `#n` reads the n-th amount in the element's text (abschliff's cell
 "20,- / 30,-" is `td:eq(2)#1` for the day, `td:eq(2)#2` for the weekend); without it, the amount
 written with its currency is taken where the text holds other numbers too ("4 Stunden: 44,80 €").
-A bare `@attribute` reads the item box's own attribute, and a link stored base64-encoded (an
+Where each offer names only its model ("ELF", "Trio"), `context` names a page element that says
+what they are, and the title reads "ELF · Parkettschleifmaschinen Verleih". A bare `@attribute` reads the item box's own attribute, and a link stored base64-encoded (an
 encoded path in a `data-submit`) is decoded.
 
 A site whose offers come from its own JSON API is searched through the API: `searchUrl` points at
