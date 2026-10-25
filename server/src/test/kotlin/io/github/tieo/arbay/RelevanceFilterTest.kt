@@ -382,6 +382,28 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `each of a maker's belt sanders is found by its own name, and its edge sanders are not`() {
+        val belt = SearchQuery(
+            text = "lägler hummel",
+            aliases = listOf("lägler elf", "lägler profit", "lägler superhummel", "hummel parkettschleifmaschine"),
+            category = MarketGroup.GENERAL,
+        )
+        // Live titles from the "parkettschleifmaschine" search.
+        val sanders = listOf(
+            listing("Parkettschleifmaschine LÄGLER ELF 1", 79000),
+            listing("Lägler Profit Schleifmaschine für Parkett und Dielen Schleifmaschine", 80000),
+            listing("Lägler Profit Parkettschleifmaschine / Bodenschleifmaschine inkl. Staubsack, 230 V", 95000),
+            listing("Ponceuse à bande Lägler Super Hummel", 790000),
+        )
+        val others = listOf(
+            listing("Lägler Flip Parkettschleifmaschine für Holzbearbeitung mit Staubsack, manuell", 39999),
+            listing("Lägler ELAN Randschleifer / Parkettschleifmaschine - voll funktionsfähig", 49000),
+            listing("Lägler TRIO Parkettschleifmaschine inkl. Zubehör und Schleifpapier", 250000),
+        )
+        assertEquals(sanders.map { it.title }.toSet(), RelevanceFilter.filter(sanders + others, belt).map { it.title }.toSet())
+    }
+
+    @Test
     fun `a search is offered the other names sellers write its words under`() {
         // pearl counts bays as "4-fach", MediaMarkt as "4 Einschübe": a market answering only titles
         // carrying "bay" never shows them unless it is asked in their words.
