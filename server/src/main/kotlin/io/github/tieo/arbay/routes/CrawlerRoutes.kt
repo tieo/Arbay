@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.routes
 
+import kotlinx.coroutines.flow.transformWhile
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.BlockCooldown
@@ -247,6 +248,11 @@ private fun priceEurCents(money: Money): Long =
  *  market's captcha and while the crawl waits for a request window other searches spent, and starts
  *  over with every page answered (CrawlClock). */
 private const val PLATFORM_BUDGET_MS = 180_000L
+
+/** How long a search stays open for the shops the web market is learning. A site takes the agent
+ *  minutes; one it has not learned by then is still added to the search's stored answer, so the
+ *  search opened again shows it. */
+private const val LEARNING_WAIT_MS = 15 * 60_000L
 
 /**
  * How many markets are actually crawled at once.
@@ -770,6 +776,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // on the map after the crawl slot and the crawl's budget are let go.
                           var finished: CrawlerSearchEvent? = null
                           var finishedBy: Crawler? = null
+                          // The shops the web market met and could not read, which this search
+                          // then stays open for while they are learned.
+                          val unreadable = io.github.tieo.arbay.crawler.UnreadableSites()
                           // A crawler that never returns must not outlive the request. Without this
                           // its coroutine holds the stream open, the stream holds the scrape permit,
                           // and the server refuses every later search as busy until it restarts.
@@ -931,7 +940,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             val event = try {
                                 // Bounded by the market's budget around this block, which is what
                                 // turns a crawl that never answers into a TIMEOUT report.
-                                val rawResults = kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter) {
+                                val rawResults = kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter + unreadable) {
                                     crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
@@ -1077,6 +1086,67 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                   throw e
                               } catch (e: Exception) {
                                   routesLog.warn("Placing {} listings on the map failed: {}", platformId.displayName, e.message)
+                              }
+                          }
+                          // The web market met shops it could not read yet. Each goes to the agent
+                          // that teaches Arbay a site, and this search stays open meanwhile: the
+                          // market shows as learning, every site learned adds its offers as it
+                          // comes, and the market finishes again with all of them once every site
+                          // is learned or given up on, or the wait is over. Outside the crawl slot,
+                          // so the wait holds back no other search. A watch that runs unattended
+                          // does not wait; its next run reads the learned sites anyway.
+                          val webDone = finished
+                          if (webDone != null && platformId == PlatformId.WEB && unreadable.sites.isNotEmpty() && !marketQuery.unattended) {
+                              try {
+                                  val wq = localizedQuery(marketQuery, platformId)
+                                  val waiting = unreadable.sites.toMutableSet()
+                                  var shown = webDone.listings
+                                  suspend fun learning() = resultChannel.send(CrawlerSearchEvent(
+                                      type = CrawlerEventType.PLATFORM_PROGRESS,
+                                      platform = platformId.name,
+                                      platformName = platformId.displayName,
+                                      fetchStage = "learning ${waiting.size} new site${if (waiting.size == 1) "" else "s"}",
+                                  ))
+                                  resultChannel.send(CrawlerSearchEvent(
+                                      type = CrawlerEventType.PLATFORM_STARTED,
+                                      platform = platformId.name,
+                                      platformName = platformId.displayName,
+                                  ))
+                                  learning()
+                                  kotlinx.coroutines.withTimeoutOrNull(LEARNING_WAIT_MS) {
+                                      io.github.tieo.arbay.crawler.SiteGaps.learned
+                                          .transformWhile { l ->
+                                              if (l.domain in waiting) {
+                                                  waiting -= l.domain
+                                                  val found = l.offers.entries.firstOrNull { it.key.equals(wq.positiveText, ignoreCase = true) }?.value.orEmpty()
+                                                  val crawler = CrawlerRegistry.crawlerFor(platformId)
+                                                  if (found.isNotEmpty() && crawler != null) {
+                                                      val kept = RelevanceFilter.filter(found, wq).map { SoldDetector.classify(it) }
+                                                      val fresh = finishedResults(kept, wq, false, crawler, listingRepo).listings
+                                                          .filter { f -> shown.none { it.id == f.id } }
+                                                      if (fresh.isNotEmpty()) {
+                                                          shown = shown + fresh
+                                                          resultChannel.send(CrawlerSearchEvent(
+                                                              type = CrawlerEventType.PLATFORM_PROGRESS,
+                                                              platform = platformId.name,
+                                                              platformName = platformId.displayName,
+                                                              listings = fresh,
+                                                              resultCount = fresh.size,
+                                                          ))
+                                                      }
+                                                  }
+                                                  if (waiting.isNotEmpty()) learning()
+                                              }
+                                              emit(Unit)
+                                              waiting.isNotEmpty()
+                                          }.collect {}
+                                  }
+                                  resultChannel.send(webDone.copy(listings = shown, resultCount = shown.size))
+                              } catch (e: CancellationException) {
+                                  throw e
+                              } catch (e: Exception) {
+                                  routesLog.warn("Learning sites for the web search failed: {}", e.message)
+                                  resultChannel.send(webDone)
                               }
                           }
                         }.also { job ->

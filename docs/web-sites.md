@@ -2,8 +2,11 @@
 
 The web market (`WebCrawler`) asks six search engines for a search's words and reads every shop
 page they list. A page is read by the structured data shops publish for search engines
-(`ProductPages`: JSON-LD, microdata, OpenGraph), or by the site's recipe (`SiteRecipes`). A page
-that sells something and yields no offer is a **gap**: the server keeps the page as it fetched it
+(`ProductPages`: JSON-LD, microdata, OpenGraph), or by the site's recipe (`SiteRecipes`). Before a site gets
+here, two generic readers try it: the JSON a JavaScript shop hands its page (`__NEXT_DATA__`,
+`application/json` scripts), and the box a list page repeats with a link and a price in each; a
+single product page is also guessed from its one heading and its price element. A page that sells
+something and yields no offer, or only a guess, is a **gap**: the server keeps the page as it fetched it
 and reports the site on `GET /api/web/gaps`. Each report is handed to the Paseo agent
 "Arbay web sites", which works through this document for every site in it.
 
@@ -18,7 +21,8 @@ to reach that machine.
 | `GET /api/web/gaps/<domain>/page` | The page as Arbay fetched it when it reported the site |
 | `GET /api/web/recipes` | Every recipe |
 | `POST /api/web/try` `{"url": ..., "recipe": {...}, "kept": true}` | Reads a page by a recipe (or the stored one, or structured data only) and answers the offers found, what read them and whether the page sells something. `kept` reads the kept page instead of fetching it again. |
-| `PUT /api/web/recipes` (a recipe) | Keeps a recipe; the next search uses it |
+| `PUT /api/web/recipes` (a recipe) | Keeps a recipe and reads the site again for every search that met it; answers how many offers each of those searches gained. A search still open on a screen shows them at once. |
+| `POST /api/web/gaps/<domain>/given-up` | Says a site cannot be taught, so the searches waiting on it stop waiting |
 | `DELETE /api/web/recipes/<domain>` | Drops a site's recipes |
 
 ## A recipe
@@ -69,7 +73,9 @@ search.
    needs a variant picked first, the site answers Arbay's fetch with a block page), change the
    code instead: `WebCrawler`, `ProductPages` or `SiteRecipes`, with a test, committed and deployed
    as every Arbay change is.
-7. A site that blocks every way in is left without a recipe, and said so in the report.
+7. A site that blocks every way in, or turns out to sell nothing, is given up on with
+   `POST /api/web/gaps/<domain>/given-up`, so the searches waiting on it finish, and said so in the
+   report.
 
 Never send anything to a seller and never buy anything. Report to the user as a short table: each
 site, what kind of page it was, what was done (recipe kept, code changed, false report fixed,

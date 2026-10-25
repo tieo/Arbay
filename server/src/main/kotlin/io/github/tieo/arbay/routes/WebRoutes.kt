@@ -57,6 +57,13 @@ fun Route.webRoutes() {
             val domain = call.parameters["domain"] ?: throw BadRequestException("Missing domain")
             call.respondText(SiteGaps.page(domain) ?: throw NotFoundException("No page kept for $domain"), ContentType.Text.Html)
         }
+        // A site that cannot be taught (it blocks every way in, or sells nothing after all): the
+        // searches waiting on it stop waiting.
+        post("/gaps/{domain}/given-up") {
+            val domain = call.parameters["domain"] ?: throw BadRequestException("Missing domain")
+            SiteGaps.learned.emit(SiteGaps.Learned(domain, emptyMap()))
+            call.respond(HttpStatusCode.NoContent)
+        }
         get("/recipes") { call.respond(SiteRecipes.all()) }
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()
@@ -64,7 +71,11 @@ fun Route.webRoutes() {
                 throw BadRequestException("A recipe needs its domain, title and price")
             recipe.urlPattern?.let { runCatching { Regex(it) }.getOrElse { throw BadRequestException("urlPattern is not a regex: ${it.message}") } }
             SiteRecipes.put(recipe)
-            call.respond(HttpStatusCode.NoContent)
+            // What the searches that met the site before it was learned missed, read now and added
+            // to them, the ones still open on a screen included.
+            val learned = (CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler)
+                ?.learned(SiteRecipes.domainOf("https://${recipe.domain}/")).orEmpty()
+            call.respond(learned.mapValues { it.value.size })
         }
         delete("/recipes/{domain}") {
             SiteRecipes.remove(call.parameters["domain"] ?: throw BadRequestException("Missing domain"))

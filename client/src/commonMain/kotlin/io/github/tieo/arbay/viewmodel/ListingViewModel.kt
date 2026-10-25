@@ -717,12 +717,11 @@ class ListingViewModel(
                         }
 
                         CrawlerEventType.PLATFORM_STARTED -> {
-                            _platformStatuses.value = _platformStatuses.value + PlatformStatus(
-                                platformId = event.platform,
-                                platformName = event.platformName,
-                                status = PlatformSearchStatus.SEARCHING,
-                                queryUsed = event.queryUsed,
-                            )
+                            // A market can start again after it answered: the web market, learning
+                            // the shops it could not read, works on and adds their offers.
+                            upsertStatus(event.platform, event.platformName) {
+                                it.copy(status = PlatformSearchStatus.SEARCHING, queryUsed = event.queryUsed ?: it.queryUsed)
+                            }
                         }
 
                         CrawlerEventType.PLATFORM_DONE -> {

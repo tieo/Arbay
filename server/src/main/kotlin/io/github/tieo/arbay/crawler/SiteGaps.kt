@@ -47,8 +47,16 @@ object SiteGaps {
     private var gaps: List<SiteGap> = file.readStore(log) { json.decodeFromString<List<SiteGap>>(it) } ?: emptyList()
     private val latest = MutableStateFlow(gaps.maxOfOrNull { it.seq } ?: 0L)
 
+    /** Every page found unreadable lately, per site with the words that found it, reported or
+     *  not: learning a site reads each of them again, for each search that met the site. */
+    private val pagesSeen = java.util.concurrent.ConcurrentHashMap<String, MutableSet<Pair<String, String>>>()
+
     fun record(domain: String, url: String, query: String, html: String, recipeBroken: Boolean) {
         val now = Clock.System.now()
+        pagesSeen.computeIfAbsent(domain) { java.util.Collections.synchronizedSet(LinkedHashSet()) }.let { seen ->
+            seen += url to query
+            while (seen.size > PAGES_KEPT_PER_SITE) seen.remove(seen.first())
+        }
         val seq = synchronized(this) {
             val last = gaps.lastOrNull { it.domain == domain }
             if (last != null && now - last.at < REPORT_AGAIN_AFTER && last.recipeBroken == recipeBroken) return
@@ -69,6 +77,21 @@ object SiteGaps {
         if (latest.value <= after && wait.isPositive()) withTimeoutOrNull(wait) { latest.first { it > after } }
         return synchronized(this) { gaps.filter { it.seq > after } }
     }
+
+    /** Every page found unreadable on [domain], with the words of the search that found it. */
+    fun of(domain: String): List<Pair<String, String>> =
+        (pagesSeen[domain]?.toList().orEmpty() + synchronized(this) { gaps.filter { it.domain == domain }.map { it.url to it.query } }).distinct()
+
+    /**
+     * What learning a site gave each search that met it, as each is learned: the searches still
+     * open wait on this to show the offers. [offers] is keyed by the words of the search; empty
+     * where the site was given up on.
+     */
+    class Learned(val domain: String, val offers: Map<String, List<io.github.tieo.arbay.model.Listing>>)
+
+    val learned = kotlinx.coroutines.flow.MutableSharedFlow<Learned>(extraBufferCapacity = 64)
+
+    private const val PAGES_KEPT_PER_SITE = 50
 
     /** The page as Arbay fetched it when it reported [domain]. */
     fun page(domain: String): String? = pageFile(domain).takeIf { it.isFile }?.readText()

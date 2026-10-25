@@ -113,4 +113,30 @@ class WebMarketTest {
             "offers":{"price":"64.99","priceCurrency":"EUR"}}</script>"""
         assertEquals("4 Bay Festplattengehäuse 2,5\" 3,5\"", ProductPages.offers(html, "https://a.example/p").single().title)
     }
+
+    @Test
+    fun `a shop's app state is read for anything with a name and a price`() {
+        val html = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"product":
+            {"id":7,"productName":"Silverstone TS434U 4-Bay","price":{"value":199.0,"currency":"EUR"},"url":"/p/ts434u"}}}}</script>"""
+        val offer = ProductPages.offers(html, "https://n.example/x").single()
+        assertEquals("Silverstone TS434U 4-Bay", offer.title)
+        assertEquals(Money(19900, Currency.EUR), offer.price)
+        assertEquals("https://n.example/p/ts434u", offer.url)
+    }
+
+    @Test
+    fun `a list page is read by the box it repeats`() {
+        val box = { name: String, price: String, href: String ->
+            """<div class="tile card"><a href="$href"><img data-src="/i$href.jpg"></a><h3 class="tile-title"><a href="$href">$name</a></h3>
+               <span class="price-old">999,00 €</span><span class="price">$price</span><button>In den Warenkorb</button></div>"""
+        }
+        val html = "<main><nav><a href='/'>Start</a></nav><section class='grid'>" +
+            box("Yottamaster FS4C3 4 Bay", "157,69 €", "/a") + box("ORICO 9548U3 4 Bay", "129,00 €", "/b") +
+            box("Fantec QB-35U31 4 Bay", "165,00 €", "/c") + "</section><footer>Impressum</footer></main>"
+        val offers = ProductPages.offers(html, "https://m.example/suche?q=4bay")
+        assertEquals(listOf("Yottamaster FS4C3 4 Bay", "ORICO 9548U3 4 Bay", "Fantec QB-35U31 4 Bay"), offers.map { it.title })
+        assertEquals(Money(15769, Currency.EUR), offers[0].price)
+        assertEquals("https://m.example/a", offers[0].url)
+        assertEquals("https://m.example/i/a.jpg", offers[0].image)
+    }
 }

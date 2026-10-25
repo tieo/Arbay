@@ -84,4 +84,20 @@ object QueryResultCache {
             }
         }
     }
+
+    /**
+     * Adds offers found after the fact to every stored answer of [platformId] for these words:
+     * a site the web market learned to read once a search had already passed it. The answer
+     * keeps its age, so it expires when it would have.
+     */
+    fun extend(platformId: PlatformId, words: String, more: List<Listing>): Int {
+        if (more.isEmpty()) return 0
+        val prefix = "${platformId.name}|${words.lowercase().trim()}|"
+        var touched = 0
+        entries.replaceAll { key, entry ->
+            if (!key.startsWith(prefix)) entry
+            else entry.copy(listings = (entry.listings + more).distinctBy { it.id }).also { touched++ }
+        }
+        return touched
+    }
 }

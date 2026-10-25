@@ -12,6 +12,7 @@ import io.ktor.client.request.headers
 import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -51,13 +52,38 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words) } ?: Page(Outcome.TIMED_OUT) } } }.awaitAll()
         }
         val outcomes = pages.groupingBy { it.outcome }.eachCount()
-        log.info("Web: '{}' read {} pages: {} with offers, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
-            words, pages.size, outcomes[Outcome.OFFERS] ?: 0, outcomes[Outcome.NOTHING_SOLD] ?: 0, outcomes[Outcome.UNREADABLE] ?: 0,
+        log.info("Web: '{}' read {} pages: {} with offers, {} guessed, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
+            words, pages.size, outcomes[Outcome.OFFERS] ?: 0, outcomes[Outcome.GUESSED] ?: 0, outcomes[Outcome.NOTHING_SOLD] ?: 0, outcomes[Outcome.UNREADABLE] ?: 0,
             outcomes[Outcome.BLOCKED] ?: 0, outcomes[Outcome.TIMED_OUT] ?: 0, pages.sumOf { it.offers.size })
-        val offers = pages.flatMap { it.offers }
-        // A page pointing at an offer on a market Arbay crawls itself (a comparison site linking
-        // an eBay item) is that market's offer, which its own crawler reads better.
-        return offers.map { it.copy(url = behindAffiliateLink(it.url)) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
+        return listingsOf(pages.flatMap { it.offers }, now)
+    }
+
+    /**
+     * Reads again what was reported for [domain], now that it has a recipe: each reported page,
+     * and the site's own search for the words that found it. The offers go into the stored
+     * answers of those searches, so a search that passed the site before it was learned shows
+     * them without being run again; a saved search's next run reads the site anyway. Answers the
+     * offers found, by the words of the search they belong to.
+     */
+    suspend fun learned(domain: String): Map<String, List<Listing>> {
+        val now = Clock.System.now()
+        val byWords = SiteGaps.of(domain).groupBy({ it.second }, { it.first }).mapValues { (words, pages) ->
+            val urls = (pages + SiteRecipes.all().filter { it.domain == domain }
+                .mapNotNull { it.searchUrl?.replace("{q}", words.encodeUrl()) }).distinct()
+            val found = listingsOf(urls.flatMap { read(it, words).offers }, now)
+            QueryResultCache.extend(platformId, words, found)
+            log.info("Web: {} learned, {} offers added to the search '{}'", domain, found.size, words)
+            found
+        }
+        SiteGaps.learned.emit(SiteGaps.Learned(domain, byWords))
+        return byWords
+    }
+
+    /** The listings of offers read off pages. A page pointing at an offer on a market Arbay
+     *  crawls itself (a comparison site linking an eBay item) is that market's offer, which its
+     *  own crawler reads better. */
+    private fun listingsOf(offers: List<PageOffer>, now: kotlin.time.Instant): List<Listing> =
+        offers.map { it.copy(url = behindAffiliateLink(it.url)) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -75,7 +101,6 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 scrapedAt = now,
             )
         }.distinctBy { it.id }
-    }
 
     /**
      * The pages every engine lists for the words. The engines that print their results as plain
@@ -168,7 +193,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     private fun siteSearches(words: String): List<String> =
         SiteRecipes.all().mapNotNull { r -> r.searchUrl?.replace("{q}", words.encodeUrl()) }.distinct()
 
-    private enum class Outcome { OFFERS, NOTHING_SOLD, UNREADABLE, BLOCKED, TIMED_OUT }
+    private enum class Outcome { OFFERS, GUESSED, NOTHING_SOLD, UNREADABLE, BLOCKED, TIMED_OUT }
     private class Page(val outcome: Outcome, val offers: List<PageOffer> = emptyList())
 
     /** The offers on one page; a page that sells something and yields none is reported. */
@@ -189,8 +214,12 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         }
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
         if (!ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
+        // Reported either way, so the site gets its exact recipe; the guess only keeps this
+        // search from missing the offer until then.
         SiteGaps.record(domain, url, words, html, recipeBroken = recipe != null)
-        return Page(Outcome.UNREADABLE)
+        coroutineContext[UnreadableSites]?.sites?.add(domain)
+        val guessed = runCatching { ProductPages.guess(html, url) }.getOrNull()
+        return if (guessed != null) Page(Outcome.GUESSED, listOf(guessed)) else Page(Outcome.UNREADABLE)
     }
 
     /** Whether the page belongs to a market Arbay crawls by its own crawler, which reads it better. */
@@ -293,4 +322,15 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             "golem.de", "pcgameshardware.de", "tomshardware.com", "github.com", "stackoverflow.com", "quora.com",
         )
     }
+}
+
+/**
+ * The sites a web search found selling something and could not read, collected while it runs, so
+ * the search can stay open for them: each is learned by the agent the gap feed reaches, and its
+ * offers then join the search still on screen.
+ */
+class UnreadableSites : kotlin.coroutines.CoroutineContext.Element {
+    val sites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    companion object Key : kotlin.coroutines.CoroutineContext.Key<UnreadableSites>
+    override val key: kotlin.coroutines.CoroutineContext.Key<*> = Key
 }

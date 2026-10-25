@@ -48,6 +48,7 @@ object ProductPages {
     fun offers(html: String, pageUrl: String): List<PageOffer> {
         val doc = Jsoup.parse(html, pageUrl)
         return jsonLd(doc, pageUrl).ifEmpty { microdata(doc, pageUrl) }.ifEmpty { openGraph(doc, pageUrl) }
+            .ifEmpty { appState(doc, pageUrl) }.ifEmpty { repeatedBoxes(doc, pageUrl) }
             .distinctBy { it.url to it.title }
     }
 
@@ -66,6 +67,138 @@ object ProductPages {
         """warenkorb|in den korb|add to (cart|basket)|jetzt kaufen|sofort.?kaufen|kaufen\b|bestellen|""" +
             """buy now|in den einkaufswagen|panier|carrello|cesta|winkelwagen|zur kasse""",
     )
+
+    /**
+     * One product page read the way a person reads it, for a site with no structured data and no
+     * recipe yet: the page's one heading and the first price it shows in an element made for a
+     * price. A guess, so the site is still reported and gets its exact recipe; until then the
+     * search that found the page still shows its offer rather than nothing. Null on a page with
+     * several headings or no such price, which is a list or not a product at all.
+     */
+    fun guess(html: String, pageUrl: String): PageOffer? {
+        val doc = Jsoup.parse(html, pageUrl)
+        val headings = doc.select("h1").map { it.text().trim() }.filter { it.isNotEmpty() }
+        if (headings.size != 1) return null
+        val priceEl = doc.select("[class*=price], [class*=Price], [class*=preis], [class*=Preis], [id*=price], [id*=preis], [data-price]")
+            .firstOrNull { el ->
+                val marks = (el.className() + " " + el.id()).lowercase()
+                // The struck-through price beside the real one, and a unit price, are not it.
+                OLD_PRICE.none { it in marks } && PRICE_IN_TEXT.containsMatchIn(el.ownText().lowercase() + " " + el.text().lowercase().take(40))
+            } ?: return null
+        val raw = priceEl.attr("content").ifBlank { priceEl.attr("data-price") }.ifBlank { priceEl.text() }
+        val currency = currencyOf(raw.filter { !it.isDigit() && it !in ".,  -" }.trim()) ?: Currency.EUR
+        val price = amount(raw, currency)?.takeIf { it.amount > 0 } ?: return null
+        return PageOffer(
+            title = headings.single(),
+            price = price,
+            url = doc.selectFirst("link[rel=canonical]")?.absUrl("href")?.takeIf { it.isNotBlank() } ?: pageUrl,
+            image = doc.selectFirst("meta[property=og:image]")?.attr("content")?.takeIf { it.isNotBlank() }?.let { absolute(it, pageUrl) },
+        )
+    }
+
+    private val OLD_PRICE = listOf("old", "uvp", "strike", "was-", "regular", "crossed", "streich", "statt", "unit", "grund", "base")
+
+    // ── The page's own app state ──
+
+    /**
+     * The products a shop built with a JavaScript framework hands its page as JSON: Next.js in
+     * `__NEXT_DATA__`, others in a `<script type="application/json">`. Any object in it carrying a
+     * name and a price is an offer, whatever the shop calls the fields.
+     */
+    private fun appState(doc: Document, pageUrl: String): List<PageOffer> =
+        doc.select("script#__NEXT_DATA__, script[type=application/json]").flatMap { script ->
+            val root = runCatching { json.parseToJsonElement(script.data().trim()) }.getOrNull() ?: return@flatMap emptyList()
+            val found = mutableListOf<PageOffer>()
+            fun walk(e: JsonElement, depth: Int) {
+                if (depth > 40 || found.size > 200) return
+                when (e) {
+                    is JsonObject -> {
+                        stateOffer(e, pageUrl)?.let { found += it }
+                        e.values.forEach { walk(it, depth + 1) }
+                    }
+                    is JsonArray -> e.forEach { walk(it, depth + 1) }
+                    else -> {}
+                }
+            }
+            walk(root, 0)
+            found
+        }
+
+    private fun stateOffer(o: JsonObject, pageUrl: String): PageOffer? {
+        val title = NAME_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content }
+            ?.let { Jsoup.parse(it).text().trim() }?.takeIf { it.length >= 6 } ?: return null
+        val currency = CURRENCY_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.contentOrNull?.let(::currencyOf) }
+        val price = PRICE_KEYS.firstNotNullOfOrNull { k ->
+            when (val v = o[k]) {
+                is JsonPrimitive -> v.contentOrNull
+                // A price object: {"value": 169.99, "currency": "EUR"}, {"amount": ...}, {"current": ...}.
+                is JsonObject -> listOf("value", "amount", "current", "gross", "price").firstNotNullOfOrNull { (v[it] as? JsonPrimitive)?.contentOrNull }
+                else -> null
+            }
+        }?.let { amount(it, currency ?: Currency.EUR) }?.takeIf { it.amount > 0 } ?: return null
+        val link = URL_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.startsWith("/") || it.startsWith("http") } }
+        val image = IMAGE_KEYS.firstNotNullOfOrNull { k -> imageOf(o[k]) }
+        return PageOffer(
+            title = title,
+            price = price,
+            url = link?.let { absolute(it, pageUrl) } ?: pageUrl,
+            image = image?.let { absolute(it, pageUrl) },
+        )
+    }
+
+    private val NAME_KEYS = listOf("name", "title", "productName", "product_name", "displayName")
+    private val PRICE_KEYS = listOf("price", "salePrice", "currentPrice", "finalPrice", "priceValue", "sellingPrice", "offerPrice", "priceGross")
+    private val CURRENCY_KEYS = listOf("currency", "currencyCode", "priceCurrency")
+    private val URL_KEYS = listOf("url", "link", "href", "productUrl", "canonicalUrl")
+    private val IMAGE_KEYS = listOf("image", "imageUrl", "thumbnail", "img", "picture")
+
+    // ── Repeated boxes ──
+
+    /**
+     * The offers of a list page read by its shape: a list shows one box per product, every box
+     * built alike, each with a link and a price. The most repeated box that carries both is taken,
+     * at least [MIN_BOXES] of them, and each is read for its name, price, link and picture.
+     */
+    private fun repeatedBoxes(doc: Document, pageUrl: String): List<PageOffer> {
+        val body = doc.body() ?: return emptyList()
+        var best: List<Element> = emptyList()
+        for (parent in body.select("*")) {
+            val children = parent.children()
+            if (children.size < MIN_BOXES) continue
+            val alike = children.groupBy { it.tagName() + "." + it.classNames().sorted().joinToString(".") }.values.maxByOrNull { it.size } ?: continue
+            if (alike.size < MIN_BOXES || alike.size <= best.size) continue
+            val priced = alike.filter { box -> box.selectFirst("a[href]") != null && PRICE_IN_TEXT.containsMatchIn(box.text().lowercase()) }
+            if (priced.size >= MIN_BOXES && priced.size * 10 >= alike.size * 6) best = priced
+        }
+        return best.mapNotNull { box -> boxOffer(box, pageUrl) }
+    }
+
+    private fun boxOffer(box: Element, pageUrl: String): PageOffer? {
+        val heading = box.selectFirst("h2, h3, h4, [class*=title], [class*=Title], [class*=name], [class*=Name]")
+        val link = heading?.selectFirst("a[href]") ?: heading?.closest("a[href]")
+            ?: box.select("a[href]").maxByOrNull { it.text().length }
+        val title = (heading?.text()?.takeIf { it.length >= 6 } ?: link?.text())?.trim()
+            ?.takeIf { it.length >= 6 && !CALL_TO_ACTION.containsMatchIn(it.lowercase()) } ?: return null
+        val priceEl = box.select("[class*=price], [class*=Price], [class*=preis], [class*=Preis], [data-price]")
+            .firstOrNull { el -> OLD_PRICE.none { it in (el.className() + " " + el.id()).lowercase() } && PRICE_IN_TEXT.containsMatchIn(el.text().lowercase()) }
+        val priceText = priceEl?.let { it.attr("content").ifBlank { it.attr("data-price") }.ifBlank { it.text() } }
+            ?: PRICE_IN_TEXT.find(box.text().lowercase())?.value ?: return null
+        val currency = currencyOf(priceText.filter { !it.isDigit() && it !in ".,  -" }.trim()) ?: Currency.EUR
+        val price = amount(priceText, currency)?.takeIf { it.amount > 0 } ?: return null
+        val img = box.selectFirst("img")
+        return PageOffer(
+            title = title,
+            price = price,
+            url = link?.absUrl("href")?.takeIf { it.isNotBlank() } ?: pageUrl,
+            image = img?.let { i -> listOf("src", "data-src", "data-original").firstNotNullOfOrNull { a -> i.absUrl(a).takeIf { it.isNotBlank() && !it.startsWith("data:") } } },
+        )
+    }
+
+    private const val MIN_BOXES = 3
+
+    /** A button's words, which a test report's offer boxes carry where a shop's carry the name:
+     *  "Zum Angebot bei cyberport" is a link, not a product. */
+    private val CALL_TO_ACTION = Regex("""^(zum angebot|jetzt kaufen|in den warenkorb|angebot ansehen|zum shop|zum produkt|details|mehr erfahren|buy now|view deal|check price)""")
 
     // ── JSON-LD ──
 
