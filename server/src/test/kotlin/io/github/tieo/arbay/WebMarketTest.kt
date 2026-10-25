@@ -403,4 +403,28 @@ class WebMarketTest {
         assertEquals("https://www.voelkner.de/index.php?mp=products&products_id=12147583",
             WebCrawler.withoutSession("https://www.voelkner.de/index.php?mp=products&products_id=12147583&utm_source=google&gclid=EAIa"))
     }
+
+    @Test
+    fun `a guessed price labelled as a day's rent is a day rate`() {
+        // werkzeugprofis.de's machine page, before it had a recipe.
+        val html = """<h1 itemprop="name">Parkettschleifmaschine 79 kg</h1><div class="price-box"><span class="regular-price" id="product-price-24">
+            Tagesmietpreis:&nbsp; <span class="price">36,00 €</span></span></div><button>In den Warenkorb</button>"""
+        val offer = ProductPages.guess(html, "https://www.werkzeugprofis.de/parkett-dielen/parkettschleifmaschine-klein.html")!!
+        assertEquals(Money(3600, Currency.EUR), offer.price)
+        assertEquals(io.github.tieo.arbay.model.RentPeriod.DAY, offer.rentPer)
+    }
+
+    @Test
+    fun `an offer a recipe reads at its own page is not taken off a list`() {
+        SiteRecipes.put(SiteRecipe(domain = "rp-test.com", urlPattern = "/p/", title = "h1", price = "span.p"))
+        try {
+            val listed = PageOffer("Lägler Parkettschleifmaschine", Money(2000, Currency.EUR), "https://www.rp-test.com/p/lagler-mieten")
+            val other = PageOffer("Bagger", Money(9000, Currency.EUR), "https://www.rp-test.com/kategorie/bagger")
+            assertEquals(listOf(other), SiteRecipes.withoutOffersReadElsewhere("https://www.rp-test.com/kategorie/parkett", listOf(listed, other)))
+            // On its own page it is what the page says.
+            assertEquals(listOf(listed), SiteRecipes.withoutOffersReadElsewhere("https://www.rp-test.com/p/lagler-mieten", listOf(listed)))
+        } finally {
+            SiteRecipes.remove("rp-test.com")
+        }
+    }
 }

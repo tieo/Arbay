@@ -144,6 +144,17 @@ object SiteRecipes {
         }
     }
 
+    /**
+     * Offers a page's structured data states for other pages, without those a recipe of the site
+     * reads at their own page: rental-portal.com's lists give each machine its cheapest tier net
+     * (20,00 €), its machine page one day's rent (35,70 €).
+     */
+    fun withoutOffersReadElsewhere(pageUrl: String, offers: List<PageOffer>): List<PageOffer> {
+        val own = synchronized(this) { recipes[domainOf(pageUrl)] }?.mapNotNull { r -> r.urlPattern?.let { runCatching { Regex(it) }.getOrNull() } }
+            ?.takeIf { it.isNotEmpty() } ?: return offers
+        return offers.filterNot { o -> o.url != pageUrl && own.any { it.containsMatchIn(o.url) && !it.containsMatchIn(pageUrl) } }
+    }
+
     /** The offers [recipe] reads off a page. */
     fun read(recipe: SiteRecipe, html: String, pageUrl: String): List<PageOffer> {
         if (recipe.pattern != null) return readPattern(recipe, recipe.pattern, html, pageUrl)

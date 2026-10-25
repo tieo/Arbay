@@ -259,7 +259,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     }
 
     private fun offersOn(recipe: SiteRecipe?, html: String, url: String): List<PageOffer> = try {
-        SiteRecipes.asTheSiteDeals(url, html, recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { ProductPages.offers(html, url) })
+        SiteRecipes.asTheSiteDeals(url, html, recipe?.let { SiteRecipes.read(it, html, url) }.orEmpty().ifEmpty { SiteRecipes.withoutOffersReadElsewhere(url, ProductPages.offers(html, url)) })
     } catch (e: Exception) {
         log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
         emptyList()
@@ -364,7 +364,9 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         internal fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
             .replace(TRACKING_PARAM, "").replace(Regex("""[?&]$"""), "").replace("?&", "?")
 
-        private val RENTAL_SITE = Regex("""^(miet|rent(al|in|o))|verleih|vermiet|mietpark|rental""")
+        // Named for hiring out at its start: a Verleih elsewhere in the name (verleihnix.de) may
+        // sell the consumables beside its machines.
+        private val RENTAL_SITE = Regex("""^(miet|rent(al|in|o))|rental""")
 
         /** What an engine or an ad adds to an address to count the visit, which makes the same
          *  offer a new one for every engine that listed it. */

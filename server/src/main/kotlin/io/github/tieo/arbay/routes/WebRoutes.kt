@@ -101,7 +101,7 @@ fun Route.webRoutes() {
                 io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
             else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")
             val byRecipe = recipe?.let { SiteRecipes.read(it, html, asked.url) }.orEmpty()
-            val offers = SiteRecipes.asTheSiteDeals(asked.url, html, byRecipe.ifEmpty { ProductPages.offers(html, asked.url) })
+            val offers = SiteRecipes.asTheSiteDeals(asked.url, html, byRecipe.ifEmpty { SiteRecipes.withoutOffersReadElsewhere(asked.url, ProductPages.offers(html, asked.url)) })
             call.respond(WebTried(
                 offers = offers,
                 readBy = when {

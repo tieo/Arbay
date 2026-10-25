@@ -143,13 +143,18 @@ object ProductPages {
         val raw = priceEl.attr("content").ifBlank { priceEl.attr("data-price") }.ifBlank { priceEl.text() }
         val currency = currencyOf(raw.filter { !it.isDigit() && it !in ".,  -" }.trim()) ?: Currency.EUR
         val price = amount(raw, currency)?.takeIf { it.amount > 0 } ?: return null
+        // A price labelled as a day's rent: werkzeugprofis.de's "Tagesmietpreis: 36,00 €".
+        val label = (priceEl.parent()?.ownText().orEmpty() + " " + priceEl.text().take(80)).lowercase()
         return PageOffer(
             title = headings.single(),
             price = price,
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY.takeIf { DAY_RENT.containsMatchIn(label) },
             url = doc.selectFirst("link[rel=canonical]")?.absUrl("href")?.takeIf { it.isNotBlank() } ?: pageUrl,
             image = doc.selectFirst("meta[property=og:image]")?.attr("content")?.takeIf { it.isNotBlank() }?.let { absolute(it, pageUrl) },
         )
     }
+
+    private val DAY_RENT = Regex("""tagesmiet|mietpreis.{0,12}tag|pro tag|/\s?tag\b|tagespreis""")
 
     private val OLD_PRICE = listOf("old", "uvp", "strike", "was-", "regular", "crossed", "streich", "statt", "unit", "grund", "base")
 
