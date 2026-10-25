@@ -41,13 +41,6 @@ object SmartScreens {
     /** Photos read per ad: a gallery longer than this is product shots, not more screenshots. */
     private const val MOST_PHOTOS = 12
 
-    /** The largest photo read, in bytes and in pixels a side, so a hostile file cannot exhaust the server. */
-    private const val MOST_BYTES = 8_000_000
-    private const val MOST_SIDE = 5_000
-
-    /** A screenshot this narrow is upscaled before reading: Tesseract wants letters some 20 pixels high. */
-    private const val READ_WIDTH = 1_400
-
     /** A row of a SMART table: three normalised values and the raw one in twelve hex digits, as
      *  CrystalDiskInfo prints them ("Wiederzugewiesene Sektoren 88 88 10 00000000B9A0"). Whatever the
      *  OCR makes of the scroll bar and window edge after it is let be, and so is one stray character
@@ -373,41 +366,8 @@ object SmartScreens {
             .onFailure { log.warn("SMART readings not kept: {}", it.message) }
     }
 
-    private val tesseractPresent: Boolean by lazy {
-        runCatching { ProcessBuilder("tesseract", "--version").start().waitFor() == 0 }.getOrDefault(false)
-            .also { if (!it) log.warn("tesseract is not installed: SMART screenshots are not read") }
-    }
+    private val tesseractPresent: Boolean get() = PhotoText.present
 
-    /** The photo's text, or null where it is not an image this reads or the reader gave none in time. */
-    private suspend fun ocr(bytes: ByteArray, enlarge: Double): String? {
-        if (bytes.size > MOST_BYTES) return null
-        val image = runCatching { ImageIO.read(ByteArrayInputStream(bytes)) }.getOrNull() ?: return null
-        if (image.width > MOST_SIDE || image.height > MOST_SIDE || image.width < 200 || image.height < 150) return null
-        val scale = (READ_WIDTH.toDouble() / image.width).coerceIn(1.0, 3.0) * enlarge
-        val gray = BufferedImage((image.width * scale).toInt(), (image.height * scale).toInt(), BufferedImage.TYPE_BYTE_GRAY)
-        gray.createGraphics().apply {
-            setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
-            drawImage(image, 0, 0, gray.width, gray.height, null)
-            dispose()
-        }
-        // Tesseract reads dark text on light; a terminal or a dark theme is turned over first, which
-        // took its zeros from "9", "]" and "e" to "0".
-        val raster = gray.raster
-        var sum = 0L
-        for (y in 0 until gray.height step 4) for (x in 0 until gray.width step 4) sum += raster.getSample(x, y, 0)
-        val samples = ((gray.height + 3) / 4).toLong() * ((gray.width + 3) / 4)
-        if (sum < samples * 255 * 0.45) {
-            for (y in 0 until gray.height) for (x in 0 until gray.width) raster.setSample(x, y, 0, 255 - raster.getSample(x, y, 0))
-        }
-        val file: File = Files.createTempFile("smart", ".png").toFile()
-        return try {
-            ImageIO.write(gray, "png", file)
-            // A photo that is not a screenshot can keep Tesseract busy for long; none needs more than this.
-            withTimeoutOrNull(30.seconds) {
-                runProcess(listOf("tesseract", file.absolutePath, "stdout", "-l", "deu+eng", "--psm", "6"))
-            }?.takeIf { it.exitCode == 0 }?.stdout?.decodeToString()
-        } finally {
-            file.delete()
-        }
-    }
+    /** The photo's text as a screenshot is laid out: one block. */
+    private suspend fun ocr(bytes: ByteArray, enlarge: Double): String? = PhotoText.read(bytes, enlarge, PhotoText.Layout.BLOCK)
 }

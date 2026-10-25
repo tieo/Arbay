@@ -221,13 +221,13 @@ object FitScore {
 
     /** Lower case with umlauts folded and every run of other characters one space, so "Lägler",
      *  "Laegler" and "LAGLER" read alike and a word is found only as a whole. */
-    private fun folded(text: String): String =
+    internal fun folded(text: String): String =
         " " + text.lowercase().replace("ä", "a").replace("ö", "o").replace("ü", "u").replace("ß", "ss")
             .replace("ae", "a").replace("oe", "o").replace("ue", "u")
             .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim() + " "
 
     /** Whether [text], already [folded], says [phrase] in so many words and not right after a "kein". */
-    private fun says(text: String, phrase: String): Boolean {
+    internal fun says(text: String, phrase: String): Boolean {
         val p = folded(phrase).trim().takeIf { it.isNotEmpty() } ?: return false
         var from = 0
         while (true) {
@@ -238,6 +238,10 @@ object FitScore {
         }
     }
 
+    /** The model of [wishes] that [text], [folded] already, names, the one worth most where several are. */
+    internal fun namedModel(text: String, wishes: ProductWishes): io.github.tieo.arbay.model.ModelWish? =
+        wishes.models.filter { m -> m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+
     private val NEGATIONS = setOf("kein", "keine", "keinen", "ohne", "nicht", "no", "not", "without", "senza", "sans")
 
     /**
@@ -247,7 +251,10 @@ object FitScore {
      * it is, first; the price, where every euro counts; then what comes with it, the drive to the
      * seller (a machine is fetched, not posted), the seller, and the time the ad has been online.
      */
-    fun score(listing: Listing, wishes: ProductWishes, priceEur: Double, softDriveHours: Double): Fit? {
+    fun score(
+        listing: Listing, wishes: ProductWishes, priceEur: Double, softDriveHours: Double,
+        guessed: ((Listing) -> ModelGuess?)? = ModelGuesses::of,
+    ): Fit? {
         val raw = "${listing.title}\n${listing.description.orEmpty()}"
         if (listing.condition == Condition.PARTS_ONLY) return null
         if (tradeOnly.containsMatchIn(raw)) return null
@@ -259,13 +266,23 @@ object FitScore {
         if (wishes.ruledOutWords.any { says(text, it) }) return null
 
         // The model a title names counts in full; one only the text names may be a comparison or
-        // a mention ("Schleifpapier passt auch für Hummel"), and counts a little less.
+        // a mention ("Schleifpapier passt auch für Hummel"), and counts a little less. A model worth
+        // nothing is one that would not do: an edge sander named alone is not the machine wanted,
+        // while "Hummel + Elan" is the Hummel with an edge sander thrown in.
         val model = wishes.models.takeIf { it.isNotEmpty() }?.let { models ->
-            val inTitle = models.filter { m -> m.words.any { says(title, it) } }.maxByOrNull { it.worth }
-            val inText = models.filter { m -> m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+            val namedInTitle = models.filter { m -> m.words.any { says(title, it) } }
+            val inTitle = namedInTitle.maxByOrNull { it.worth }
+            if (inTitle != null && inTitle.worth <= 0.0) return null
+            val inText = models.filter { m -> m.worth > 0 && m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+            val seen = guessed?.invoke(listing)?.let { g -> models.firstOrNull { it.name == g.model }?.let { it to g } }
             when {
                 inTitle != null -> Wish(inTitle.worth, inTitle.name)
                 inText != null -> Wish(inText.worth * 0.8, "${inText.name} (in the text)")
+                // A model told from the ad's photos or its full text, read since the card came in.
+                seen != null -> {
+                    if (seen.first.worth <= 0.0 && seen.second.sure) return null
+                    Wish(seen.first.worth * seen.second.confidence, "${seen.first.name} (${seen.second.how})")
+                }
                 else -> Wish(null, null)
             }
         }

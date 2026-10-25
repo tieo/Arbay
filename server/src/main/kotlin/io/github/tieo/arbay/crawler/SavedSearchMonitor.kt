@@ -541,6 +541,9 @@ class SavedSearchMonitor(
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
         val fresh = record(product, shown)
+        // An offer naming no model is told one from its full text, its photos' print or their
+        // likeness to the offers that do, before it is weighed.
+        if (things != null) ModelGuesses.identify(shown.values, things)
         // What the top of the search scores today, every offer counted once.
         val scores = bestCopyEach(
             shown.values.mapNotNull { l ->
