@@ -24,6 +24,9 @@ object RelevanceFilter {
         /** Every word of the search as typed, in its order, whichever of them a listing is held
          *  to: what a number counts is the word typed after it, required or not. */
         val typed: List<String> = emptyList(),
+        /** A word typed with an umlaut, by the spelling without it: "lägler" is "laegler" here and
+         *  "Lagler" on most of the ads selling one. */
+        val plainVowels: Map<String, String> = emptyMap(),
     )
 
     /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
@@ -43,8 +46,14 @@ object RelevanceFilter {
             orGroups = orGroups,
             asksForASize = (positiveTokens + orGroups.flatten()).any { namesAUnit(it) },
             typed = positiveTokens,
+            plainVowels = (listOf(query.text) + query.aliases).flatMap { it.split(" ") }
+                .filter { w -> w.any { it in "äöüÄÖÜ" } }
+                .associate { w -> normalizeToken(w) to normalizeToken(w.replace(UMLAUT) { it.value.lowercase().let(PLAIN_VOWEL::getValue) }) },
         )
     }
+
+    private val UMLAUT = Regex("[äöüÄÖÜ]")
+    private val PLAIN_VOWEL = mapOf("ä" to "a", "ö" to "o", "ü" to "u")
 
     /** A unit on its own ("GB"), or glued to a number or a kit's quantity×size ("32GB", "1x32GB"). */
     private fun namesAUnit(token: String): Boolean =
@@ -214,6 +223,7 @@ object RelevanceFilter {
 
         fun tokenMatches(token: String): Boolean {
             if (token in implied) return true
+            parsed.plainVowels[token]?.let { plain -> if (tokenMatches(plain)) return true }
             if (statedModel != null && token.replace(NON_ALNUM, "") == statedModel) return true
             // A size is a number of bytes, written however the seller writes it: a 2TB drive is
             // sold as "2048GB" and "2000GB" as often as "2TB", and only the spelling differs.
@@ -440,6 +450,12 @@ object RelevanceFilter {
         RegexOption.IGNORE_CASE,
     )
 
+    /** What a machine works on, named after "für" or "per" to say what it is for. */
+    private val material = Regex(
+        """parkett|parquet|parket|parketts|holz|holzb(ö|oe)den|dielen|legno|bois|wood|hardwood|floors?|boden|b(ö|oe)den|pavimenti|beton|estrich""",
+        RegexOption.IGNORE_CASE,
+    )
+
     /** How far past "für" the thing itself has to appear for the phrase to be about it. */
     private const val WORDS_AFTER_FOR = 4
 
@@ -480,6 +496,10 @@ object RelevanceFilter {
         val pointsAtAMachine = tail.trimStart().split(Regex("\\s+")).firstOrNull()
             ?.let { hostDevice.matches(it.trim(',', '.', ':', ';')) } ?: false
         if (pointsAtAMachine) return false
+        // A material after the preposition is what the thing works on, and the words after it
+        // name the thing itself: "Levigatrice per parquet HUMMEL" is a Hummel sanding parquet,
+        // not something sold for one.
+        if (tail.trimStart().split(Regex("\\s+")).firstOrNull()?.trim(',', '.', ':', ';')?.let { material.matches(it) } == true) return false
         val pointedAt = tail.trim().split(Regex("\\s+")).take(WORDS_AFTER_FOR).joinToString(" ")
         val tailHasQuery = tokens.any { holds(pointedAt, it.lowercase()) }
         if (headHasQuery || !tailHasQuery) return false
@@ -969,6 +989,11 @@ object RelevanceFilter {
             // they carry the machine's own name and its price is a fraction of one, which put a
             // €33 switch at the top of a search for the machine it belongs to.
             """schalter|kohleb(ü|ue)rsten|kondensator|keilriemen|antriebsriemen|""" +
+            // The same in English, as Lägler's US dealer lists a Hummel's spares: "Belt Tensioner -
+            // Part# P064 - OEM", "Hummel Drum #P161", "Fan Insert - Complete Assembly". "OEM" alone
+            // is not one: a drive sold loose from a laptop is an OEM drive.
+            """part(?=\s*(#|no\b|number))|spare\s+parts?|replacement\s+parts?|complete\s+assembly|tensioner|contactor|""" +
+            """(?<=#\s?)\p{L}{0,2}\d{3,}|""" +
             // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
             // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.
             """papel\s+de\s+lija|banda\s+de\s+revestimiento|bandas?\s+abrasivas?|""" +
@@ -1176,6 +1201,7 @@ object RelevanceFilter {
             if (listings.isEmpty()) return 0.0
             val t = token.lowercase().replace(NON_ALNUM, "")
             if (t.isEmpty()) return 1.0
+            val plain = parsed.plainVowels[t]
             return listings.count { listing ->
                 val text = "${listing.title} ${listing.description ?: ""}"
                 // A short word is looked for as a word of its own, the way it is matched: "m2"
@@ -1183,7 +1209,7 @@ object RelevanceFilter {
                 if (t.length <= 2) {
                     normalize(text.lowercase()).split(" ").any { it.replace(NON_ALNUM, "") == t }
                 } else {
-                    normalize(text.lowercase()).replace(NON_ALNUM, "").contains(t)
+                    normalize(text.lowercase()).replace(NON_ALNUM, "").let { it.contains(t) || plain != null && it.contains(plain) }
                 }
             }.toDouble() / listings.size
         }

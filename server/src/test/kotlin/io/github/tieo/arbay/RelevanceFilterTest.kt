@@ -312,6 +312,66 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a word with an umlaut is the word its sellers write without one`() {
+        // Live answers for "lägler hummel": Kleinanzeigen, 2dehands and eBay sellers write the maker
+        // as "Lagler", and every one of those machines was dropped as off target.
+        val machines = listOf(
+            listing("parkettschleifmaschine lagler Hummel jahr 2025", 450000),
+            listing("Parket schuurmachine lagler Hummel numatic", 260000),
+            listing("Lägler Hummel Bandschleifmaschine 230V", 210000),
+        )
+        val found = RelevanceFilter.partition(machines, SearchQuery(text = "lägler hummel", category = MarketGroup.GENERAL))
+        assertEquals(machines.map { it.title }, found.kept.map { it.title }.sortedBy { t -> machines.indexOfFirst { it.title == t } }, "${found.dropped}")
+        // A sander sold for parquet is the sander: Subito's "levigatrice per parquet" was taken for
+        // something sold for a parquet floor.
+        val subito = listing("Levigatrice per parquet HUMMEL USATA Lagler", 500000)
+        assertEquals(1, RelevanceFilter.filter(listOf(subito) + machines, SearchQuery(text = "lägler hummel", category = MarketGroup.GENERAL)).count { it == subito })
+    }
+
+    @Test
+    fun `a spare part of the machine searched for is not the machine`() {
+        // eBay FR, live, for "lägler hummel": Lägler's own spare parts at 370 to 685 €, each naming
+        // the maker and the machine, and under a 700 € alert each read as a cheap Hummel.
+        val parts = listOf(
+            listing("Lagler Hummel Belt Tensioner - Part# P064 - OEM", 37047),
+            listing("Hummel Switch Part # P202 - NEW - OEM - Original - Made by Lagler - Hummel", 41561),
+            listing("P169 - Lagler - Hummel Fan Insert - Complete Assembly", 57579),
+            listing("Hummel Drum #P161 - OEM - BRAND NEW - Lagler Hummel Drum", 68470),
+            listing("Lagler P278 Universal Contactor For Hummel Sanding Machines", 48569),
+            listing("Lägler Hummel Ersatzteil Antriebsriemen", 4500),
+        )
+        val machines = listOf(
+            listing("parkettschleifmaschine lagler Hummel jahr 2025", 450000),
+            listing("Lägler Hummel Bandschleifmaschine 230V", 210000),
+        )
+        val kept = RelevanceFilter.filter(parts + machines, SearchQuery(text = "lägler hummel", category = MarketGroup.GENERAL))
+        assertEquals(machines.map { it.title }.toSet(), kept.map { it.title }.toSet())
+    }
+
+    @Test
+    fun `a machine named by its maker or by what it is is the machine, and a namesake is not`() {
+        // Live answers for "lägler hummel": Vinted and eBay list Goebel's Hummel figurines and Hummel
+        // football shirts, while Kleinanzeigen and 2dehands sell the sander without naming Lägler.
+        val hummel = SearchQuery(
+            text = "lägler hummel",
+            aliases = listOf("hummel parkettschleifmaschine", "hummel bandschleifmaschine", "hummel parketschuurmachine"),
+            category = MarketGroup.GENERAL,
+        )
+        val machines = listOf(
+            listing("Parkett - Schleifmaschine Hummel", 145000),
+            listing("Hummel Parketschuurmachine ,bandschuurmachine", 225000),
+            listing("parkettschleifmaschine lagler Hummel jahr 2025", 450000),
+        )
+        val namesakes = listOf(
+            listing("Original Hummel \"Glitzernde Frühlingsboten“ (HUM 2284) beim Spielen mit Swarovski-Kristallen", 30520),
+            listing("Goebel Hummel Porzellan Figuren Sammlung", 31570),
+            listing("Hummel Dänemark Laudrup Euro 1992", 31570),
+            listing("Randschleifmaschine Parkettschleifmaschine", 61500),
+        )
+        assertEquals(machines.map { it.title }.toSet(), RelevanceFilter.filter(machines + namesakes, hummel).map { it.title }.toSet())
+    }
+
+    @Test
     fun `a search is offered the other names sellers write its words under`() {
         // pearl counts bays as "4-fach", MediaMarkt as "4 Einschübe": a market answering only titles
         // carrying "bay" never shows them unless it is asked in their words.
