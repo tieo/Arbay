@@ -306,6 +306,13 @@ object RelevanceFilter {
             if (token.length >= COMPOUND_LENGTH && token.all { it.isLetter() } &&
                 titleCompact.contains(token.take(STEM_LENGTH))
             ) return true
+            // A compound is also written as its last part alone, the rest said by the other words
+            // of the title: "Icy Box 4 Bay Gehäuse" is the "4 bay festplattengehäuse" searched for.
+            // Only beside other words of the search, which have to be found too: on its own,
+            // "maschine" would let every novel ending in it through a search for a machine.
+            if (parsed.positiveTokens.size >= 2 && token.length >= COMPOUND_LENGTH && token.all { it.isLetter() } &&
+                titleWords.any { w -> w.length >= COMPOUND_HEAD_LENGTH && token.length - w.length >= STEM_LENGTH / 2 && token.endsWith(w) }
+            ) return true
             // titleCompact catches tokens split by hyphens/spaces (e.g. "wh1000xm6" = "WH-1000XM6").
             // Guard: match must start AND end at word boundaries (prevents "g16" matching "8G 16GB").
             var searchFrom = 0
@@ -1295,6 +1302,9 @@ object RelevanceFilter {
      */
     /** From this many characters a word is built of parts rather than being one. */
     private const val COMPOUND_LENGTH = 10
+
+    /** The shortest last part of a compound that stands for it: "gehaeuse", "maschine". */
+    private const val COMPOUND_HEAD_LENGTH = 6
 
     /** The leading part compared, long enough to name the thing the compound is about. */
     private const val STEM_LENGTH = 7

@@ -782,6 +782,32 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a compound written as its last part is found beside the other words`() {
+        // Kleinanzeigen, live: "Verkaufe Icy Box 4 Bay Gehäuse" is a 4-bay drive enclosure.
+        val kept = search("4 bay festplattengehäuse", listOf(
+            listing("Verkaufe Icy Box 4 Bay Gehäuse"),
+            listing("Fantec 4-Bay USB-3.0-Festplattengehäuse mit Netzteil"),
+            listing("Icy Box 2 Bay Gehäuse"),
+        )).map { it.title }
+        assertEquals(listOf("Verkaufe Icy Box 4 Bay Gehäuse", "Fantec 4-Bay USB-3.0-Festplattengehäuse mit Netzteil").sorted(), kept.sorted())
+        // On its own the last part says nothing: a search of one word stays held to that word.
+        val alone = search("parkettschleifmaschine", listOf(
+            listing("Parkettschleifmaschine Lägler Hummel"),
+            listing("Schleifmaschine Bosch"),
+        )).map { it.title }
+        assertEquals(listOf("Parkettschleifmaschine Lägler Hummel"), alone)
+    }
+
+    @Test
+    fun `a compound is searched shorter only by a last part sellers write alone`() {
+        val seen = setOf(" gehäuse", " schleifmaschine", " maschine")
+        val background = io.github.tieo.arbay.crawler.QueryVariants.TermBackground { t -> if (t.lowercase() in seen) 0.01 else 0.0 }
+        assertEquals(listOf("4 bay gehäuse"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("4 bay festplattengehäuse", background))
+        assertEquals(listOf("schleifmaschine lägler"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("parkettschleifmaschine lägler", background))
+        assertEquals(emptyList(), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("festplattengehäuse", background))
+    }
+
+    @Test
     fun `a part number's revision suffix is not a model word`() {
         // eBay.fr, live, for "2TB NVMe": a 2.5" SATA hard disk with part number 1FM101-002 was kept
         // as NVMe because most other listings ending in "-002" were NVMe drives.

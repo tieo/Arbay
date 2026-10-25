@@ -83,7 +83,12 @@ suspend fun Crawler.searchAllSpellings(
                     .map { QueryVariants.Candidate(it, sharesStem = true) }
             }
         }
-    val terms = (picked + automatic).distinctBy { it.term.lowercase() }
+    // A market answering only titles that carry every word misses the sellers who write a compound
+    // shorter; where that leaves its answer thin, the compound's last part is searched as well. A
+    // thin answer is one more page at most, so this needs no asking.
+    val shorter = if (primary.size >= THIN_ANSWER) emptyList() else
+        QueryVariants.compoundHeads(query.text, background).map { QueryVariants.Candidate(it, sharesStem = true) }
+    val terms = (picked + automatic + shorter).distinctBy { it.term.lowercase() }
     if (terms.isEmpty()) return primary.markDefective()
 
     val extra = terms.flatMap { candidate ->
@@ -117,6 +122,7 @@ suspend fun Crawler.searchAllSpellings(
             why = when (candidate.term) {
                 in query.reach.extraTerms -> "picked by hand"
                 in described -> "how the listings carrying this number describe the part"
+                in shorter.map { it.term } -> "the compound written shorter, for a thin answer"
                 else -> "another name for it"
             },
             searched = true,
@@ -128,6 +134,9 @@ suspend fun Crawler.searchAllSpellings(
     }
     return (primary + extra).distinctBy { it.id }.markDefective()
 }
+
+/** An answer this small is likely missing what sellers wrote in other words. */
+private const val THIN_ANSWER = 15
 
 /** A listing whose title or text says it is sold broken carries that as its condition, the way
  *  eBay's own "for parts" listings do: a Kleinanzeigen ad has no condition field, and its seller

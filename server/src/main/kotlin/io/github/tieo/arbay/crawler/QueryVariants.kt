@@ -347,6 +347,33 @@ object QueryVariants {
             .map { it.first }
     }
 
+    /**
+     * The search with each compound cut to its last part, where the titles Arbay has seen write
+     * that part as a word of its own: "4 bay festplattengehäuse" also as "4 bay gehäuse". A market
+     * that answers only titles carrying every word misses the sellers who write the thing shorter,
+     * and an Icy Box sold as "4 Bay Gehäuse" never came up. The longest such part is taken, so
+     * "parkettschleifmaschine" stays a "schleifmaschine" rather than becoming any machine. Only for
+     * a search of several words: the others still say what the thing is.
+     */
+    fun compoundHeads(queryText: String, background: TermBackground): List<String> {
+        val words = queryText.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.size < 2) return emptyList()
+        return words.indices.mapNotNull { i ->
+            val word = words[i]
+            if (word.length < COMPOUND_LENGTH || !word.all { it.isLetter() }) return@mapNotNull null
+            val head = (MIN_COMPOUND_REST until word.length - MIN_HEAD_LENGTH + 1)
+                .map { word.substring(it) }
+                // Written after a space somewhere: a word of its own, not only the end of another.
+                .firstOrNull { background.shareOfCorpus(" $it") > 0.0 }
+                ?: return@mapNotNull null
+            words.toMutableList().apply { this[i] = head }.joinToString(" ")
+        }.distinct()
+    }
+
+    private const val COMPOUND_LENGTH = 10
+    private const val MIN_HEAD_LENGTH = 6
+    private const val MIN_COMPOUND_REST = 4
+
     /** How common a word is across everything crawled so far, as a share of listings in [0,1].
      *  The background a feedback term is judged against. */
     fun interface TermBackground {
