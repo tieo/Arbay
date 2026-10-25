@@ -54,7 +54,10 @@ appear once its scripts ran. `searchUrl` is the site's own search with `{q}` for
 then on the site is searched directly on every web search, so set it wherever the site has a
 search. A site its structured data already reads gets a recipe of `domain` and `searchUrl` alone.
 A price its structured data marks `"valueAddedTaxIncluded": false` (Conrad's business prices) is
-read with the VAT of the shop's country added.
+read with the VAT of the shop's country added. A site that shows net prices where its structured
+data says nothing gets `"pricesNet": true`, and `netWhere`, a selector for what marks such a page,
+where only some are: Conrad shows a client it does not know its business prices, its header then
+reading "Geschäftskunde".
 
 Where no element holds one whole offer (pearl's lists split each product across rows, and state
 it whole only in a script), `pattern` replaces `item`, `title`, `price`, `link` and `image`: a
