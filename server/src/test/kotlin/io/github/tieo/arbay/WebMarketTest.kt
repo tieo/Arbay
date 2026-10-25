@@ -318,4 +318,15 @@ class WebMarketTest {
         assertEquals("https://mediahub.boels.com/m/p/11281.jpg", offer.image)
         assertEquals(io.github.tieo.arbay.model.RentPeriod.DAY, offer.rentPer)
     }
+
+    @Test
+    fun `a recipe for a site quoting net prices adds VAT`() {
+        // maschinen-humpert.de: "Tagestarif Wochenendtarif Wochentarif Kaution / 15,00 €* 22,50 €* 72,00 €* 50,00 €", net.
+        val html = """<div><div class="w"><p>Tagestarif<br>Wochenendtarif<br>Wochentarif<br>Kaution</p></div><div class="w"><p>15,00 €*<br> 22,50 €*<br> 72,00 €*<br> 50,00 €</p></div></div><h1>Parkett Eckenschleifer zur Miete</h1>"""
+        val recipe = SiteRecipe(domain = "maschinen-humpert.de", title = "h1", price = "div.w:has(p:matchesOwn(^Tagestarif)) + div p#1", pricesNet = true,
+            rentPer = io.github.tieo.arbay.model.RentPeriod.DAY, rates = mapOf(io.github.tieo.arbay.model.RentPeriod.WEEK to "div.w:has(p:matchesOwn(^Tagestarif)) + div p#3"))
+        val offer = SiteRecipes.read(recipe, html, "https://maschinen-humpert.de/vermietung/parkett-eckenschleifer-mieten/").single()
+        assertEquals(Money(1785, Currency.EUR), offer.price)
+        assertEquals(Money(8568, Currency.EUR), offer.rentRates.single().price)
+    }
 }

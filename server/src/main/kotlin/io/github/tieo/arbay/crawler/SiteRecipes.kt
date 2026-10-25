@@ -69,6 +69,10 @@ data class SiteRecipe(
     /** For a site that hires things out rather than selling them, the stretch of time [price]
      *  reads the cost of: its day rate wherever it states one, so rentals compare. */
     val rentPer: RentPeriod? = null,
+    /** Whether the site states its prices without VAT, as a rental firm for trades does
+     *  (maschinen-humpert.de: "*Preisangabe netto zzgl. MwSt."): Germany's 19 % is added, so the
+     *  price is what a person pays. */
+    val pricesNet: Boolean = false,
     /** A rental's other rates, each a selector inside the offer's box, by the time they pay for. */
     val rates: Map<RentPeriod, String> = emptyMap(),
     /** Whether the offers only appear once a browser has run the page's scripts. */
@@ -139,7 +143,7 @@ object SiteRecipes {
             val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
             val currency = pageCurrency ?: ProductPages.currencyOf(priceText.filter { !it.isDigit() && it !in ".,  " }) ?: Currency.EUR
-            val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 } ?: return@mapNotNull null
+            val price = ProductPages.amount(priceText, currency)?.takeIf { it.amount > 0 }?.let { withVat(recipe, it) } ?: return@mapNotNull null
             PageOffer(
                 title = title,
                 price = price,
@@ -149,7 +153,7 @@ object SiteRecipes {
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
                 rentPer = recipe.rentPer,
                 rentRates = recipe.rates.mapNotNull { (period, spec) ->
-                    amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, it) }
+                    amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, withVat(recipe, it)) }
                 },
             )
         }.distinctBy { it.url to it.title }
@@ -229,6 +233,11 @@ object SiteRecipes {
 
     private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|eur\b|chf\b|£|\$)|(€|eur|chf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")
+
+    private fun withVat(recipe: SiteRecipe, price: io.github.tieo.arbay.model.Money) =
+        if (recipe.pricesNet) price.copy(amount = Math.round(price.amount * (1 + GERMAN_VAT))) else price
+
+    private const val GERMAN_VAT = 0.19
 
     /** A link as a page hides it: mietmeile.de writes each ad's address base64-encoded into a
      *  `data-submit` its script follows. A value that decodes to an address is that address. */

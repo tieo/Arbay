@@ -94,7 +94,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 url = o.url,
                 title = o.title,
                 price = o.price,
-                saleType = if (o.rentPer != null) io.github.tieo.arbay.model.SaleType.RENT else null,
+                saleType = if (o.rentPer != null || hiredOut(o)) io.github.tieo.arbay.model.SaleType.RENT else null,
                 rentPer = o.rentPer,
                 rentRates = o.rentRates,
                 condition = o.condition,
@@ -182,6 +182,15 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             Regex("""[?&]$name=([^&]+)""").find(url)?.groupValues?.get(1)
                 ?.let { java.net.URLDecoder.decode(it, "UTF-8") }?.takeIf { it.startsWith("http") }
         } ?: url
+    }
+
+    /** Whether an offer read off structured data says it is hired out, in its own address or
+     *  title (maschinen-humpert.de/vermietung/…-mieten/, "Parkett Eckenschleifer zur Miete"):
+     *  its price is a rate, whatever period it is for, and not what the thing costs to buy. */
+    private fun hiredOut(o: PageOffer): Boolean {
+        val said = o.url.substringBefore('?').lowercase() + " " + o.title.lowercase()
+        // A machine sold out of a rental fleet is sold: "Rüttelplatte aus der Vermietung".
+        return HIRED_OUT.containsMatchIn(said) && !SOLD_FROM_FLEET.containsMatchIn(said)
     }
 
     /** An address without the session a shop writes into it (`;jsessionid=…`), which changes on
@@ -342,6 +351,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
         private val SHOP_MARKERS = listOf("\"offers\"", "itemprop=\"price\"", "product:price:amount", "__NEXT_DATA__")
         private const val RENDER_TIMEOUT_S = 20
+
+        private val HIRED_OUT = Regex("""mieten\b|vermietung|verleih|zur.miete|mietger|\brental\b|\bfor.(hire|rent)\b""")
+
+        private val SOLD_FROM_FLEET = Regex("""aus.(der.)?(vermietung|miete)|ex.?(vermietung|miet)|mietr(ü|ue)ckl(ä|ae)ufer|gebraucht""")
 
         private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
 
