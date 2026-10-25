@@ -98,7 +98,7 @@ suspend fun Crawler.searchAllSpellings(
     val shorter = if (primary.size >= THIN_ANSWER) emptyList() else
         QueryVariants.compoundHeads(query.text, background).map { QueryVariants.Candidate(it, sharesStem = true) }
     val terms = (picked + automatic + shorter).distinctBy { it.term.lowercase() }
-    if (terms.isEmpty()) return primary.markDefective().markRented(query)
+    if (terms.isEmpty()) return primary.markDefective().markRented(query).markAskedInText()
 
     val extra = terms.flatMap { candidate ->
         // The follow-up carries its own related searches, so whether the market names this query
@@ -142,7 +142,7 @@ suspend fun Crawler.searchAllSpellings(
             platformId.displayName, query.text, candidate.term, added)
         followUp
     }
-    return (primary + extra).distinctBy { it.id }.markDefective().markRented(query)
+    return (primary + extra).distinctBy { it.id }.markDefective().markRented(query).markAskedInText()
 }
 
 private const val RENAMED = "the same words as other sellers write them"

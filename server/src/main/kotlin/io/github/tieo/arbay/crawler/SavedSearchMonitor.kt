@@ -241,6 +241,7 @@ class SavedSearchMonitor(
 
         val found = LinkedHashMap<String, Listing>() // listing id -> listing
         val failed = HashMap<String, String>()
+        val notTheThing = HashSet<String>() // offer keys some market's copy showed to be something else
         for (platformId in platforms) {
             if (BlockCooldown.isCoolingDown(platformId)) { failed[platformId.name] = "cooling down after a block"; continue }
             val crawler = CrawlerRegistry.crawlerFor(platformId) ?: continue
@@ -263,8 +264,15 @@ class SavedSearchMonitor(
                 failed[platformId.name] = "no answer within 120 s"
                 continue
             }
-            RelevanceFilter.filter(results, query).forEach { found[it.id] = it }
+            val judged = RelevanceFilter.partition(results, query)
+            judged.kept.forEach { found[it.id] = it }
+            judged.dropped.filter { it.reason in WHAT_THE_ITEM_IS }.forEach { notTheThing += offerKey(it.listing.id) }
         }
+        // One eBay item is listed on every eBay site under its number, titled in each site's
+        // language: the fan insert Lägler's US dealer sells read as a part in English and French,
+        // and as a Hummel in Spanish, which went out under a 700 € alert. What one copy shows the
+        // item to be, every copy is.
+        found.keys.removeAll { offerKey(it) in notTheThing }
 
         // An offer the user put away is a judgement on it: a fake or a scam priced below
         // everything real would otherwise set the price every later find has to beat.
@@ -860,5 +868,15 @@ private suspend fun readAdText(listing: Listing): String? = try {
 }
 
 /** What makes two listing ids one offer: an eBay item's number, whichever eBay site it is on. */
+/** The reasons that say what an item is, the same in every language its copies are titled in.
+ *  Not the word-share ones: a market answering in another language reads off target by its words. */
+private val WHAT_THE_ITEM_IS = setOf(
+    io.github.tieo.arbay.model.DropReason.ACCESSORY,
+    io.github.tieo.arbay.model.DropReason.CONSUMABLE,
+    io.github.tieo.arbay.model.DropReason.BUILT_INTO_A_DEVICE,
+    io.github.tieo.arbay.model.DropReason.WANTED_AD,
+    io.github.tieo.arbay.model.DropReason.RENTAL,
+)
+
 internal fun offerKey(listingId: String): String =
     if (listingId.startsWith("EBAY_")) "EBAY:" + listingId.substringAfter(':') else listingId
