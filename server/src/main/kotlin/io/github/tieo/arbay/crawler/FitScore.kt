@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.Condition
+import io.github.tieo.arbay.model.ProductWishes
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.FitPart
@@ -154,27 +156,15 @@ object FitScore {
         } ?: wishes.minPowerKw?.let { want ->
             Wish(linear(v?.powerKw?.toDouble(), want + 20.0, want - 35.0), v?.powerKw?.let { "$it kW" })
         }
-        val dealer = when {
-            stars != null -> Wish(
-                (if (stars >= 4.5) 1.0 else 0.75) * ((seller.reviewCount ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
-                "${"%.1f".format(stars)}★" + (seller.reviewCount?.let { " ($it)" } ?: ""),
-            )
-            seller?.type == SellerType.PRIVATE -> Wish(0.6, "private")
-            else -> Wish(0.45, NOT_STATED)
-        }
-        val days = listing.listingDate?.let { (Clock.System.now() - it).inWholeDays.toDouble() }
-        val age = Wish(days?.let { if (it <= 30) 1.0 else if (it <= 90) 0.85 else (linear(it, 90.0, 365.0) ?: 0.0) * 0.6 + 0.2 }, days?.let { "${it.toLong()} days" })
+        val dealer = sellerWish(listing)
+        val age = adAgeWish(listing)
         val ac = when {
             noAirConditioning.containsMatchIn(text) -> false
             airConditioning.containsMatchIn(text) -> true
             else -> null
         }
         val hours = driveHours(listing.distanceKm)
-        // Full marks within half the drive the user would happily make, half marks at it, none at twice.
-        val where = Wish(hours?.let {
-            if (it <= softDriveHours / 2) 1.0 else if (it <= softDriveHours) 1.0 - (it - softDriveHours / 2) / softDriveHours
-            else (0.5 - (it - softDriveHours) / (2 * softDriveHours)).coerceAtLeast(0.0)
-        }, hours?.let { h -> listOfNotNull(listing.distanceKm?.let { "${it.roundToInt()} km" }, hoursLabel(h)).joinToString(", ") })
+        val where = distanceWish(listing, softDriveHours)
 
         // A wish the search does not make counts for nothing; one it makes and the ad does not
         // answer counts a little under half.
@@ -186,6 +176,11 @@ object FitScore {
             Triple(FitWish.DISTANCE, where, .03), Triple(FitWish.AD_AGE, age, .01),
             Triple(FitWish.AIR_CONDITIONING, Wish(ac?.let { if (it) 1.0 else 0.3 }, ac?.let { if (it) "yes" else "no" }), .01),
         )
+        return weigh(weighed, hours, ac)
+    }
+
+    /** The parts and the score of [weighed] wishes, each counting its weight's share of the whole. */
+    private fun weigh(weighed: List<Triple<FitWish, Wish, Double>>, hours: Double?, ac: Boolean?): Fit {
         val total = weighed.sumOf { it.third }
         val parts = weighed.map { (wish, w, weight) ->
             val of = weight / total * 100
@@ -193,6 +188,104 @@ object FitScore {
         }
         val score = parts.sumOf { it.points } / 100
         return Fit(score = score, driveHours = hours, airConditioning = ac, parts = parts)
+    }
+
+    /** A dealer by the market's own stars and how many gave them; a private seller a little over unknown. */
+    private fun sellerWish(listing: Listing): Wish {
+        val seller = listing.seller
+        val stars = seller?.rating
+        return when {
+            stars != null -> Wish(
+                (if (stars >= 4.5) 1.0 else 0.75) * ((seller.reviewCount ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
+                "${"%.1f".format(stars)}★" + (seller.reviewCount?.let { " ($it)" } ?: ""),
+            )
+            seller?.type == SellerType.PRIVATE -> Wish(0.6, "private")
+            else -> Wish(0.45, NOT_STATED)
+        }
+    }
+
+    /** A fresh ad fits fully; one nobody bought in a year is likely priced wrong or has a catch. */
+    private fun adAgeWish(listing: Listing): Wish {
+        val days = listing.listingDate?.let { (Clock.System.now() - it).inWholeDays.toDouble() }
+        return Wish(days?.let { if (it <= 30) 1.0 else if (it <= 90) 0.85 else (linear(it, 90.0, 365.0) ?: 0.0) * 0.6 + 0.2 }, days?.let { "${it.toLong()} days" })
+    }
+
+    /** Full marks within half the drive the user would happily make, half marks at it, none at twice. */
+    private fun distanceWish(listing: Listing, softDriveHours: Double): Wish {
+        val hours = driveHours(listing.distanceKm)
+        return Wish(hours?.let {
+            if (it <= softDriveHours / 2) 1.0 else if (it <= softDriveHours) 1.0 - (it - softDriveHours / 2) / softDriveHours
+            else (0.5 - (it - softDriveHours) / (2 * softDriveHours)).coerceAtLeast(0.0)
+        }, hours?.let { h -> listOfNotNull(listing.distanceKm?.let { "${it.roundToInt()} km" }, hoursLabel(h)).joinToString(", ") })
+    }
+
+    /** Lower case with umlauts folded and every run of other characters one space, so "Lägler",
+     *  "Laegler" and "LAGLER" read alike and a word is found only as a whole. */
+    private fun folded(text: String): String =
+        " " + text.lowercase().replace("ä", "a").replace("ö", "o").replace("ü", "u").replace("ß", "ss")
+            .replace("ae", "a").replace("oe", "o").replace("ue", "u")
+            .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim() + " "
+
+    /** Whether [text], already [folded], says [phrase] in so many words and not right after a "kein". */
+    private fun says(text: String, phrase: String): Boolean {
+        val p = folded(phrase).trim().takeIf { it.isNotEmpty() } ?: return false
+        var from = 0
+        while (true) {
+            val at = text.indexOf(" $p ", from).takeIf { it >= 0 } ?: return false
+            val before = text.substring(0, at).trimEnd().substringAfterLast(' ')
+            if (before !in NEGATIONS) return true
+            from = at + 1
+        }
+    }
+
+    private val NEGATIONS = setOf("kein", "keine", "keinen", "ohne", "nicht", "no", "not", "without", "senza", "sans")
+
+    /**
+     * The offer's fit to the [wishes] of a search for a thing, or null where it is ruled out: sold
+     * broken, offered to traders or for export only, showing another ad's photos, sold by a dealer
+     * under four stars, or saying a word the search rules out. Weighed: which of the wanted models
+     * it is, first; the price, where every euro counts; then what comes with it, the drive to the
+     * seller (a machine is fetched, not posted), the seller, and the time the ad has been online.
+     */
+    fun score(listing: Listing, wishes: ProductWishes, priceEur: Double, softDriveHours: Double): Fit? {
+        val raw = "${listing.title}\n${listing.description.orEmpty()}"
+        if (listing.condition == Condition.PARTS_ONLY) return null
+        if (tradeOnly.containsMatchIn(raw)) return null
+        if (listing.photosAlsoIn.isNotEmpty()) return null
+        val stars = listing.seller?.rating
+        if (stars != null && stars < 4.0) return null
+        val title = folded(listing.title)
+        val text = folded(raw)
+        if (wishes.ruledOutWords.any { says(text, it) }) return null
+
+        // The model a title names counts in full; one only the text names may be a comparison or
+        // a mention ("Schleifpapier passt auch für Hummel"), and counts a little less.
+        val model = wishes.models.takeIf { it.isNotEmpty() }?.let { models ->
+            val inTitle = models.filter { m -> m.words.any { says(title, it) } }.maxByOrNull { it.worth }
+            val inText = models.filter { m -> m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+            when {
+                inTitle != null -> Wish(inTitle.worth, inTitle.name)
+                inText != null -> Wish(inText.worth * 0.8, "${inText.name} (in the text)")
+                else -> Wish(null, null)
+            }
+        }
+        val max = wishes.maxPriceEur?.toDouble()
+        val ideal = wishes.idealPriceEur?.toDouble()
+        val price = when {
+            max != null -> Wish(linear(priceEur, ideal ?: (max * 0.25), max * 1.03), euros(priceEur))
+            ideal != null -> Wish(linear(priceEur, ideal, ideal * 3), euros(priceEur))
+            else -> null
+        }
+        val plus = wishes.plusWords.takeIf { it.isNotEmpty() }?.let { words ->
+            val said = words.filter { says(text, it) }
+            Wish(if (said.isEmpty()) 0.3 else (0.6 + 0.2 * said.size).coerceAtMost(1.0), said.joinToString(", ").ifEmpty { "none named" })
+        }
+        val weighed = listOfNotNull(
+            model?.let { Triple(FitWish.MODEL, it, .35) }, price?.let { Triple(FitWish.PRICE, it, .30) },
+            plus?.let { Triple(FitWish.EXTRAS, it, .10) }, Triple(FitWish.DISTANCE, distanceWish(listing, softDriveHours), .12),
+            Triple(FitWish.SELLER, sellerWish(listing), .08), Triple(FitWish.AD_AGE, adAgeWish(listing), .05),
+        )
+        return weigh(weighed, driveHours(listing.distanceKm), null)
     }
 
     /**

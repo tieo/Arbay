@@ -154,13 +154,14 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     }
 
     val markets = remember(view.platforms, view.isCar, shownMarkets) { marketsToAsk(view.platforms, view.isCar, shownMarkets) }
-    val crawlKey = listOf(view.query, view.filters, view.aliases, markets.map { it.name }, open.saved?.location, open.saved?.radiusKm, open.saved?.reach).toString()
+    val crawlKey = listOf(view.query, view.filters, view.aliases, markets.map { it.name }, open.saved?.location, open.saved?.radiusKm, open.saved?.reach, open.saved?.productWishes).toString()
     LaunchedEffect(crawlKey) {
         vm.search(
             view.query, markets, view.filters, excludeKeywords = savedBlocked, aliases = view.aliases,
             reach = open.saved?.reach ?: SearchReach(),
             near = open.saved?.location,
             radiusKm = open.saved?.radiusKm?.takeIf { it > 0 },
+            wishes = open.saved?.productWishes,
         )
     }
 

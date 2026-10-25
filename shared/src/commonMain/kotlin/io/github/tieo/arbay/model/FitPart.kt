@@ -4,9 +4,10 @@ import kotlinx.serialization.Serializable
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
-/** One thing a vehicle search weighs when it scores how well an offer fits, in the order of how much it counts. */
+/** One thing a search weighs when it scores how well an offer fits, in the order of how much it counts. */
 @Serializable
 enum class FitWish(val label: String) {
+    MODEL("Model"),
     SIZE("Size"),
     PRICE("Price"),
     GEARBOX("Gearbox"),
@@ -19,6 +20,7 @@ enum class FitWish(val label: String) {
     DISTANCE("Distance"),
     AD_AGE("Time online"),
     AIR_CONDITIONING("Air conditioning"),
+    EXTRAS("Extras"),
 }
 
 /**

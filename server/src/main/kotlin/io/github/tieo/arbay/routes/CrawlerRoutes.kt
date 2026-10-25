@@ -197,7 +197,11 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
     // the words were typed into.
     val reach = queryParameters["reach"]
         ?.let { runCatching { json.decodeFromString<SearchReach>(it) }.getOrNull() }
+    // What a search for a thing weighs an offer by, so its offers carry a fit as a vehicle's do.
+    val wishes = queryParameters["wishes"]
+        ?.let { runCatching { json.decodeFromString<io.github.tieo.arbay.model.ProductWishes>(it) }.getOrNull() }
     return base.copy(
+        productWishes = wishes ?: base.productWishes,
         excludeKeywords = excludeKeywords ?: base.excludeKeywords,
         aliases = aliases ?: base.aliases,
         reach = reach ?: base.reach,
@@ -385,13 +389,20 @@ private fun withPhotoCopies(listings: List<Listing>): List<Listing> = listings.m
 /**
  * Every vehicle scored as a whole against the search's criteria ([FitScore]), as the saved-search
  * watch scores it, so "Best match" in the app and the website orders by the same fit. A
- * description of the ideal vehicle, where one was given, counts half. A vehicle the score rules
- * out keeps no fit and sorts last.
+ * description of the ideal vehicle, where one was given, counts half. A search for a thing is
+ * scored against its [io.github.tieo.arbay.model.ProductWishes] the same way. An offer the score
+ * rules out keeps no fit and sorts last.
  */
 private fun withFit(listings: List<Listing>, query: SearchQuery, isCarQuery: Boolean): List<Listing> {
+    val softDriveHours = io.github.tieo.arbay.model.FitAlertSettings().softDriveHours
+    val things = query.productWishes?.takeUnless { it.isEmpty }
+    if (!isCarQuery && things != null) return listings.map { l ->
+        val fit = io.github.tieo.arbay.crawler.FitScore.score(l, things, io.github.tieo.arbay.crawler.FitScore.priceEur(l), softDriveHours)
+            ?: return@map l
+        l.copy(matchScore = fit.score, fit = fit.parts)
+    }
     if (!isCarQuery) return listings
     val wishes = query.toCarFilters() ?: return listings
-    val softDriveHours = io.github.tieo.arbay.model.FitAlertSettings().softDriveHours
     return listings.map { l ->
         val fit = io.github.tieo.arbay.crawler.FitScore.score(l, wishes, io.github.tieo.arbay.crawler.FitScore.priceEur(l), softDriveHours)
             ?: return@map l

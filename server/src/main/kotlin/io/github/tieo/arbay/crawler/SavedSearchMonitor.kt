@@ -446,6 +446,7 @@ class SavedSearchMonitor(
             q.excludeKeywords.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
             q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
             parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
+            q.productWishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", json.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
             home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }
             parameter("unattended", true)
         }.execute { response ->
@@ -496,6 +497,8 @@ class SavedSearchMonitor(
         val settings = product.fitAlert
         val q = product.searchQuery
         val wishes = q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters()
+        // A search for a thing is weighed by its own wishes instead, read from the same offers.
+        val things = q.productWishes?.takeUnless { it.isEmpty }
         val crawl = wishes.copy(
             minPowerKw = null, maxPowerKw = null, drivetrain = null,
             minWheelbaseMm = null, maxWheelbaseMm = null, sellerType = null,
@@ -537,7 +540,11 @@ class SavedSearchMonitor(
         val fresh = record(product, shown)
         // What the top of the search scores today, every offer counted once.
         val scores = bestCopyEach(
-            shown.values.mapNotNull { l -> FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)?.let { l to it } },
+            shown.values.mapNotNull { l ->
+                val fit = if (things != null) FitScore.score(l, things, FitScore.priceEur(l), settings.softDriveHours)
+                    else FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)
+                fit?.let { l to it }
+            },
         ) { it.score }
         // Every run, quiet ones included: the best offers it ever ranked are looked for again.
         if (shown.isNotEmpty()) TopOffers.update(
@@ -579,7 +586,7 @@ class SavedSearchMonitor(
         val buttons = worth.drop(1).take(3).map { (l, _) ->
             Ntfy.Action(label = listOfNotNull(euros(l), l.location?.city).joinToString(" "), url = l.url)
         }
-        Ntfy.send(title, body, click = best.url, tags = listOf("truck"), actions = buttons)
+        Ntfy.send(title, body, click = best.url, tags = listOf(if (things != null) "hammer_and_wrench" else "truck"), actions = buttons)
     }
 
     /**

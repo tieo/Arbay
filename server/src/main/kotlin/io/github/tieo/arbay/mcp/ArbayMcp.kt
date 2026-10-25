@@ -223,6 +223,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.platforms?.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
                 q?.excludeKeywords?.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
                 q?.aliases?.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+                q?.productWishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", json.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
                 q?.location?.let { parameter("near", it) }
                 q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
                 // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
@@ -301,6 +302,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                         }
                     } ?: "") +
                     (if (p.fitAlert.enabled) "\n  fit alert: a new offer in its top ${p.fitAlert.topN} that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
+                    (p.searchQuery.productWishes?.let { "\n  " + wishesLine(it) } ?: "") +
                     p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
                     // seen so far: the bar a find has to beat once learning ends.
@@ -467,7 +469,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_from_eur", "Add an alert rule: push for finds from this landed price")
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
-                number("fit_alert_percent", "Vehicle searches: push a new offer that fits the search's wishes at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
+                number("fit_alert_percent", "Push a new offer that fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
+                string("fit_wishes", "A search for a thing (not a vehicle): what its offers are weighed by, as JSON {\"models\":[{\"name\":\"Lägler HUMMEL\",\"words\":[\"hummel\"],\"worth\":1.0}],\"idealPriceEur\":450,\"maxPriceEur\":1500,\"ruledOutWords\":[\"400 V\"],\"plusWords\":[\"Schleifbänder\"]}; worth 0 to 1, words matched whole and umlaut-blind, a ruled-out word not right after kein/ohne; {} clears")
             },
         ) { args ->
             val id = args.str("id")!!
@@ -480,8 +483,15 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             if (fitPercent != null && fitPercent != 0.0 && (fitPercent % 1.0 != 0.0 || fitPercent.toInt() !in FIT_ALERT_PERCENT))
                 return@tool "Not changed: fit_alert_percent is a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}, or 0."
             val fitLevel = fitPercent?.let { it / 100 }
-            if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.weighsAFit)
-                return@tool "Not changed: a fit is weighed from a vehicle search's wishes, and this search has none."
+            val wishes = if ("fit_wishes" !in args) p.searchQuery.productWishes else args.str("fit_wishes")?.let { raw ->
+                runCatching { json.decodeFromString(io.github.tieo.arbay.model.ProductWishes.serializer(), raw) }.getOrElse {
+                    return@tool "Not changed: fit_wishes is not readable: ${it.message?.take(200)}"
+                }
+            }?.takeUnless { it.isEmpty }
+            if (wishes != null && wishes.models.any { it.worth !in 0.0..1.0 || it.words.isEmpty() })
+                return@tool "Not changed: each model in fit_wishes needs words and a worth from 0 to 1."
+            if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.copy(productWishes = wishes).weighsAFit)
+                return@tool "Not changed: a fit is weighed from a search's wishes, a vehicle's criteria or fit_wishes, and this search has none."
             val gone = args.strs("remove_alert_rules").toSet()
             val unknown = gone - p.notificationSubfilters.map { it.id }.toSet()
             if (unknown.isNotEmpty()) return@tool "Not changed: no alert rule ${unknown.joinToString()} on this search."
@@ -497,6 +507,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     aliases = if ("other_words" in args) args.strs("other_words") else p.searchQuery.aliases,
                     minPrice = band("min_price_eur", p.searchQuery.minPrice),
                     maxPrice = band("max_price_eur", p.searchQuery.maxPrice),
+                    productWishes = wishes,
                 ),
             )
             val r = http.put("$base/api/products/${id.encodeURLPathPart()}") { contentType(ContentType.Application.Json); setBody(json.encodeToString(TrackedProduct.serializer(), next)) }
@@ -505,6 +516,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Changed: ${next.name} (\"${next.searchQuery.text}\")" +
                 (if (next.autoFetch.enabled) ", looks every ${next.autoFetch.intervalMinutes} min" else ", does not look on its own") +
                 (if (next.fitAlert.enabled) ", pushes a fit of ${(next.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
+                (next.searchQuery.productWishes?.let { "\n  " + wishesLine(it) } ?: "") +
                 next.notificationSubfilters.joinToString("") { "\n  alert rule ${it.id}: ${it.summaryText()}" }
         }
 
@@ -1077,3 +1089,11 @@ private fun PriceOffer.describe(): String {
     return "Offer ${eur(price)} + buyer protection ${eur(fee)} + shipping ${eur(shippingEur)} = paid ${eur(paid)}. " +
         "The seller ships: $ways."
 }
+
+/** A search's fit wishes in one line: "fit wishes: Lägler HUMMEL 100 %, PROFIT 80 % · 450–1.500 € · out: 400 V · plus: Schleifbänder". */
+private fun wishesLine(w: io.github.tieo.arbay.model.ProductWishes): String = "fit wishes: " + listOfNotNull(
+    w.models.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.name} ${(it.worth * 100).roundToInt()} %" },
+    listOfNotNull(w.idealPriceEur, w.maxPriceEur).takeIf { it.isNotEmpty() }?.joinToString("–", postfix = " €"),
+    w.ruledOutWords.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "out: "),
+    w.plusWords.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "plus: "),
+).joinToString(" · ")

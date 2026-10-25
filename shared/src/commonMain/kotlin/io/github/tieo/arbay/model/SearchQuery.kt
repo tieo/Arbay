@@ -126,9 +126,9 @@ fun SearchQuery.toCarFilters(): CarFilters? {
     return if (complete.isEmpty) null else complete
 }
 
-/** Whether the search carries vehicle wishes a fit can be weighed from; a price band alone is
- *  no vehicle wish, since every search has one. */
-val SearchQuery.weighsAFit: Boolean get() = carFilters?.isEmpty == false
+/** Whether the search carries wishes a fit can be weighed from, a vehicle's or a thing's; a price
+ *  band alone is no wish, since every search has one. */
+val SearchQuery.weighsAFit: Boolean get() = carFilters?.isEmpty == false || productWishes?.isEmpty == false
 
 /** The vehicle criteria of a search, empty when it carries none. Every crawler reads its native
  *  filter parameters from here, so a criterion cannot reach one site and be silently dropped on
@@ -282,6 +282,8 @@ data class SearchQuery(
     // Vehicle criteria, read through carCriteria: crawlers turn what their site supports into
     // native URL parameters, and post-filtering enforces the rest.
     val carFilters: CarFilters? = null,
+    // What a search for a thing that is not a vehicle weighs an offer by (see [ProductWishes]).
+    val productWishes: ProductWishes? = null,
     // Alternate phrasings that count as this same search — a listing matching any one of these as
     // well as [text] is a match (e.g. text="Fujifilm X-T5", aliases=["XT5"]). Structured data, not
     // embedded "OR" syntax: the field the user searches stays exactly what they typed or what a

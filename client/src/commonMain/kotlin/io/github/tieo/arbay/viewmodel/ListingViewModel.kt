@@ -421,6 +421,7 @@ class ListingViewModel(
     // identity as the search that first ran.
     private var excludeKeywords: List<String> = emptyList()
     private var aliases: List<String> = emptyList()
+    private var wishes: io.github.tieo.arbay.model.ProductWishes? = null
 
     // How far this search may travel from the typed words. Held here so a re-crawl after a filter
     // tweak keeps whatever the searcher turned on, and so a change to it counts as a new search.
@@ -667,12 +668,13 @@ class ListingViewModel(
         reach: SearchReach = SearchReach(),
         near: String? = null,
         radiusKm: Int? = null,
+        wishes: io.github.tieo.arbay.model.ProductWishes? = null,
         force: Boolean = false,
     ) {
         if (query.isBlank() || rendersASample) return
         if (!force && query == _searchQuery.value && filters == carFilters &&
             excludeKeywords == this.excludeKeywords && aliases == this.aliases &&
-            reach == this.reach && near == this.near && radiusKm == this.radiusKm &&
+            reach == this.reach && near == this.near && radiusKm == this.radiusKm && wishes == this.wishes &&
             (_allListings.value.isNotEmpty() || _loading.value)
         ) return
         _searchQuery.value = query
@@ -682,6 +684,7 @@ class ListingViewModel(
         this.reach = reach
         this.near = near
         this.radiusKm = radiusKm
+        this.wishes = wishes
         _searchReach.value = reach
         _pickedWords.value = reach.extraTerms
         _priceHistory.value = emptyList()
@@ -708,7 +711,7 @@ class ListingViewModel(
                 client.crawlerSearchStream(
                     query, platforms = platforms, filters = filters,
                     excludeKeywords = excludeKeywords, aliases = aliases, reach = reach,
-                    near = near, radiusKm = radiusKm,
+                    near = near, radiusKm = radiusKm, wishes = wishes,
                     lat = userLat, lon = userLon,
                 ).collect { event ->
                     when (event.type) {

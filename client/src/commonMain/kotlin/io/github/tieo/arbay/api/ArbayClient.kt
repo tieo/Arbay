@@ -646,6 +646,8 @@ class ArbayClient(
         // How far this search may travel from the typed words. Sent per search, so the server
         // never decides on its own what a market gets asked.
         reach: SearchReach = SearchReach(),
+        // What a search for a thing weighs its offers by, so they come back with a fit.
+        wishes: io.github.tieo.arbay.model.ProductWishes? = null,
         // Where the search is centred and how far it reaches, for the markets that take one.
         near: String? = null,
         radiusKm: Int? = null,
@@ -668,6 +670,7 @@ class ArbayClient(
             }
             if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
             if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
+            wishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", streamJson.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
             near?.takeIf { it.isNotBlank() }?.let { parameter("near", it) }
             radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
             if (!reach.isDefault) {
