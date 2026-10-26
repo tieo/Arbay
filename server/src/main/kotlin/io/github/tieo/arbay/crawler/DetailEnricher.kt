@@ -53,8 +53,9 @@ object DetailEnricher {
         return needed.any { field -> v == null || !v.isVerified(field) }
     }
 
-    /** Enrich one platform's listings in place of the crawler that produced them. */
-    suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler): List<Listing> {
+    /** Enrich one platform's listings in place of the crawler that produced them. [newestFirst]
+     *  spends the page budget on the newest ads instead of the cheapest, for a watch run. */
+    suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler, newestFirst: Boolean = false): List<Listing> {
         val needed = neededFields(filters)
         if (needed.isEmpty()) return listings
 
@@ -62,9 +63,13 @@ object DetailEnricher {
         // so the results the user actually sees get verified, not whatever came first in the
         // crawler's order. Cached details are free and always applied; the rest fill in on a
         // re-run from cache.
-        val toFetch = listings
-            .filter { needsDetail(it, needed) && DetailCache.get(it.id) == null || galleryUnread(it, crawler) }
-            .sortedBy { priceEurCents(it) }
+        // A watch run reads the newest ads first instead: what it finds new is announced and may
+        // be pushed, and every page read stays cached, so a watch reading new ads as they appear
+        // reads them all. Cheapest first, the Crafter watch announced Kleinanzeigen vans of
+        // 27,000 € and more whose cards say nothing of their gearbox as new with it unknown,
+        // their pages left behind the cheaper unread ones, and five of the pages say "Schaltgetriebe".
+        val unread = listings.filter { needsDetail(it, needed) && DetailCache.get(it.id) == null || galleryUnread(it, crawler) }
+        val toFetch = (if (newestFirst) unread.sortedByDescending { it.listingDate } else unread.sortedBy { priceEurCents(it) })
             .take(MAX_FETCHES_PER_PLATFORM)
             .mapTo(HashSet()) { it.id }
 

@@ -179,7 +179,9 @@ class SavedSearchMonitor(
      * Served from what was stored at crawl time rather than looked up again: a listing found
      * overnight can be sold or deleted by morning, and asking the platform for it then answers
      * "gone" rather than showing what the watch actually saw. Falls back to the archive, which
-     * outlives a restart and mirrors the images too.
+     * outlives a restart and mirrors the images too. A later run that still finds one stores what
+     * it reads of it then ([sinceFound]), and one the search has since removed by its own rules
+     * is no longer counted as new.
      */
     fun newListings(productId: String): List<Listing> {
         val ids = synchronized(stateLock) {
@@ -189,6 +191,28 @@ class SavedSearchMonitor(
         // a photo after the platform drops the listing. The repo copy stands in while archiving is
         // still in flight, since that runs in the background after a crawl.
         return ids.mapNotNull { ListingArchive.get(it) ?: listingRepo.getById(it) }
+    }
+
+    /**
+     * What a later run of [productId] says of the offers it announced as new: an offer it found
+     * again replaces its stored copy with today's reading, and one the search's rules now remove
+     * ([ruledOut]) stops being new. A van is often announced off its card alone, before its page
+     * is read: Kleinanzeigen vans whose cards name no gearbox stayed in the Crafter search's new
+     * offers for days as automatics of unknown gearbox, at their net price and with a likely scam
+     * since cleared, after the search had read their pages and removed them as manuals or over
+     * budget.
+     */
+    internal fun sinceFound(productId: String, current: Map<String, Listing>, ruledOut: Map<String, String>) {
+        val held = synchronized(stateLock) { unopened[productId].orEmpty() + lastNew[productId].orEmpty() }
+        held.forEach { id -> current[id]?.let(ListingArchive::refresh) }
+        val removed = held.filter { it in ruledOut && it !in current }.toSet()
+        if (removed.isEmpty()) return
+        synchronized(stateLock) {
+            unopened[productId]?.removeAll(removed)
+            lastNew[productId]?.removeAll(removed)
+        }
+        log.info("saved-search {}: {} new offers since removed by the search's rules", productId, removed.size)
+        saveStatus()
     }
 
     fun start() {
@@ -541,6 +565,7 @@ class SavedSearchMonitor(
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
         val fresh = record(product, shown)
+        sinceFound(product.id, shown, ruledOut)
         // An offer naming no model is told one from its full text, its photos' print or their
         // likeness to the offers that do, before it is weighed.
         if (things != null) ModelGuesses.identify(shown.values, q, things)

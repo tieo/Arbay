@@ -305,4 +305,28 @@ class SavedSearchMonitorTest {
         assertEquals(offerKey("EBAY_FR:377593213616"), offerKey("EBAY_DE:377593213616"))
         assertEquals("KLEINANZEIGEN:3549820022", offerKey("KLEINANZEIGEN:3549820022"))
     }
+
+    @Test
+    fun `an announced offer the search later removes by its rules is no longer new, one it finds again is read anew`() {
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo())
+        // A search's state is kept only while the search itself is.
+        val product = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "Crafter since found",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "Crafter", category = io.github.tieo.arbay.model.MarketGroup.VEHICLES), createdAt = Instant.fromEpochMilliseconds(0),
+        ))
+        val known = listing("Crafter Kasten known", 20000).copy(id = "KLEINANZEIGEN:1")
+        val manual = listing("Crafter Kasten mittellang Hoch", 27132).copy(id = "KLEINANZEIGEN:2")
+        val kept = listing("Crafter Kasten DSG", 24990).copy(id = "KLEINANZEIGEN:3")
+        monitor.record(product, mapOf(known.id to known))
+        monitor.record(product, listOf(known, manual, kept).associateBy { it.id })
+        assertEquals(setOf(manual.id, kept.id), monitor.newListings(product.id).mapTo(HashSet()) { it.id })
+
+        monitor.sinceFound(product.id, mapOf(kept.id to kept), mapOf(manual.id to "vehicle criteria: gearbox"))
+        assertEquals(listOf(kept.id), monitor.newListings(product.id).map { it.id })
+        // An offer the run neither found nor removed may only be gone from its market, and stays.
+        monitor.sinceFound(product.id, emptyMap(), emptyMap())
+        assertEquals(listOf(kept.id), monitor.newListings(product.id).map { it.id })
+        products.delete(product.id)
+    }
 }
