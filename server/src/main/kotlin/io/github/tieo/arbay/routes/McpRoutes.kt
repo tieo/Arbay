@@ -36,10 +36,18 @@ import io.ktor.http.ContentType
  * tools as they were costs nothing.
  */
 fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
-    val mcp = ArbayMcp(http, selfUrl)
-    val toolsId = toolsDigest(mcp)
+    val arbay = ArbayMcp(http, selfUrl)
+    mcpEndpoint("/mcp") { arbay.server() }
+    // A search of the web on its own, so a session researching something sees no shopping tools.
+    val web = io.github.tieo.arbay.mcp.WebSearchMcp(http, selfUrl)
+    mcpEndpoint("/web-mcp") { web.server() }
+}
 
-    route("/mcp") {
+/** One MCP server at [path], a server of [server]'s tools answering each request. */
+private fun Route.mcpEndpoint(path: String, server: () -> io.modelcontextprotocol.kotlin.sdk.server.Server) {
+    val toolsId = toolsDigest(server())
+
+    route(path) {
         // JSON-RPC as the MCP SDK writes it: Arbay's own JSON settings drop the "jsonrpc" field
         // and add nulls, and strict clients refuse the reply.
         install(ContentNegotiation) { json(McpJson) }
@@ -58,7 +66,7 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
             call.response.header(SESSION_HEADER, toolsId)
             val transport = StreamableHttpServerTransport(StreamableHttpServerTransport.Configuration(enableJsonResponse = true))
             transport.setSessionIdGenerator(null)
-            mcp.server().createSession(transport)
+            server().createSession(transport)
             transport.handleRequest(null, call)
         }
         // Nothing streams from the server on its own, and there is no session to end.
@@ -70,8 +78,8 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
 private const val SESSION_HEADER = "Mcp-Session-Id"
 
 /** A digest of every tool's name, description and schemas, the same for the same tools. */
-private fun toolsDigest(mcp: ArbayMcp): String {
-    val tools = mcp.server().tools.values.map { it.tool }.sortedBy { it.name }
+private fun toolsDigest(server: io.modelcontextprotocol.kotlin.sdk.server.Server): String {
+    val tools = server.tools.values.map { it.tool }.sortedBy { it.name }
     val text = McpJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(io.modelcontextprotocol.kotlin.sdk.types.Tool.serializer()), tools)
     return java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
         .joinToString("") { "%02x".format(it) }.take(32)

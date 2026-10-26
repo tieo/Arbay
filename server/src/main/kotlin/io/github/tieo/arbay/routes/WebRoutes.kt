@@ -75,7 +75,7 @@ fun Route.webRoutes() {
             val engines = call.request.queryParameters.getAll("engine").orEmpty().toSet()
             val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler
                 ?: throw NotFoundException("The web market is not running")
-            call.respond(web.serp(q, engines))
+            call.respond(web.engines.serp(q, engines))
         }
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()

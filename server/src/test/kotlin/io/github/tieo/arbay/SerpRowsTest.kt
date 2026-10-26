@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.SerpResult
-import io.github.tieo.arbay.crawler.WebCrawler
+import io.github.tieo.arbay.crawler.SearchEngines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  */
 class SerpRowsTest {
     private fun rows(name: String, host: String, base: String): List<SerpResult> =
-        WebCrawler.serpRows(javaClass.getResource("/fixtures/serp/$name.html")!!.readText(), host, base, listOf("/goto?url="))
+        SearchEngines.serpRows(javaClass.getResource("/fixtures/serp/$name.html")!!.readText(), host, base, listOf("/goto?url="))
 
     private val hummel = "https://www.laegler.com/produkte/maschinen/hummel"
 

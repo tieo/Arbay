@@ -76,12 +76,8 @@ import io.ktor.http.isSuccess
 import io.ktor.utils.io.readUTF8Line
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
-import io.modelcontextprotocol.kotlin.sdk.types.TextContent
-import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
-import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.time.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -558,24 +554,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
-            "web_search",
-            "What the search engines (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage) list for any words, not only things for sale: every result with its title, address and snippet, merged by address, the ones most engines list first, and how each engine answered. Takes up to two minutes, the browser engines being asked one after another.",
-            props = {
-                string("query", "The words, as typed into a search engine (quotes and operators pass through)", required = true)
-                stringArray("engines", "Only these engines, by name; all when left out")
-            },
-        ) { args ->
-            val found = json.decodeFromString(io.github.tieo.arbay.crawler.WebSearch.serializer(), http.get("$base/api/web/serp") {
-                parameter("q", args.str("query"))
-                args.strs("engines").forEach { parameter("engine", it) }
-            }.bodyAsText())
-            found.engines.joinToString(", ", prefix = "Engines: ") { "${it.engine} ${it.results.size} (${it.status})" } + "\n" +
-                found.results.withIndex().joinToString("\n") { (i, r) ->
-                    "${i + 1}. ${r.title} | ${r.url} | ${r.engines.joinToString("+")} best #${r.bestRank}" + (if (r.snippet.isNotBlank()) "\n   ${r.snippet}" else "")
-                }
-        }
-
-        tool(
             "block_dealer",
             "Block the seller of offers, so every search on every device drops whatever they sell on that market and lists it under \"a dealer you blocked\"; or unblock them. The seller is the one the offer's market names. The same dealer on another market is blocked by naming one of its offers there.",
             props = {
@@ -1048,45 +1026,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     // ── Declaring tools ──
 
-    private class Props {
-        val properties = mutableMapOf<String, JsonObject>()
-        val required = mutableListOf<String>()
-        private fun add(name: String, type: String, description: String, required: Boolean, extra: Map<String, JsonElement> = emptyMap()) {
-            properties[name] = JsonObject(mapOf("type" to JsonPrimitive(type), "description" to JsonPrimitive(description)) + extra)
-            if (required) this.required += name
-        }
-        fun string(name: String, description: String, required: Boolean = false) = add(name, "string", description, required)
-        fun number(name: String, description: String, required: Boolean = false) = add(name, "number", description, required)
-        fun integer(name: String, description: String, required: Boolean = false) = add(name, "integer", description, required)
-        fun boolean(name: String, description: String, required: Boolean = false) = add(name, "boolean", description, required)
-        fun stringArray(name: String, description: String, required: Boolean = false) =
-            add(name, "array", description, required, mapOf("items" to JsonObject(mapOf("type" to JsonPrimitive("string")))))
-        fun putJsonObject(name: String, build: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) { properties[name] = buildJsonObject(build) }
-    }
-
     private fun Server.tool(
         name: String,
         description: String,
         destructive: Boolean = false,
-        props: Props.() -> Unit = {},
+        props: McpProps.() -> Unit = {},
         run: suspend (JsonObject) -> String,
-    ) {
-        val p = Props().apply(props)
-        addTool(
-            name = name,
-            description = description,
-            inputSchema = ToolSchema(properties = JsonObject(p.properties), required = p.required),
-            toolAnnotations = ToolAnnotations(destructiveHint = destructive, readOnlyHint = !destructive && name.startsWith("list") || name in READ_ONLY),
-        ) { request ->
-            try {
-                CallToolResult(content = listOf(TextContent(run(request.arguments ?: JsonObject(emptyMap())))))
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                CallToolResult(content = listOf(TextContent("Failed: ${e.message}")), isError = true)
-            }
-        }
-    }
+    ) = textTool(name, description, destructive, readOnly = !destructive && name.startsWith("list") || name in READ_ONLY, props, run)
 
     private companion object {
         val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages")

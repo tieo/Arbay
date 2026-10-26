@@ -4,6 +4,7 @@ import io.github.tieo.arbay.crawler.PageOffer
 import io.github.tieo.arbay.crawler.ProductPages
 import io.github.tieo.arbay.crawler.SiteRecipe
 import io.github.tieo.arbay.crawler.SiteRecipes
+import io.github.tieo.arbay.crawler.SearchEngines
 import io.github.tieo.arbay.crawler.WebCrawler
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
@@ -88,16 +89,16 @@ class WebMarketTest {
         val html = """<div id="rso"><a href="https://shop.example/p/1"><h3>One</h3></a>
             <a href="/url?q=https://other.example/p/2&sa=U">Two</a>
             <a href="https://www.google.com/preferences">Settings</a><a href="https://maps.google.de/x">Maps</a></div>"""
-        assertEquals(listOf("https://shop.example/p/1", "https://other.example/p/2"), WebCrawler.resultLinks(html, "google."))
+        assertEquals(listOf("https://shop.example/p/1", "https://other.example/p/2"), SearchEngines.resultLinks(html, "google."))
     }
 
     @Test
     fun `an engine's redirect gives the page behind it`() {
         val ddg = """<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fshop.example%2Fp%2F3&amp;rut=abc">Three</a>"""
-        assertEquals(listOf("https://shop.example/p/3"), WebCrawler.resultLinks(ddg, "duckduckgo."))
+        assertEquals(listOf("https://shop.example/p/3"), SearchEngines.resultLinks(ddg, "duckduckgo."))
         val b64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("https://shop.example/p/4".toByteArray())
         val bing = """<li class="b_algo"><a href="https://www.bing.com/ck/a?!&amp;&amp;p=x&amp;u=a1$b64&amp;ntb=1">Four</a></li>"""
-        assertEquals(listOf("https://shop.example/p/4"), WebCrawler.resultLinks(bing, "bing."))
+        assertEquals(listOf("https://shop.example/p/4"), SearchEngines.resultLinks(bing, "bing."))
     }
 
     @Test
