@@ -10,7 +10,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -56,7 +55,20 @@ open class WarmBrowser(
      * [timeoutS] passes. Null where the browser could not be started or did not answer, which
      * leaves the caller its other ways in.
      */
-    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30): Page? = lock.withLock {
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30): Page? {
+        // One browser serves every search of its site, and a crawl waiting its turn is not its
+        // market failing to answer: eBay's five sites share this one, and four waited out their
+        // whole time limit behind the fifth.
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
+        try {
+            return read(url, markers, timeoutS)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private suspend fun read(url: String, markers: List<String>, timeoutS: Int): Page? {
         val request = JsonObject(mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
@@ -74,14 +86,14 @@ open class WarmBrowser(
         } catch (e: Exception) {
             log.warn("{} browser did not answer for {}: {}", name, url, e.message)
             stop()
-            return@withLock null
+            return null
         }
         if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
             log.warn("{} browser failed {}: {}", name, url, answer["error"]?.jsonPrimitive?.contentOrNull)
             if (answer["stuck"]?.jsonPrimitive?.booleanOrNull == true) stop()
-            return@withLock null
+            return null
         }
-        Page(
+        return Page(
             html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
             page = answer["page"]?.jsonPrimitive?.contentOrNull ?: "unknown",

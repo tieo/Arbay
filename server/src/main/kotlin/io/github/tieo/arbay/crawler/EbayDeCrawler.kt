@@ -117,6 +117,10 @@ class EbayDeCrawler(
         fun read(html: String) = parseSearchResults(html).map { if (query.soldOnly) it.copy(sold = true) else it }
         var page = read(first)
         val results = page.filter { seenIds.add(it.externalId) }.toMutableList()
+        // Each page streams as it is read, which is also what tells the crawl's time limit that eBay
+        // is answering: without it the limit ran over the whole search and its other words, and
+        // cut eBay off at 180 s while it answered every few seconds.
+        emitPartialResults(results)
         val cap = query.resultCap()
         var number = 1
         while (page.size >= 20 && results.size < cap && number < query.pageLimit()) {
@@ -126,6 +130,7 @@ class EbayDeCrawler(
             val fresh = page.filter { seenIds.add(it.externalId) }
             if (fresh.isEmpty()) break
             results += fresh
+            emitPartialResults(fresh)
         }
         return results
     }
