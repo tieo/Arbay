@@ -36,6 +36,10 @@ data class SmartReading(
     /** The tool's own word for the drive's health, as the screenshot shows it ("Gut", "Vorsicht"). */
     val status: String? = null,
     val findings: List<String> = emptyList(),
+    /** An NVMe drive's own count of its rated wear used, in percent ("Percentage Used"). */
+    val wearUsed: Int? = null,
+    /** An NVMe drive's spare blocks left, in percent ("Available Spare"). */
+    val spareLeft: Int? = null,
 )
 
 /** Every SMART screenshot found among an ad's photos, read. Empty where its photos show none. */

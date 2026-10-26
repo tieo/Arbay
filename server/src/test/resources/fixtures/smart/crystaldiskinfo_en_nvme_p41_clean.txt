@@ -1,0 +1,42 @@
+= CrystalDiskMark 9.0,3 x64 x
+File Settings Profile Theme Help Language
+3 »l1GiB >| D: 0% (0/1863Gi8) || MB/s =
+Read (MB/s) Write (MB/s)
+SEQIM |
+“" 6576.56 6409.26
+SEQ128K 7
+am | 6565.56 6395.1
+aie 311.91 5863.72
+032T16 | 6 1 © °
+—————_ SS
+er 76.98 273.10
+am | ° | .
+|
+4 SHPP41-2000GM : 2000.3 GB
+Health Status Firmware [51061420 Total HostReads[ 773298 GB
+[Good] Serisl Number [XXXXXXXXXXXXXXXXX Total Host Writes | 21490 GB
+won Interface | NVM Express Rotation Rate | weve (SSD)
+Transfer Mode [PCIe 4.0 x4 [PCe4.0x4 Power On Count u 2350 count
+Temperature Drive Letter | D; j Power On Hours [ 6259 hours
+6 , . ) Standard [NVM Express 1.4 ü
+j Features |[S.M.A.R.T., TRIM, VolatileWriteCache
+ID Attribute Name Raw Values |
+@ 01 Critical Waming 00000000000000
+© 02 Composite Temperature 00000000000145
+@ 03 Available Spare 00000000000064
+@ 04 = Available Spare Threshold 0000000000000A
+@ 05 Percentage Used 00000000000001
+@ 06 Data Units Read 00000015A98CA0
+@ 07 Data Units Written 00000002AFB218B
+@ 08 Host Read Commands 0000004320D88D
+@ 09 Host Write Commands 0000001E101A9C
+@ 0A Controller Busy Time 00000000000A06
+@ 0B Power Cycles 0000000000092E
+@ 0C Power On Hours 00000000001873
+@ 0D Unsafe Shutdowns 000000000001 28
+@ 0E Media and Data integrity Errors 00000000000000
+@ OF Number of Error Information Log Entries 00000000000000
+@ 10 Warning Composite Temperature Time 00000000000000
+© 11 Critical Composite Temperature Time 00000000000000
+@ 12 Temperature Sensor 1 0000000000013F
+ı aen 11:20 AM

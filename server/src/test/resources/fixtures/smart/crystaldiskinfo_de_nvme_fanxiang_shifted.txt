@@ -1,0 +1,32 @@
+a i a __
+2 tei Be — ma U
+i |
+Fanxiang S880 2TB: 2000,3 GB
+Firmware | SN112/ Lesevorgänge (gesamt 2296 GB
+Gut Seriennummer | XXXXXXXX \ reibvorgange (gesamt 2089 GB
+Schnittstelle ASP (NVM Expre )rehzahl SSD
+S| 1000
+Übertragungsmod Eingeschaltet 676 mal
+& > tandard | NVM Expr 4
+41-6 ain
+b) | Eigenschafter \f RIN Wr
+ID Parameternan es
+@ 01 riti Warnir =
+@ 0 omposite Temperatur =
+5Y @ 02 Available or : ( x >
+@ 04 Available Spare Threshold
+@ 05 _ Percentag ed )00!
+ge if OO
+® > Data Units Rea =
+@ Data Units Writter AQ
+@ 08 Host Read Commar ( 12DB8F
+@ 09 Host Write Commar )O000E
+@ 0A ntroller Busy Time 0 13A4F81
+@ 0B Power Cycle \0000000000?E
+@ 0C Power On Hour )00000000002A4
+@ 0D Unsafe Shutdown 100000000141
+@ DE Media and Data Integrity Error 000000000001
+@ OF Number of Error Information Log Entric 0000000000000
+© 12 Temperature Sensor 1 1000000069A67A
+|@ 13 Temperature Sensor 2 0000000000013A
+0000000000012«

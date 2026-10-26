@@ -956,7 +956,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         return health.readings.joinToString("") { r ->
             "Drive health, photo ${r.photo}: ${r.verdict}" +
                 listOfNotNull(r.powerOnHours?.let { "$it h" }, r.reallocated?.let { "$it reallocated" }, r.pending?.let { "$it pending" },
-                    r.uncorrectable?.let { "$it uncorrectable" }, r.status?.let { "tool says $it" }).takeIf { it.isNotEmpty() }
+                    r.uncorrectable?.let { "$it uncorrectable" }, r.wearUsed?.let { "$it % worn" }, r.spareLeft?.let { "$it % spare" },
+                    r.status?.let { "tool says $it" }).takeIf { it.isNotEmpty() }
                     ?.joinToString(", ", prefix = " (", postfix = ")").orEmpty() +
                 r.findings.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = ": ").orEmpty() + "\n"
         }

@@ -84,7 +84,23 @@ object SmartScreens {
         HOURS(Regex("""(?i)be\w{1,6}stunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
         // The OCR swaps its letters ("Current Heilum Level").
         HELIUM(Regex("""(?i)he(li|il)um""")),
+        // An NVMe drive's log page in place of ATA attributes, named in English in every language of
+        // CrystalDiskInfo. The OCR reads "Warning" as "Waming"; the threshold comes before the spare
+        // itself, whose name it begins with.
+        CRITICAL_WARNING(Regex("""(?i)critical\s+wa\w{2,4}g\b""")),
+        SPARE_THRESHOLD(Regex("""(?i)available\s+spare\s+threshold""")),
+        SPARE(Regex("""(?i)available\s+spare""")),
+        USED(Regex("""(?i)percentage\s+used""")),
+        MEDIA_ERRORS(Regex("""(?i)media\s+and\s+data\s+integrity""")),
     }
+
+    private val nvmeAttributes = setOf(Attribute.CRITICAL_WARNING, Attribute.SPARE_THRESHOLD, Attribute.SPARE, Attribute.USED, Attribute.MEDIA_ERRORS)
+
+    /** An NVMe row's raw value: CrystalDiskInfo's fourteen hex digits at the end of the line, which the
+     *  OCR at times splits once ("000000000001 28") or reads a zero of as O. */
+    private val nvmeRaw = Regex("""([0-9A-FOQ]{6,16}(?:\s[0-9A-FOQ]{1,8})?)\W*$""")
+    private val nvmePowerCycles = Regex("""(?i)power\s+cycles?\b""")
+    private val headerPowerCount = Regex("""(?i)(eingeschaltet|power\s+on\s+count)[\s|\[\]_:;.lIu!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(mal|count)""")
 
     private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")
     // The field beside the label is framed, and the OCR reads its edge as "[", "|", "_", "l" or "I".
@@ -137,7 +153,10 @@ object SmartScreens {
         // a zero is taken from any reading no other contradicts.
         val counts = Attribute.entries.mapNotNull { a ->
             val all = seen.map { it.counts[a] }
-            agreed(all)?.takeIf { it == 0L || all.all { v -> v == it } }?.let { a to it }
+            // How much spare and wear an NVMe drive shows is no count of faults: any one reading of it
+            // no other contradicts is taken.
+            val levels = a in setOf(Attribute.SPARE, Attribute.SPARE_THRESHOLD, Attribute.USED)
+            agreed(all)?.takeIf { levels || it == 0L || all.all { v -> v == it } }?.let { a to it }
         }.toMap()
         // A value at its threshold is read off a whole row that passed its own check (current at or
         // above worst), and a reading at the larger size can lose a row the first one had, so a
@@ -194,11 +213,22 @@ object SmartScreens {
         // A terminal font with a slashed zero reads it as 8 or 9. No drive counts the same 8 or 9
         // on three attributes, so where three smartctl rows end in one such lone digit, every lone
         // 8 or 9 on the screen is a zero misread and is left unread.
+        // An NVMe screen's table is a name and one raw value a row, and the OCR can pair each name with
+        // the next row's value, so the table counts only where it agrees with the screen's header.
+        val nvmeScreen = lines.count { line -> nvmeAttributes.any { it.names.containsMatchIn(line) } } >= 2
+        val nvmeRows = HashMap<Attribute, Long>()
+        var nvmeCycles: Long? = null
         val zeroAsDigit = lines.mapNotNull { smartctlAnywhere.find(it)?.groupValues?.last() }
             .filter { it == "8" || it == "9" }.groupingBy { it }.eachCount().values.any { it >= 3 }
         for (line in lines) {
+            if (nvmeScreen && nvmePowerCycles.containsMatchIn(line)) nvmeCycles = nvmeValue(line)
             val attribute = Attribute.entries.firstOrNull { it.names.containsMatchIn(line) } ?: continue
             found++
+            if (nvmeScreen && (attribute in nvmeAttributes || attribute == Attribute.HOURS)) {
+                if (!headerHours.containsMatchIn(line)) nvmeValue(line)?.let { nvmeRows[attribute] = it }
+                continue
+            }
+            if (attribute in nvmeAttributes) continue
             // The rest of the name ("_Ct", " Count") is left to the row patterns, which skip it.
             val after = line.substring(attribute.names.find(line)!!.range.last + 1).replace(Regex("""^[\w-]*"""), "")
             // Each format names its columns in its own order: current, worst, threshold, raw.
@@ -243,10 +273,19 @@ object SmartScreens {
                 // Scrutiny shows the raw count of a sector attribute as its value.
                 Attribute.REALLOCATED, Attribute.PENDING, Attribute.UNCORRECTABLE, Attribute.REPORTED_UNCORRECTABLE ->
                     counts[attribute] = value.toLong()
-                Attribute.HOURS -> {}
+                else -> {}
             }
         }
         if (found < 3) return null
+        val headerCount = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()
+        val powerCount = headerPowerCount.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()
+        // The Fanxiang S880 at 321 hours and 676 power-ons read its hours row as 676 and its media
+        // errors as 1: every value one row down. A row matching its own header count shows no shift.
+        val nvmeBelieved = nvmeRows[Attribute.HOURS]?.let { it == headerCount } == true ||
+            nvmeCycles?.let { it == powerCount } == true
+        if (nvmeBelieved) {
+            nvmeRows.forEach { (a, v) -> if (a == Attribute.HOURS) tableHours = v.takeIf { it <= MOST_HOURS } else counts[a] = v }
+        }
         if (smartctlFailed.containsMatchIn(text)) failing += "smartctl says FAILED"
         // The big status box is white on colour and often lost to the OCR; the row of drive tabs
         // above it names each drive's status too. Where every tab is good and no word anywhere on
@@ -259,8 +298,16 @@ object SmartScreens {
         return Seen(counts, failing, word, header ?: tableHours, header, tableHours)
     }
 
+    /** The raw value ending an NVMe row, or null where the OCR left none to read. */
+    private fun nvmeValue(line: String): Long? {
+        val digits = nvmeRaw.find(line.trim())?.groupValues?.get(1)?.replace(Regex("""\s"""), "") ?: return null
+        if (digits.length !in 12..16) return null
+        return digits.replace(Regex("[OQ]"), "0").toLongOrNull(16)
+    }
+
     private fun judge(seen: Seen, photo: Int): SmartReading {
         val (counts, failing, word, hours) = seen
+        if (listOf(Attribute.CRITICAL_WARNING, Attribute.SPARE, Attribute.MEDIA_ERRORS).any { it in counts }) return judgeNvme(seen, photo)
         val reallocated = counts[Attribute.REALLOCATED]
         val pending = counts[Attribute.PENDING]
         val uncorrectable = listOfNotNull(counts[Attribute.UNCORRECTABLE], counts[Attribute.REPORTED_UNCORRECTABLE]).takeIf { it.isNotEmpty() }?.max()
@@ -289,6 +336,37 @@ object SmartScreens {
         )
     }
 
+    /**
+     * An NVMe drive's reading: failing where it raises its critical warning, counts a media error,
+     * has less spare left than its own threshold or has used up its rated wear; clean where the
+     * warning, the errors and the spare are all read and fine.
+     */
+    private fun judgeNvme(seen: Seen, photo: Int): SmartReading {
+        val (counts, failing, word, hours) = seen
+        val warning = counts[Attribute.CRITICAL_WARNING]
+        val spare = counts[Attribute.SPARE]
+        val threshold = counts[Attribute.SPARE_THRESHOLD]
+        val used = counts[Attribute.USED]
+        val errors = counts[Attribute.MEDIA_ERRORS]
+        val findings = buildList {
+            if (word != null && word.lowercase() in failingStatus) add("the tool says $word")
+            warning?.takeIf { it > 0 }?.let { add("critical warning raised") }
+            errors?.takeIf { it > 0 }?.let { add("$it uncorrectable errors") }
+            if (spare != null && threshold != null && threshold > 0 && spare < threshold) add("Spare $spare % under its threshold of $threshold %")
+            used?.takeIf { it >= 100 }?.let { add("Rated wear used up: $it %") }
+            addAll(failing)
+        }
+        val verdict = when {
+            findings.isNotEmpty() -> DriveVerdict.FAILING
+            warning == 0L && errors == 0L && spare != null -> DriveVerdict.CLEAN
+            else -> DriveVerdict.UNREADABLE
+        }
+        return SmartReading(
+            photo = photo, verdict = verdict, powerOnHours = hours, uncorrectable = errors, status = word,
+            findings = findings, wearUsed = used?.toInt(), spareLeft = spare?.toInt(),
+        )
+    }
+
     private fun Attribute.label() = when (this) {
         Attribute.REALLOCATED -> "Reallocated sectors"
         Attribute.PENDING -> "Pending sectors"
@@ -296,6 +374,11 @@ object SmartScreens {
         Attribute.REPORTED_UNCORRECTABLE -> "Reported uncorrectable errors"
         Attribute.HOURS -> "Power-on hours"
         Attribute.HELIUM -> "Helium"
+        Attribute.CRITICAL_WARNING -> "Critical warning"
+        Attribute.SPARE_THRESHOLD -> "Spare threshold"
+        Attribute.SPARE -> "Available spare"
+        Attribute.USED -> "Percentage used"
+        Attribute.MEDIA_ERRORS -> "Media errors"
     }
 
     // ── Reading photos ──

@@ -204,4 +204,24 @@ class SmartScreensTest {
         assertEquals(35337L, r.powerOnHours)
         assertTrue(r.verdict != io.github.tieo.arbay.model.DriveVerdict.FAILING, r.toString())
     }
+
+    @Test
+    fun `an NVMe screen whose hours row matches its header is read and clean`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_en_nvme_p41_clean"), 1))
+        assertEquals(DriveVerdict.CLEAN, r.verdict, r.toString())
+        assertEquals(6_259L, r.powerOnHours)
+        assertEquals(0L, r.uncorrectable)
+        assertEquals(1, r.wearUsed)
+        assertEquals(100, r.spareLeft)
+    }
+
+    @Test
+    fun `an NVMe screen read with every value one row down is not believed`() {
+        // The photo shows 321 hours, 676 power-ons and no media errors; the OCR paired the hours row
+        // with 676 and the media errors row with 1.
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_nvme_fanxiang_shifted"), 3))
+        assertEquals(DriveVerdict.UNREADABLE, r.verdict, r.toString())
+        assertNull(r.uncorrectable)
+        assertTrue(r.powerOnHours == null || r.powerOnHours == 321L, r.toString())
+    }
 }

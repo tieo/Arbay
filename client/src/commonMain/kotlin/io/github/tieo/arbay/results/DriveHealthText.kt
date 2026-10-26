@@ -13,10 +13,13 @@ val DriveVerdict.label: String
         DriveVerdict.UNREADABLE -> "Not enough shown"
     }
 
-/** The values one screenshot showed: "37.150 h · 0 reallocated · 0 pending · 0 uncorrectable". */
+/** The values one screenshot showed: "37.150 h · 0 reallocated · 0 pending · 0 uncorrectable", or an
+ *  NVMe drive's "6.259 h · 0 uncorrectable · 1 % worn · 100 % spare". */
 fun SmartReading.values(): String = listOfNotNull(
     powerOnHours?.let { "${grouped(it, '.')} h" },
     reallocated?.let { "${grouped(it, '.')} reallocated" },
     pending?.let { "${grouped(it, '.')} pending" },
     uncorrectable?.let { "${grouped(it, '.')} uncorrectable" },
+    wearUsed?.let { "$it % worn" },
+    spareLeft?.let { "$it % spare" },
 ).joinToString(" · ")
