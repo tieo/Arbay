@@ -414,13 +414,15 @@ class RelevanceFilterTest {
         val belt = SearchQuery(
             text = "lägler hummel",
             aliases = listOf("lägler elf", "lägler profit", "lägler superhummel", "hummel parkettschleifmaschine",
-                "hummel bandschleifmaschine", "hummel parketschuurmachine", "levigatrice hummel"),
+                "hummel bandschleifmaschine", "hummel parketschuurmachine", "levigatrice hummel", "bona belt"),
             category = MarketGroup.GENERAL,
         )
-        // eBay IT and eBay DE, live, kept under a 700 € alert.
+        // eBay IT, ES and DE, live, kept under a 700 € alert.
         val notMachines = listOf(
             listing("Levigatrice per pavimenti Hummel Dolly", 31044),
             listing("Hummel Alimentatore Levigatrice a Nastro 240V da Doppia Prese 120V", 33833),
+            // eBay ES, the same Texan adapter under a Bona Belt name, alerted at 76 % fit.
+            listing("Lijadora Bona Belt UX AMK170140 240V Fuente de alimentación desde doble 15 amperios 120 voltios", 33833),
             listing("P169 - Lagler - Inserto ventola Hummel - Gruppo completo", 57579),
             listing("Uimoso 1500W Bandschleifmaschine mit 3 Schleifbändern,einstellbar 600-6000 U/min", 121380),
         )
