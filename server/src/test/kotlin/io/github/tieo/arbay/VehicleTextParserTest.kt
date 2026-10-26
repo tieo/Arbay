@@ -27,6 +27,9 @@ class VehicleTextParserTest {
         assertEquals(44_000, VehicleTextParser.parse("VW Crafter, 3 Jahre alt wegen Neuanschaffung abzugeben. Nur 44TKm, AHK, Rückfahrkamera")!!.mileageKm)
         assertEquals(132_000, VehicleTextParser.parse("VW Crafter / 177 PS / 132 TKM / Würth Ausbau")!!.mileageKm)
         assertEquals(85_500, VehicleTextParser.parse("Crafter 85,5 Tsd. km Automatik")!!.mileageKm)
+        // Kleinanzeigen, live 2026-10-26: removed as a van of 900,000 km.
+        assertEquals(79_900, VehicleTextParser.parse("Vw Crafter 2,0 TDI 130KW/177Ps Mit 3000Kg Mit 79:900 TKM 1Hand")!!.mileageKm)
+        assertEquals(79_900, VehicleTextParser.parse("Crafter 79.900 TKM")!!.mileageKm)
     }
 
     @Test

@@ -259,8 +259,15 @@ object VehicleTextParser {
     }
 
     // The mileage in thousands: "Nur 44TKm", "132 TKM", "85 Tsd. km", "120 tausend km", "44,5 tkm".
+    // Never the last group of a number written out in full: "79:900 TKM" is 79,900 km, not 900,000.
     private val thousandsKmRegex = Regex(
-        """(?<![0-9.,])([0-9]{1,3})(?:[.,]([0-9]))?[ \u00a0]?(?:tkm|tsd\.?[ \u00a0]?km|tausend[ \u00a0]?km)\b""",
+        """(?<![0-9.,:])([0-9]{1,3})(?:[.,]([0-9]))?[ \u00a0]?(?:tkm|tsd\.?[ \u00a0]?km|tausend[ \u00a0]?km)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    // The whole mileage written out, with the thousands unit after it all the same: "Mit 79:900 TKM",
+    // "79.900 TKM", seen on a Kleinanzeigen Crafter that its "900 TKM" put at 900,000 km.
+    private val fullKmBeforeThousandsRegex = Regex(
+        """(?<![0-9.,:])([0-9]{1,3})[.:]([0-9]{3})[ \u00a0]?(?:tkm|tsd\.?[ \u00a0]?km|tausend[ \u00a0]?km)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -277,7 +284,8 @@ object VehicleTextParser {
         val inThousands = thousandsKmRegex.findAll(text).map { m ->
             (m.groupValues[1].toInt() * 1000 + (m.groupValues[2].toIntOrNull() ?: 0) * 100).toString()
         }
-        return (unitAfter + labelBefore + serviceLog + inThousands)
+        val writtenOut = fullKmBeforeThousandsRegex.findAll(text).map { m -> m.groupValues[1] + m.groupValues[2] }
+        return (unitAfter + labelBefore + serviceLog + inThousands + writtenOut)
             .mapNotNull { digits(it) }
             .filter { it in 1..2_000_000 }
             .maxOrNull()
