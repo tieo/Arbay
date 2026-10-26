@@ -126,21 +126,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
     private suspend fun results(engine: Engine, words: String): List<String> {
         val url = engine.url(words)
-        val html = try {
-            if (engine.browser) {
-                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25)
-                    ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
-                if (page.page != "content") {
-                    ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("no results page (${page.page})"), ErrorType.PARSE_ERROR, url, html = page.html, finalUrl = page.url)
-                    log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page.page)
-                    return emptyList()
-                }
-                page.html
-            } else fetchWithFallback(client, url, "Web ${engine.name}")
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
-            return emptyList()
-        }
+        val html = resultsPage(engine, words).getOrElse { return emptyList() }
         // An ad goes through an ad network's redirect before the shop; it is followed like the
         // engine's own.
         val (ads, direct) = resultLinks(html, engine.host).partition { url -> AD_HOSTS.any { it in SiteRecipes.domainOf(url) } }
@@ -150,6 +136,61 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         }
         log.info("Web: {} listed {} pages for '{}'", engine.name, links.size, words)
         return links
+    }
+
+    /** An engine's results page for the words, or why there is none. */
+    private suspend fun resultsPage(engine: Engine, words: String): Result<String> {
+        val url = engine.url(words)
+        return try {
+            if (engine.browser) {
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25)
+                    ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
+                if (page.page != "content") {
+                    ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("no results page (${page.page})"), ErrorType.PARSE_ERROR, url, html = page.html, finalUrl = page.url)
+                    log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page.page)
+                    return Result.failure(Exception("no results page (${page.page})"))
+                }
+                Result.success(page.html)
+            } else Result.success(fetchWithFallback(client, url, "Web ${engine.name}"))
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * What each engine lists for [words], as a person reads its results page: every result's title,
+     * address and snippet in the engine's order, and all of them merged by address. [engines] picks
+     * engines by name; none picks every one. The browser engines are asked one after another, as
+     * for a search, the plain ones meanwhile.
+     */
+    suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
+        val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
+        suspend fun ask(e: Engine): EngineResults {
+            val html = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
+            // The last results page of each engine is kept, which is what a reader of a changed
+            // page is mended against.
+            runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(html) }
+            val found = serpRows(html, e.host, e.url(""), e.redirects.filter { it != "/aclk?" })
+            // Google hides each address behind its own redirect, resolved like a search's.
+            val rows = found.mapNotNull { r ->
+                val url = if (e.redirects.any { it in r.url }) resolved(listOf(r.url), e).firstOrNull() ?: return@mapNotNull null else r.url
+                r.copy(url = withoutSession(unproxied(url)))
+            }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
+            if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
+            return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
+        }
+        val plain = picked.filter { !it.browser }.map { e -> async { ask(e) } }
+        val browser = picked.filter { it.browser }.map { ask(it) }
+        val all = plain.awaitAll() + browser
+        val merged = all.flatMap { e -> e.results.map { e.engine to it } }
+            .groupBy { (_, r) -> r.url.removeSuffix("/") }
+            .map { (_, hits) ->
+                val (_, first) = hits.minBy { it.second.rank }
+                WebResult(first.url, first.title, hits.map { it.second.snippet }.maxBy { it.length }, hits.map { it.first }.distinct(), hits.minOf { it.second.rank })
+            }
+            .sortedWith(compareByDescending<WebResult> { it.engines.size }.thenBy { it.bestRank })
+        WebSearch(words, all, merged)
     }
 
     /**
@@ -309,6 +350,79 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 host.isNotEmpty() && engineHost !in host && ENGINE_HOSTS.none { it in host }
             }.distinct()
 
+        /**
+         * The results of one engine's results page, in its order: each result's address, its title
+         * and the text beside it. Read by shape rather than by each engine's classes, which change:
+         * a result is the largest part of the page holding links to its one address and to no
+         * other, its title the heading in it or else its longest link text, its snippet the rest
+         * of its text. An address hidden behind one of [redirects] is kept as the redirect.
+         */
+        internal fun serpRows(html: String, engineHost: String, base: String, redirects: List<String>): List<SerpResult> {
+            val doc = org.jsoup.Jsoup.parse(html, base)
+            fun targetOf(a: org.jsoup.nodes.Element): String? {
+                val abs = a.absUrl("href")
+                if (redirects.any { it in abs }) return abs
+                return unwrap(a.attr("href"))?.takeIf { it.startsWith("http") }?.takeIf { url ->
+                    val host = SiteRecipes.domainOf(url)
+                    host.isNotEmpty() && engineHost !in host && ENGINE_HOSTS.none { it in host } && AD_HOSTS.none { it in host }
+                }
+            }
+            // The engine's own header, menus and footer link elsewhere too, and list no result.
+            fun inFrame(a: org.jsoup.nodes.Element) = a.parents().any { p ->
+                p.tagName() in setOf("footer", "nav", "header") || p.attr("role") in setOf("contentinfo", "navigation", "banner")
+            }
+            val target = LinkedHashMap<org.jsoup.nodes.Element, String>()
+            for (a in doc.select("a[href]")) if (!inFrame(a)) target[a] = targetOf(a) ?: continue
+            fun targetsIn(e: org.jsoup.nodes.Element) = e.select("a[href]").mapNotNullTo(HashSet()) { target[it] }
+            fun headings(e: org.jsoup.nodes.Element) = e.select("h1, h2, h3, h4").size
+            return target.entries.groupBy({ it.value }, { it.key }).mapNotNull { (url, anchors) ->
+                // The result is the largest part of the page holding this address and no other, and
+                // no heading beyond its own: a page listing one result holds it in a section that
+                // has the page's own headings too.
+                var block = anchors.first()
+                while (true) {
+                    val up = block.parent() ?: break
+                    if (up.tagName() == "body" || targetsIn(up).size > 1 || headings(up) > maxOf(1, headings(block))) break
+                    block = up
+                }
+                val heading = anchors.firstNotNullOfOrNull { it.selectFirst("h1, h2, h3, h4") } ?: block.selectFirst("h1, h2, h3, h4")
+                // Without a heading, the title is the longest part of a link to it that is no address
+                // (a site name, "example.com › path" and the title, in one link: Brave).
+                val title = (heading?.text() ?: anchors.flatMap { it.select("*") }.map { it.text().trim() }
+                    .filterNot { looksLikeAddress(it) }.maxByOrNull { it.length })
+                    ?.trim()?.takeIf { it.length >= 2 } ?: return@mapNotNull null
+                // The snippet is what is left of the result without its title, the address it prints,
+                // the site's name and the engine's own links ("Anonymous view").
+                val rest = block.clone()
+                rest.select("h1, h2, h3, h4").filter { it.text().trim() == title }.forEach { it.remove() }
+                rest.select("cite").remove()
+                rest.select("a[href]").filter { a ->
+                    val text = a.text().trim()
+                    targetOf(a) == null || text == title || looksLikeAddress(text) || text.split(' ').size < 4 || title in text
+                }.forEach { it.remove() }
+                // Bing writes some of its snippets' symbols as entities twice over ("&#9742;"); Qwant
+                // prints the address's path before the text ("laegler.com ‣ produkte ‣ hummel").
+                val snippet = org.jsoup.parser.Parser.unescapeEntities(rest.text(), false)
+                    .replace(Regex("""\s+"""), " ").trim().replace(LEADING_PATH, "").trim()
+                SerpResult(0, title, url, snippet.take(SNIPPET_LENGTH))
+            }.let { rows ->
+                // An ad or a shopping card comes with a title and an address alone (Qwant's ads above
+                // its results, Google's "Von Testberichte.de"); where results have snippets, one
+                // without is one of those.
+                if (rows.count { it.snippet.isNotEmpty() } >= 3) rows.filter { it.snippet.isNotEmpty() } else rows
+            }.mapIndexed { i, r -> r.copy(rank = i + 1) }
+        }
+
+        private val LEADING_PATH = Regex("""^(\S+\s)?([›‣]\s*\S+\s*)+""")
+
+        private const val SNIPPET_LENGTH = 500
+
+        /** A link text that is the address it leads to, as engines print it ("example.com › path"). */
+        private fun looksLikeAddress(text: String): Boolean {
+            val t = text.trim()
+            return t.startsWith("http") || "›" in t || "‣" in t || Regex("""^[\w-]+(\.[\w-]+)+(/\S*)?$""").matches(t)
+        }
+
         /** The page behind an engine's own redirect: Google's `/url?q=`, DuckDuckGo's `/l/?uddg=`,
          *  Bing's `/ck/a?...&u=a1<base64 of the address>`. */
         private fun unwrap(href: String): String? {
@@ -376,7 +490,11 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         /** Ad networks an engine's ads pass through on their way to the shop. */
         private val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.", "partners.webmasterplan.", "pvn.", "tc.tradetracker.", "go.skimresources.")
 
-        private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org")
+        private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org",
+            // Bing's footer: its terms and how it ranks.
+            "go.microsoft.", "support.microsoft.",
+            // Startpage's note on the ads it shows.
+            "privacy.microsoft.")
 
         /** Pages read per search, of what the engines and the learned sites list. */
         private const val MAX_PAGES = 60
@@ -446,3 +564,20 @@ object RenderedSites {
         }
     }
 }
+
+/** One result as an engine lists it: its place in the engine's list, from 1. */
+@kotlinx.serialization.Serializable
+data class SerpResult(val rank: Int, val title: String, val url: String, val snippet: String)
+
+/** One engine's results for a search, or why it gave none. */
+@kotlinx.serialization.Serializable
+data class EngineResults(val engine: String, val status: String, val results: List<SerpResult>)
+
+/** One address every engine that listed it agrees on, with the best place any gave it. */
+@kotlinx.serialization.Serializable
+data class WebResult(val url: String, val title: String, val snippet: String, val engines: List<String>, val bestRank: Int)
+
+/** A web search's raw results: each engine's list, and all of them merged by address, the
+ *  addresses most engines list first. */
+@kotlinx.serialization.Serializable
+data class WebSearch(val query: String, val engines: List<EngineResults>, val results: List<WebResult>)

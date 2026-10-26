@@ -68,6 +68,15 @@ fun Route.webRoutes() {
             call.respond(HttpStatusCode.NoContent)
         }
         get("/recipes") { call.respond(SiteRecipes.all()) }
+        // What the search engines list for any words, not only shops: each engine's results with
+        // title, address and snippet, and all merged by address. `engine` may repeat to pick some.
+        get("/serp") {
+            val q = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() } ?: throw BadRequestException("Missing q")
+            val engines = call.request.queryParameters.getAll("engine").orEmpty().toSet()
+            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler
+                ?: throw NotFoundException("The web market is not running")
+            call.respond(web.serp(q, engines))
+        }
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()
             if (recipe.domain.isBlank()) throw BadRequestException("A recipe needs its domain")
