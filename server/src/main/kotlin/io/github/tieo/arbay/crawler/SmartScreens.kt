@@ -409,7 +409,10 @@ object SmartScreens {
         val urls = photos.take(MOST_PHOTOS)
         val readings = urls.mapIndexedNotNull { i, url ->
             val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
-            if (known != null) return@mapIndexedNotNull known.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
+            // A text read once, as every photo is that shows no screen, is read again at twice the size
+            // where a better parser now finds a screen in it.
+            val readOnce = known?.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
+            if (known != null && !readOnce) return@mapIndexedNotNull known.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
             val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
                 // A photo that shows a SMART screen is read a second time at twice the size, and a
                 // count is believed only where both readings agree.
