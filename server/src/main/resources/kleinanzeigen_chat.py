@@ -114,6 +114,7 @@ class Chat:
         self.browser = await zd.start(**kwargs)
         # The home page shows to everyone; the message box would send a signed-out browser to log in.
         self.tab = await self.browser.get(ROOT + "/")
+        await self.accept_leave_prompts()
         await asyncio.sleep(3)
 
     async def url(self) -> str:
@@ -216,12 +217,29 @@ class Chat:
         with its last page."""
         old = self.tab
         self.tab = await self.browser.get(ROOT + "/", new_tab=True)
+        await self.accept_leave_prompts()
         self.origin = None
         try:
             await within("close page", self.browser.connection.send(cdp.target.close_target(target_id=old.target.target_id)), 5)
         except Exception as e:
             log(f"closing the old page failed: {type(e).__name__}")
         await asyncio.sleep(3)
+
+    async def accept_leave_prompts(self) -> None:
+        """Every "leave this page?" the page asks answered yes the moment Chrome shows it. A post
+        form left half filled asks it, and while it is open the page answers nothing at all: the
+        next page never opened and every call after timed out. Answered later it was not showing
+        yet, so it is answered as Chrome reports it opening."""
+        tab = self.tab
+
+        # A coroutine, which zendriver runs as a task on the page's own loop; a plain function it
+        # runs in a thread, where nothing can be sent to the page.
+        async def opened(event: cdp.page.JavascriptDialogOpening, *_) -> None:
+            if event.type_ == cdp.page.DialogType.BEFOREUNLOAD:
+                await tab.send(cdp.page.handle_java_script_dialog(accept=True))
+
+        tab.add_handler(cdp.page.JavascriptDialogOpening, opened)
+        await within("page events", tab.send(cdp.page.enable()), 5)
 
     async def where(self) -> str:
         try:
@@ -827,8 +845,21 @@ class Chat:
         await self.leave_form()
         return {"ok": False, "signedOut": False, "error": why, "taken": taken, "detail": detail}
 
+    # A half filled form asks before it is left, and the browser waits on that question: answered
+    # afterwards it was gone already ("No dialog is showing") while the page still hung, and the
+    # next page the sidecar opened never loaded. Stopped before the page's own listener runs (a
+    # capturing listener on the window runs first), the form is left without asking.
+    SILENCE_LEAVE_PROMPT = """
+        window.onbeforeunload = null;
+        window.addEventListener('beforeunload', e => e.stopImmediatePropagation(), true);
+    """
+
     async def leave_form(self) -> None:
-        """Back to the home page; a half filled form asks before it is left, and is left."""
+        """Back to the home page, the form left without the question it asks before it is left."""
+        try:
+            await within("silence leave prompt", self.tab.evaluate(self.SILENCE_LEAVE_PROMPT), 5)
+        except Exception as e:
+            log(f"silencing the leave prompt: {type(e).__name__}")
         try:
             await within("leave", self.tab.send(cdp.page.navigate(ROOT + "/")), 5)
         except Exception:
@@ -995,11 +1026,23 @@ class Chat:
         CSRF token (a meta tag on the old page, the page props on the new one) sent with its delete
         request, only when "send" is true. An ad the market no longer knows (404) is down already."""
         await self.session()
-        await self.tab.get(self.MY_ADS)
-        await asyncio.sleep(random.uniform(3, 4.5))
-        if await self.host() != "www.kleinanzeigen.de":
-            raise SignedOut("the site sends the browser to its login page")
-        token = await within("csrf token", self.tab.evaluate(self.CSRF_TOKEN))
+        # The page keeps loading long after its token is there, and waiting for it to finish
+        # loading waited out the whole call: it is opened, and the token looked for until it shows.
+        try:
+            await within("open my ads", self.tab.send(cdp.page.navigate(self.MY_ADS)), 15)
+        except Exception as e:
+            log(f"opening my ads: {type(e).__name__}")
+        token = None
+        for _ in range(20):
+            await asyncio.sleep(1.5)
+            if await self.host() not in ("www.kleinanzeigen.de", ""):
+                raise SignedOut("the site sends the browser to its login page")
+            try:
+                token = await within("csrf token", self.tab.evaluate(self.CSRF_TOKEN), 5)
+            except Exception:
+                token = None
+            if token:
+                break
         if not token:
             raise RuntimeError(f"no CSRF token on {await self.where()}")
         if not send:
