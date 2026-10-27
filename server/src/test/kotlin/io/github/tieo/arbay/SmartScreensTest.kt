@@ -122,6 +122,16 @@ class SmartScreensTest {
     }
 
     @Test
+    fun `a Dutch CrystalDiskInfo screen gives its hours and status`() {
+        // A WD Blue M.2 SATA drive on Marktplaats, photographed off a monitor at an angle: the table
+        // is lost to the OCR, the header ("Goed", "Bedrijfsuren 1920 uren") is not.
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_nl_monitor_photo_sata_ssd"), 4))
+        assertEquals(1_920L, r.powerOnHours)
+        assertEquals("Goed", r.status)
+        assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
+    }
+
+    @Test
     fun `a row whose current value reads under its worst is a misread, not a failing drive`() {
         val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_de_monitor_photo_misread"), 3))
         assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())

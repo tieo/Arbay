@@ -75,7 +75,8 @@ object SmartScreens {
     private enum class Attribute(val names: Regex) {
         // smartctl and Proxmox join the words with underscores ("Reallocated_Sector_Ct"); the French
         // CrystalDiskInfo names them in French.
-        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated[\s_]+sectors?|secteurs\s+r[ée]allou""")),
+        // WD's SSDs call it "Reassigned Block Count".
+        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated[\s_]+sectors?|secteurs\s+r[ée]allou|reassigned\s+block\s+count""")),
         // Older German CrystalDiskInfo calls pending sectors "schwebend".
         PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending[\s_]+sectors?|secteurs\s+en\s+attente|secteurs\W+instables""")),
         UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
@@ -100,11 +101,11 @@ object SmartScreens {
      *  OCR at times splits once ("000000000001 28") or reads a zero of as O. */
     private val nvmeRaw = Regex("""([0-9A-FOQ]{6,16}(?:\s[0-9A-FOQ]{1,8})?)\W*$""")
     private val nvmePowerCycles = Regex("""(?i)power\s+cycles?\b""")
-    private val headerPowerCount = Regex("""(?i)(eingeschaltet|power\s+on\s+count)[\s|\[\]_:;.lIu!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(mal|count)""")
+    private val headerPowerCount = Regex("""(?i)(eingeschaltet|power\s+on\s+count|inschakelingen)[\s|\[\]_:;.lIu!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(mal|count|keer)""")
 
-    private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad)\s+(schnittstelle|interface)\b""")
+    private val status = Regex("""(?i)\b(gut|vorsicht|schlecht|good|caution|bad|goed|voorzichtig|slecht)\s+(schnittstelle|interface)\b""")
     // The field beside the label is framed, and the OCR reads its edge as "[", "|", "_", "l" or "I".
-    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours|fonctionnement)[\s|\[\]_:;.lI!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|sta|stunden|hours|heures)""")
+    private val headerHours = Regex("""(?i)(betriebsstunden|power\s+on\s+hours|fonctionnement|bedrijfsuren)[\s|\[\]_:;.lI!]{1,6}(\d{1,3}(?:[.,]?\d{3})*)\s*(std|sta|stunden|hours|heures|uren)""")
     /** smartctl's own verdict on the drive; PASSED says nothing of its sector counts, FAILED says it fails. */
     private val smartctlFailed = Regex("""self-assessment\s+test\s+result:\s*FAILED""", RegexOption.IGNORE_CASE)
     private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
@@ -114,9 +115,11 @@ object SmartScreens {
 
     /** The most hours a drive's counter believes: some 34 years. */
     private const val MOST_HOURS = 300_000L
-    private val goodTab = Regex("""\b(gut|good)\b""", RegexOption.IGNORE_CASE)
-    private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad|unbekannt|unknown)\b""", RegexOption.IGNORE_CASE)
-    private val failingStatus = setOf("vorsicht", "schlecht", "caution", "bad")
+    // Dutch CrystalDiskInfo says Goed, Voorzichtig, Slecht and Onbekend. A row named for bad blocks
+    // or sectors ("Grown Bad Blocks") is no warning.
+    private val goodTab = Regex("""\b(gut|good|goed)\b""", RegexOption.IGNORE_CASE)
+    private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad(?!\W+(blocks?|sectors?)\b)|unbekannt|unknown|voorzichtig|slecht|onbekend)\b""", RegexOption.IGNORE_CASE)
+    private val failingStatus = setOf("vorsicht", "schlecht", "caution", "bad", "voorzichtig", "slecht")
 
     /** The most bad sectors a reading believes; a drive's spare area holds some thousands to tens of thousands. */
     private const val MOST_SECTORS = 1_000_000L
@@ -276,6 +279,10 @@ object SmartScreens {
                 else -> {}
             }
         }
+        // CrystalDiskInfo's header ("Bedrijfsuren 1920 uren", "Inschakelingen 832 keer") names the
+        // screen as surely as a table row, and survives a photo of a monitor the table does not.
+        if (headerHours.containsMatchIn(text)) found++
+        if (headerPowerCount.containsMatchIn(text)) found++
         if (found < 3) return null
         val headerCount = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()
         val powerCount = headerPowerCount.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()
@@ -320,7 +327,7 @@ object SmartScreens {
         }
         // CrystalDiskInfo itself turns to Vorsicht as soon as a reallocated, pending or uncorrectable
         // sector is counted, so under its Gut a count above zero is the OCR reading a 0 as 9 or 8.
-        val misread = word?.lowercase() in setOf("gut", "good") &&
+        val misread = word?.lowercase() in setOf("gut", "good", "goed") &&
             listOf(Attribute.REALLOCATED, Attribute.PENDING, Attribute.UNCORRECTABLE).any { (counts[it] ?: 0) > 0 }
         val verdict = when {
             misread -> DriveVerdict.UNREADABLE

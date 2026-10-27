@@ -1,0 +1,38 @@
+BD, CrystalDiskinfo 9.9.2 x64 - went
+Bestand Bewerken Functies Thema Schijf Help Taal(Language) f
+y, 2 }
+D Goed © Goed M Goed |
+2 eis ago 23°C 29°C |
+= Ga D: E u EEG:
+x WERTET NRZ ee ~ u ~ [
+we |
+1 ial WDC WDS200T2BOB-00YS70 : 2000,3 GB |
+| ezondheidstoestar Firmware [415020WD Total aantal leescties | 2037 GB |
+= RZ Serienummer [0000X0000000 staal aantal schrijfacties | 292768 |
+a all Interface [UASP (Serial ATA) ntal NAND-schrijfacties | 2722GB |
+Se Transfermodus | SATA/600 | SATA/600 Inschakelingen [ 832 keer |
+| Temperatuur Schijfletter [E: Bedrijfsuren | 1920 uren |
+Se 17777 Standaard [ACS-4 | ACS-4 Revision 5 N
+Am. Eigenschappen [S.M.A.RT., APM, NCQ, TRIM, DevSleep, GPL AN
+Oe SAN
+ER 4 | NEE HIN Huidig Slechtst Drempel Raw-waarden N ER
+BE | @ 05  Resssigned Block Count 100 100 © 00000000000 |||
+NS 3 Power On Hours, 100 100 0 ooooooooozeo |||
+ap |e OC | Power Cycle Count | 100 100 0 000000000340 || aN
+A 5 BiockErsecounsig | 100. 100 0 ooooaesooe |||
+ee ES DI TESTS ATED ES EPP T A | f | Hl: AS INN 0 ‘
+NR a qi | Poth iA 800 NA Ot oon gpqaooga NN ANN
+a N Ses eed aati MA NE Ta | 8 0a0ooooooapı | AN
+Ne i) iN) 328). | 398) 8) N
+2 and N Hal uno). 14111001 |. 81) Gößnapaomeze NR ZEN
+1\@ Ar Gre n Bad Blocks Hi) HM oo 100.0) oa0acco00000 | | N
+lan Program race AALS Te re I N
+HN. PN Hill H SETA! 000000000000 | RR
+\ RN HTM MATES AN a) ae RN
+Ace: rennen NAG) Hil Hie NV aoa i NEAR NN
+Se ELE SEAL 7 ites rtd ea VHA KUNDE LOODDORSE AND
+ER EEETSSIN Let] AMELLNNLIENTG IN epobwonboogo NN
+Beer Unconeible re We il N) ia bi NL. LAN enonagongona |
+Command Timeout Caunt/ / 2) 1.100100 1 \ ig BER
+Pe ETT LEAT ABA VANAVEAS cannes
+
