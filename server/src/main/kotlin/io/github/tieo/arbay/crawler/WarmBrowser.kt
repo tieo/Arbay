@@ -88,6 +88,9 @@ open class WarmBrowser(
             stop()
             return null
         }
+        // Any page the site answers with, its error page too, is the site answering: the crawl's time
+        // limit is there for a crawl that hangs, and one eBay keeps refusing and asking again is not.
+        kotlin.coroutines.coroutineContext[CrawlClock]?.answered()
         if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
             log.warn("{} browser failed {}: {}", name, url, answer["error"]?.jsonPrimitive?.contentOrNull)
             if (answer["stuck"]?.jsonPrimitive?.booleanOrNull == true) stop()

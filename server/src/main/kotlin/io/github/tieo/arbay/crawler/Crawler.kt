@@ -123,6 +123,9 @@ suspend fun Crawler.searchAllSpellings(
                 platformId.displayName, candidate.term, query.text)
             return@flatMap emptyList()
         }
+        // A search under another word answered is the market answering, whatever its crawler streams
+        // page by page: a search with fifteen other words outlasts the crawl's time limit otherwise.
+        kotlin.coroutines.coroutineContext[CrawlClock]?.answered()
         emitTermUsed(candidate.term)
         val added = followUp.count { l -> primary.none { it.id == l.id } }
         emitTermVerdict(SuggestedTerm(
