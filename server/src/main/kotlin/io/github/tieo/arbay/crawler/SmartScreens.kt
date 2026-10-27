@@ -47,6 +47,10 @@ object SmartScreens {
      *  before the raw value ("1000000000000"), since the twelve digits are a fixed width. */
     private val tableRow = Regex("""(\d{1,3})\s*[^\w\s]{0,2}\s+(\d{1,3})\s*[^\w\s]{0,2}\s+(\d{1,3})\s*[^\w\s]{0,2}\s+(?:0x|[0-9A-Fa-f])?([0-9A-Fa-f]{12})(?![0-9A-Fa-f])""")
 
+    /** A CrystalDiskInfo row with its threshold lost: RapidOCR read "Aktuell ausstehende Sektoren
+     *  100 100 0 000000000000" as "100 100 000000000000", the lone 0 taken into the raw value's box. */
+    private val lostThresholdRow = Regex("""^\s*(\d{1,3})\s+(\d{1,3})\s+([0-9A-Fa-f]{12})(?![0-9A-Fa-f])""")
+
     /** A row as Hard Disk Sentinel shows it: threshold, value, worst, its own status word, then the
      *  raw value in twelve hex digits ("Reallocated Sectors Count 10 100 100 OK 000000000000"). */
     private val sentinelRow = Regex("""(?i)(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(?:ok|warning|failed)\b.*?\b([0-9A-Fa-f]{12})\b""")
@@ -64,7 +68,8 @@ object SmartScreens {
 
     /** A row as Proxmox's SMART dialog shows it: raw value first, then normalised, threshold, worst
      *  and the flags ("Reallocated_Sector_Ct 0 100 10 100 PO--CK -"). */
-    private val proxmoxRow = Regex("""^\W*(\d+)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+[-A-Z]{4,}""")
+    // The flags are letters and dashes, an O among them read as 0 at times ("-0-0-").
+    private val proxmoxRow = Regex("""^\W*(\d+)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+[-A-Z0]{4,}""")
 
     /** A row with only a value and its threshold, as Scrutiny shows some ("Current Helium Level 19 25"). */
     private val pairRow = Regex("""(\d{1,6})\s+(\d{1,3})\b""")
@@ -73,26 +78,27 @@ object SmartScreens {
     private val scrutinyMarks = Regex("""(?i)\(?0[x%]\w{2}\)|threshold\s+ideal|fa\w{0,2}ure\s?rate|scrutiny""")
 
     private enum class Attribute(val names: Regex) {
-        // smartctl and Proxmox join the words with underscores ("Reallocated_Sector_Ct"); the French
+        // smartctl and Proxmox join the words with underscores ("Reallocated_Sector_Ct"), RapidOCR
+        // drops the space between words set close ("WiederzugewieseneSektoren"); the French
         // CrystalDiskInfo names them in French.
         // WD's SSDs call it "Reassigned Block Count".
-        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s+sektor|reallocated[\s_]+sectors?|secteurs\s+r[ée]allou|reassigned\s+block\s+count""")),
+        REALLOCATED(Regex("""(?i)wiederzugewiesene[nr]?\s*sektor|reallocated[\s_]*sectors?|secteurs\s*r[ée]allou|reassigned\s*block\s*count""")),
         // Older German CrystalDiskInfo calls pending sectors "schwebend".
-        PENDING(Regex("""(?i)(ausstehende|schwebende)\s+sektor|pending[\s_]+sectors?|secteurs\s+en\s+attente|secteurs\W+instables""")),
-        UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s+sektor|offline[\s_]+uncorrectable|uncorrectable[\s_]+sectors?|erreurs\s+incorrigibles""")),
-        REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s+unkorrigierbare|reported[\s_]+uncorrect|erreurs\s+signal|erreurs\s+qui\s+n.ont\s+pas""")),
+        PENDING(Regex("""(?i)(ausstehende|schwebende)\s*sektor|pending[\s_]*sectors?|secteurs\s*en\s*attente|secteurs\W+instables""")),
+        UNCORRECTABLE(Regex("""(?i)(nicht\s?korrigierbare|unkorrigierbare)\s*sektor|offline[\s_]*uncorrectable|uncorrectable[\s_]*sectors?|erreurs\s*incorrigibles""")),
+        REPORTED_UNCORRECTABLE(Regex("""(?i)gemeldete\s*unkorrigierbare|reported[\s_]*uncorrect|erreurs\s*signal|erreurs\s*qui\s*n.ont\s*pas""")),
         // The OCR mangles the middle of the word ("Beitnebsstunden", "Beinebsstunden").
-        HOURS(Regex("""(?i)be\w{1,6}stunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s+de\s+fonctionnement""")),
+        HOURS(Regex("""(?i)be\w{1,6}stunden|power[\s_-]?[o0]n[\s_-]?hou|heures\s*de\s*fonctionnement""")),
         // The OCR swaps its letters ("Current Heilum Level").
         HELIUM(Regex("""(?i)he(li|il)um""")),
         // An NVMe drive's log page in place of ATA attributes, named in English in every language of
         // CrystalDiskInfo. The OCR reads "Warning" as "Waming"; the threshold comes before the spare
         // itself, whose name it begins with.
-        CRITICAL_WARNING(Regex("""(?i)critical\s+wa\w{2,4}g\b""")),
-        SPARE_THRESHOLD(Regex("""(?i)available\s+spare\s+threshold""")),
-        SPARE(Regex("""(?i)available\s+spare""")),
-        USED(Regex("""(?i)percentage\s+used""")),
-        MEDIA_ERRORS(Regex("""(?i)media\s+and\s+data\s+integrity""")),
+        CRITICAL_WARNING(Regex("""(?i)critical\s*wa\w{2,4}g\b""")),
+        SPARE_THRESHOLD(Regex("""(?i)available\s*spare\s*threshold""")),
+        SPARE(Regex("""(?i)available\s*spare""")),
+        USED(Regex("""(?i)percentage\s*used""")),
+        MEDIA_ERRORS(Regex("""(?i)media\s*and\s*data\s*integrity""")),
     }
 
     private val nvmeAttributes = setOf(Attribute.CRITICAL_WARNING, Attribute.SPARE_THRESHOLD, Attribute.SPARE, Attribute.USED, Attribute.MEDIA_ERRORS)
@@ -116,11 +122,11 @@ object SmartScreens {
     /** The most hours a drive's counter believes: some 34 years. */
     private const val MOST_HOURS = 300_000L
     // Dutch CrystalDiskInfo says Goed, Voorzichtig, Slecht and Onbekend. A row named for bad blocks
-    // or sectors ("Grown Bad Blocks") is no warning.
+    // or sectors ("Grown Bad Blocks", read glued as "Bad Blocksperdie") is no warning.
     /** Rows only a flash drive has: its erase cycles, its NAND, its wear. */
     private val solidState = Regex("""(?i)p/?e\s*cycles|nand|erase\s*count|wear\s*level|ssd\s*life|percent\s*lifetime""")
     private val goodTab = Regex("""\b(gut|good|goed)\b""", RegexOption.IGNORE_CASE)
-    private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad(?!\W+(blocks?|sectors?)\b)|unbekannt|unknown|voorzichtig|slecht|onbekend)\b""", RegexOption.IGNORE_CASE)
+    private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad(?!\W*(block|sector))|unbekannt|unknown|voorzichtig|slecht|onbekend)\b""", RegexOption.IGNORE_CASE)
     private val failingStatus = setOf("vorsicht", "schlecht", "caution", "bad", "voorzichtig", "slecht")
 
     /** The most bad sectors a reading believes; a drive's spare area holds some thousands to tens of thousands. */
@@ -175,6 +181,10 @@ object SmartScreens {
         )
     }
 
+    /** The hours as a power-on row whose hex Tesseract reads with every B as 8 and every A as 4
+     *  shows them (41779 hours, 0xA333, as 0x4333): the same count. */
+    private fun asTableReadsIt(hours: Long) = hours.toString(16).uppercase().replace('B', '8').replace('A', '4').toLong(16)
+
     /**
      * The hours the readings agree on; where they differ, the count most of the witnesses read: each
      * reading's header, and the power-on row once.
@@ -189,8 +199,6 @@ object SmartScreens {
         // The table is one witness however many readings show it: both read the same font, and
         // read its B as 8 alike (0xB0 as 0x80, 176 hours as 128).
         val tables = seen.mapNotNull { it.table }.distinct()
-        // A header whose hex, with every B written as 8, is the table's value is the same count.
-        fun asTableReadsIt(hours: Long) = hours.toString(16).uppercase().replace('B', '8').toLong(16)
         val votes = (headers + tables.map { t -> headers.firstOrNull { asTableReadsIt(it) == t } ?: t })
             .groupingBy { it }.eachCount()
         val most = votes.values.maxOrNull()?.takeIf { it >= 2 } ?: return null
@@ -241,6 +249,8 @@ object SmartScreens {
             // Each format names its columns in its own order: current, worst, threshold, raw.
             val row: List<String>? = sentinelRow.find(after)?.groupValues?.let { g -> listOf(g[2], g[3], g[1], g[4]) }
                 ?: tableRow.find(after)?.groupValues?.drop(1)
+                // The threshold is no failure mark where it is lost, and the row's raw value stands.
+                ?: lostThresholdRow.find(after)?.groupValues?.let { g -> listOf(g[1], g[2], "0", g[3]) }
                 ?: smartctlRow.find(after)?.groupValues?.takeUnless { zeroAsDigit && it[5] in setOf("8", "9") }?.let { g ->
                     if (g[4].startsWith("FAILING", ignoreCase = true)) failing += "${attribute.label()} failing now"
                     listOf(g[1], g[2], g[3], g[5])
@@ -306,7 +316,15 @@ object SmartScreens {
         // The header's own count comes first: in the table's hex the OCR reads B as 8.
         val header = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
             ?: daysAndHours.find(text)?.let { it.groupValues[1].toLong() * 24 + it.groupValues[3].toLong() }
-        return Seen(counts, failing, word, header ?: tableHours, header, tableHours, solidState.containsMatchIn(text))
+        // A table whose power-on row holds a value no unit of the header's hours explains is read one
+        // row off: RapidOCR paired a Seagate's names with the next row's values, its power-on row held
+        // 0 under a header of 1063 hours and its "reallocated" row the read error rate. Its counts are
+        // no drive's, so none is believed. The row counts in its own unit, minutes on some drives
+        // (0x92FF beside 627 hours), and a screenshot's header can be hours ahead of its table.
+        val shifted = !nvmeScreen && header != null && header > 0 && tableHours != null &&
+            asTableReadsIt(header) != tableHours && (tableHours * 2 < header || tableHours > header * 70)
+        val believed = if (shifted) emptyMap() else counts
+        return Seen(believed, failing, word, header ?: tableHours, header, tableHours, solidState.containsMatchIn(text))
     }
 
     /** The raw value ending an NVMe row, or null where the OCR left none to read. */

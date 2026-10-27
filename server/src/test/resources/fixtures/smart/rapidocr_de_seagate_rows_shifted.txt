@@ -1,0 +1,37 @@
+CrystalDisklnfo 9.4.4x64
+Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut Gut
+22°C 16℃
+C: D:
+ST2000DM001-1ER164:2000,3 GB
+esamtzustand Firmware CC63
+Seriennummer XXXXXXXX
+Gut Schnittstelle Serial ATA Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 789mal
+uelle Temperatu Laufwerksbuchstaben D: Betriebsstunden 1063 Std.
+Standard ACS-2|ACS-3 Revision 3b
+16℃
+Eigenschaften S.M.A.R.T.APM.NCQ GPL
+Aktueller.. Schlechte.. Grenzwert Rohwerte
+ID Parametername
+110 99 L6 000001B458E8
+01 Lesefehlerrate 16 96 0 000000000000
+03 Mittlere Anlaufzeit 99 66 20 000000000551
+04 Start/Stopp-Zyklen derSpindel 100 100 10 000000000000
+05 Wiederzugewiesene Sektoren 63 60 30 0000001C0D74
+07 Suchfehler 99 99 0 000000000427
+09 Betriebsstunden 100 100 97 000000000000
+OA Misslungene Spindelanlaufe 100 100 20 000000000315
+OC Gerate-Einschaltvorgange 100 100 0 000000000000
+B7 Herstellerspezifisch 100 100 99 000000000000
+B8 Ende-zu-Ende-Fehler 100 100 0 000000000000
+BB Gemeldete unkorrigierbare Fehler 100 100 0 000000000000
+BC Befehlszeituberschreitung 66 99 0 000000000001
+BD Ubergeordnete Schreibvorgange 84 57 45 000010100010
+BE Luftstromtemperatur 100 100 0 000000000000
+BF Beschleunigungssensor-Fehlerrate 100 100 0 000000000031
+0000000014B1
+CO Ausschaltungsabbruiche 98 98 0 000A00000010
+C1 Laden/Entladen-Zyklen 16 43 000000000000
+C2 Temperatur 100 100
+C5 Aktuellausstehende Sektoren

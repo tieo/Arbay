@@ -133,6 +133,25 @@ class SmartScreensTest {
     }
 
     @Test
+    fun `names read without their spaces and a row without its threshold still count`() {
+        // RapidOCR writes "WiederzugewieseneSektoren" and takes C5's lone threshold 0 into its raw value.
+        val r = assertNotNull(SmartScreens.parse(text("rapidocr_de_glued_names_lost_threshold"), 1))
+        assertEquals(DriveVerdict.CLEAN, r.verdict, r.toString())
+        assertEquals(0L, r.pending)
+        assertEquals(0L, r.reallocated)
+    }
+
+    @Test
+    fun `a table read one row off believes none of its counts`() {
+        // A Seagate's names paired with the next row's values: its power-on row reads 0 under a header
+        // of 1063 hours, and its "reallocated" row holds the read error rate.
+        val r = assertNotNull(SmartScreens.parse(text("rapidocr_de_seagate_rows_shifted"), 1))
+        assertEquals(DriveVerdict.UNREADABLE, r.verdict, r.toString())
+        assertEquals(null, r.reallocated)
+        assertEquals(1_063L, r.powerOnHours)
+    }
+
+    @Test
     fun `a Dutch CrystalDiskInfo screen gives its hours and status`() {
         // A WD Blue M.2 SATA drive on Marktplaats, photographed off a monitor at an angle: the table
         // is lost to the OCR, the header ("Goed", "Bedrijfsuren 1920 uren") is not.

@@ -1,0 +1,37 @@
+CrystalDisklnfo 9.3.1 x64
+Datei Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut Gut Gut Gut
+45°C 40℃ 29°C 36℃
+D: F: H:
+ST16000NM002H-3KW133:16000,9 GB
+Gesamtzustand Firmware RE06
+Seriennummer XXXXXXXX
+Gut Schnittstelle UASP(Serial ATA) Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 8mal
+AktuelleTemperatu Laufwerksbuchstaben F: Betriebsstunden 'PS0
+Standard ACS-5----
+29C
+EigenschaftenS.M.A.R.T.,NCQ,Streaming,GPL
+ID Parametername Aktueller... Schlechte... Grenzwert Rohwerte
+01 Lesefehlerrate 68 66 44 000000570ECE
+03 Mittlere Anlaufzeit 93 93 0 000000000000
+04 Start/Stopp-ZyklenderSpindel 100 100 20 000000000008
+05 WiederzugewieseneSektoren 100 100 10 000000000000
+07 Suchfehler 100 253 45 00000000140E
+09 Betriebsstunden 100 100 0 000000000000
+OA Misslungene Spindelanläufe 100 100 97 000000000000
+OC Gerate-Einschaltvorgange 100 100 20 000000000008
+12 Herstellerspezifisch 100 100 50 000000000000
+? BB GemeldeteunkorrigierbareFehler 100 100 0 000000000000
+BC Befehlszeituberschreitung 100 100 0 000000000000
+BE Luftstromtemperatur 71 47 0 00001D18001D
+CO Ausschaltungsabbruche 100 100 0 000000000003
+C1 Laden/Entladen-Zyklen 100 100 0 000000000008
+C2 Temperatur 29 40 0 00180000001D
+C5 AktuellausstehendeSektoren 100 100 000000000000
+C6 NichtkorrigierbareSektoren 100 100 0 000000000000
+? C7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+C8 Schreibfehlerrate 100 100 1 000000000000
+FO Kopfpositionierungszeit 100 100 0 9DBA00000000
+F1 LBA geschrieben (gesamt) 100 253 0 000000367B78
+F2 LBA gelesen (gesamt) 100 253 0 000000209356
