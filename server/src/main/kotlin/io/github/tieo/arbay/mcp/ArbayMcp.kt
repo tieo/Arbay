@@ -958,8 +958,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             }
             json.decodeFromString(io.github.tieo.arbay.model.DriveHealth.serializer(), r.bodyAsText())
         }.getOrNull() ?: return "Drive health: the photos could not be read.\n"
-        if (health.readings.isEmpty()) return "Drive health: none of its ${health.photosRead} photos shows a SMART screen.\n"
-        return health.readings.joinToString("") { r ->
+        val pending = if (health.photosPending > 0) "Drive health: ${health.photosPending} more photos are being read; ask again in a minute.\n" else ""
+        if (health.readings.isEmpty()) return pending.ifEmpty { "Drive health: none of its ${health.photosRead} photos shows a SMART screen.\n" }
+        return pending + health.readings.joinToString("") { r ->
             "Drive health, photo ${r.photo}: ${r.verdict}" +
                 listOfNotNull(r.powerOnHours?.let { "$it h" }, r.reallocated?.let { "$it reallocated" }, r.pending?.let { "$it pending" },
                     r.uncorrectable?.let { "$it uncorrectable" }, r.wearUsed?.let { "$it % worn" }, r.spareLeft?.let { "$it % spare" },

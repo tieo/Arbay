@@ -563,7 +563,13 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         // A drive's photos may hold a SMART screenshot; the server reads it.
         if (looksLikeADrive(listing.title)) {
             readingDrive = true
-            health = app.client.driveHealth(listing, fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls)
+            val photos = fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls
+            health = app.client.driveHealth(listing, photos)
+            // The server answers with what it read in time and reads the rest meanwhile.
+            while ((health?.photosPending ?: 0) > 0) {
+                kotlinx.coroutines.delay(10_000)
+                health = app.client.driveHealth(listing, photos) ?: break
+            }
             readingDrive = false
         }
     }
@@ -725,13 +731,14 @@ private fun ModelPick(choice: ModelChoice, checked: String?, pick: (String) -> U
 /** What the SMART screenshots among the ad's photos say about the drive, one row per screenshot. */
 @Composable
 private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
-    if (reading) {
+    val readings = health?.readings.orEmpty()
+    if (reading && readings.isEmpty()) {
         Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading the drive's photos") } }
         return
     }
-    val readings = health?.readings.orEmpty()
     if (readings.isEmpty()) return
     H3 { Text("Drive health") }
+    if (reading) Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading the other photos") } }
     Div({ classes("drive-health") }) {
         readings.forEach { r ->
             Div({ classes("drive-reading") }) {

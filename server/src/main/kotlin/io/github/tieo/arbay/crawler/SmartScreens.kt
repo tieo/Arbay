@@ -6,6 +6,8 @@ import io.github.tieo.arbay.model.DriveVerdict
 import io.github.tieo.arbay.model.SmartReading
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -433,40 +435,80 @@ object SmartScreens {
     @Serializable
     private data class Logged(val at: String, val listingId: String, val title: String, val url: String, val reading: SmartReading, val text: String)
 
-    /** The SMART screenshots among [photos], read; empty where there are none or the reader is missing. */
+    /** One photo read at a time: RapidOCR takes every core, and three ads read at once took 90 s
+     *  each where one alone takes a few seconds a photo. */
+    private val reading = kotlinx.coroutines.sync.Mutex()
+
+    /** Reads the photos an answer had no time for, after it went out. */
+    private val background = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+
+    /** Photos queued for the background, so asking twice queues each once. */
+    private val queued: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** How long an answer waits on photos not read before: an offer's page and the MCP call that
+     *  asks for it give up after a minute, and the rest is read in the background meanwhile. */
+    private const val ANSWER_WITHIN_MS = 20_000L
+
+    /**
+     * The SMART screenshots among [photos], read; empty where there are none or the reader is
+     * missing. Photos read before answer at once; new ones are read until [ANSWER_WITHIN_MS] has
+     * passed, and the rest are read in the background and counted as [DriveHealth.photosPending].
+     */
     suspend fun read(listingId: String, title: String, photos: List<String>, fetch: suspend (String) -> ByteArray?): DriveHealth {
         if (!PhotoText.present && !PhotoText.screenReaderPresent) return DriveHealth()
         val urls = photos.take(MOST_PHOTOS)
+        val until = System.currentTimeMillis() + ANSWER_WITHIN_MS
+        var pending = 0
         val readings = urls.mapIndexedNotNull { i, url ->
-            val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
-            // A text read once, as every photo is that shows no screen, is read again at twice the size
-            // where a better parser now finds a screen in it.
-            // RapidOCR reads a photo once, so this is Tesseract's alone.
-            val readOnce = !PhotoText.screenReaderPresent && known?.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
-            if (known != null && !readOnce) return@mapIndexedNotNull known.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
-            val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
-                // A photo that shows a SMART screen is read a second time at twice the size, and a
-                // count is believed only where both readings agree: Tesseract reads a slashed zero as
-                // 0 at one size and 9 at another. RapidOCR takes some five seconds a photo, which a
-                // second reading would double, so its one reading stands.
-                ocr(bytes, 1.0)?.let { first ->
-                    if (PhotoText.screenReaderPresent || see(first) == null) first
-                    else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK)
+            val text = known(url) ?: if (System.currentTimeMillis() < until) {
+                reading.withLock { known(url) ?: readPhoto(listingId, title, url, fetch) }
+            } else {
+                pending++
+                if (queued.add(url)) background.launch {
+                    try { reading.withLock { if (known(url) == null) readPhoto(listingId, title, url, fetch) } } finally { queued.remove(url) }
+                    persist()
                 }
+                null
             }
-            // Only a photo that was read is remembered: one that failed to arrive or to read is
-            // tried again the next time, rather than counted as no screenshot for good.
-            if (text != null) synchronized(cache) { cache[url] = text.takeIf { t -> Attribute.entries.any { it.names.containsMatchIn(t) } } }
-            val read = text?.let { parse(it.split(PASS_BREAK), i + 1) }
-            read?.let { r ->
-                runCatching {
-                    shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r, text)) + "\n")
-                }
-            }
-            read
+            text?.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
         }
         persist()
-        return DriveHealth(readings = readings, photosRead = urls.size)
+        return DriveHealth(readings = readings, photosRead = urls.size - pending, photosPending = pending)
+    }
+
+    /** What the cache holds for the photo, null where it has to be read (again). A success of null
+     *  is a photo read that shows no screen. */
+    private fun known(url: String): Result<String?>? {
+        val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null } ?: return null
+        // A text read once, as every photo is that shows no screen, is read again at twice the size
+        // where a better parser now finds a screen in it. RapidOCR reads a photo once, so this is
+        // Tesseract's alone.
+        val readOnce = !PhotoText.screenReaderPresent && known.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
+        return known.takeUnless { readOnce }
+    }
+
+    /** The photo at [url] read and kept; null where it did not arrive or could not be read. */
+    private suspend fun readPhoto(listingId: String, title: String, url: String, fetch: suspend (String) -> ByteArray?): Result<String?>? {
+        val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
+            // A photo that shows a SMART screen is read a second time at twice the size, and a
+            // count is believed only where both readings agree: Tesseract reads a slashed zero as
+            // 0 at one size and 9 at another. RapidOCR takes some five seconds a photo, which a
+            // second reading would double, so its one reading stands.
+            ocr(bytes, 1.0)?.let { first ->
+                if (PhotoText.screenReaderPresent || see(first) == null) first
+                else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK)
+            }
+        } ?: return null
+        // Only a photo that was read is remembered: one that failed to arrive or to read is tried
+        // again the next time, rather than counted as no screenshot for good.
+        val kept = text.takeIf { t -> Attribute.entries.any { it.names.containsMatchIn(t) } }
+        synchronized(cache) { cache[url] = kept }
+        parse(text.split(PASS_BREAK), 1)?.let { r ->
+            runCatching {
+                shadowLog.appendText(json.encodeToString(Logged.serializer(), Logged(Clock.System.now().toString(), listingId, title, url, r, text)) + "\n")
+            }
+        }
+        return Result.success(kept)
     }
 
     /**

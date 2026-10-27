@@ -132,7 +132,13 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
         // A drive's photos may hold a SMART screenshot; the server reads it.
         if (looksLikeADrive(listing.title)) {
             readingDrive = true
-            health = session.client.driveHealth(listing, fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls)
+            val photos = fromItsPage?.photos?.takeIf { it.isNotEmpty() } ?: listing.imageUrls
+            health = session.client.driveHealth(listing, photos)
+            // The server answers with what it read in time and reads the rest meanwhile.
+            while ((health?.photosPending ?: 0) > 0) {
+                kotlinx.coroutines.delay(10_000)
+                health = session.client.driveHealth(listing, photos) ?: break
+            }
             readingDrive = false
         }
     }
@@ -301,15 +307,16 @@ private fun ModelPick(choice: ModelChoice, checked: ModelPicked?, pick: (ModelPi
 /** What the SMART screenshots among the ad's photos say about the drive, one row per screenshot. */
 @Composable
 private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
-    if (reading) {
+    val readings = health?.readings.orEmpty()
+    if (reading && readings.isEmpty()) {
         Gap(4.dp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading the drive's photos") }
         return
     }
-    val readings = health?.readings.orEmpty()
     if (readings.isEmpty()) return
     Gap(4.dp)
     SectionTitle("Drive health")
+    if (reading) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading the other photos") }
     readings.forEach { r ->
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

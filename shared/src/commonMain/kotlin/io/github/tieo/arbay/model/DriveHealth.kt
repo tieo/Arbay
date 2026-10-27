@@ -44,7 +44,12 @@ data class SmartReading(
 
 /** Every SMART screenshot found among an ad's photos, read. Empty where its photos show none. */
 @Serializable
-data class DriveHealth(val readings: List<SmartReading> = emptyList(), val photosRead: Int = 0)
+data class DriveHealth(
+    val readings: List<SmartReading> = emptyList(),
+    val photosRead: Int = 0,
+    /** Photos still being read, after the answer had to go out; asking again a minute later has them. */
+    val photosPending: Int = 0,
+)
 
 /** The photos of one drive's ad, sent to have its SMART screenshots read. */
 @Serializable
