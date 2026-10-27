@@ -27,14 +27,16 @@ object SellersWords {
     // VAT left out, as a Dutch or English ad says it: "prijzen zijn ex. BTW", "excl. BTW",
     // "exclusief btw", "excl. VAT", "plus VAT".
     private const val EX_VAT = """(?:ex(?:cl)?\.?|exclusief)\s*btw\b|\b(?:ex(?:cl)?\.?|excluding|plus)\s*vat\b"""
-    // VAT put in: "Brutto", "incl. BTW", "inclusief btw".
-    private const val WITH_VAT = """(?:brutto|incl(?:\.|usief)?\s*btw)"""
+    // VAT put in: "Brutto", "incl. BTW", "inc btw", "inclusief btw".
+    private const val WITH_VAT = """(?:brutto|inc(?:l(?:usief)?)?\.?\s*btw)"""
     private const val AMOUNT = """(\d{1,3}(?:[.\s]\d{3})+|\d{3,7})"""
+    // What may stand between an amount and the word after it: "1.195,- excl. btw", "42.338 euro inc btw".
+    private const val UNIT = """(?:,-|,00)?\s*(?:€|euro?)?"""
 
     // The asking price called net, and the gross beside it: "12.000€ Nettopreis (Brutto 14.280€)",
     // "12.000 € netto, 14.280 € brutto", "Brutto: 14.280 €", "€ 32.138 incl. BTW".
     private val net = Regex("""\b(?:netto\w*|zzgl\.?\s*(?:19\s*%\s*)?mwst\.?|zuzüglich\s+(?:der\s+)?mwst|$EX_VAT)""", RegexOption.IGNORE_CASE)
-    private val gross = Regex("""$WITH_VAT\W{0,4}$AMOUNT|$AMOUNT\s*(?:€|eur)?\s*$WITH_VAT""", RegexOption.IGNORE_CASE)
+    private val gross = Regex("""$WITH_VAT\W{0,4}$AMOUNT|$AMOUNT$UNIT\s*$WITH_VAT""", RegexOption.IGNORE_CASE)
 
     // The asking price said to have VAT on top, with no gross written anywhere: "Preis Netto zzgl
     // MwSt.", "Preis zzgl. 19% MwSt". A net figure of its own ("Ihr Nettopreis 20.672 €" under a
@@ -46,11 +48,12 @@ object SellersWords {
         RegexOption.IGNORE_CASE,
     )
     // A net amount written out: "netto: 15.950,-", "Nettopreis 20.672 €", "15.950 € netto",
-    // "€ 21.950 excl. BTW".
-    private val statedNet = Regex("""netto\w*\W{0,4}$AMOUNT|$AMOUNT\s*(?:€|eur)?\s*(?:netto|$EX_VAT)""", RegexOption.IGNORE_CASE)
+    // "€ 21.950 excl. BTW", and a warranty's "12 maanden € 495,- excl. btw", which says the van's
+    // own price is the gross.
+    private val statedNet = Regex("""netto\w*\W{0,4}$AMOUNT|$AMOUNT$UNIT\s*(?:netto|$EX_VAT)""", RegexOption.IGNORE_CASE)
     // VAT in the price already, or none to pay on it: a margin-scheme van ("marge") carries no
     // VAT a buyer adds, and one whose VAT is "verrekenbaar" has it inside the price.
-    private val vatIncluded = Regex("""mwst\.?\s*ausweisbar|inkl\.?\s*(?:19\s*%\s*)?mwst|incl(?:\.|usief)?\s*btw|btw[\s-]*verrekenbaar|\bmarge\b""", RegexOption.IGNORE_CASE)
+    private val vatIncluded = Regex("""mwst\.?\s*ausweisbar|inkl\.?\s*(?:19\s*%\s*)?mwst|inc(?:l(?:usief)?)?\.?\s*btw|btw[\s-]*verrekenbaar|\bmarge\b""", RegexOption.IGNORE_CASE)
 
     // The gearbox the text names under its own heading or by its gears: "Getriebe\n- 6-Gang-
     // Schaltgetriebe", "Getriebe: Schaltgetriebe", "8-Gang-Automatikgetriebe". Equipment that only

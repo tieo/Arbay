@@ -113,6 +113,10 @@ Laufleistung: 297000"""
         assertEquals(32_138_00, SellersWords.apply(dutch.copy(description = "€ 26.560 excl. BTW, € 32.138 incl. BTW")).price.amount)
         assertEquals(26_560_00, SellersWords.apply(dutch.copy(description = "Marge auto, prijs excl. btw niet van toepassing")).price.amount)
         assertEquals(26_560_00, SellersWords.apply(dutch.copy(description = "Prijs incl. BTW, BTW verrekenbaar")).price.amount)
+        // AutoScout24 Belgium, cached 2026-10: net and gross both written out.
+        assertEquals(32_138_00, SellersWords.apply(dutch.copy(description = "26.560 euro ex btw – 32.138 euro inc btw*")).price.amount)
+        // A warranty priced ex BTW says nothing of the van's own price.
+        assertEquals(26_560_00, SellersWords.apply(dutch.copy(description = " * 12 maanden € 495,- excl. btw\n 24 maanden € 1.195,- excl. btw")).price.amount)
     }
 
     @Test
