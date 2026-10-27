@@ -29,6 +29,14 @@ val EU_VAT_AREA: Set<String> = setOf(
     "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
 )
 
+/** Standard VAT by ISO 3166-1 alpha-2 country, as a fraction: what a business there charges a
+ *  private buyer on top of a price it calls net. */
+val STANDARD_VAT: Map<String, Double> = mapOf(
+    "DE" to 0.19, "AT" to 0.20, "CH" to 0.081, "FR" to 0.20, "IT" to 0.22, "ES" to 0.21, "NL" to 0.21,
+    "BE" to 0.21, "PL" to 0.23, "CZ" to 0.21, "DK" to 0.25, "SE" to 0.25, "GB" to 0.20, "LU" to 0.17,
+    "RO" to 0.21, "SK" to 0.23, "SI" to 0.22, "HU" to 0.27, "PT" to 0.23, "FI" to 0.255, "NO" to 0.25,
+)
+
 /** Where this listing is sold from: what the listing itself says, else the market's own country,
  *  else the buyer's own country (a home market carries no origin). */
 fun Listing.originCountry(homeCountry: String): String =

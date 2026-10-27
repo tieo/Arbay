@@ -100,4 +100,33 @@ Laufleistung: 297000"""
         assertEquals(12_300_00, SellersWords.apply(van("56.999€ VB", euros = 12_300)).price.amount)
         assertEquals(12_345_00, SellersWords.apply(van("Gepflegter Camper", euros = 12_345)).price.amount)
     }
+
+    @Test
+    fun `a Dutch dealer's price ex BTW gets the Dutch VAT`() {
+        // AutoScout24 Enkhuizen, live 2026-10-27.
+        val dutch = van(
+            ".FINANCIAL LEASE SNEL VOOR U GEREGELD\n\nprijzen zijn ex. BTW / excl. rijklaarmaken\n\nVelgen + banden zijn tegen meerprijs!",
+            euros = 26_560, km = 141_252,
+        ).copy(id = "AUTOSCOUT24:2a368ff1", platformId = PlatformId.AUTOSCOUT24, location = io.github.tieo.arbay.model.Location(city = "ENKHUIZEN", country = "NL"))
+        assertEquals(32_137_60, SellersWords.apply(dutch).price.amount)
+        // The gross written beside it, a margin van, or VAT inside the price leave the stated gross.
+        assertEquals(32_138_00, SellersWords.apply(dutch.copy(description = "€ 26.560 excl. BTW, € 32.138 incl. BTW")).price.amount)
+        assertEquals(26_560_00, SellersWords.apply(dutch.copy(description = "Marge auto, prijs excl. btw niet van toepassing")).price.amount)
+        assertEquals(26_560_00, SellersWords.apply(dutch.copy(description = "Prijs incl. BTW, BTW verrekenbaar")).price.amount)
+    }
+
+    @Test
+    fun `the gearbox the equipment list states wins over the form`() {
+        // AutoScout24 Fellbach, live 2026-10-27: the form said automatic.
+        val auto = io.github.tieo.arbay.model.VehicleInfo(gearbox = io.github.tieo.arbay.model.Transmission.AUTOMATIC, verified = setOf(VehicleField.GEARBOX))
+        val fellbach = van("Technik & Sicherheit: \n 2 Funkklappschlüssel\n 6-Gang-Schaltgetriebe\n Motor-Start-Stopp-System", km = null).copy(vehicle = auto)
+        val read = SellersWords.apply(fellbach).vehicle!!
+        assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, read.gearbox)
+        assertFalse(read.isVerified(VehicleField.GEARBOX))
+        // Kleinanzeigen, live 2026-10-21: the gearbox under its own heading.
+        assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, SellersWords.apply(van("Getriebe\n- Schaltgetriebe\nTechnik\n- Start-Stop-Automatik", km = null).copy(vehicle = auto)).vehicle?.gearbox)
+        // An automatic's own line, or a text naming both, leaves the form.
+        assertEquals(auto, SellersWords.apply(van("8-Gang-Automatikgetriebe\nStart-Stop-Automatik", km = null).copy(vehicle = auto)).vehicle)
+        assertEquals(auto, SellersWords.apply(van("6-Gang-Schaltgetriebe oder DSG auf Wunsch", km = null).copy(vehicle = auto)).vehicle)
+    }
 }

@@ -191,6 +191,28 @@ class SavedSearchMonitor(
         // a photo after the platform drops the listing. The repo copy stands in while archiving is
         // still in flight, since that runs in the background after a crawl.
         return ids.mapNotNull { ListingArchive.get(it) ?: listingRepo.getById(it) }
+            .map { withPhotosToday(it, productId) }
+    }
+
+    /**
+     * [l] with the ads elsewhere that show its photos as the prints say now, not as they said when
+     * the watch found it, and its fit weighed again where that changed, since an ad showing
+     * another's photos gets no fit. Live, 2026-10-27: a Fellbach dealer's Crafter, posted under two
+     * trading names, stayed a likely scam with no fit among the Crafter search's new offers for
+     * days after the rule stopped calling one dealer's two ads a copy.
+     */
+    private fun withPhotosToday(l: Listing, productId: String): Listing {
+        val copies = PhotoPrints.copiesOf(l)
+        if (copies == l.photosAlsoIn) return l
+        val now = l.copy(photosAlsoIn = copies)
+        if (copies.isNotEmpty()) return now.copy(matchScore = null, fit = emptyList())
+        val product = productRepo.getById(productId) ?: return now
+        val q = product.searchQuery
+        val things = q.productWishes?.takeUnless { it.isEmpty }
+        val soft = product.fitAlert.softDriveHours
+        val fit = if (things != null) FitScore.score(now, things, FitScore.priceEur(now), soft)
+            else FitScore.score(now, q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters(), FitScore.priceEur(now), soft)
+        return fit?.let { now.copy(matchScore = it.score, fit = it.parts) } ?: now
     }
 
     /**

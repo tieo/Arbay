@@ -407,15 +407,10 @@ object ProductPages {
 
     /** [price] with the standard VAT of the shop's country, read off its address's ending. */
     internal fun withVat(price: Money, pageUrl: String): Money {
-        val rate = VAT_BY_COUNTRY[SiteRecipes.domainOf(pageUrl).substringAfterLast('.')] ?: VAT_BY_COUNTRY.getValue("de")
+        val ending = SiteRecipes.domainOf(pageUrl).substringAfterLast('.').uppercase().let { if (it == "UK") "GB" else it }
+        val rate = io.github.tieo.arbay.model.STANDARD_VAT[ending] ?: io.github.tieo.arbay.model.STANDARD_VAT.getValue("DE")
         return price.copy(amount = Math.round(price.amount * (1 + rate)))
     }
-
-    /** Standard VAT by a shop's country ending. */
-    private val VAT_BY_COUNTRY = mapOf(
-        "de" to 0.19, "at" to 0.20, "ch" to 0.081, "fr" to 0.20, "it" to 0.22, "es" to 0.21, "nl" to 0.21,
-        "be" to 0.21, "pl" to 0.23, "cz" to 0.21, "dk" to 0.25, "se" to 0.25, "uk" to 0.20, "lu" to 0.17,
-    )
 
     private fun specifications(e: JsonElement?): List<JsonObject> = when (e) {
         is JsonObject -> listOf(e)
