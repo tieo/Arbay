@@ -1319,8 +1319,9 @@ object RelevanceFilter {
         modelWordsOf.forEachIndexed { i, ws -> ws.forEach { carriers.getOrPut(it) { mutableListOf() } += i } }
         val result = HashMap<String, Set<String>>()
         listings.forEachIndexed { i, listing ->
+            val title = " " + normalize(listing.title.lowercase()) + " "
             val shown = words.filter { w ->
-                !carries.getValue(w)[i] && modelWordsOf[i].any { m ->
+                !carries.getValue(w)[i] && CONTRARY[w].orEmpty().none { title.contains(" $it ") } && modelWordsOf[i].any { m ->
                     val others = carriers.getValue(m).filter { it != i }
                     val here = others.size >= MODEL_EVIDENCE_LISTINGS &&
                         others.count { carries.getValue(w)[it] }.toDouble() / others.size >= MODEL_EVIDENCE_SHARE
@@ -1390,7 +1391,11 @@ object RelevanceFilter {
      *  was asked, not which product it is. */
     private fun modelWords(title: String): Set<String> {
         val words = normalize(gluedThousands(title.lowercase())).split(" ")
+        // A share is no model either: "100% Gezond" made an M.2 SATA drive an NVMe one, by the
+        // "100% health" the NVMe drives beside it were sold with.
+        val shares = PERCENTAGE.findAll(title).map { it.groupValues[1] }.toSet()
         return words.filterIndexed { i, w ->
+            w !in shares &&
             w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
                 // A number led by a zero is a part number's revision ("1FM101-002", "718292-001"),
                 // shared by drives of every kind; no product is named 002.
@@ -1407,6 +1412,8 @@ object RelevanceFilter {
     }
 
     private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
+
+    private val PERCENTAGE = Regex("""(\d+)\s*%""")
 
     /** Words that make the number before them a count or a measure. */
     private val COUNT_OR_MEASURE = setOf(
@@ -1426,6 +1433,10 @@ object RelevanceFilter {
     /** Words a title states a spec in rather than names a product with: a card length, a bus
      *  generation, a lane count. A SATA drive is "M.2 2280" as much as an NVMe one is. */
     private val specWord = Regex("""22(30|42|60|80|110)|gen\d|pcie\d|pci\d|ddr\d|usb\d\w*|3d""")
+
+    /** Words of a search a title rules out by naming the alternative: a drive sold as "M.2 SATA"
+     *  is not the NVMe one, however many NVMe drives share its model words. */
+    private val CONTRARY = mapOf("nvme" to listOf("sata"))
 
     /** Other listings that have to share a model word before it says anything about this one. */
     private const val MODEL_EVIDENCE_LISTINGS = 2

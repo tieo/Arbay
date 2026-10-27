@@ -2,6 +2,7 @@ package io.github.tieo.arbay
 
 import io.github.tieo.arbay.crawler.MarktplaatsDetailParser
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleField
 import kotlin.test.Test
@@ -45,5 +46,20 @@ class MarktplaatsDetailParserTest {
     @Test
     fun `a page without the attribute object yields null`() {
         assertNull(MarktplaatsDetailParser.parse("<html><body>no specs</body></html>"))
+    }
+
+    @Test
+    fun `reads the seller's whole text, the seller and every photo of an ad`() {
+        val html = javaClass.getResource("/fixtures/marktplaats_ad.html")!!.readText()
+        val d = MarktplaatsDetailParser.parseAd(html)!!
+        val text = d.description!!
+        assertTrue(text.startsWith("Te koop aangeboden: een uitstekend werkende WD Blue 2TB M.2 SATA SSD."), text)
+        // Past the cut the search card makes, and one line per line of the page.
+        assertTrue("\nUitsluitend ophalen: Wordt niet verzonden.\n" in text, text)
+        assertEquals("Verkoper", d.seller?.name)
+        assertEquals(SellerType.PRIVATE, d.seller?.type)
+        assertEquals(4, d.photos.size)
+        assertTrue(d.photos.all { it.startsWith("https://images.marktplaats.com/") }, d.photos.toString())
+        assertNull(d.vehicle)
     }
 }

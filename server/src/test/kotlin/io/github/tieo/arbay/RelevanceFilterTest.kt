@@ -1731,6 +1731,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a drive whose title names the other bus is not implied to be NVMe`() {
+        // Marktplaats answered "2TB NVMe" with an M.2 SATA drive whose text says "Geen NVMe", and
+        // the 2 TB watch alerted on it: the NVMe drives beside it shared its "100" (% health).
+        val sata = listing("WD Blue 2TB M.2 SATA SSD – 100% Gezond (CrystalDiskInfo)")
+        val nvme = listOf(
+            listing("Samsung 990 Pro 2TB NVMe M.2 – 100% Gezondheid"),
+            listing("Lexar NM790 2TB NVMe SSD 100% health"),
+            listing("WD Black SN850X 2TB NVMe 100% CrystalDiskInfo"),
+            listing("Crucial P310 2TB NVMe, 100% gezond"),
+        )
+        val kept = search("2TB NVMe", nvme + sata, aliases = listOf("2 TB NVMe", "2000GB NVMe"))
+        assertEquals(nvme.map { it.title }, kept.map { it.title })
+    }
+
+    @Test
     fun `a docking station that takes drives up to the size is not a drive`() {
         val dock = listing("SSD und Festplatten Docking Station USB 3.0, HDD Docking Station, Dockingstation für Festplatten für 2,5 und 3,5 Zoll SATA HDD/SSD 32TB mit SD/TF-Kartenleser, Unterstützt Offline-Cloning,UASP", 2899)
         val drive = listing("Seagate Exos 32TB HDD SATA", 60000)

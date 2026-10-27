@@ -18,12 +18,11 @@ class MarktplaatsCrawler(
     private val host: String = "https://www.marktplaats.nl",
 ) : Crawler, StartsAtAnyPage, FetchesEveryPage, KnowsLocation, HasDetailSpecs {
 
-    /** The search card carries only year and mileage; the detail page's attribute object adds
-     *  power, gearbox, fuel, doors, body type and colour, so a filter on those verifies instead of
-     *  soft-passing. Fetched only for the listings DetailEnricher selects (budgeted + cached). */
+    /** The ad's page: the seller's whole text, who sells it and every photo, and for a vehicle the
+     *  attribute object the card leaves out (power, gearbox, fuel, doors, body type, colour), so a
+     *  filter on those verifies instead of soft-passing. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        MarktplaatsDetailParser.parse(CurlCffiClient.fetch(listing.url, primeUrl = host))
-            ?.let { ListingDetail(vehicle = it) }
+        MarktplaatsDetailParser.parseAd(CurlCffiClient.fetch(listing.url, primeUrl = host))
     } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
     }
