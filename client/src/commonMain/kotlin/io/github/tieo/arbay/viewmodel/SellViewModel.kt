@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.AdDraft
+import io.github.tieo.arbay.model.REPOST_EVERY_DAYS
 import io.github.tieo.arbay.model.photoPath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -95,7 +96,10 @@ class SellViewModel(
 
     /** Whether the open ad is posted and changed on screen since, which only saving puts on the market. */
     fun unsaved(draft: AdDraft): Boolean =
-        draft.postedAdId != null && _drafts.value.firstOrNull { it.id == draft.id }?.let { it != draft } == true
+        draft.postedAdId != null && _drafts.value.firstOrNull { it.id == draft.id }?.let { it.marketPart() != draft.marketPart() } == true
+
+    /** The ad as the market has it, without how often Arbay puts it up again, which is kept apart. */
+    private fun AdDraft.marketPart() = copy(repostEveryDays = null, repostProblem = null)
 
     /** The open posted ad's changes saved on Kleinanzeigen. */
     fun save() {
@@ -109,6 +113,21 @@ class SellViewModel(
                 if (_open.value == draft) _open.value = kept
             }
             _busy.value = null
+        }
+    }
+
+    /** Whether the open ad goes up again every week; kept on the server at once, apart from any
+     *  change still to be saved on Kleinanzeigen. */
+    fun repostWeekly(on: Boolean) {
+        val id = _open.value?.id ?: return
+        val days = if (on) REPOST_EVERY_DAYS else null
+        _open.value = _open.value?.copy(repostEveryDays = days, repostProblem = null)
+        if (rendersASample) return
+        viewModelScope.launch {
+            attempt {
+                val kept = client.setRepost(id, days)
+                _drafts.value = _drafts.value.map { if (it.id == kept.id) kept else it }
+            }
         }
     }
 

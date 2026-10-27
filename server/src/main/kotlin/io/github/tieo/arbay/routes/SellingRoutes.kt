@@ -2,6 +2,7 @@ package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.model.AdDraft
 import io.github.tieo.arbay.model.NewAdDraft
+import io.github.tieo.arbay.model.RepostEvery
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.github.tieo.arbay.selling.Selling
@@ -43,6 +44,13 @@ fun Route.sellingRoutes() {
             }
         }
         post("/{id}/post") { call.selling { call.respond(Selling.post(call.id()).first) } }
+        // Putting the posted ad up again gone through without posting or taking anything down.
+        post("/{id}/try-repost") { call.selling { call.respond(Selling.tryRepost(call.id())) } }
+        // How often the posted ad goes up again: {"everyDays": 7}, or null to leave it as posted.
+        put("/{id}/repost") {
+            val days = call.receive<RepostEvery>().everyDays
+            call.selling { call.respond(Selling.setRepost(call.id(), days)) }
+        }
         // Fills the market's post form and leaves it without posting: what the form took, with a
         // picture of it, for checking the steps against the market as it is now.
         post("/{id}/try") {

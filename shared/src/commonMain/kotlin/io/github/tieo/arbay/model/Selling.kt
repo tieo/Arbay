@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.model
 
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
@@ -39,7 +40,28 @@ data class AdDraft(
     /** The market's id of the ad once posted. */
     val postedAdId: String? = null,
     val postedAt: Instant? = null,
+    /** Every how many days the posted ad is put up again and the one before taken down, which
+     *  lists it with the newest again; null where it stays as posted. */
+    val repostEveryDays: Int? = REPOST_EVERY_DAYS,
+    /** The ids the ad had before it was put up again: buyers wrote about it under those. */
+    val earlierAdIds: List<String> = emptyList(),
+    /** Earlier ids of the ad still up because taking them down failed; tried again until gone. */
+    val adIdsToTakeDown: List<String> = emptyList(),
+    /** Why the last time it was due it was not put up again, worded for the user. */
+    val repostProblem: String? = null,
 )
+
+/** How often an ad is put up again unless the user says otherwise. */
+const val REPOST_EVERY_DAYS = 7
+
+/** When the posted ad is put up again next, where it is. */
+fun AdDraft.nextRepost(): Instant? {
+    val days = repostEveryDays ?: return null
+    return postedAt?.plus(days.days)
+}
+
+/** Whether [adId] is this ad's, now or under an id it had before being put up again. */
+fun AdDraft.isAd(adId: String): Boolean = adId == postedAdId || adId in earlierAdIds
 
 @Serializable
 enum class AdPriceType(val label: String) {
@@ -66,7 +88,12 @@ fun AdDraft.saleLine(): String = listOfNotNull(
     if (postedAdId != null) "Posted" else "Draft",
     if (priceType == AdPriceType.GIVE_AWAY) priceType.label else priceEur?.let { "$it € ${if (priceType == AdPriceType.NEGOTIABLE) "VB" else ""}".trim() },
     if (shipping) null else "pickup only",
+    if (postedAdId != null && repostEveryDays != null) "up again every ${repostEveryDays} days" else null,
 ).joinToString(" · ")
+
+/** How often a posted ad goes up again; null leaves it as posted. */
+@Serializable
+data class RepostEvery(val everyDays: Int?)
 
 /** What a draft starts from: an ad the user bought from, by its Arbay listing id. */
 @Serializable

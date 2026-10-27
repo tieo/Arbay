@@ -30,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import io.github.tieo.arbay.results.repostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -120,6 +122,7 @@ fun SellScreen(session: Session, draftId: String) {
                 OutlinedTextField(d.description, { sell.change(d.copy(description = it)) }, Modifier.fillMaxWidth(), label = { Text("Text") }, minLines = 8)
             }
             item { PriceFields(d) { sell.change(it) } }
+            item { Repost(d) { sell.repostWeekly(it) } }
             item { Details(d, posted) { sell.change(it) } }
         }
     }
@@ -162,6 +165,18 @@ private fun PriceFields(d: AdDraft, onChange: (AdDraft) -> Unit) {
             Choice("Pickup only", !d.shipping) { onChange(d.copy(shipping = false, buyNow = false)) }
             if (d.shipping) Choice("Direkt kaufen", d.buyNow) { onChange(d.copy(buyNow = !d.buyNow)) }
         }
+    }
+}
+
+/** Whether the ad goes up again every week, listed with the newest, and when it next does. */
+@Composable
+private fun Repost(d: AdDraft, onChange: (Boolean) -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Put up again every week", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(d.repostEveryDays != null, onChange)
+        }
+        repostState(d)?.let { Muted(it) }
     }
 }
 

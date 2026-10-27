@@ -5,12 +5,15 @@ import io.github.tieo.arbay.chat.ChatBrowser
 import io.github.tieo.arbay.chat.ChatFailure
 import io.github.tieo.arbay.crawler.CopiesAds
 import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.crawler.KnowsAdState
 import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.AdDraft
 import io.github.tieo.arbay.model.AdPriceType
+import io.github.tieo.arbay.model.AdState
 import io.github.tieo.arbay.model.LiveKind
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PostAdResult
+import io.github.tieo.arbay.model.nextRepost
 import io.github.tieo.arbay.model.problem
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeBytesAtomically
@@ -191,21 +194,8 @@ object Selling {
         if (draft.postedAdId != null) return PostAdResult(draft) to null
         draft.problem()?.let { return PostAdResult(draft, it) to null }
         val answer = try {
-            ChatBrowser.call(
-                "post_ad", 300_000,
-                "categoryId" to draft.categoryId,
-                "title" to draft.title,
-                "description" to draft.description,
-                "attributes" to JsonObject(draft.attributes.mapValues { JsonPrimitive(it.value) }),
-                "priceType" to draft.priceType.label,
-                "price" to draft.priceEur,
-                "shipping" to draft.shipping,
-                "buyNow" to draft.buyNow,
-                "photos" to JsonArray(draft.photos.map { JsonPrimitive(DataDir.file("selling/$id/$it.jpg").absolutePath) }),
-                "send" to send,
-            )
+            postForm(draft, send)
         } catch (e: ChatFailure) {
-            e.detail?.let { keepFailedPage(draft, it, e) }
             return PostAdResult(draft, e.message) to e.detail
         }
         if (!send) return PostAdResult(draft) to answer
@@ -216,6 +206,113 @@ object Selling {
         }
         persist()
         return PostAdResult(posted) to answer
+    }
+
+    /** The draft through the market's post form, posted where [send]; the post form it failed on is
+     *  kept as an error snapshot. */
+    private suspend fun postForm(draft: AdDraft, send: Boolean): JsonObject = try {
+        ChatBrowser.call(
+            "post_ad", 300_000,
+            "categoryId" to draft.categoryId,
+            "title" to draft.title,
+            "description" to draft.description,
+            "attributes" to JsonObject(draft.attributes.mapValues { JsonPrimitive(it.value) }),
+            "priceType" to draft.priceType.label,
+            "price" to draft.priceEur,
+            "shipping" to draft.shipping,
+            "buyNow" to draft.buyNow,
+            "photos" to JsonArray(draft.photos.map { JsonPrimitive(DataDir.file("selling/${draft.id}/$it.jpg").absolutePath) }),
+            "send" to send,
+        )
+    } catch (e: ChatFailure) {
+        e.detail?.let { keepFailedPage(draft, it, e) }
+        throw e
+    }
+
+    /** Whether and how often the ad is put up again; null leaves it as posted. */
+    fun setRepost(id: String, everyDays: Int?): AdDraft {
+        if (everyDays != null && everyDays !in 1..60) throw SellingFailure("An ad goes up again every 1 to 60 days")
+        val now = synchronized(drafts) {
+            val old = drafts.firstOrNull { it.id == id } ?: throw SellingFailure("No draft $id")
+            old.copy(repostEveryDays = everyDays, repostProblem = null).also { drafts[drafts.indexOf(old)] = it }
+        }
+        persist()
+        return now
+    }
+
+    /**
+     * Puts every posted ad that is due up again: the same ad posted anew, which Kleinanzeigen lists
+     * with the newest, then the one before taken down, so the ad is never up twice for longer than
+     * the minute between and never down at all. Only an ad still up: one the user took down or
+     * marked reserved is sold or nearly so, and putting it up again would sell it twice.
+     */
+    suspend fun repostDue(now: kotlin.time.Instant = Clock.System.now()) {
+        val due = synchronized(drafts) { drafts.filter { d -> d.postedAdId != null && (d.nextRepost()?.let { it <= now } ?: false) } }
+        for (draft in due) {
+            val oldId = draft.postedAdId ?: continue
+            val state = runCatching {
+                (CrawlerRegistry.crawlerFor(PlatformId.KLEINANZEIGEN) as? KnowsAdState)?.adState("https://www.kleinanzeigen.de/s-anzeige/$oldId")
+            }.getOrNull()
+            // A page that could not be read is tried again within the hour.
+            if (state == null) continue
+            if (state != AdState.LIVE) {
+                keep(draft.id) { it.copy(repostProblem = "Not put up again: the ad is ${state.name.lowercase()} on Kleinanzeigen") }
+                continue
+            }
+            val answer = try {
+                postForm(draft, send = true)
+            } catch (e: ChatFailure) {
+                log.warn("Ad {} was not put up again: {}", draft.id, e.message)
+                keep(draft.id) { it.copy(repostProblem = "Not put up again: ${e.message}") }
+                continue
+            }
+            val newId = answer["adId"]?.jsonPrimitive?.contentOrNull
+            if (newId == null) {
+                keep(draft.id) { it.copy(repostProblem = "Put up again, but the market named no ad id; the old ad is still up") }
+                continue
+            }
+            keep(draft.id) {
+                it.copy(postedAdId = newId, postedAt = Clock.System.now(), earlierAdIds = it.earlierAdIds + oldId, repostProblem = null)
+            }
+            log.info("Ad {} put up again as {} in place of {}", draft.id, newId, oldId)
+            keep(draft.id) { it.copy(adIdsToTakeDown = it.adIdsToTakeDown + oldId) }
+        }
+        takeDownEarlier()
+    }
+
+    /** Putting the posted ad up again, gone through without posting or taking anything down: what
+     *  the post form took and what the "Meine Anzeigen" page offers for taking the ad down. */
+    suspend fun tryRepost(id: String): JsonObject {
+        val draft = draft(id) ?: throw SellingFailure("No draft $id")
+        val adId = draft.postedAdId ?: throw SellingFailure("This ad is not posted yet")
+        fun attempt(block: suspend () -> JsonObject): suspend () -> JsonObject = {
+            try { block() } catch (e: ChatFailure) { JsonObject(mapOf("error" to JsonPrimitive(e.message))) }
+        }
+        val form = attempt { postForm(draft, send = false) }()
+        val takeDown = attempt { ChatBrowser.call("delete_ad", 120_000, "adId" to adId, "send" to false) }()
+        return JsonObject(mapOf("post" to JsonObject(form - "picture"), "takeDown" to takeDown))
+    }
+
+    /** Takes down the ids an ad had before it went up again, each until the market confirms it. */
+    private suspend fun takeDownEarlier() {
+        val pending = synchronized(drafts) { drafts.flatMap { d -> d.adIdsToTakeDown.map { d.id to it } } }
+        for ((id, adId) in pending) {
+            val failure = runCatching { ChatBrowser.call("delete_ad", 120_000, "adId" to adId, "send" to true) }.exceptionOrNull()
+            if (failure == null) {
+                keep(id) { it.copy(adIdsToTakeDown = it.adIdsToTakeDown - adId) }
+            } else {
+                log.warn("Earlier ad {} of {} was not taken down: {}", adId, id, failure.message)
+                keep(id) { it.copy(repostProblem = "Put up again, but the earlier ad $adId is still up: ${failure.message}") }
+            }
+        }
+    }
+
+    private fun keep(id: String, change: (AdDraft) -> AdDraft) {
+        synchronized(drafts) {
+            val i = drafts.indexOfFirst { it.id == id }
+            if (i >= 0) drafts[i] = change(drafts[i])
+        }
+        persist()
     }
 
     /** The post form a draft failed on, as an error snapshot to read afterwards. */

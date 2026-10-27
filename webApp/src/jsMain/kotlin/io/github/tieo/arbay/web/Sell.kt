@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.results.repostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -134,6 +135,8 @@ fun SellPane(app: WebApp, draftId: String) {
             Chip("Pickup only", !d.shipping) { sell.change(d.copy(shipping = false, buyNow = false)) }
             if (d.shipping) Chip("Direkt kaufen", d.buyNow) { sell.change(d.copy(buyNow = !d.buyNow)) }
         }
+        Switch("Put up again every week", d.repostEveryDays != null) { sell.repostWeekly(it) }
+        repostState(d)?.let { P({ classes("muted", "small") }) { Text(it) } }
         if (d.attributes.isNotEmpty()) {
             H3({ classes("group-title") }) { Text("Details") }
             Div({ classes("sale-details") }) { d.attributes.forEach { (label, value) -> DetailField(d, label, value, posted) { sell.change(it) } } }

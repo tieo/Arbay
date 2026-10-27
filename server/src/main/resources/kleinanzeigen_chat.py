@@ -43,6 +43,10 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
    "buyNow": true, "send": false}                  -> {"ok": true, "saved": bool, "before": {..}, "taken": {..}, "buttons": [..], "picture": ..};
                                                        a posted ad's edit form, the fields given changed where they differ,
                                                        saved with the form's own button only when "send" is true
+  {"op": "delete_ad", "adId": "..", "send": false}  -> {"ok": true, "deleted": bool, ..}; one of the user's own ads taken down
+                                                       as "Meine Anzeigen" does it, only when "send" is true; false where
+                                                       it was down already. Not sent, it says whether the page has the
+                                                       token and lists the ad
   {"op": "offer", "id": "..", "price": 425.0, "toDoor": true, "most": 450.0, "send": false}
                                                     -> {"ok": true, "price": .., "fee": .., "shippingFrom": .., "shipping": [{"name", "eur"}],
                                                         "shippingEur": .., "paid": .., "sent": bool, "picture": ..}; a price offer through
@@ -971,6 +975,42 @@ class Chat:
             differs.append("Direkt kaufen otherwise")
         return differs
 
+    MY_ADS = ROOT + "/m-meine-anzeigen.html"
+    CSRF_TOKEN = """
+        (() => {
+            const meta = document.querySelector('meta[name="_csrf"]')?.getAttribute('content');
+            if (meta && meta.trim()) return meta;
+            for (const el of document.querySelectorAll('[data-initialprops]')) {
+                try {
+                    const token = JSON.parse(el.getAttribute('data-initialprops'))?.webContext?.csrfToken;
+                    if (typeof token === 'string' && token.trim()) return token;
+                } catch (e) {}
+            }
+            return null;
+        })()
+    """
+
+    async def delete_ad(self, ad_id: str, send: bool) -> dict:
+        """One of the user's own ads taken down, as the "Meine Anzeigen" page does it: the page's
+        CSRF token (a meta tag on the old page, the page props on the new one) sent with its delete
+        request, only when "send" is true. An ad the market no longer knows (404) is down already."""
+        await self.session()
+        await self.tab.get(self.MY_ADS)
+        await asyncio.sleep(random.uniform(3, 4.5))
+        if await self.host() != "www.kleinanzeigen.de":
+            raise SignedOut("the site sends the browser to its login page")
+        token = await within("csrf token", self.tab.evaluate(self.CSRF_TOKEN))
+        if not token:
+            raise RuntimeError(f"no CSRF token on {await self.where()}")
+        if not send:
+            listed = await within("own ads", self.tab.evaluate(
+                "[...document.querySelectorAll('[data-adid]')].map(e => e.getAttribute('data-adid'))"))
+            return {"ok": True, "deleted": False, "token": True, "listed": ad_id in (listed or []), "page": await self.where()}
+        r = await self.fetch(f"{ROOT}/m-anzeigen-loeschen.json?ids={int(ad_id)}", "POST", {"x-csrf-token": token})
+        if r["status"] not in (200, 404):
+            raise RuntimeError(f"deleting ad {ad_id} answered {r['status']}: {r['text'][:200]}")
+        return {"ok": True, "deleted": r["status"] == 200}
+
     async def shipping_options(self, ad_id: str) -> dict:
         """The ways an ad ships through "Sicher bezahlen", each priced as the buyer pays it at payment."""
         _, uid = await self.session()
@@ -1022,6 +1062,8 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.post_ad(req)
     if op == "edit_ad":
         return await chat.edit_ad(req)
+    if op == "delete_ad":
+        return await chat.delete_ad(str(req["adId"]), bool(req.get("send")))
     if op == "contact":
         return await chat.contact(str(req["adId"]), req["text"])
     return {"ok": False, "error": f"unknown op {op}"}

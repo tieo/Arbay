@@ -10,6 +10,8 @@ import io.github.tieo.arbay.model.AdDraft
 import io.github.tieo.arbay.model.AdPriceType
 import io.github.tieo.arbay.model.NewAdDraft
 import io.github.tieo.arbay.model.PostAdResult
+import io.github.tieo.arbay.model.RepostEvery
+import io.github.tieo.arbay.model.nextRepost
 import io.github.tieo.arbay.model.postedUrl
 import io.github.tieo.arbay.model.problem
 import io.github.tieo.arbay.model.dealerNameKey
@@ -840,8 +842,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 boolean("shipping", "Whether it ships; false is pickup only"); boolean("buy_now", "Offer Kleinanzeigen's Direkt kaufen")
                 stringArray("photos", "The photos to keep, in the order the ad shows them (names from the draft)")
                 stringArray("details", "Details to set, each as \"Label: option\" the way the post form words them (\"Farbe: Grau\"); an empty option drops that detail")
+                integer("repost_every_days", "Every how many days the posted ad goes up again (posted anew, the old one taken down, so it lists with the newest); 0 leaves it as posted")
             },
         ) { args ->
+            args.int("repost_every_days")?.let { days ->
+                val r = http.put("$base/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}/repost") {
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(RepostEvery.serializer(), RepostEvery(days.takeIf { it > 0 })))
+                }
+                if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
+            }
             val d = getJson<AdDraft>("/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}")
             val details = args.strs("details").map { it.substringBefore(':').trim() to it.substringAfter(':', "").trim() }
             val next = d.copy(
@@ -1059,6 +1069,8 @@ private fun JsonObject.strs(k: String) = (this[k] as? JsonArray).orEmpty().mapNo
 private fun AdDraft.describe(): String = listOfNotNull(
     "$id: $title",
     postedUrl()?.let { "posted: $it" } ?: problem()?.let { "not ready: $it" } ?: "ready to post",
+    if (repostEveryDays == null) "stays as posted" else "goes up again every $repostEveryDays days" + (nextRepost()?.let { ", next $it" } ?: " once posted"),
+    repostProblem,
     "price: ${priceEur?.let { "$it €" } ?: "none"} ${priceType.label}" + (if (shipping) ", ships" else ", pickup only") + (if (buyNow) ", Direkt kaufen" else ""),
     "category $categoryId; details: ${attributes.entries.joinToString(", ") { "${it.key}: ${it.value}" }.ifEmpty { "none" }}",
     "photos: ${photos.joinToString(", ")}",

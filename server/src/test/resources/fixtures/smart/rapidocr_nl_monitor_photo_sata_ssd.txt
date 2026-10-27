@@ -1,0 +1,34 @@
+CrystalDisklnfo9.9.2x64
+Bestand Bewerken FunctiesT Thema Schijf Help Taal(Language)
+Goed Goed Goed
+32°℃ 23°℃ 29°℃
+C: D:
+WDC WDS200T2B0B-00YS70 :2000,3 GB
+ezondheidstoestar Firmware415020WD Totaalaantal leescties 2037GB
+Serienummer|0000X0000000 otaalaantalschrijfacties 2927GB
+InterfaceUASP(SerialATA) ntal NAND-schrijfacties 2722GB
+100%
+Transfermodus|SATA/600|SATA/600 Inschakelingen 832keer
+Temperatuur SchijfletterE: Bedrjfsuren 1920uren
+StandaardACS-4|ACS-4Revision5
+29.C
+EigenshapnS.M.A.R.T,APM,NCQTRIM,DeSle,G
+Kenmerk Huidig Slechtst Drempel
+05 Reassigned Block Count 100 100 0 000000000000
+60 Power On Hours 100 100 0 000000000780
+OC Power Cycle Count 100 100 0 000000000340
+A5 Block Erase Count(SLC) 100 100 0 000000E30087
+A6 MinimumP/E Cycles 100 100 0 000000000001
+A7 MaximumBadBlocks perdie 100 100 0 0000000000D1
+A8 MaximumP/ECycles 100 100 0 000000000002
+A9 Total Bad Block 100 100 0 00000000087E
+AA GrownBadBlocks 100 100 0 000000000000
+AB Program Fail Count 100 100 0 000000000000
+AC EraseFail Count 100 100 0 000000000000
+AD AverageP/ECycles 100 00L 0 000000000001
+AE UnexpectedPower Loss Count 100 100 0 000000000028
+B8 End-to-End ErrorDetection/Correction Count 100 100 0 000000000000
+BB Reported Uncorrectable Errors 100 100 0 000000000000
+BC Command Timeout Count 100 100 0 000000000000
+C2 Temperature 71 40 0: 0028000E001D
+q7 CRC Error Count 100 100 0 000000000000

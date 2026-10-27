@@ -122,6 +122,17 @@ class SmartScreensTest {
     }
 
     @Test
+    fun `a monitor photo read by RapidOCR is a clean drive with its hours`() {
+        // The same Dutch screen as below, read by RapidOCR: every row of the table survives, its
+        // words written together ("GrownBadBlocks") and its hours in hex (0x780).
+        val r = assertNotNull(SmartScreens.parse(text("rapidocr_nl_monitor_photo_sata_ssd"), 4))
+        assertEquals(DriveVerdict.CLEAN, r.verdict, r.toString())
+        assertEquals(1_920L, r.powerOnHours)
+        assertEquals(0L, r.reallocated)
+        assertEquals("Goed", r.status)
+    }
+
+    @Test
     fun `a Dutch CrystalDiskInfo screen gives its hours and status`() {
         // A WD Blue M.2 SATA drive on Marktplaats, photographed off a monitor at an angle: the table
         // is lost to the OCR, the header ("Goed", "Bedrijfsuren 1920 uren") is not.

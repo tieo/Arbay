@@ -9,15 +9,18 @@ FROM mcr.microsoft.com/playwright/java:v1.51.0-noble
 #  - When a stealth fetch hits a captcha the automation cannot clear, x11vnc + websockify expose
 #    that live Chrome session over noVNC so the user can solve it in the crawler's own browser
 #    (same IP + fingerprint the token binds to); novnc ships the static web client.
-#  - SmartScreens reads the SMART screenshots in a drive ad's photos with Tesseract (German and English).
+#  - SmartScreens reads the SMART screens in a drive ad's photos with RapidOCR (PaddleOCR's models on
+#    ONNX Runtime; its OpenCV wants libGL and glib), which reads a phone photo of a monitor where
+#    Tesseract does not (installed beside Debian's numpy, which pip cannot replace); ModelGuesses reads type plates with Tesseract (German and English).
 # Chrome comes in through ADD so every build fetches the current stable: a layer cached with an
 # older Chrome kept 150 in the image, which mobile.de answered "Access denied" while 155 got results.
 ADD https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb /tmp/chrome.deb
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip xvfb x11vnc websockify novnc xdotool tesseract-ocr tesseract-ocr-deu \
+    && apt-get install -y --no-install-recommends python3 python3-pip xvfb x11vnc websockify novnc xdotool tesseract-ocr tesseract-ocr-deu libgl1 libglib2.0-0 \
     && apt-get install -y --no-install-recommends /tmp/chrome.deb \
     && rm /tmp/chrome.deb \
     && pip3 install --break-system-packages curl_cffi rnet zendriver "huggingface_hub[hf_xet]" \
+    && pip3 install --break-system-packages --ignore-installed rapidocr_onnxruntime==1.4.4 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -11,8 +11,9 @@ import javax.imageio.ImageIO
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The text in a photo, read with Tesseract: a drive's SMART screenshot ([SmartScreens]), or what a
- * machine has printed on it and on its type plate ([ModelGuesses]).
+ * The text in a photo: a drive's SMART screen ([SmartScreens]), read with RapidOCR where the server
+ * has it, or what a machine has printed on it and on its type plate ([ModelGuesses]), read with
+ * Tesseract.
  */
 object PhotoText {
     private val log = LoggerFactory.getLogger(PhotoText::class.java)
@@ -32,9 +33,56 @@ object PhotoText {
             .also { if (!it) log.warn("tesseract is not installed: photos are not read") }
     }
 
+    private val screenScript: String by lazy {
+        val file = File.createTempFile("screen_ocr", ".py")
+        file.writeBytes(PhotoText::class.java.getResourceAsStream("/screen_ocr.py")!!.readBytes())
+        file.deleteOnExit()
+        file.absolutePath
+    }
+
+    /** Whether RapidOCR is installed. Tesseract reads a scan well and a photo of a monitor not at
+     *  all: a tilted, moire-striped CrystalDiskInfo screen came back as noise, every row of which
+     *  RapidOCR read. */
+    val screenReaderPresent: Boolean by lazy {
+        runCatching { ProcessBuilder("python3", screenScript, "--check").start().waitFor() == 0 }.getOrDefault(false)
+            .also { if (!it) log.warn("RapidOCR is not installed: screens are read with Tesseract") }
+    }
+
+    /** The text of a screen in the photo, one line per line of it, read with RapidOCR where it is
+     *  installed and with Tesseract otherwise. */
+    suspend fun readScreen(bytes: ByteArray, enlarge: Double): String? {
+        if (!screenReaderPresent) return read(bytes, enlarge, Layout.BLOCK)
+        val image = prepared(bytes, enlarge) ?: return null
+        val file: File = Files.createTempFile("screen", ".png").toFile()
+        return try {
+            ImageIO.write(image, "png", file)
+            withTimeoutOrNull(60.seconds) { runProcess(listOf("python3", screenScript, file.absolutePath)) }
+                ?.takeIf { it.exitCode == 0 }?.stdout?.decodeToString()
+        } finally {
+            file.delete()
+        }
+    }
+
     /** The photo's text, or null where it is not an image this reads or the reader gave none in time. */
     suspend fun read(bytes: ByteArray, enlarge: Double, layout: Layout): String? {
-        if (!present || bytes.size > MOST_BYTES) return null
+        if (!present) return null
+        val gray = prepared(bytes, enlarge) ?: return null
+        val file: File = Files.createTempFile("photo", ".png").toFile()
+        return try {
+            ImageIO.write(gray, "png", file)
+            // A photo with little text can keep Tesseract busy for long; none needs more than this.
+            withTimeoutOrNull(30.seconds) {
+                runProcess(listOf("tesseract", file.absolutePath, "stdout", "-l", "deu+eng", "--psm", layout.psm))
+            }?.takeIf { it.exitCode == 0 }?.stdout?.decodeToString()
+        } finally {
+            file.delete()
+        }
+    }
+
+    /** The photo in grey, dark text on light, at a size the readers want, or null where it is not an
+     *  image this reads. */
+    private fun prepared(bytes: ByteArray, enlarge: Double): BufferedImage? {
+        if (bytes.size > MOST_BYTES) return null
         val image = runCatching { ImageIO.read(ByteArrayInputStream(bytes)) }.getOrNull() ?: return null
         if (image.width > MOST_SIDE || image.height > MOST_SIDE || image.width < 200 || image.height < 150) return null
         val scale = (READ_WIDTH.toDouble() / image.width).coerceIn(1.0, 3.0) * enlarge
@@ -53,15 +101,6 @@ object PhotoText {
         if (sum < samples * 255 * 0.45) {
             for (y in 0 until gray.height) for (x in 0 until gray.width) raster.setSample(x, y, 0, 255 - raster.getSample(x, y, 0))
         }
-        val file: File = Files.createTempFile("photo", ".png").toFile()
-        return try {
-            ImageIO.write(gray, "png", file)
-            // A photo with little text can keep Tesseract busy for long; none needs more than this.
-            withTimeoutOrNull(30.seconds) {
-                runProcess(listOf("tesseract", file.absolutePath, "stdout", "-l", "deu+eng", "--psm", layout.psm))
-            }?.takeIf { it.exitCode == 0 }?.stdout?.decodeToString()
-        } finally {
-            file.delete()
-        }
+        return gray
     }
 }

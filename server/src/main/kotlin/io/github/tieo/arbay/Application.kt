@@ -65,6 +65,18 @@ fun Application.module() {
             delay(24 * 60 * 60 * 1000L)
         }
     }
+    // The user's ads for sale that are due go up again, each once its days have passed; the first
+    // look an hour after starting, so a restart is never what puts an ad up.
+    launch {
+        while (true) {
+            delay(60 * 60 * 1000L)
+            try {
+                io.github.tieo.arbay.selling.Selling.repostDue()
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                LoggerFactory.getLogger("Selling").error("Putting ads up again failed: {}", e.message)
+            }
+        }
+    }
     // Start background monitor if tracking was previously enabled
     if (FreeItemProfileStore.get()?.trackingEnabled == true) {
         FreeItemMonitor.start()

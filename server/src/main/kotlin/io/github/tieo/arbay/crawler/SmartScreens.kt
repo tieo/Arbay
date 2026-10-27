@@ -117,6 +117,8 @@ object SmartScreens {
     private const val MOST_HOURS = 300_000L
     // Dutch CrystalDiskInfo says Goed, Voorzichtig, Slecht and Onbekend. A row named for bad blocks
     // or sectors ("Grown Bad Blocks") is no warning.
+    /** Rows only a flash drive has: its erase cycles, its NAND, its wear. */
+    private val solidState = Regex("""(?i)p/?e\s*cycles|nand|erase\s*count|wear\s*level|ssd\s*life|percent\s*lifetime""")
     private val goodTab = Regex("""\b(gut|good|goed)\b""", RegexOption.IGNORE_CASE)
     private val warningWord = Regex("""\b(vorsicht|schlecht|caution|bad(?!\W+(blocks?|sectors?)\b)|unbekannt|unknown|voorzichtig|slecht|onbekend)\b""", RegexOption.IGNORE_CASE)
     private val failingStatus = setOf("vorsicht", "schlecht", "caution", "bad", "voorzichtig", "slecht")
@@ -136,6 +138,8 @@ object SmartScreens {
         /** The hours the screen's header shows, and the ones its power-on row holds. */
         val header: Long? = null,
         val table: Long? = null,
+        /** A flash drive's screen, which has no pending sectors to count. */
+        val solidState: Boolean = false,
     )
 
     /**
@@ -166,7 +170,7 @@ object SmartScreens {
         // mark either reading makes counts.
         val failing = seen.flatMap { it.failing }.distinct()
         return judge(
-            Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreedHours(seen)),
+            Seen(counts, failing, seen.firstNotNullOfOrNull { it.word }, agreedHours(seen), solidState = seen.any { it.solidState }),
             photo,
         )
     }
@@ -302,7 +306,7 @@ object SmartScreens {
         // The header's own count comes first: in the table's hex the OCR reads B as 8.
         val header = headerHours.find(text)?.groupValues?.get(2)?.replace(Regex("[.,]"), "")?.toLongOrNull()?.takeIf { it <= MOST_HOURS }
             ?: daysAndHours.find(text)?.let { it.groupValues[1].toLong() * 24 + it.groupValues[3].toLong() }
-        return Seen(counts, failing, word, header ?: tableHours, header, tableHours)
+        return Seen(counts, failing, word, header ?: tableHours, header, tableHours, solidState.containsMatchIn(text))
     }
 
     /** The raw value ending an NVMe row, or null where the OCR left none to read. */
@@ -334,7 +338,7 @@ object SmartScreens {
             (word != null && word.lowercase() in failingStatus) || failing.isNotEmpty() ||
                 (pending ?: 0) > 0 || (uncorrectable ?: 0) > 0 || (reallocated ?: 0) > MANY_REALLOCATED -> DriveVerdict.FAILING
             (reallocated ?: 0) > 0 -> DriveVerdict.WORN
-            reallocated == 0L && pending == 0L && uncorrectable == 0L -> DriveVerdict.CLEAN
+            reallocated == 0L && (pending == 0L || pending == null && seen.solidState) && uncorrectable == 0L -> DriveVerdict.CLEAN
             else -> DriveVerdict.UNREADABLE
         }
         return SmartReading(
@@ -398,7 +402,8 @@ object SmartScreens {
     @Serializable
     private data class Read(val url: String, val text: String?)
 
-    private val cacheFile = DataDir.file("smart_screens_text.json")
+    // Each reader keeps its own texts: what Tesseract read as no screen at all, RapidOCR reads again.
+    private val cacheFile = DataDir.file(if (PhotoText.screenReaderPresent) "smart_screens_rapid.json" else "smart_screens_text.json")
     private val cache: MutableMap<String, String?> = LinkedHashMap<String, String?>().apply {
         cacheFile.readStore(log) { json.decodeFromString<List<Read>>(it) }?.forEach { put(it.url, it.text) }
     }
@@ -412,18 +417,24 @@ object SmartScreens {
 
     /** The SMART screenshots among [photos], read; empty where there are none or the reader is missing. */
     suspend fun read(listingId: String, title: String, photos: List<String>, fetch: suspend (String) -> ByteArray?): DriveHealth {
-        if (!tesseractPresent) return DriveHealth()
+        if (!PhotoText.present && !PhotoText.screenReaderPresent) return DriveHealth()
         val urls = photos.take(MOST_PHOTOS)
         val readings = urls.mapIndexedNotNull { i, url ->
             val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null }
             // A text read once, as every photo is that shows no screen, is read again at twice the size
             // where a better parser now finds a screen in it.
-            val readOnce = known?.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
+            // RapidOCR reads a photo once, so this is Tesseract's alone.
+            val readOnce = !PhotoText.screenReaderPresent && known?.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
             if (known != null && !readOnce) return@mapIndexedNotNull known.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
             val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
                 // A photo that shows a SMART screen is read a second time at twice the size, and a
-                // count is believed only where both readings agree.
-                ocr(bytes, 1.0)?.let { first -> if (see(first) == null) first else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK) }
+                // count is believed only where both readings agree: Tesseract reads a slashed zero as
+                // 0 at one size and 9 at another. RapidOCR takes some five seconds a photo, which a
+                // second reading would double, so its one reading stands.
+                ocr(bytes, 1.0)?.let { first ->
+                    if (PhotoText.screenReaderPresent || see(first) == null) first
+                    else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK)
+                }
             }
             // Only a photo that was read is remembered: one that failed to arrive or to read is
             // tried again the next time, rather than counted as no screenshot for good.
@@ -459,8 +470,5 @@ object SmartScreens {
             .onFailure { log.warn("SMART readings not kept: {}", it.message) }
     }
 
-    private val tesseractPresent: Boolean get() = PhotoText.present
-
-    /** The photo's text as a screenshot is laid out: one block. */
-    private suspend fun ocr(bytes: ByteArray, enlarge: Double): String? = PhotoText.read(bytes, enlarge, PhotoText.Layout.BLOCK)
+    private suspend fun ocr(bytes: ByteArray, enlarge: Double): String? = PhotoText.readScreen(bytes, enlarge)
 }
