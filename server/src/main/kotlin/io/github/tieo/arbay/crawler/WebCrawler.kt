@@ -19,7 +19,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 
 /**
@@ -61,7 +60,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         val pages = coroutineScope {
             found.map { url ->
                 async {
-                    gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) }
+                    // Timed like a market's crawl: waiting for the shared browser behind another
+                    // page is not this page failing, and counted it cancelled pages mid-read, which
+                    // got the browser restarted for every page queued behind them.
+                    gate.withPermit { withCrawlLimitOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) }
                         // Each page's offers show as it is read: the slowest page of sixty is often
                         // a minute behind the rest.
                         .also { emitPartialResults(listingsOf(it.offers, now)) }

@@ -30,7 +30,19 @@ class SearchEngines(private val client: HttpClient) {
      */
     suspend fun links(words: String): List<String> = coroutineScope {
         val asked = ENGINES.filter { !resting(it) }
-        val plain = asked.filter { !it.browser }.flatMap { e -> (1..e.pages).map { page -> async { results(e, words, page) } } }
+        // An engine's pages one after another, the next only after a page with results: Bing
+        // answered two at once with a challenge for the first.
+        val plain = asked.filter { !it.browser }.map { e ->
+            async {
+                val all = mutableListOf<String>()
+                for (page in 1..e.pages) {
+                    val found = results(e, words, page)
+                    all += found
+                    if (found.isEmpty()) break
+                }
+                all
+            }
+        }
         val browser = asked.filter { it.browser }.map { e -> results(e, words) }
         (plain.awaitAll() + browser).flatten().distinct()
     }
