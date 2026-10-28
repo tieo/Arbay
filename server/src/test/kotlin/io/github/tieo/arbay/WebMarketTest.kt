@@ -192,6 +192,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a Nuxt app's packed state is read unpacked`() {
+        // expert.de: every value is the index of another entry, the price an object under "expPrice".
+        val state = """[{"data":1},["ShallowReactive",2],{"article":3},{"name":4,"expPrice":5},"E8 Piano Black (EC) Kaffeevollautomat",{"bruttoPrice":6,"nettoPrice":7},977,821.01]"""
+        val html = "<body><script type=\"application/json\" id=\"__NUXT_DATA__\">$state</script></body>"
+        val offers = ProductPages.offers(html, "https://www.expert.de/shop/e8.html")
+        assertEquals(listOf("E8 Piano Black (EC) Kaffeevollautomat" to 97700L), offers.map { it.title to it.price.amount })
+    }
+
+    @Test
     fun `a list box is priced at what it asks, not its delivery time or list price`() {
         // megabad.com's category page: each box's price block names the delivery time and the UVP first.
         fun box(id: Int, delivery: String, uvp: String, price: String) = """

@@ -7,9 +7,11 @@ import java.math.BigDecimal
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -205,7 +207,8 @@ object ProductPages {
      */
     private fun appState(doc: Document, pageUrl: String): List<PageOffer> =
         doc.select("script#__NEXT_DATA__, script[type=application/json]").flatMap { script ->
-            val root = runCatching { json.parseToJsonElement(script.data().trim()) }.getOrNull() ?: return@flatMap emptyList()
+            val parsed = runCatching { json.parseToJsonElement(script.data().trim()) }.getOrNull() ?: return@flatMap emptyList()
+            val root = if (script.id() == "__NUXT_DATA__" && parsed is JsonArray) unpacked(parsed) else parsed
             val found = mutableListOf<PageOffer>()
             fun walk(e: JsonElement, depth: Int) {
                 if (depth > 40 || found.size > 200) return
@@ -222,18 +225,50 @@ object ProductPages {
             found
         }
 
+    /**
+     * A Nuxt app's state as its page carries it: one flat array whose first entry is the root and
+     * where every value inside an object or a list is the index of another entry, a wrapper such as
+     * `["Reactive", 5]` standing for entry 5. Read packed, an index passed for a price: expert.de's
+     * JURA E8 at 977 € read as 9,99 €.
+     */
+    private fun unpacked(entries: JsonArray): JsonElement {
+        val done = HashMap<Int, JsonElement>()
+        fun at(i: JsonElement?, depth: Int): JsonElement {
+            val index = (i as? JsonPrimitive)?.intOrNull ?: return JsonNull
+            if (index !in entries.indices || depth > 200) return JsonNull
+            done[index]?.let { return it }
+            done[index] = JsonNull
+            val value = when (val e = entries[index]) {
+                is JsonObject -> JsonObject(e.mapValues { (_, v) -> at(v, depth + 1) })
+                is JsonArray -> {
+                    val tag = (e.firstOrNull() as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    if (tag in NUXT_WRAPPERS) at(e.getOrNull(1), depth + 1) else JsonArray(e.map { at(it, depth + 1) })
+                }
+                else -> e
+            }
+            done[index] = value
+            return value
+        }
+        return at(JsonPrimitive(0), 0)
+    }
+
+    private val NUXT_WRAPPERS = setOf("Reactive", "ShallowReactive", "Ref", "ShallowRef", "EmptyRef", "EmptyShallowRef")
+
     private fun stateOffer(o: JsonObject, pageUrl: String): PageOffer? {
         val title = NAME_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content }
             ?.let { Jsoup.parse(it).text().trim() }?.takeIf { it.length >= 6 } ?: return null
         val currency = CURRENCY_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.contentOrNull?.let(::currencyOf) }
-        val price = PRICE_KEYS.firstNotNullOfOrNull { k ->
+        // A price object: {"value": 169.99, "currency": "EUR"}, {"amount": ...}, {"bruttoPrice": 977}, under
+        // any key naming a price where none of the usual ones is there (expert.de's "expPrice").
+        fun inner(v: JsonObject) = listOf("value", "amount", "current", "gross", "price", "bruttoPrice", "grossPrice")
+            .firstNotNullOfOrNull { (v[it] as? JsonPrimitive)?.contentOrNull }
+        val price = (PRICE_KEYS.firstNotNullOfOrNull { k ->
             when (val v = o[k]) {
                 is JsonPrimitive -> v.contentOrNull
-                // A price object: {"value": 169.99, "currency": "EUR"}, {"amount": ...}, {"current": ...}.
-                is JsonObject -> listOf("value", "amount", "current", "gross", "price").firstNotNullOfOrNull { (v[it] as? JsonPrimitive)?.contentOrNull }
+                is JsonObject -> inner(v)
                 else -> null
             }
-        }?.let { amount(it, currency ?: Currency.EUR) }?.takeIf { it.amount > 0 } ?: return null
+        } ?: o.entries.firstNotNullOfOrNull { (k, v) -> (v as? JsonObject)?.takeIf { k.endsWith("price", ignoreCase = true) }?.let(::inner) })?.let { amount(it, currency ?: Currency.EUR) }?.takeIf { it.amount > 0 } ?: return null
         val link = URL_KEYS.firstNotNullOfOrNull { k -> (o[k] as? JsonPrimitive)?.contentOrNull?.takeIf { it.startsWith("/") || it.startsWith("http") } }
         val image = IMAGE_KEYS.firstNotNullOfOrNull { k -> imageOf(o[k]) }
         return PageOffer(
