@@ -30,6 +30,9 @@ data class Listing(
     // page states a day rate, so rentals compare with each other. Its other rates beside it.
     val rentPer: RentPeriod? = null,
     val rentRates: List<RentRate> = emptyList(),
+    // A code the shop's list gives a lower price for, which [price] then is, the price without it
+    // [oldPrice]: dyson.de's "Mit dem Code DYSON: Jetzt für nur 779 €" under a 999 € vacuum.
+    val coupon: Coupon? = null,
     val condition: Condition? = null,
     val imageUrls: List<String> = emptyList(),
     val location: Location? = null,

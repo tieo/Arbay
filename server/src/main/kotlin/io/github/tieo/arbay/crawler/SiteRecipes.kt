@@ -55,6 +55,9 @@ data class SiteRecipe(
      *  "Geberit" on a line above "Wand-Dusch-WC-Set AquaClean Alba". Put before a title that
      *  does not name it already. */
     val brand: String? = null,
+    /** The box's line offering a code for a lower price ("Mit dem Code DYSON: Jetzt für nur
+     *  779 €"): the code and the price it gives are read off it. */
+    val coupon: String? = null,
     /**
      * For a site whose offers come from its own JSON API (searched through [searchUrl]): the path
      * to the list of offers in the answer, "products". [title], [price], [link], [image] and
@@ -203,6 +206,7 @@ object SiteRecipes {
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
                 rentPer = recipe.rentPer,
                 vatStated = true,
+                coupon = recipe.coupon?.let { spec -> couponIn(box, spec, currency, price) },
                 rentRates = recipe.rates.mapNotNull { (period, spec) ->
                     amountAt(box, spec)?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount > 0 }?.let { RentRate(period, withVat(recipe, it, doc, pageUrl)) }
                 },
@@ -295,6 +299,16 @@ object SiteRecipes {
         if (nth != null) return AMOUNT.findAll(text).elementAtOrNull(nth.groupValues[1].toInt() - 1)?.value
         return WITH_CURRENCY.find(text)?.value ?: text
     }
+
+    /** The code a line names and the price it gives, where that is below the [listed] one. */
+    private fun couponIn(box: Element, spec: String, currency: Currency, listed: io.github.tieo.arbay.model.Money): io.github.tieo.arbay.model.Coupon? {
+        val text = pick(box, spec, spaced = true) ?: return null
+        val price = WITH_CURRENCY.find(text)?.value?.let { ProductPages.amount(it, currency) }?.takeIf { it.amount in 1 until listed.amount } ?: return null
+        val code = COUPON_CODE.find(text)?.groupValues?.get(1)
+        return io.github.tieo.arbay.model.Coupon(price = price, code = code, terms = text)
+    }
+
+    private val COUPON_CODE = Regex("""(?i:code)\W{0,3}([A-Z0-9][A-Z0-9_-]{2,})""")
 
     private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|\beur\b|\bchf\b|£|\$)|(€|\beur|\bchf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")

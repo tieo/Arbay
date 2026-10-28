@@ -99,7 +99,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 externalId = idOf(o.url, o.title),
                 url = o.url,
                 title = o.title,
-                price = o.price,
+                // The code price is what the offer costs; the price without the code stays beside it.
+                price = o.coupon?.price ?: o.price,
+                oldPrice = o.price.takeIf { o.coupon != null },
+                coupon = o.coupon,
                 saleType = if (o.rentPer != null || hiredOut(o)) io.github.tieo.arbay.model.SaleType.RENT else null,
                 rentPer = o.rentPer,
                 rentRates = o.rentRates,

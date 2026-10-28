@@ -49,7 +49,7 @@ fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     val shipping = fromItsPage?.shipping?.takeIf { it.cost != null || it.free || !it.available } ?: listing.shipping
     return OfferReading(
         vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true, fromItsPage?.seller,
-        shipping = shipping, conditionNote = fromItsPage?.conditionNote, coupon = fromItsPage?.coupon,
+        shipping = shipping, conditionNote = fromItsPage?.conditionNote, coupon = fromItsPage?.coupon ?: listing.coupon,
     )
 }
 
