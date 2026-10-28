@@ -424,6 +424,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a site's front page is told from its other pages`() {
+        assertTrue(WebCrawler.isFrontPage("https://www.grills.de/"))
+        assertTrue(WebCrawler.isFrontPage("https://www.grills.de"))
+        assertFalse(WebCrawler.isFrontPage("https://www.grills.de/search?sSearch=Weber"))
+        assertFalse(WebCrawler.isFrontPage("https://www.grills.de/?sSearch=Weber"))
+        assertFalse(WebCrawler.isFrontPage("https://www.grills.de/weber-genesis"))
+    }
+
+    @Test
     fun `a page listed through Google's translating proxy is read at the shop's own address`() {
         assertEquals("https://www.amazon.it/Levigatrici-lamiera/s?rh=n:3121001031,p_6:A20FPJ7ZUTLVQJ",
             WebCrawler.unproxied("https://www-amazon-it.translate.goog/Levigatrici-lamiera/s?rh=n:3121001031,p_6:A20FPJ7ZUTLVQJ&_x_tr_sl=it&_x_tr_tl=de&_x_tr_hl=de&_x_tr_pto=sc"))

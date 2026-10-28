@@ -164,6 +164,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         // words: Boels lists its toilet containers for "Dusch-WC" with no rate and a banner by the
         // week only. Its answer is data, never a page a browser would show more of.
         if (recipe?.items != null) return Page(Outcome.NOTHING_SOLD)
+        // A shop's front page shows what it pushes today, not what was searched for; where the
+        // site's own search is known, that search answers the words. grills.de's front page, listed
+        // for "Weber Grill", holds no product tile.
+        if (isFrontPage(url) && SiteRecipes.all().any { it.domain == domain && it.searchUrl != null }) return Page(Outcome.NOTHING_SOLD)
         if (SiteGaps.isGivenUp(domain) || !ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
         // A shop whose offers its own scripts put on the page shows them only to a browser. Read
         // once more in one, a few pages per search since a browser is slow; a site that gives its
@@ -236,6 +240,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
          *  an engine adds (`utm_source=qwant`) goes the same way. */
         internal fun withoutSession(url: String): String = url.replace(SESSION_IN_PATH, "")
             .replace(TRACKING_PARAM, "").replace(Regex("""[?&]$"""), "").replace("?&", "?")
+
+        /** Whether [url] is a site's front page: no path beyond "/", no query. */
+        internal fun isFrontPage(url: String): Boolean =
+            runCatching { java.net.URI(url) }.getOrNull()?.let { u -> u.rawPath.orEmpty().trim('/').isEmpty() && u.rawQuery == null } ?: false
 
         /** The shop's own address of a page an engine lists through Google's translating proxy
          *  (www-amazon-it.translate.goog/…?_x_tr_sl=it for www.amazon.it/…): the proxy's host names
