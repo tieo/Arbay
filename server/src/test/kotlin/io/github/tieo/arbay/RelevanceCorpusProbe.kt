@@ -35,7 +35,7 @@ class RelevanceCorpusProbe {
         val queries = File(dir, "queries.txt").readLines().filter { it.isNotBlank() }.associateBy { it.replace(' ', '_').replace('/', '_') }
         val out = File(System.getenv("ARBAY_RELEVANCE_OUT") ?: "relevance-replay.tsv")
         out.printWriter().use { w ->
-            w.println(listOf("query", "market", "recorded", "replayed", "reason", "carries", "inTitle", "inText", "price", "title").joinToString("\t"))
+            w.println(listOf("query", "market", "recorded", "replayed", "reason", "carries", "inTitle", "inText", "price", "title", "withRule").joinToString("\t"))
             dir.listFiles { f -> f.name.endsWith(".ndjson") }!!.sortedBy { it.name }.forEach { file ->
                 val words = queries[file.name.removeSuffix(".ndjson")] ?: return@forEach
                 val query = SearchQuery(text = words, category = io.github.tieo.arbay.model.MarketGroup.GENERAL)
@@ -49,6 +49,7 @@ class RelevanceCorpusProbe {
                         val replay = RelevanceFilter.partition(answer, query, emptyList())
                         val keptIds = replay.kept.map { it.id }.toSet()
                         val reasons = replay.dropped.associate { it.listing.id to it.reason.name }
+                        val ruled = RelevanceFilter.partition(answer, query, emptyList(), aWordWhereTheAnswerWritesOne = true).kept.map { it.id }.toSet()
                         answer.forEach { l ->
                             w.println(listOf(
                                 words, market,
@@ -60,6 +61,7 @@ class RelevanceCorpusProbe {
                                 wordsIn(l.title + " " + (l.description ?: ""), words).joinToString(","),
                                 (l.effectivePrice.amount / 100.0).toString(),
                                 l.title.replace('\t', ' ').replace('\n', ' '),
+                                if (l.id in ruled) "kept" else "dropped",
                             ).joinToString("\t"))
                         }
                     }

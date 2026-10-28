@@ -1144,6 +1144,10 @@ object RelevanceFilter {
         listings: List<Listing>,
         query: SearchQuery,
         blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+        /** Under study, off everywhere but the corpus probe: where any listing of the answer
+         *  carries a word of the search, itself or implied by its model, one carrying none is
+         *  off target. */
+        aWordWhereTheAnswerWritesOne: Boolean = false,
     ): Partitioned {
         val asParsed = parseQuery(query)
         val namesOnePart = isAPartNumber(asParsed)
@@ -1277,6 +1281,8 @@ object RelevanceFilter {
 
 
         val implied = impliedWords(listings, parsed)
+        val carrying = if (!aWordWhereTheAnswerWritesOne) emptySet()
+            else listings.filter { score(it, parsed, implied[it.id].orEmpty()) > 0.0 }.map { it.id }.toSet()
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
             // as something the market got wrong, naming the word so the reader can check it.
@@ -1287,6 +1293,10 @@ object RelevanceFilter {
             val s = score(listing, asked, implied[listing.id].orEmpty())
             if (s < 0) {
                 dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
+                return@mapNotNull null
+            }
+            if (carrying.isNotEmpty() && listing.id !in carrying) {
+                dropped += DroppedListing(listing, DropReason.OFF_TARGET)
                 return@mapNotNull null
             }
             // A listing has to carry the search well enough, and only where the market's own answer
