@@ -1445,6 +1445,25 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a Crafter named without its make answers a search for a Volkswagen Crafter`() {
+        // Kleinanzeigen 3544522403 "Crafter 2.0 TDI Klima. 6 SITZER PDC TIPTOP", a private seller's
+        // van, was hidden as off target for carrying one of the two words. A seller's list of
+        // models names other makes too, and that one stays out.
+        val answer = List(9) { listing("Volkswagen Crafter 35 Kasten L3H3 Nr $it") } +
+            listOf(
+                listing("Crafter 2.0 TDI Klima. 6 SITZER PDC TIPTOP"),
+                listing("3,5 t Crafter zu verkaufen Mit Ladelänge, Hochdach"),
+                listing("Mercedes-Benz 213 CDI Sprinter / Crafter / Transit / Master"),
+                listing("Volkswagen Tiguan Allspace"),
+            )
+        val kept = search("Volkswagen Crafter", answer).map { it.title }
+        assertTrue("Crafter 2.0 TDI Klima. 6 SITZER PDC TIPTOP" in kept)
+        assertTrue("3,5 t Crafter zu verkaufen Mit Ladelänge, Hochdach" in kept)
+        assertTrue(kept.none { it.startsWith("Mercedes") }, "a list of models names another make")
+        assertTrue(kept.none { it.contains("Tiguan") })
+    }
+
+    @Test
     fun `what a compound is about has to be in the listing`() {
         // Straight off the live answer for "parkettschleifmaschine": Geizhals and Amazon send
         // sanding belts and belt sanders, which share the tail of the word and nothing else. What

@@ -95,8 +95,11 @@ enum class Fuel {
             val s = raw?.lowercase()?.trim() ?: return null
             return when {
                 s.isBlank() -> null
-                "plug" in s || "phev" in s || "laddhybrid" in s || "plug-in" in s -> PLUGIN_HYBRID
-                "mild" in s || "mhev" in s -> MILD_HYBRID
+                // "Plug" and "mild" open a word: inside one they name nothing, and the misspelt
+                // "Anhängerkupplug" in a dealer's list made a 2.0 TDI Crafter a plug-in hybrid
+                // that a diesel search dropped.
+                Regex("""\bplug""").containsMatchIn(s) || "phev" in s || "laddhybrid" in s -> PLUGIN_HYBRID
+                Regex("""\bmild""").containsMatchIn(s) || "mhev" in s -> MILD_HYBRID
                 "hybrid" in s || "hybride" in s || "hybridní" in s ->
                     if ("diesel" in s || "nafta" in s) HYBRID_DIESEL else HYBRID_PETROL
                 // Word-boundary match: "Elektro"/"Elektrisch"/"electric"/"BEV" as a fuel, but NOT

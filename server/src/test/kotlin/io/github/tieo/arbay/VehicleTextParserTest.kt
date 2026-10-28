@@ -139,6 +139,15 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun aWordContainingPlugIsNoPluginHybrid() {
+        // mobile.de 53205908848448: a diesel Crafter dropped from a diesel search as a plug-in hybrid.
+        assertEquals(Fuel.DIESEL, VehicleTextParser.parse("VW Crafter 2.0 TDI -130kW hoch/lang\nAnhängerkupplug\nAutomatik")!!.fuel)
+        assertEquals(Fuel.PLUGIN_HYBRID, VehicleTextParser.parse("Kia Niro Plug-in-Hybrid 2021")!!.fuel)
+        assertEquals(Fuel.PLUGIN_HYBRID, VehicleTextParser.parse("Passat GTE Plugin Hybrid 2020")!!.fuel)
+        assertEquals(Fuel.MILD_HYBRID, VehicleTextParser.parse("Golf 1.5 eTSI Mild-Hybrid 2022")!!.fuel)
+    }
+
+    @Test
     fun realElectricStillDetected() {
         assertEquals(Fuel.ELECTRIC, VehicleTextParser.parse("VW e-Crafter Elektro 2021")!!.fuel)
     }

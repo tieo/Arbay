@@ -1276,7 +1276,7 @@ object RelevanceFilter {
             beyondTheSize.any { shareCarrying(it) > 0.0 }
 
 
-        val implied = impliedWords(listings, parsed)
+        val implied = impliedWords(listings, parsed, query.text)
         // Where the answer writes a word of the search, a listing carrying none, itself or
         // implied by its model, is what the market guessed: marked, to be shown after the rest.
         // Measured on 35 searches, 89% of such listings were something else (Playmobil for
@@ -1344,10 +1344,22 @@ object RelevanceFilter {
      * listing with that model word carries it too. A spec word ("2280", "gen4") is on SATA drives
      * as much as on NVMe ones and names no product, so it shows nothing.
      */
-    private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
+    private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery, queryText: String): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
             .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
         if (words.isEmpty() || listings.isEmpty()) return emptyMap()
+        // A vehicle's model names its make: a private seller writes "Crafter 2.0 TDI" and never
+        // "Volkswagen", and carrying one of two words such an ad was hidden from a Volkswagen
+        // Crafter search. A title naming another make as well is a list of models ("Sprinter /
+        // Crafter / Transit") and implies nothing.
+        val car = CarQueryResolver.resolve(queryText)?.takeIf { it.modelSlug != null }
+        val ownMake = car?.makeSlug?.replace("-", "")
+        val modelWord = car?.modelSlug?.let(::normalizeToken)?.takeIf { it in words }
+        val makeWords = if (modelWord == null) emptyList() else
+            words.filter { CarQueryResolver.makeSpellings(it)?.firstOrNull() == ownMake }
+        fun namesAnotherMake(title: String) = normalize(title.lowercase()).split(" ").any { t ->
+            t.length >= 2 && CarQueryResolver.makeSpellings(t)?.firstOrNull().let { it != null && it != ownMake }
+        }
         val evidence = ModelWordEvidence.installed
         val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
         val carries = words.associateWith { w -> listings.map { score(it, single(w)) == 1.0 } }
@@ -1369,7 +1381,9 @@ object RelevanceFilter {
             // A rental carries the search's own word for renting ("mieten") however its title
             // names the machine: the market stated it is hired out.
             val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
-            if (shown.isNotEmpty() || rented.isNotEmpty()) result[listing.id] = (shown + rented).toSet()
+            val made = if (modelWord != null && carries.getValue(modelWord)[i] && !namesAnotherMake(listing.title))
+                makeWords.filter { !carries.getValue(it)[i] } else emptyList()
+            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty()) result[listing.id] = (shown + rented + made).toSet()
         }
         return result
     }
