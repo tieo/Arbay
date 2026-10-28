@@ -18,8 +18,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-internal const val USER_AGENT =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+/**
+ * The browser Arbay's plain fetches say they are: Chrome on Windows, at the version of the Chrome
+ * installed beside the server, so the claim ages with the browser that is updated rather than with
+ * the code. A version a year old reads as a bot to some shops: grills.de answers Chrome 131 its
+ * search with 404 and Chrome 141 with the results.
+ */
+internal val USER_AGENT: String by lazy {
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${installedChromeMajor() ?: KNOWN_CHROME_MAJOR}.0.0.0 Safari/537.36"
+}
+
+/** The Chrome major version where none is installed to ask, as on a developer's machine. */
+private const val KNOWN_CHROME_MAJOR = 156
+
+private fun installedChromeMajor(): Int? = runCatching {
+    val chrome = System.getenv("STEALTH_CHROME")?.takeIf { java.io.File(it).canExecute() } ?: "google-chrome-stable"
+    val process = ProcessBuilder(chrome, "--version").redirectErrorStream(true).start()
+    if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) { process.destroyForcibly(); return@runCatching null }
+    Regex("""(\d+)\.\d+\.\d+""").find(process.inputStream.bufferedReader().readText())?.groupValues?.get(1)?.toInt()
+}.getOrNull()
 
 internal fun String.encodeUrl(): String = java.net.URLEncoder.encode(this, "UTF-8")
 

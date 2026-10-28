@@ -36,6 +36,8 @@ data class PageOffer(
     /** Whether what was read settled the price's VAT: structured data stating it, or a recipe,
      *  which knows its site. A site that shows net prices adds VAT to the others only. */
     val vatStated: Boolean = false,
+    /** A code the page gives a lower price for, and that price. */
+    val coupon: io.github.tieo.arbay.model.Coupon? = null,
 )
 
 /**
@@ -113,7 +115,9 @@ object ProductPages {
         val types = doc.select("script[type=application/ld+json]").flatMap { script ->
             Regex(""""@type"\s*:\s*(\[[^\]]*]|"[^"]*")""").findAll(script.data()).flatMap { m -> Regex(""""([^"]+)"""").findAll(m.groupValues[1]).map { it.groupValues[1].substringAfterLast('/') } }
         }.toSet()
-        if (types.any { it in PRODUCT_TYPES || it == "ProductGroup" } || doc.selectFirst("[itemtype*=schema.org/Product]") != null) return false
+        // A product the page offers makes it a shop's page; one it only reviews does not:
+        // matthiashaltenhof.de's test of the Sony A7 III states the camera with a review and no offer.
+        if (statedOffers(doc).isNotEmpty() || doc.selectFirst("[itemtype*=schema.org/Product] [itemprop=offers]") != null) return false
         // A blog without structured data says what it is in its OpenGraph type: techtest.org's
         // review of three 18 TB drives names their prices and links Amazon.
         return types.any { it in ARTICLE_TYPES } || doc.selectFirst("meta[property=og:type][content=article]") != null
@@ -127,7 +131,7 @@ object ProductPages {
     private fun isForum(doc: Document): Boolean =
         doc.selectFirst("html#XenForo, html#XF, html[data-app=public][data-template=thread_view], body#phpbb, #vbulletin_html, meta[name=generator][content*=Discourse], meta[name=generator][content*=phpBB], meta[name=generator][content*=vBulletin]") != null
 
-    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute""")
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|im wert von|gesamtwert|coupon|voucher|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute""")
 
     private val AMOUNT_TAIL = Regex("""[\d.,]+""")
 
@@ -350,6 +354,12 @@ object ProductPages {
      * variant at price 0, OutOfStock; nothing there can be read because nothing there is for sale.
      */
     private fun soldOut(doc: Document): Boolean {
+        val offers = statedOffers(doc)
+        return offers.isNotEmpty() && offers.none { inStock(it) }
+    }
+
+    /** Every offer the page's structured data states, however deep in it, reviews aside. */
+    private fun statedOffers(doc: Document): List<JsonObject> {
         val offers = mutableListOf<JsonObject>()
         fun walk(e: JsonElement) {
             when (e) {
@@ -362,7 +372,7 @@ object ProductPages {
             }
         }
         doc.select("script[type=application/ld+json]").mapNotNull { parseLenient(it.data().trim()) }.forEach(::walk)
-        return offers.isNotEmpty() && offers.none { inStock(it) }
+        return offers
     }
 
     private fun JsonObject.types(): List<String> = when (val t = this["@type"]) {

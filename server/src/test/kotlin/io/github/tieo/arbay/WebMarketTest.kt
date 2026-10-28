@@ -215,6 +215,11 @@ class WebMarketTest {
         assertFalse(ProductPages.sellsSomething("<html><head><meta property=\"og:type\" content=\"article\"></head><body><h1>3x 18TB HDDs im Vergleich</h1><p>So kostet die Red Pro ca. 490€.</p><a>418,30 € bei Amazon kaufen</a></body></html>"))
         // bergfreunde.de's GriGri+, sold out: its one variant at price 0, OutOfStock.
         assertFalse(ProductPages.sellsSomething("""<script type="application/ld+json">{"@type":"ProductGroup","name":"Petzl GriGri+","hasVariant":[{"@type":"Product","name":"Petzl GriGri+","offers":{"@type":"Offer","price":0,"priceCurrency":"EUR","availability":"https://schema.org/OutOfStock"}}]}</script><body><h1>Petzl GriGri+</h1><p>Sonst 109,95 €</p><button>In den Warenkorb</button></body>"""))
+        // matthiashaltenhof.de's camera test states the camera as a reviewed Product, offering nothing.
+        assertFalse(ProductPages.sellsSomething("""<script type="application/ld+json">[{"@type":"Article","headline":"Sony A7 III Test"},{"@type":"Product","name":"Sony Alpha 7 III","review":{"@type":"Review"}}]</script><body><h1>Sony A7 III Test</h1><p>Ich habe sie für 1.800 € gekauft.</p><a>Bei Amazon kaufen</a></body>"""))
+        // weber.com's recipe page names its free delivery, grills.de's front page the value of a free gift.
+        assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Kostenlose Lieferung bei Bestellungen über 49,00 €</p><h1>Grillrezepte</h1></body>"))
+        assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Sie erhalten ein Starterset im Wert von rund 150€ gratis dazu!</p></body>"))
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
@@ -480,6 +485,17 @@ class WebMarketTest {
         val html = """<h1>Parkettschleifmaschinen Verleih</h1><table><tr><td>ELF</td><td>200 x 550 mm</td><td>20,- / 30,-</td></tr></table>"""
         val recipe = SiteRecipe(domain = "abschliff.de", item = "tr:has(td)", title = "td:eq(0)", price = "td:eq(2)#1", currency = "EUR", context = "h1")
         assertEquals("ELF · Parkettschleifmaschinen Verleih", SiteRecipes.read(recipe, html, "https://abschliff.de/verleih").single().title)
+    }
+
+    @Test
+    fun `a code price on a list is read with its code`() {
+        // dyson.de's cards: the list price, and on some a line offering a code for less.
+        val html = """<li class="c"><a href="/v16"><div class="n">Dyson V16 Piston Animal Submarine</div><div class="p">999,00 €</div><div class="promo">Mit dem Code DYSON: Jetzt für nur 779 €.</div></a></li>
+            <li class="c"><a href="/v15"><div class="n">Dyson V15 Detect Absolute</div><div class="p">599,00 €</div><div class="promo"></div></a></li>"""
+        val recipe = SiteRecipe(domain = "dyson.de", item = "li.c", title = ".n", price = ".p", link = "a@href", coupon = ".promo")
+        val offers = SiteRecipes.read(recipe, html, "https://www.dyson.de/staubsauger/kabellos")
+        assertEquals(listOf(77900L to "DYSON", null), offers.map { o -> o.coupon?.let { it.price.amount to it.code } })
+        assertEquals(listOf(99900L, 59900L), offers.map { it.price.amount })
     }
 
     @Test
