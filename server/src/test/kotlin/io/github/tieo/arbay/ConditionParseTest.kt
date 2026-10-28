@@ -30,6 +30,8 @@ class ConditionParseTest {
             "Reconditionné" to Condition.REFURBISHED,
             "Reacondicionado" to Condition.REFURBISHED,
             "Come nuovo" to Condition.LIKE_NEW,
+            "Vorführgerät" to Condition.LIKE_NEW,
+            "Aussteller" to Condition.LIKE_NEW,
         ).forEach { (label, expected) -> assertEquals(expected, Condition.parse(label), label) }
     }
 }

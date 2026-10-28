@@ -22,6 +22,9 @@ enum class Condition {
                 // first, since these labels also carry words of the other conditions.
                 partsLabel.containsMatchIn(lower) -> PARTS_ONLY
                 lower in listOf("neu", "new", "brand new", "nieuw", "neuf", "nuovo", "nuevo") -> NEW
+                // A shop's demo or display unit: shown, switched on, never owned. expert.de marks
+                // its JURA machines so.
+                lower.contains("vorführ") || lower.contains("aussteller") || lower.contains("ausstellungsstück") -> LIKE_NEW
                 lower.contains("wie neu") || lower.contains("like new") || lower.contains("als nieuw") ||
                     lower.contains("come nuovo") || lower.contains("comme neuf") || lower.contains("como nuevo") -> LIKE_NEW
                 // "Nuovo (altro)", "Neuf (autre)", "Nuevo: otro": new, out of its packaging.
