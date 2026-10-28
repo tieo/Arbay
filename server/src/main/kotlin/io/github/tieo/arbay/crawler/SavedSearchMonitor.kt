@@ -311,7 +311,9 @@ class SavedSearchMonitor(
                 continue
             }
             val judged = RelevanceFilter.partition(results, query)
-            judged.kept.forEach { found[it.id] = it }
+            // Read by the offer judge as an opened search is, so a grigri bag charm that writes
+            // the word wakes nobody about a belay device.
+            OfferJudge.judge(judged.kept, product.searchQuery.positiveText).forEach { found[it.id] = it }
             judged.dropped.filter { it.reason in WHAT_THE_ITEM_IS }.forEach { notTheThing += offerKey(it.listing.id) }
         }
         // One eBay item is listed on every eBay site under its number, titled in each site's
@@ -616,7 +618,7 @@ class SavedSearchMonitor(
             val better = FitScore.beatenBy(l, online) ?: return@filter true
             log.info("fit alert {}: {} beaten by {}", product.name, l.url, better.url)
             false
-        }.filterNot { (l, _) -> offMarket(l) }
+        }.filterNot { (l, _) -> judgedSomethingElse(l) || offMarket(l) }
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return
@@ -823,7 +825,12 @@ class SavedSearchMonitor(
          */
         internal fun isTheThing(listing: Listing): Boolean =
             listing.condition != Condition.PARTS_ONLY && listing.priceUpTo == null &&
-                !RelevanceFilter.namesSeveralSizes(listing.title)
+                !RelevanceFilter.namesSeveralSizes(listing.title) && !judgedSomethingElse(listing)
+
+        /** Whether both readings of the offer judge found the offer to be something else than
+         *  what was searched for, or an accessory for it. */
+        internal fun judgedSomethingElse(listing: Listing): Boolean =
+            listing.judged == io.github.tieo.arbay.model.OfferKind.OTHER || listing.judged == io.github.tieo.arbay.model.OfferKind.ACCESSORY
 
         /** Whether a find costs less than the cheapest a learning rule saw; true for a rule that never learned. */
         internal fun beatsTheBestSeen(
