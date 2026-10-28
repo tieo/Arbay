@@ -146,16 +146,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val startedAt = kotlin.time.Clock.System.now()
         /** Set while the server's crawl throttle has it waiting for a free slot. */
         @Volatile var queued: String? = null
-        /** The new price the markets were asked up to, when the search named no price. */
-        @Volatile var askedUpTo: Money? = null
         lateinit var job: Job
 
         suspend fun describe(args: JsonObject): String {
             val q = saved?.searchQuery
             val hidden = hiddenOffers()
-            // With no price named the markets were asked up to the new price, and what the price
-            // comparers list above it is left out here as it is in the app.
-            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0) ?: askedUpTo?.amount?.div(100.0)
+            val max = args.num("max_price_eur") ?: q?.maxPrice?.amount?.div(100.0)
             val min = args.num("min_price_eur") ?: q?.minPrice?.amount?.div(100.0)
             // The saved market and country picks narrow what was fetched, adding up as in the app.
             val markets = q?.showOnlyMarkets.orEmpty()
@@ -178,7 +174,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
             return buildString {
                 appendLine("${shown.size} of ${all.size} offers for \"$words\":")
-                askedUpTo?.let { appendLine("No price was named, so the markets were asked up to ${it.amount / 100} €, what it costs new (the price comparers' third cheapest offer).") }
                 shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
                 synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
                 // What each market sent against what the search kept, with the reasons for the
@@ -253,7 +248,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     if (line.isBlank()) continue
                     val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
                     val market = event.platformName.ifEmpty { event.platform }
-                    event.askedUpTo?.let { run.askedUpTo = it }
                     when (event.type) {
                         CrawlerEventType.PLATFORM_STARTED -> run.searching += market
                         CrawlerEventType.PLATFORM_DONE -> run.searching -= market

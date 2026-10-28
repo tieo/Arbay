@@ -13,7 +13,6 @@ import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketGroup
-import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PriceDrop
 import io.github.tieo.arbay.model.SearchQuery
@@ -109,8 +108,6 @@ class ResultsState(
     val setNarrowing: (Narrowing) -> Unit,
     /** How often each Kleinanzeigen ad has been looked at, where known. */
     val views: Map<String, Int> = emptyMap(),
-    /** What the thing costs new, which the markets were asked up to when the search named no price. */
-    val newPrice: Money? = null,
 ) {
     /** The offers on screen, in order. */
     val shown: List<Listing> get() = narrowed.displayed
@@ -136,7 +133,6 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val dropCounts by vm.dropCounts.collectAsState()
     val dealers by vm.blockedDealers.collectAsState()
     val views by vm.views.collectAsState()
-    val newPrice by vm.newPrice.collectAsState()
 
     val savedBlocked = open.saved?.excludeKeywords.orEmpty()
     LaunchedEffect(view.query, view.category) {
@@ -170,12 +166,12 @@ fun rememberResultsState(vm: ListingViewModel, open: OpenSearch): ResultsState {
     val current = narrowing ?: Narrowing()
     val money = Triple(DisplayCurrency.current, DisplayCurrency.rates, ImportRules.current)
     val scams = remember(fetched, views, money) { likelyScams(fetched, views) }
-    val narrowed = remember(listings, current, money, open.newListingIds, scams, newPrice) { narrow(listings, current, open.newListingIds, scams.keys, newPrice) }
+    val narrowed = remember(listings, current, money, open.newListingIds, scams) { narrow(listings, current, open.newListingIds, scams.keys) }
     val summary = remember(narrowed, priceHistory, money) { priceSummary(narrowed.displayed, priceHistory) }
     val hidden = remember(narrowed, fetched, marketBasis, banned, blocked, dropped, dropCounts, scams, dealers) {
         hiddenListings(narrowed, current, fetched, marketBasis, banned, blocked, dropped, open.newListingIds, scams, dealers, dropCounts.values.flatten())
     }
-    return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets, { narrowing = it }, views, newPrice)
+    return ResultsState(open, current, narrowed, summary, elsewhere, hidden, markets, { narrowing = it }, views)
 }
 
 // ── What the reader can change about an open search ────────────────────────

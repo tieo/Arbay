@@ -40,9 +40,6 @@ data class CrawlerSearchEvent(
     // removed (computed locally over the fetched candidate set — the "−N" a chip is hiding).
     // Keyed by filter dimension; summed across platforms by the client.
     val facets: Map<String, Int> = emptyMap(),
-    // The price this market was asked up to when the search named none: the new price the price
-    // comparers answered with. Null where the market was asked without a ceiling.
-    val askedUpTo: Money? = null,
 )
 
 @Serializable

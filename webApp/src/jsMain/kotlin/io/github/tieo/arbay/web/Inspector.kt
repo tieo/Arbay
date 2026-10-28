@@ -138,10 +138,6 @@ fun PricesPanel(app: WebApp, route: Route.Results, state: ResultsState) {
             Figure("Dearest", summary.dearest?.format())
             Figure("Offers", summary.count.toString())
         }
-        state.newPrice?.let { new ->
-            H3 { Text("What it costs new") }
-            Div({ classes("figures") }) { Figure("New, in a shop", new.format()) }
-        }
         H3 { Text("What it sold for") }
         val sold = summary.sold
         when {
@@ -201,7 +197,7 @@ private fun HiddenPanel(app: WebApp, route: Route.Results, state: ResultsState) 
                         HiddenKind.Condition -> QuietButton("Show every condition") { state.showEveryCondition(app.products) }
                         HiddenKind.SaleType -> QuietButton("Show both") { state.showBothSaleTypes(app.products) }
                         HiddenKind.NotNew -> QuietButton("Show everything") { state.toggleNewOnly() }
-                        HiddenKind.LikelyScam, HiddenKind.AboveNewPrice -> {}
+                        HiddenKind.LikelyScam -> {}
                         is HiddenKind.Search -> if (kind.reason == io.github.tieo.arbay.model.DropReason.VEHICLE_CRITERIA) {
                             QuietButton("Edit the criteria") { Router.replace(route.copy(panel = Panel.CRITERIA)) }
                         }

@@ -2,7 +2,6 @@ package io.github.tieo.arbay.results
 
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.comparablePrice
-import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
@@ -108,10 +107,6 @@ class Narrowed(
     val saleTypeCounts: Map<SaleType?, Int>,
     /** What is on screen: inside the band, in a wanted condition and sale type, new if asked. */
     val displayed: List<Listing>,
-    /** What the thing costs new, when the search named no price and the markets were asked up to it. */
-    val newPrice: Money? = null,
-    /** What costs more than that: offers the price comparers listed, which answer without a ceiling. */
-    val aboveNew: List<Listing> = emptyList(),
 ) {
     /** Bounds compare in whole currency units, and an end resting on the end of the track is no
      *  bound. Comparing cent for cent would shave a cent off a boundary and drop the very listing
@@ -126,19 +121,14 @@ private fun withinBand(amount: Long, range: ClosedFloatingPointRange<Float>, tra
     return minOk && maxOk
 }
 
-/** Applies [narrowing] to the listings a search has on screen ([listings], sold ones included).
- *  Where the markets were asked up to the [newPrice], whatever costs more is left out with them. */
+/** Applies [narrowing] to the listings a search has on screen ([listings], sold ones included). */
 fun narrow(
     listings: List<Listing>,
     narrowing: Narrowing,
     newListingIds: Set<String>,
     likelyScams: Set<String> = emptySet(),
-    newPrice: Money? = null,
 ): Narrowed {
-    val forSale = listings.filter { !it.sold }
-    val ceiling = newPrice?.let { DisplayCurrency.convert(it.amount, it.currency.name) }
-    val aboveNew = if (ceiling == null) emptyList() else forSale.filter { it.displayAmount() > ceiling }
-    val allActive = if (aboveNew.isEmpty()) forSale else forSale - aboveNew.toSet()
+    val allActive = listings.filter { !it.sold }
     val prices = allActive.map { it.displayAmount() }.sorted()
     val priceMin = (prices.firstOrNull() ?: 0L) / 100f
     val priceMax = ((prices.lastOrNull() ?: 100_000L) / 100f).coerceAtLeast(priceMin + 1f)
@@ -164,8 +154,6 @@ fun narrow(
         conditionCounts = active.groupingBy { it.condition }.eachCount(),
         saleTypeCounts = active.groupingBy { it.saleType }.eachCount(),
         displayed = displayed,
-        newPrice = newPrice,
-        aboveNew = aboveNew,
     )
 }
 
@@ -189,7 +177,6 @@ sealed interface HiddenKind {
     data object SaleType : HiddenKind
     data object NotNew : HiddenKind
     data object LikelyScam : HiddenKind
-    data object AboveNewPrice : HiddenKind
     data class Search(val reason: DropReason, val detail: String?) : HiddenKind
 }
 
@@ -256,11 +243,6 @@ fun hiddenListings(
             .distinct().joinToString(", ") + ".", byDealer, byDealer.size + unsent(DropReason.BLOCKED_DEALER, anyDetail = true)))
     if (byWord.isNotEmpty()) add(Hidden(HiddenKind.BlockedWords, "your blocked words",
         "Carrying one of your blocked words: " + blockedTerms.joinToString(", "), byWord, byWord.size + unsent(DropReason.BLOCKED_WORD, anyDetail = true)))
-    narrowed.newPrice?.takeIf { narrowed.aboveNew.isNotEmpty() }?.let { new ->
-        add(Hidden(HiddenKind.AboveNewPrice, "above the new price",
-            "Costing more than the thing new in a shop, ${new.format()}. The search named no price, so the markets were asked for nothing dearer.",
-            narrowed.aboveNew))
-    }
     if (outOfBand.isNotEmpty()) add(Hidden(HiddenKind.PriceBand, "outside your price band",
         "Priced outside the band this search is narrowed to.", outOfBand))
     if (wrongCondition.isNotEmpty()) add(Hidden(HiddenKind.Condition, "the other condition",
