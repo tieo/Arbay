@@ -73,7 +73,7 @@ class FitScoreTest {
         assertEquals(Math.round(f.score * 100).toInt(), whole.sumOf { it.first })
         assertEquals(100, whole.sumOf { it.second })
         assertEquals(FitPart.NOT_STATED, f.parts.single { it.wish == FitWish.GEARBOX }.note)
-        assertEquals(listOf(FitWish.PRICE, FitWish.GEARBOX, FitWish.MILEAGE, FitWish.POWER), f.parts.biggestLosses(4).map { it.first.wish })
+        assertEquals(listOf(FitWish.PRICE, FitWish.POWER, FitWish.GEARBOX, FitWish.MILEAGE), f.parts.biggestLosses(4).map { it.first.wish })
     }
 
     @Test
@@ -202,6 +202,10 @@ class FitScoreTest {
         val weaker = fitOf(103)
         assertTrue(weaker.score < fitOf(130).score)
         assertEquals("103 kW of 130", powerOf(weaker).note)
+        // The user, on a 140 PS Crafter that fit 89 % against an ideal of 177 PS: "how is it 89%
+        // with to low power". It costs about a fifth of the whole now, still short of ruling it out.
+        assertTrue(fitOf(130).score - weaker.score > 0.12)
+        assertTrue(powerOf(weaker).points > 0.0)
         assertTrue(CarFilterEngine.apply(listOf(withPower(80)), ideal).isNotEmpty())
     }
 }

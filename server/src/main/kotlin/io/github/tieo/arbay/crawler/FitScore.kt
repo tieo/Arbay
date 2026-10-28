@@ -25,7 +25,9 @@ import kotlin.time.Clock
  * ad's photos.
  *
  * The weights were set with the user on a real search (a Crafter): the van's size first, then the
- * price, where every euro counts, then gearbox, mileage, age and drive; the drive to the seller
+ * price, where every euro counts, then power, then gearbox, mileage, age and drive. Power weighs
+ * near the price because a van far under the power wanted is one the user would not buy at the
+ * price, while still trading off against the rest rather than ruling the van out. The drive to the seller
  * counts for little, since it is made once or twice, and so does the seller: a dealer under four
  * stars is ruled out already, and what is left between a good dealer and a private seller is
  * mostly the dealer's warranty. A wish the search does not make counts for nothing, so the fit of
@@ -149,10 +151,11 @@ object FitScore {
         val km = wishes.maxMileageKm?.let { Wish(linear(v?.mileageKm?.toDouble(), it * 0.4, it * 1.33), v?.mileageKm?.let { m -> "${grouped(m.toLong())} km" }) }
         val thisYear = Clock.System.now().toString().take(4).toInt()
         val year = wishes.firstRegFromYear?.let { Wish(linear(v?.firstRegYear?.toDouble(), thisYear - 4.0, it - 2.0), v?.firstRegYear?.toString()) }
-        // The ideal power fits fully and 50 kW below it not at all; a bare minimum fits fully 20 kW
-        // above it and not at all 35 kW below.
+        // The ideal power fits fully and 35 kW below it not at all; a bare minimum fits fully 20 kW
+        // above it and not at all 35 kW below. A 140 PS Crafter against an ideal of 177 PS keeps
+        // under a quarter of the power points: the gap is what the user wants the engine for.
         val power = wishes.idealPowerKw?.let { ideal ->
-            Wish(linear(v?.powerKw?.toDouble(), ideal.toDouble(), ideal - 50.0), v?.powerKw?.let { "$it kW of $ideal" })
+            Wish(linear(v?.powerKw?.toDouble(), ideal.toDouble(), ideal - 35.0), v?.powerKw?.let { "$it kW of $ideal" })
         } ?: wishes.minPowerKw?.let { want ->
             Wish(linear(v?.powerKw?.toDouble(), want + 20.0, want - 35.0), v?.powerKw?.let { "$it kW" })
         }
@@ -171,7 +174,7 @@ object FitScore {
         val weighed = listOfNotNull(
             size?.let { Triple(FitWish.SIZE, it, .26) }, price?.let { Triple(FitWish.PRICE, it, .22) },
             gear?.let { Triple(FitWish.GEARBOX, it, .12) }, km?.let { Triple(FitWish.MILEAGE, it, .11) },
-            power?.let { Triple(FitWish.POWER, it, .08) }, year?.let { Triple(FitWish.YEAR, it, .09) },
+            power?.let { Triple(FitWish.POWER, it, .20) }, year?.let { Triple(FitWish.YEAR, it, .09) },
             drive?.let { Triple(FitWish.DRIVE, it, .07) }, Triple(FitWish.SELLER, dealer, .03),
             Triple(FitWish.DISTANCE, where, .03), Triple(FitWish.AD_AGE, age, .01),
             Triple(FitWish.AIR_CONDITIONING, Wish(ac?.let { if (it) 1.0 else 0.3 }, ac?.let { if (it) "yes" else "no" }), .01),
