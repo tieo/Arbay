@@ -174,8 +174,27 @@ object SearchBrowser : WarmBrowser(
 )
 
 /**
- * The Chrome shop pages are read through once their scripts ran. Apart from [SearchBrowser], so a
- * shop page that hangs until its time runs out, and gets the browser restarted, holds up no search
- * engine: Duschmeister's own search did that on every web search, and each engine behind it waited.
+ * The Chromes shop pages are read through once their scripts ran: apart from [SearchBrowser], so a
+ * shop page that hangs until its time runs out, and gets its browser restarted, holds up no search
+ * engine (Duschmeister's own search did that on every web search), and several of them, since a
+ * web search renders a handful of pages and one browser read them one after another for over a
+ * minute.
  */
-object RenderBrowser : WarmBrowser("render", 92, "render-profile", "render-browser.log")
+object RenderBrowsers {
+    private val pool = kotlinx.coroutines.channels.Channel<WarmBrowser>(RENDER_BROWSERS).apply {
+        repeat(RENDER_BROWSERS) { i -> trySend(WarmBrowser("render${i + 1}", 92 + i, "render-profile-${i + 1}", "render-browser-${i + 1}.log")) }
+    }
+
+    /** [WarmBrowser.get] on whichever browser is free first. */
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int): WarmBrowser.Page? {
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        val browser = if (clock != null) clock.waitingOnOthers { pool.receive() } else pool.receive()
+        try {
+            return browser.get(url, markers, timeoutS)
+        } finally {
+            pool.send(browser)
+        }
+    }
+
+    private const val RENDER_BROWSERS = 3
+}

@@ -54,6 +54,9 @@ first, and by the site-wide one where they find nothing. `render: true` reads th
 appear once its scripts ran. `searchUrl` is the site's own search with `{q}` for the words: from
 then on the site is searched directly on every web search, so set it wherever the site has a
 search. A site its structured data already reads gets a recipe of `domain` and `searchUrl` alone.
+`nothingFound` is a selector for what the site's own search shows when it found nothing for the
+words (Zen Cart's `.messageStackCaution`, "Es wurden keine Artikel gefunden"): such a page counts
+as selling nothing for them, where it would otherwise be reported as one the recipe cannot read.
 A price its structured data marks `"valueAddedTaxIncluded": false` (Conrad's business prices) is
 read with the VAT of the shop's country added. A site that shows net prices where its structured
 data says nothing gets `"pricesNet": true`, and `netWhere`, a selector for what marks such a page,

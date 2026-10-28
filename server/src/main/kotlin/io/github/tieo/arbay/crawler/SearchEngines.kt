@@ -53,6 +53,13 @@ class SearchEngines(private val client: HttpClient) {
         // An ad goes through an ad network's redirect before the shop; it is followed like the
         // engine's own.
         val (ads, direct) = resultLinks(html, engine.host).partition { url -> AD_HOSTS.any { it in SiteRecipes.domainOf(url) } }
+        // A plain engine that answered a request with a check instead of results ("Noch ein letzter
+        // Schritt", Bing now and then) is asked once more through the browser, which passes it.
+        if (!engine.browser && direct.isEmpty() && ads.isEmpty()) {
+            val page = SearchBrowser.get(url, engine.markers, timeoutS = 10)?.html
+            if (page != null) return resultLinks(page, engine.host).filterNot { u -> AD_HOSTS.any { it in SiteRecipes.domainOf(u) } }
+                .also { log.info("Web: {} listed {} pages for '{}' through the browser", engine.name, it.size, words) }
+        }
         val links = (direct + resolved(redirectsIn(html, engine) + ads, engine)).distinct()
         if (links.isEmpty() && page == 1) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
@@ -187,10 +194,10 @@ class SearchEngines(private val client: HttpClient) {
         private val ENGINES = listOf(
             // Bing prints ten results a page whatever count asks for; the second page adds ten more
             // over plain HTTP, no browser needed.
-            Engine("Bing", "bing.", false, emptyList(), pages = 2, next = { url, page -> "$url&first=${(page - 1) * 10 + 1}" }) { q ->
+            Engine("Bing", "bing.", false, listOf("class=\"b_algo"), pages = 2, next = { url, page -> "$url&first=${(page - 1) * 10 + 1}" }) { q ->
                 "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE"
             },
-            Engine("DuckDuckGo", "duckduckgo.", false, emptyList()) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
+            Engine("DuckDuckGo", "duckduckgo.", false, listOf("result__a")) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
             Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?")) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
             },

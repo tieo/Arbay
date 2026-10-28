@@ -143,6 +143,16 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a site search saying it found nothing is told apart from a page the recipe cannot read`() {
+        SiteRecipes.put(SiteRecipe(domain = "zc-test.de", urlPattern = "advanced_search_result", item = "div.box", title = "h3", price = ".p",
+            nothingFound = ".messageStackCaution"))
+        val url = "https://zc-test.de/index.php?main_page=advanced_search_result&keyword=x"
+        assertTrue(SiteRecipes.foundNothing(url, "<div class='messageStackCaution larger'>Es wurden keine Artikel gefunden</div>"))
+        assertFalse(SiteRecipes.foundNothing(url, "<div class='box'><h3>Neu</h3></div>"))
+        assertFalse(SiteRecipes.foundNothing("https://zc-test.de/index.php?main_page=product_info", "<div class='messageStackCaution'>x</div>"))
+    }
+
+    @Test
     fun `a box whose title element holds its price is named by its picture`() {
         // ManoMano's tiles put the price where the class says title; 56 offers were named "1990,00€".
         val box = { name: String, price: String, href: String ->

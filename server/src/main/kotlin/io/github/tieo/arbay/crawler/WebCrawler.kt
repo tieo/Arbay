@@ -175,6 +175,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         // words: Boels lists its toilet containers for "Dusch-WC" with no rate and a banner by the
         // week only. Its answer is data, never a page a browser would show more of.
         if (recipe?.items != null) return Page(Outcome.NOTHING_SOLD)
+        // A site's own search that says it found nothing for the words sells nothing for them.
+        if (SiteRecipes.foundNothing(url, html)) return Page(Outcome.NOTHING_SOLD)
         // A shop's front page shows what it pushes today, not what was searched for; where the
         // site's own search is known, that search answers the words. grills.de's front page, listed
         // for "Weber Grill", holds no product tile.
@@ -222,13 +224,13 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     companion object {
 
         /**
-         * A shop page as a person's Chrome shows it once its scripts ran: [RenderBrowser], warm and on
+         * A shop page as a person's Chrome shows it once its scripts ran: [RenderBrowsers], warm and on
          * a display of its own, waiting until the page carries the marks shops put on their product
          * data, or [RENDER_TIMEOUT_S] passed. A headless Playwright waiting for the network to go
          * idle timed out on every MediaMarkt and Saturn page, whose trackers never stop.
          */
         internal suspend fun rendered(url: String): String? =
-            RenderBrowser.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
+            RenderBrowsers.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
 
         /** A site's own API, asked for JSON: SAP Commerce's answers a browser's Accept header in XML. */
         internal suspend fun apiAnswer(client: HttpClient, url: String): String {

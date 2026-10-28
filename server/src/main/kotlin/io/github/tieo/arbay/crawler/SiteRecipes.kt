@@ -94,6 +94,10 @@ data class SiteRecipe(
     /** The site's own search for some words, with `{q}` where the words go: from then on the site
      *  is searched directly, not only when a search engine happens to list one of its pages. */
     val searchUrl: String? = null,
+    /** An element the site shows only where its own search found nothing ("Es wurden keine
+     *  Artikel gefunden"): such a page sells nothing for the words, rather than being a page the
+     *  recipe cannot read, which is reported. */
+    val nothingFound: String? = null,
     /** Why the recipe reads the page this way, for whoever rewrites it. */
     val note: String? = null,
     val updatedAt: Instant? = null,
@@ -114,6 +118,16 @@ object SiteRecipes {
         val candidates = synchronized(this) { recipes[domainOf(url)] } ?: return null
         return candidates.firstOrNull { r -> r.urlPattern != null && runCatching { Regex(r.urlPattern).containsMatchIn(url) }.getOrDefault(false) }
             ?: candidates.firstOrNull { it.urlPattern == null }
+    }
+
+    /** Whether a recipe for this page finds the site's own "nothing found" answer on it. */
+    fun foundNothing(url: String, html: String): Boolean {
+        val candidates = synchronized(this) { recipes[domainOf(url)] } ?: return false
+        val marks = candidates.filter { r -> r.urlPattern == null || runCatching { Regex(r.urlPattern).containsMatchIn(url) }.getOrDefault(false) }
+            .mapNotNull { it.nothingFound }
+        if (marks.isEmpty()) return false
+        val doc = Jsoup.parse(html)
+        return marks.any { runCatching { doc.selectFirst(it) != null }.getOrDefault(false) }
     }
 
     /**
