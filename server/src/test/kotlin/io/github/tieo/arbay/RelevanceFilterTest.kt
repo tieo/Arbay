@@ -1761,6 +1761,39 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a version number shared with NVMe drives does not make a hard disk one`() {
+        // eBay France answered "2TB NVMe" with a WD Red whose title names its firmware "NASWare
+        // 3.0", and the 2 TB watch alerted on it: the NVMe drives beside it say "PCIe 3.0".
+        val disk = listing("WESTERN DIGITAL 2TB - NASWare 3.0")
+        val nvme = listOf(
+            listing("Crucial P3 2TB PCIe 3.0 NVMe M.2"),
+            listing("Samsung 970 EVO Plus 2TB NVMe PCIe 3.0"),
+            listing("WD Blue SN570 2TB NVMe PCIe 3.0 M.2"),
+            listing("Kingston NV2 2TB NVMe PCIe 3.0"),
+        )
+        val kept = search("2TB NVMe", nvme + disk, aliases = listOf("2 TB NVMe", "2000GB NVMe"))
+        assertEquals(nvme.map { it.title }, kept.map { it.title })
+    }
+
+    @Test
+    fun `a cloning station, a Spanish enclosure and a part sold alone are not the drive`() {
+        // Kept by a "2TB NVMe" search on eBay Spain and the US, the duplicator at 108 € inside
+        // the 2 TB watch's alert band.
+        val gear = listOf(
+            listing("M.2 NVMe Duplicator Dual Bay Fast Offline Clone For SSD 2TB Recommended"),
+            listing("Caja SSD M.2 SATA NVME DOBLE protocolo SATA NVME a adaptador USB 10Gbps 2TB EE. UU."),
+            listing("Caja Satechi Nvme Mini SSD Transferencia Aceleración Ssd M.2 10GBPS 2TB Uso Común"),
+            listing("880242-001 HP 2TB 2.5\" NVMe SSD Tray Only 651699-003 ***Pulled***"),
+        )
+        val drives = listOf(
+            listing("Samsung 990 Pro 2TB NVMe"),
+            listing("WD Black SN850X 2TB NVMe con caja original"),
+            listing("Crucial P3 2TB NVMe M.2"),
+        )
+        assertEquals(drives.map { it.title }, search("2TB NVMe", gear + drives).map { it.title })
+    }
+
+    @Test
     fun `a docking station that takes drives up to the size is not a drive`() {
         val dock = listing("SSD und Festplatten Docking Station USB 3.0, HDD Docking Station, Dockingstation für Festplatten für 2,5 und 3,5 Zoll SATA HDD/SSD 32TB mit SD/TF-Kartenleser, Unterstützt Offline-Cloning,UASP", 2899)
         val drive = listing("Seagate Exos 32TB HDD SATA", 60000)

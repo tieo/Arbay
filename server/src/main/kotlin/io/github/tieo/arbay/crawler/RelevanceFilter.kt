@@ -885,9 +885,20 @@ object RelevanceFilter {
             """(empty|emty|leere?)\s+(box|karton|ovp|verpackung)|nur\s+(die\s+)?(box|karton|ovp)|""" +
             // Brands that make nothing but cases and glass for the phones they name.
             """spigen|otterbox|benks|nillkin|ringke|caseology|rhinoshield|dbrand|""" +
-            """bo(î|i)tier|carcasa|caja\s+externa|behuizing)\b""",
+            """bo(î|i)tier|carcasa|caja\s+externa|behuizing|adaptador|adattatore|adaptateur|""" +
+            // A station that copies one drive onto another, sold under the sizes it copies: "M.2
+            // NVMe Duplicator Dual Bay Fast Offline Clone For SSD 2TB" stood at 108 € among the
+            // 2 TB drives.
+            """duplicat(or|ore|eur)|duplicador|clonador)\b|""" +
+            // Spanish names an enclosure "caja" and puts it first: "Caja Satechi Nvme Mini SSD".
+            // Further on the word is the drive's own box ("990 Pro 2TB con caja").
+            """^\s*caja\b""",
         RegexOption.IGNORE_CASE,
     )
+
+    /** "Tray Only", "Box only": the title says the one thing on offer is the part named, whatever
+     *  drive it names before. */
+    private val onlyThePart = Regex("""\b(box|tray|caddy|bracket|packaging|manual|case)\s+only\b|\bonly\s+(the\s+)?(box|tray|caddy|bracket)\b""", RegexOption.IGNORE_CASE)
 
     /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
@@ -937,6 +948,7 @@ object RelevanceFilter {
      */
     private fun isAnAccessoryNamedOutright(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (accessoryNoun.containsMatchIn(queryText)) return false
+        if (onlyThePart.containsMatchIn(listing.title) && !onlyThePart.containsMatchIn(queryText)) return true
         val reports = batteryReport.findAll(listing.title).map { it.range }.toList()
         val match = accessoryNoun.findAll(listing.title)
             .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
@@ -1405,6 +1417,10 @@ object RelevanceFilter {
                 // shared by drives of every kind; no product is named 002.
                 (if (w.all { it.isDigit() }) w.length in 3..4 && w[0] != '0' else w.length >= 3) &&
                 !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) && !countWord.matches(w) && !isAYear(w) &&
+                // A decimal is a version or a generation ("PCIe 3.0", "USB 3.2", "NASware 3.0"),
+                // which drives of every kind print: "3p0" made a WD Red hard disk an NVMe drive by
+                // the "PCIe 3.0" of the NVMe drives beside it.
+                !isADecimal(w) &&
                 // A number with its unit after it is a size written apart: "2000go" reads as
                 // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
                 // M.2 drive, because most listings saying 2000 GB were.
