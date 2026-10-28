@@ -47,6 +47,10 @@ data class Listing(
     val scrapedAt: Instant,
     val extras: JsonObject? = null,
     val relevanceScore: Double? = null,
+    // Carries no word of the search where other listings of its market's answer do: what the
+    // market guessed rather than what was asked for. Shown after everything else, never hidden,
+    // since a few are the thing under another name ("Closomat" for a Dusch-WC).
+    val offQuery: Boolean = false,
     // How well a vehicle fits its search as a whole, [0,1]: the weighed wishes, and half of it the
     // likeness to the search's free-form idealDescription where one is set. Null where the search
     // weighs no fit or the offer is ruled out. Ranks vehicle results by fit.

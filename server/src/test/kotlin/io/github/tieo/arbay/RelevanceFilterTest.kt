@@ -33,6 +33,19 @@ class RelevanceFilterTest {
     // === Placeholder title filtering ===
 
     @Test
+    fun `what carries no word of the search where the rest do is kept and marked, not dropped`() {
+        // Ricardo's answer to "Dusch-WC", a third of it carrying the words: Playmobil came along,
+        // and so did a Closomat, a shower toilet sold under its maker's name.
+        val kept = search("Dusch-WC", listOf(
+            listing("Geberit AquaClean Mera Dusch-WC"),
+            listing("Playmobil Family Fun 9539 Ferienhotel"),
+            listing("Closomat Lima Vita II, Baujahr 2025"),
+        ))
+        assertEquals(3, kept.size)
+        assertEquals(setOf("Playmobil Family Fun 9539 Ferienhotel", "Closomat Lima Vita II, Baujahr 2025"), kept.filter { it.offQuery }.map { it.title }.toSet())
+    }
+
+    @Test
     fun `filters out placeholder titles`() {
         val results = search("WH-1000XM5", listOf(
             listing("Neues Angebot"),

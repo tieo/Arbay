@@ -164,7 +164,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 .filter { min == null || it.effectivePrice.amount / 100.0 >= min }
                 // Vehicles carry their fit to the search as a whole and come best fit first, as in
                 // the app's "Best match"; everything else comes cheapest first.
-                .sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
+                // What the market guessed rather than what was asked for comes last, as in the app.
+                .sortedWith(compareBy<Listing> { it.offQuery }.thenByDescending { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
                 .take(args.int("limit") ?: 40)
             // Every offer the search found can be asked about, not only the ones listed: a search
             // read deep lists forty of a thousand.
