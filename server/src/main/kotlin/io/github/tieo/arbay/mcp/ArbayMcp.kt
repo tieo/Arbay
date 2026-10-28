@@ -1006,9 +1006,14 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     /** An offer by id: one this session searched, else the newest copy the server holds, else the
      *  copy archived when it was first found. */
-    private suspend fun offer(id: String): Listing? = seen[id]
+    /** The offer [id] as last stored, with its photos judged as they are now: a stored copy keeps
+     *  the verdict of the day it was stored, and a Fellbach Crafter listed by one dealer on
+     *  AutoScout24 and mobile.de still read as a likely scam days after copies at one address
+     *  stopped counting. */
+    private suspend fun offer(id: String): Listing? = (seen[id]
         ?: runCatching { getJson<Listing>("/api/listings/${id.encodeURLPathPart()}") }.getOrNull()
-        ?: io.github.tieo.arbay.repo.ListingArchive.get(id)
+        ?: io.github.tieo.arbay.repo.ListingArchive.get(id))
+        ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.crawler.PhotoPrints.copiesOf(it)) }
 
     private suspend fun hiddenOffers(): Set<String> =
         ((getJsonElement("/api/state") as? JsonObject)?.get("hiddenOffers") as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
