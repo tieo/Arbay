@@ -65,7 +65,7 @@ object ProductPages {
      */
     fun sellsSomething(html: String): Boolean {
         val doc = Jsoup.parse(html)
-        if (isArticle(doc)) return false
+        if (isArticle(doc) || isForum(doc)) return false
         val text = doc.body()?.text()?.lowercase() ?: return false
         // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
         // shop, its articles too.
@@ -115,6 +115,14 @@ object ProductPages {
         }.toSet()
         return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
     }
+
+    /**
+     * Whether the page is a thread of a forum's software, which says so in its markup where its
+     * structured data does not: bauexpertenforum.de's XenForo thread on an urinal lid's hinge
+     * quotes "90€" in a reply and names no product of its own.
+     */
+    private fun isForum(doc: Document): Boolean =
+        doc.selectFirst("html#XenForo, html#XF, html[data-app=public][data-template=thread_view], body#phpbb, #vbulletin_html, meta[name=generator][content*=Discourse], meta[name=generator][content*=phpBB], meta[name=generator][content*=vBulletin]") != null
 
     private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute""")
 
