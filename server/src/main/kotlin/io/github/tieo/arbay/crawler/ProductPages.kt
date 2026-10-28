@@ -71,9 +71,14 @@ object ProductPages {
         // shop, its articles too.
         // Nor is what delivery costs, a voucher or an order's minimum: "Versandkosten ab 5,95 €"
         // stands in a shop's header, "10 €-Gutschein ab 100 € Einkaufswert" on its newsletter page.
+        // An amount named beside another ("€ 1,99 bzw. € 3,98 Mini-Versand") is what the other is.
         return PRICE_IN_TEXT.findAll(text).any { m ->
+            // Read on from the amount's last digit: "€ 3" is how "€ 3,98" matches.
+            val end = m.range.last + 1 + (AMOUNT_TAIL.find(text, m.range.last + 1)?.takeIf { it.range.first == m.range.last + 1 }?.value?.length ?: 0)
+            val after = text.substring(end, minOf(text.length, end + 45))
+            val reach = if (ALTERNATIVE_AMOUNT.containsMatchIn(after)) 45 else 15
             m.value.any { it in '1'..'9' } && !NOT_A_PRICE.containsMatchIn(
-                text.substring(maxOf(0, m.range.first - 30), m.range.first) + " " + text.substring(m.range.last + 1, minOf(text.length, m.range.last + 16)))
+                text.substring(maxOf(0, m.range.first - 30), m.range.first) + " " + after.take(reach))
         } && BUY_WORDS.containsMatchIn(text)
     }
 
@@ -111,7 +116,11 @@ object ProductPages {
         return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
     }
 
-    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher|käuferschutz|buyer protection""")
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute""")
+
+    private val AMOUNT_TAIL = Regex("""[\d.,]+""")
+
+    private val ALTERNATIVE_AMOUNT = Regex("""^\s?(€|eur)?\s*(bzw\.?|oder)\s*(€|eur)?\s?\d""")
 
     // A forum thread too: hardwareluxx.de's posts quote Geizhals prices for what they discuss.
     private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog",

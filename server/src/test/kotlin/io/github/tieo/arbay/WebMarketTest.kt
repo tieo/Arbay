@@ -207,6 +207,8 @@ class WebMarketTest {
     @Test
     fun `an empty basket's price is no price`() {
         // globus-baumarkt.de's rental info page: the only amount on it is the header's basket.
+        // pearl.de's search finding nothing names its hotline's rates and its small-order shipping.
+        assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Hotline 01806 - 000 - 265 (€ 0,20/Anruf aus dem dt. Festnetz), Österreich (€ 0,20/Min.)</p><p>zahlen Sie nur € 1,99 bzw. € 3,98 Mini-Versandkosten</p><p>(1-0 von 0)</p></body>"))
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
