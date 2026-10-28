@@ -194,6 +194,8 @@ class WebMarketTest {
     @Test
     fun `an empty basket's price is no price`() {
         // globus-baumarkt.de's rental info page: the only amount on it is the header's basket.
+        // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
+        assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
     }
 

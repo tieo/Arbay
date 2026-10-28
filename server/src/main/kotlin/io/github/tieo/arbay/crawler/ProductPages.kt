@@ -111,7 +111,7 @@ object ProductPages {
         return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
     }
 
-    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher""")
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|warenwert|coupon|voucher|käuferschutz|buyer protection""")
 
     // A forum thread too: hardwareluxx.de's posts quote Geizhals prices for what they discuss.
     private val ARTICLE_TYPES = setOf("Article", "BlogPosting", "NewsArticle", "Review", "TechArticle", "Blog",

@@ -157,6 +157,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             return Page(Outcome.NOTHING_SOLD)
         }
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
+        // A site's own search API answering no offer its recipe reads has nothing priced for the
+        // words: Boels lists its toilet containers for "Dusch-WC" with no rate and a banner by the
+        // week only. Its answer is data, never a page a browser would show more of.
+        if (recipe?.items != null) return Page(Outcome.NOTHING_SOLD)
         if (SiteGaps.isGivenUp(domain) || !ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
         // A shop whose offers its own scripts put on the page shows them only to a browser. Read
         // once more in one, a few pages per search since a browser is slow; a site that gives its
