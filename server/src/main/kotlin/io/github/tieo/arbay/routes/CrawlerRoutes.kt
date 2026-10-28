@@ -796,6 +796,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     // answer first, and the rest are asked up to what the thing costs new.
                     val newPrice = if (searchQuery.maxPrice == null && !isCarQuery) NewPriceCeiling.forSearch(platforms, searchQuery.minPrice) else null
                     val askedUpTo = java.util.concurrent.ConcurrentHashMap<String, Money>()
+                    val crawlsLeft = java.util.concurrent.atomic.AtomicInteger(platforms.size)
                     val jobs = platforms.map { platformId ->
                         launch {
                           // Waited for before taking a crawl slot, so the comparers always get one.
@@ -1093,6 +1094,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                               ))
                           }
                           }
+                          // Every market crawled, the search holds no scrape any more: what follows
+                          // (placing listings, waiting up to a quarter hour on the sites the web
+                          // market is learning) leaves the server's few concurrent searches to others.
+                          if (crawlsLeft.decrementAndGet() == 0) permit.release()
                           // A market that says where a thing is only on the thing's own page (eBay)
                           // is asked afterwards, not before: the cards are on screen the moment the
                           // crawl is done, and the places fill in behind them. The app replaces a
