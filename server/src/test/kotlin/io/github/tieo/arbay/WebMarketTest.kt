@@ -460,6 +460,9 @@ class WebMarketTest {
             WebCrawler.withoutSession("https://www.pearl.de/a-ZX4189-1162.shtml;jsessionid=n073D1260CCA?query=x&gclid=abc"))
         assertEquals("https://www.voelkner.de/index.php?mp=products&products_id=12147583",
             WebCrawler.withoutSession("https://www.voelkner.de/index.php?mp=products&products_id=12147583&utm_source=google&gclid=EAIa"))
+        // Zen Cart (aicasanitaer.de) writes the visitor's session into every product link.
+        assertEquals("https://aicasanitaer.de/index.php?main_page=product_info&cPath=6_33&products_id=5296",
+            WebCrawler.withoutSession("https://aicasanitaer.de/index.php?main_page=product_info&cPath=6_33&products_id=5296&zenid=65fab3ac8995c35f97c86f980ae23fc5"))
     }
 
     @Test

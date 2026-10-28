@@ -259,7 +259,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
         /** What an engine or an ad adds to an address to count the visit, which makes the same
          *  offer a new one for every engine that listed it. */
-        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type|msockid|_x_tr_[a-z_]+)=[^&#]*&?""", RegexOption.IGNORE_CASE)
+        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type|msockid|_x_tr_[a-z_]+|zenid|oscsid|phpsessid)=[^&#]*&?""", RegexOption.IGNORE_CASE)
 
         private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
 
