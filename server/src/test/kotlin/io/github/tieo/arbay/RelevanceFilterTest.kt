@@ -30,6 +30,20 @@ class RelevanceFilterTest {
     ): List<Listing> =
         RelevanceFilter.filter(listings, SearchQuery(text = query, excludeKeywords = excludeKeywords, aliases = aliases, category = MarketGroup.GENERAL))
 
+    @Test
+    fun `a number given as a measure is the width asked for, wherever the title puts it`() {
+        // "Unterschrank 80" asks for an 80 cm vanity; no seller writes the width right after the word.
+        val kept = search("Villeroy Boch Subway 3.0 Waschtisch Unterschrank 80", listOf(
+            listing("Villeroy & Boch Subway 3.0 Schrankwaschtisch 80 cm, mit 1 Hahnloch, mit"),
+            listing("Villeroy & Boch Subway 3.0 Waschtischunterschrank 80 x 47 cm, 2 Auszüge"),
+            listing("Villeroy & Boch Subway 3.0 Waschtisch 60 cm, mit 1 Hahnloch, ohne Überlauf"),
+        )).map { it.title }
+        assertEquals(listOf(
+            "Villeroy & Boch Subway 3.0 Schrankwaschtisch 80 cm, mit 1 Hahnloch, mit",
+            "Villeroy & Boch Subway 3.0 Waschtischunterschrank 80 x 47 cm, 2 Auszüge",
+        ).sorted(), kept.sorted())
+    }
+
     // === Placeholder title filtering ===
 
     @Test

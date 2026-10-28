@@ -398,7 +398,11 @@ object RelevanceFilter {
             val countsTheNext = isNumericBigram && typedOrder.getOrNull(typedOrder.indexOf(b) + 1)?.takeIf { typedOrder.indexOf(b) >= 0 }?.let { c ->
                 c.any { it.isLetter() } && (sp.contains(" $b $c ") || sp.endsWith(" $b $c"))
             } == true
-            if ((isNumericBigram && !countsTheNext) || isQualifierBigram) {
+            // A number the title gives as a measure is the measure the search asks for, wherever
+            // the title puts it: "Unterschrank 80" is an 80 cm vanity, which sellers write
+            // "Schrankwaschtisch 80 cm" or "80 x 47 cm", never as a generation after the word.
+            val statedAsAMeasure = isNumericBigram && Regex("""(?:^| )$b ?(?:cm|mm|x ?\d)""").containsMatchIn(sp)
+            if ((isNumericBigram && !countsTheNext && !statedAsAMeasure) || isQualifierBigram) {
                 if (!sp.contains(" $a $b ") && !sp.endsWith(" $a $b")) {
                     return 0.0
                 }

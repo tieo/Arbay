@@ -184,6 +184,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     "$market ${n.first - n.second} of ${n.first} (" +
                         dropCounts[market].orEmpty().joinToString(", ") { "${why(it.reason, it.detail)} ${it.count}" } + ")"
                 })
+                // A market that found nothing for the words is otherwise missing from every line.
+                val empty = counts.toSortedMap().filterValues { (sent, _) -> sent == 0 }.keys
+                if (empty.isNotEmpty()) appendLine("No offers for these words: " + empty.joinToString(", "))
                 if (args.bool("dropped") == true) removed.forEach { (market, list) ->
                     val total = dropCounts[market].orEmpty().sumOf { it.count }
                     if (list.isNotEmpty()) appendLine("Removed from $market (${list.size}" + (if (total > list.size) " of $total, every reason among them" else "") + " listed, in the market's order):")
