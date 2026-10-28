@@ -51,6 +51,10 @@ data class SiteRecipe(
      *  abschliff.de's table lists "ELF", "Trio" under "Parkettschleifmaschinen Verleih", and the
      *  title reads "ELF · Parkettschleifmaschinen Verleih". */
     val context: String? = null,
+    /** The offer's maker, where the box names it apart from the title: bauhaus.info writes
+     *  "Geberit" on a line above "Wand-Dusch-WC-Set AquaClean Alba". Put before a title that
+     *  does not name it already. */
+    val brand: String? = null,
     /**
      * For a site whose offers come from its own JSON API (searched through [searchUrl]): the path
      * to the list of offers in the answer, "products". [title], [price], [link], [image] and
@@ -183,7 +187,9 @@ object SiteRecipes {
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
         val context = recipe.context?.let { pick(doc, it, spaced = true) }
         return boxes.mapNotNull { box ->
+            val maker = recipe.brand?.let { pick(box, it, spaced = true)?.trim() }?.takeIf { it.isNotEmpty() }
             val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { t -> if (maker != null && !t.contains(maker, ignoreCase = true)) "$maker $t" else t }
                 ?.let { t -> if (context != null && !t.contains(context, ignoreCase = true)) "$t · $context" else t } ?: return@mapNotNull null
             val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
             val currency = pageCurrency ?: ProductPages.currencyOf(priceText.filter { !it.isDigit() && it !in ".,  " }) ?: Currency.EUR

@@ -211,6 +211,10 @@ class WebMarketTest {
         assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Hotline 01806 - 000 - 265 (€ 0,20/Anruf aus dem dt. Festnetz), Österreich (€ 0,20/Min.)</p><p>zahlen Sie nur € 1,99 bzw. € 3,98 Mini-Versandkosten</p><p>(1-0 von 0)</p></body>"))
         // bauexpertenforum.de's XenForo thread: a reply guesses the part's price.
         assertFalse(ProductPages.sellsSomething("<html id=\"XenForo\"><body><h1>Urinal-Deckel: Scharnier befestigen</h1><p>Da musst du vermutlich in den 90€ teuren Apfel beißen. Nicht ohne Grund kaufen viele neu.</p></body></html>"))
+        // techtest.org's review, an article by its OpenGraph type alone.
+        assertFalse(ProductPages.sellsSomething("<html><head><meta property=\"og:type\" content=\"article\"></head><body><h1>3x 18TB HDDs im Vergleich</h1><p>So kostet die Red Pro ca. 490€.</p><a>418,30 € bei Amazon kaufen</a></body></html>"))
+        // bergfreunde.de's GriGri+, sold out: its one variant at price 0, OutOfStock.
+        assertFalse(ProductPages.sellsSomething("""<script type="application/ld+json">{"@type":"ProductGroup","name":"Petzl GriGri+","hasVariant":[{"@type":"Product","name":"Petzl GriGri+","offers":{"@type":"Offer","price":0,"priceCurrency":"EUR","availability":"https://schema.org/OutOfStock"}}]}</script><body><h1>Petzl GriGri+</h1><p>Sonst 109,95 €</p><button>In den Warenkorb</button></body>"""))
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
@@ -476,6 +480,15 @@ class WebMarketTest {
         val html = """<h1>Parkettschleifmaschinen Verleih</h1><table><tr><td>ELF</td><td>200 x 550 mm</td><td>20,- / 30,-</td></tr></table>"""
         val recipe = SiteRecipe(domain = "abschliff.de", item = "tr:has(td)", title = "td:eq(0)", price = "td:eq(2)#1", currency = "EUR", context = "h1")
         assertEquals("ELF · Parkettschleifmaschinen Verleih", SiteRecipes.read(recipe, html, "https://abschliff.de/verleih").single().title)
+    }
+
+    @Test
+    fun `a maker named apart from the title goes before it`() {
+        // bauhaus.info's tiles: the maker on a line of its own, empty where the shop names none.
+        val html = """<a href="/p/1"><div class="b">Geberit</div><div class="n">Wand-Dusch-WC-Set AquaClean Alba</div><span>899,00 €</span></a>
+            <a href="/p/2"><div class="b"></div><div class="n">Dusch-WC-Sitz BH 60</div><span>249,00 €</span></a>"""
+        val recipe = SiteRecipe(domain = "bauhaus.info", item = "a", title = "div.n", brand = "div.b", price = "span", link = "@href")
+        assertEquals(listOf("Geberit Wand-Dusch-WC-Set AquaClean Alba", "Dusch-WC-Sitz BH 60"), SiteRecipes.read(recipe, html, "https://www.bauhaus.info/c").map { it.title })
     }
 
     @Test

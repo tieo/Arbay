@@ -65,7 +65,7 @@ object ProductPages {
      */
     fun sellsSomething(html: String): Boolean {
         val doc = Jsoup.parse(html)
-        if (isArticle(doc) || isForum(doc)) return false
+        if (isArticle(doc) || isForum(doc) || soldOut(doc)) return false
         val text = doc.body()?.text()?.lowercase() ?: return false
         // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
         // shop, its articles too.
@@ -113,7 +113,10 @@ object ProductPages {
         val types = doc.select("script[type=application/ld+json]").flatMap { script ->
             Regex(""""@type"\s*:\s*(\[[^\]]*]|"[^"]*")""").findAll(script.data()).flatMap { m -> Regex(""""([^"]+)"""").findAll(m.groupValues[1]).map { it.groupValues[1].substringAfterLast('/') } }
         }.toSet()
-        return types.any { it in ARTICLE_TYPES } && types.none { it in PRODUCT_TYPES || it == "ProductGroup" }
+        if (types.any { it in PRODUCT_TYPES || it == "ProductGroup" } || doc.selectFirst("[itemtype*=schema.org/Product]") != null) return false
+        // A blog without structured data says what it is in its OpenGraph type: techtest.org's
+        // review of three 18 TB drives names their prices and links Amazon.
+        return types.any { it in ARTICLE_TYPES } || doc.selectFirst("meta[property=og:type][content=article]") != null
     }
 
     /**
@@ -339,6 +342,27 @@ object ProductPages {
         is JsonArray -> e.flatMap { nodes(it) }
         is JsonObject -> listOf(e) + ((e["@graph"] as? JsonArray)?.flatMap { nodes(it) } ?: emptyList())
         else -> emptyList()
+    }
+
+    /**
+     * Whether the page's structured data states offers and every one of them unavailable: the
+     * shop sells the thing and has none of it now. bergfreunde.de's Petzl GriGri+ states its one
+     * variant at price 0, OutOfStock; nothing there can be read because nothing there is for sale.
+     */
+    private fun soldOut(doc: Document): Boolean {
+        val offers = mutableListOf<JsonObject>()
+        fun walk(e: JsonElement) {
+            when (e) {
+                is JsonArray -> e.forEach(::walk)
+                is JsonObject -> {
+                    if (e.types().any { it == "Offer" || it == "AggregateOffer" }) offers += e
+                    e.forEach { (k, v) -> if (k != "review") walk(v) }
+                }
+                else -> {}
+            }
+        }
+        doc.select("script[type=application/ld+json]").mapNotNull { parseLenient(it.data().trim()) }.forEach(::walk)
+        return offers.isNotEmpty() && offers.none { inStock(it) }
     }
 
     private fun JsonObject.types(): List<String> = when (val t = this["@type"]) {
