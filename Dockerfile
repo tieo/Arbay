@@ -23,6 +23,14 @@ RUN apt-get update \
     && pip3 install --break-system-packages --ignore-installed rapidocr_onnxruntime==1.4.4 \
     && rm -rf /var/lib/apt/lists/*
 
+# OfferJudge asks Claude what each offer is, through the Claude Code CLI signed in with the
+# account token the container gets as CLAUDE_CODE_OAUTH_TOKEN. Installed fresh on every full build;
+# the copy in /usr/local/bin cannot update itself, so the updater stays off.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://claude.ai/install.sh | bash \
+    && cp -L /root/.local/bin/claude /usr/local/bin/claude && rm -rf /root/.local/share/claude /root/.local/bin/claude
+ENV DISABLE_AUTOUPDATER=1
+
 WORKDIR /app
 
 # Fat jar is built by CI (./gradlew :server:buildFatJar) before docker build.

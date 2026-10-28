@@ -51,6 +51,11 @@ data class Listing(
     // market guessed rather than what was asked for. Shown after everything else, never hidden,
     // since a few are the thing under another name ("Closomat" for a Dusch-WC).
     val offQuery: Boolean = false,
+    // What two readings by a language model both make of the offer for its search: the thing
+    // itself, an accessory for it, or something else. Null where they were not asked or did not
+    // agree. Agreement on anything but the thing sets [offQuery]; agreement on the thing clears it,
+    // since a word missing from a title is then the market's wording, not a guess.
+    val judged: OfferKind? = null,
     // How well a vehicle fits its search as a whole, [0,1]: the weighed wishes, and half of it the
     // likeness to the search's free-form idealDescription where one is set. Null where the search
     // weighs no fit or the offer is ruled out. Ranks vehicle results by fit.
@@ -88,6 +93,9 @@ fun String.tidyTitle(): String =
         .trim()
 
 /** How a listing is sold, where the market says so. */
+@Serializable
+enum class OfferKind { THING, ACCESSORY, OTHER }
+
 @Serializable
 enum class SaleType(val label: String) {
     /** A price the seller is asking, which is what it costs to buy it now. */

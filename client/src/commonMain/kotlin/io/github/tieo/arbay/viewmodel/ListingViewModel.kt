@@ -559,6 +559,7 @@ class ListingViewModel(
      * for.
      */
     private fun offQuery(listing: Listing): Boolean {
+        if (listing.judged == io.github.tieo.arbay.model.OfferKind.THING) return false
         if (listing.offQuery) return true
         val token = _searchQuery.value.trim().lowercase()
             .takeIf { it.isNotEmpty() && !it.contains(' ') }

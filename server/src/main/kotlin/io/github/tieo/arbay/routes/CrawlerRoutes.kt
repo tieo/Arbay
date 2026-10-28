@@ -873,7 +873,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 val done = finishedResults(classified, pq, isCarQuery, crawler, listingRepo)
                                 val dropped = partitioned.dropped + done.criteriaDropped +
                                     done.tooFar.map { DroppedListing(it, DropReason.TOO_FAR) }
-                                resultChannel.send(CrawlerSearchEvent(
+                                val fromCache = CrawlerSearchEvent(
                                     type = CrawlerEventType.PLATFORM_DONE,
                                     platform = platformId.name,
                                     platformName = platformId.displayName,
@@ -884,7 +884,11 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     droppedCounts = dropped.dropCounts(),
                                     fromCache = true,
                                     facets = done.facets,
-                                ))
+                                )
+                                resultChannel.send(fromCache)
+                                // Read by the offer judge below like a fresh answer; its verdicts are
+                                // kept, so this costs nothing for offers already read.
+                                finished = fromCache
                                 return@crawl
                             }
 
@@ -1100,13 +1104,14 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // for every other market.
                           val done = finished
                           val doneBy = finishedBy
+                          // The market's report as last sent, which the offer judge below builds on.
+                          var reported = done
                           if (done != null && doneBy != null && done.listings.any { it.location == null }) {
                               try {
                                   val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
                                   if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
-                                      resultChannel.send(done.copy(
-                                          listings = asDelivered(placed, localizedQuery(searchQuery, platformId)),
-                                      ))
+                                      reported = done.copy(listings = asDelivered(placed, localizedQuery(searchQuery, platformId)))
+                                      resultChannel.send(reported)
                                   }
                               } catch (e: CancellationException) {
                                   throw e
@@ -1167,12 +1172,29 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                               waiting.isNotEmpty()
                                           }.collect {}
                                   }
-                                  resultChannel.send(webDone.copy(listings = shown, resultCount = shown.size))
+                                  reported = webDone.copy(listings = shown, resultCount = shown.size)
+                                  resultChannel.send(reported)
                               } catch (e: CancellationException) {
                                   throw e
                               } catch (e: Exception) {
                                   routesLog.warn("Learning sites for the web search failed: {}", e.message)
                                   resultChannel.send(webDone)
+                              }
+                          }
+                          // What the offers are, read by language models where words cannot tell
+                          // (a grigri belay device from a grigri bag charm). Last, after everything
+                          // else this market reports, since it waits on the models; the market's
+                          // report goes out again with the offers they agree are something else
+                          // put last, and those the word rule put last wrongly brought back.
+                          val toJudge = reported
+                          if (toJudge != null && io.github.tieo.arbay.crawler.OfferJudge.enabled) {
+                              try {
+                                  val judged = io.github.tieo.arbay.crawler.OfferJudge.judge(toJudge.listings, searchQuery.positiveText)
+                                  if (judged != toJudge.listings) resultChannel.send(toJudge.copy(listings = judged))
+                              } catch (e: CancellationException) {
+                                  throw e
+                              } catch (e: Exception) {
+                                  routesLog.warn("Judging {} offers failed: {}", platformId.displayName, e.message)
                               }
                           }
                         }
