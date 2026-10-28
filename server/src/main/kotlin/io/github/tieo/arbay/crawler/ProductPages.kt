@@ -137,12 +137,7 @@ object ProductPages {
         val doc = Jsoup.parse(html, pageUrl)
         val headings = doc.select("h1").map { it.text().trim() }.filter { it.isNotEmpty() }
         if (headings.size != 1) return null
-        val priceEl = doc.select("[class*=price], [class*=Price], [class*=preis], [class*=Preis], [id*=price], [id*=preis], [data-price]")
-            .firstOrNull { el ->
-                val marks = (el.className() + " " + el.id()).lowercase()
-                // The struck-through price beside the real one, and a unit price, are not it.
-                OLD_PRICE.none { it in marks } && PRICE_IN_TEXT.containsMatchIn(el.ownText().lowercase() + " " + el.text().lowercase().take(40))
-            } ?: return null
+        val priceEl = priceElement(doc.body() ?: return null) ?: return null
         val raw = priceEl.attr("content").ifBlank { priceEl.attr("data-price") }.ifBlank { priceEl.text() }
         val currency = currencyOf(raw.filter { !it.isDigit() && it !in ".,  -" }.trim()) ?: Currency.EUR
         val price = amount(raw, currency)?.takeIf { it.amount > 0 } ?: return null
@@ -158,6 +153,22 @@ object ProductPages {
     }
 
     private val DAY_RENT = Regex("""tagesmiet|mietpreis.{0,12}tag|pro tag|/\s?tag\b|tagespreis""")
+
+    /**
+     * The element in [scope] holding the price to pay: the innermost one marked as a price, so a
+     * box's whole price block, delivery time and list price included, is not read as one. Megabad's
+     * `div.price` reads "ca. 1 Woche UVP: 3.211,81 € 2.299,00 €", and its first number made a
+     * 2,299 € shower toilet cost 1 €. The struck-through price beside the real one, and a unit
+     * price, are not it, nor is anything inside an element marked as one of them.
+     */
+    private fun priceElement(scope: Element): Element? {
+        val found = scope.select("[class*=price], [class*=Price], [class*=preis], [class*=Preis], [id*=price], [id*=preis], [data-price]")
+            .filter { el ->
+                PRICE_IN_TEXT.containsMatchIn(el.text().lowercase()) &&
+                    (listOf(el) + el.parents().takeWhile { it !== scope }).none { e -> OLD_PRICE.any { it in (e.className() + " " + e.id()).lowercase() } }
+            }
+        return found.firstOrNull { el -> found.none { it !== el && it.parents().contains(el) } }
+    }
 
     private val OLD_PRICE = listOf("old", "uvp", "strike", "was-", "regular", "crossed", "streich", "statt", "unit", "grund", "base")
 
@@ -242,8 +253,7 @@ object ProductPages {
             ?: box.select("a[href]").maxByOrNull { it.text().length }
         val title = (heading?.text()?.takeIf { it.length >= 6 } ?: link?.text())?.trim()
             ?.takeIf { it.length >= 6 && !CALL_TO_ACTION.containsMatchIn(it.lowercase()) } ?: return null
-        val priceEl = box.select("[class*=price], [class*=Price], [class*=preis], [class*=Preis], [data-price]")
-            .firstOrNull { el -> OLD_PRICE.none { it in (el.className() + " " + el.id()).lowercase() } && PRICE_IN_TEXT.containsMatchIn(el.text().lowercase()) }
+        val priceEl = priceElement(box)
         val priceText = priceEl?.let { it.attr("content").ifBlank { it.attr("data-price") }.ifBlank { it.text() } }
             ?: PRICE_IN_TEXT.find(box.text().lowercase())?.value ?: return null
         val currency = currencyOf(priceText.filter { !it.isDigit() && it !in ".,  -" }.trim()) ?: Currency.EUR

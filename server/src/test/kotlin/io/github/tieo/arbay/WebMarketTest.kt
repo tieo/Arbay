@@ -192,6 +192,19 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a list box is priced at what it asks, not its delivery time or list price`() {
+        // megabad.com's category page: each box's price block names the delivery time and the UVP first.
+        fun box(id: Int, delivery: String, uvp: String, price: String) = """
+            <a href="https://www.megabad.com/a-$id.htm" class="grid-item"><span class="grid-item-name">Geberit AquaClean Sela WC-Komplettanlage $id</span>
+            <div class="price t-item"><span class="label delivery">$delivery</span>
+            <div class="price-addition uvp-price-wrapper"><span class="price-old-currency">UVP: </span><span class="price-old">$uvp</span><span class="price-old-currency"> €</span></div>
+            <span class="pull-right price-new">$price €</span><span class="sparhinweis">Sie sparen: 912,81 €</span></div></a>"""
+        val html = "<body><div class=\"grid\">" + box(1, "ca. 1 Woche", "3.211,81", "2.299,00") + box(2, "Sofort lieferbar", "3.136,60", "2.299,00") +
+            box(3, "ca. 2 Wochen", "4.000,00", "2.879,99") + "</div></body>"
+        assertEquals(listOf(229900L, 229900L, 287999L), ProductPages.offers(html, "https://www.megabad.com/k-109598.htm").map { it.price.amount })
+    }
+
+    @Test
     fun `an empty basket's price is no price`() {
         // globus-baumarkt.de's rental info page: the only amount on it is the header's basket.
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
