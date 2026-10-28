@@ -229,6 +229,8 @@ class WebMarketTest {
         // weber.com's recipe page names its free delivery, grills.de's front page the value of a free gift.
         assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Kostenlose Lieferung bei Bestellungen über 49,00 €</p><h1>Grillrezepte</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Sie erhalten ein Starterset im Wert von rund 150€ gratis dazu!</p></body>"))
+        // kamera-express.de's comparison of three cameras names only its newsletter's discount.
+        assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><h1>Vergleiche die Sony A7 III, A7 IV und A7 V</h1><p>Abonniere unseren Newsletter. Erhalte sofort 5 € Rabatt</p></body>"))
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
