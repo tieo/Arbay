@@ -541,6 +541,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a maker's part for its own product is the part`() {
+        // Geizhals lists Geberit's spares for the AquaClean before the toilets, each naming Geberit twice.
+        val kept = search("Geberit AquaClean", listOf(
+            listing("Geberit O-Ring für Duscharm für Geberit AquaClean Sela (bis Bj2018) / 4000"),
+            listing("Geberit Puffer Set für WC-Deckel für Geberit AquaClean 4000"),
+            listing("Geberit Filtersieb für Geberit AquaClean 4000 / Tuma"),
+            listing("Geberit AquaClean Sela WC-Komplettanlage Wand WC"),
+            listing("Geberit AquaClean Tuma Wand-WC für UP-Spülkästen"),
+        )).map { it.title }
+        assertEquals(listOf("Geberit AquaClean Sela WC-Komplettanlage Wand WC", "Geberit AquaClean Tuma Wand-WC für UP-Spülkästen"), kept)
+        // The thing itself named for what it goes with stays: the toner is what a toner search is for.
+        assertEquals(1, search("Brother TN-2420", listOf(listing("Brother Toner TN-2420 für Brother MFC-L2750DW"))).size)
+    }
+
+    @Test
     fun `a module named for the machines it fits is the module`() {
         // Straight off the phone, all of them removed as accessories: the memory itself, an
         // equivalent module sold as a replacement for it, and the same in three languages.

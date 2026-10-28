@@ -794,7 +794,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     val resultChannel = Channel<CrawlerSearchEvent>(Channel.UNLIMITED)
                     // A search that names no price is for the cheapest offers: the price comparers
                     // answer first, and the rest are asked up to what the thing costs new.
-                    val newPrice = if (searchQuery.maxPrice == null && !isCarQuery) NewPriceCeiling.forSearch(platforms) else null
+                    val newPrice = if (searchQuery.maxPrice == null && !isCarQuery) NewPriceCeiling.forSearch(platforms, searchQuery.minPrice) else null
                     val askedUpTo = java.util.concurrent.ConcurrentHashMap<String, Money>()
                     val jobs = platforms.map { platformId ->
                         launch {

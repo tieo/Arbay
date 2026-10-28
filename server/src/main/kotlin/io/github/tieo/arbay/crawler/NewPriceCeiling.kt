@@ -19,8 +19,12 @@ import java.util.concurrent.ConcurrentHashMap
  * The price taken is the [RANK]th cheapest, not the cheapest: a comparer lists the odd accessory
  * that passes for the thing, and one of them at 12 € would cut every real offer away. Fewer than
  * [RANK] offers is no price at all, and the markets are asked without a ceiling, as before.
+ *
+ * Offers below the search's own [floor] are not the thing by the search's own word: a comparer
+ * lists a shower toilet's O-rings and filters at 2 € before the toilet, and a ceiling read off
+ * them asked every market for nothing dearer than 10 € while the search wanted 150 € and up.
  */
-class NewPriceCeiling(val shops: Set<PlatformId>) {
+class NewPriceCeiling(val shops: Set<PlatformId>, private val floor: Money? = null) {
     private val answers = ConcurrentHashMap<PlatformId, List<Listing>>()
     private val ceiling = CompletableDeferred<Money?>()
 
@@ -29,7 +33,7 @@ class NewPriceCeiling(val shops: Set<PlatformId>) {
     fun answered(platform: PlatformId, listings: List<Listing>) {
         if (platform !in shops) return
         answers.putIfAbsent(platform, listings)
-        if (answers.keys.containsAll(shops)) ceiling.complete(of(answers.values.flatten()))
+        if (answers.keys.containsAll(shops)) ceiling.complete(of(answers.values.flatten(), floor))
     }
 
     /** The ceiling, once every comparer has answered. */
@@ -42,14 +46,15 @@ class NewPriceCeiling(val shops: Set<PlatformId>) {
 
         /** A ceiling for a search over [platforms], or null where there is nothing to read the new
          *  price from or nothing to ask with it. */
-        fun forSearch(platforms: List<PlatformId>): NewPriceCeiling? {
+        fun forSearch(platforms: List<PlatformId>, floor: Money? = null): NewPriceCeiling? {
             val shops = platforms.filter { it in COMPARERS }.toSet()
-            return if (shops.isEmpty() || platforms.all { it in shops }) null else NewPriceCeiling(shops)
+            return if (shops.isEmpty() || platforms.all { it in shops }) null else NewPriceCeiling(shops, floor)
         }
 
-        fun of(listings: List<Listing>): Money? {
+        fun of(listings: List<Listing>, floor: Money? = null): Money? {
+            val least = floor?.let { ExchangeRates.convert(it.amount, it.currency.name, "EUR") } ?: 1L
             val prices = listings.map { ExchangeRates.convert(it.effectivePrice.amount, it.effectivePrice.currency.name, "EUR") }
-                .filter { it > 0 }
+                .filter { it >= least }
                 .sorted()
             return prices.getOrNull(RANK - 1)?.let { Money(it, Currency.EUR) }
         }

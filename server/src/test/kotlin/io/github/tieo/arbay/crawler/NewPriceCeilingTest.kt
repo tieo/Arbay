@@ -31,6 +31,14 @@ class NewPriceCeilingTest {
     }
 
     @Test
+    fun `offers below the search's own floor set no ceiling`() {
+        val parts = listOf(1.52, 1.52, 1.75, 2.27, 79.59).map { offer(PlatformId.GEIZHALS, it, "Geberit O-Ring für Geberit AquaClean") }
+        assertNull(NewPriceCeiling.of(parts, Money(15000, Currency.EUR)))
+        val toilets = parts + listOf(899.0, 1249.0, 2299.0).map { offer(PlatformId.IDEALO, it, "Geberit AquaClean Sela") }
+        assertEquals(229900, NewPriceCeiling.of(toilets, Money(15000, Currency.EUR))?.amount)
+    }
+
+    @Test
     fun `fewer comparer offers than that is no price`() {
         assertNull(NewPriceCeiling.of(listOf(offer(PlatformId.GEIZHALS, 229.90), offer(PlatformId.IDEALO, 266.0))))
     }

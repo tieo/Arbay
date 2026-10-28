@@ -488,8 +488,12 @@ object RelevanceFilter {
             return tokenCompact.length >= 10 && compact.contains(tokenCompact.take(8))
         }
         // Only fires when the head names none of the query and the tail names it — otherwise the
-        // product itself leads the title and the phrase is a normal qualifier.
-        val headHasQuery = tokens.any { holds(head, it.lowercase()) }
+        // product itself leads the title and the phrase is a normal qualifier. A maker the tail
+        // names again is no part of the query in the head: "Geberit O-Ring für Duscharm für Geberit
+        // AquaClean" is Geberit's O-ring for the shower toilet, and its "Geberit" up front made it
+        // one of the toilets the search was for.
+        val pointed = tail.trim().split(Regex("\\s+")).take(WORDS_AFTER_FOR).joinToString(" ")
+        val headHasQuery = tokens.any { holds(head, it.lowercase()) && !holds(pointed, it.lowercase()) }
         // What the phrase points at decides what it says. "Arbeitsspeicher für Laptop
         // CT32G4SFD832A" names the machines the memory fits and is the memory; "Toner für Brother
         // MFC-L2750DW" names what the toner is for and is not a printer.
@@ -508,7 +512,7 @@ object RelevanceFilter {
         if (substituteFor.containsMatchIn(listing.title)) return false
         // The head is the accessory's own noun. If the query already asks for that noun, keep it.
         val q = queryText.lowercase()
-        val headWords = head.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 }
+        val headWords = head.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 && !pointed.contains(it) }
         return headWords.none { q.contains(it) }
     }
 
