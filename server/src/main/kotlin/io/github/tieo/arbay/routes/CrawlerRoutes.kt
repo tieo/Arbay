@@ -302,7 +302,7 @@ private suspend fun carPostFilter(
         (criterion == "length" && v?.isVerified(VehicleField.VAN_LENGTH) != true) ||
             (criterion == "height" && v?.isVerified(VehicleField.VAN_HEIGHT) != true)
     }
-    val detailed = DetailEnricher.enrich(onTheCard.kept + sizeHintedOnly.map { it.first }, filters, crawler, newestFirst = searchQuery.unattended)
+    val detailed = DetailEnricher.enrich(onTheCard.kept + sizeHintedOnly.map { it.first }, filters, crawler, unattended = searchQuery.unattended)
     val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent, modelHint = model)
     // A word the reader blocked is matched on the title before any page is read; a page's trim line
     // names the model too ("Ausstattungslinie: 30 Mittellang FWD Trendline" under a mobile.de card

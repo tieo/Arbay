@@ -20,6 +20,13 @@ object DetailEnricher {
     // Each of these is one page on a market that answers a plain client, three at a time.
     private const val MAX_FETCHES_PER_PLATFORM = 25
 
+    // A watch run announces what it keeps and nobody waits on it, so it reads the page of every
+    // listing it would announce unread. Read newest first under the 25-page cap, the Crafter watch
+    // announced five Kleinanzeigen vans found that run but listed 37 to 125 days before as new with
+    // their gearbox unknown, and every one of their pages says "Schaltgetriebe". This bounds only a
+    // runaway: a run reads the pages it has not read before, a few dozen a run once a search has run.
+    private const val MAX_FETCHES_UNATTENDED = 150
+
     // How long one market's pages may wait for its request window ([RequestMonitor]): a search
     // reading a whole price band spends the window on its result pages, and a page read refused
     // there left every Kleinanzeigen van of a watch run unread. Half the market's crawl budget,
@@ -53,9 +60,9 @@ object DetailEnricher {
         return needed.any { field -> v == null || !v.isVerified(field) }
     }
 
-    /** Enrich one platform's listings in place of the crawler that produced them. [newestFirst]
-     *  spends the page budget on the newest ads instead of the cheapest, for a watch run. */
-    suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler, newestFirst: Boolean = false): List<Listing> {
+    /** Enrich one platform's listings in place of the crawler that produced them. An [unattended]
+     *  watch run reads every unread page, newest first, each one waiting for its own request window. */
+    suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler, unattended: Boolean = false): List<Listing> {
         val needed = neededFields(filters)
         if (needed.isEmpty()) return listings
 
@@ -63,14 +70,14 @@ object DetailEnricher {
         // so the results the user actually sees get verified, not whatever came first in the
         // crawler's order. Cached details are free and always applied; the rest fill in on a
         // re-run from cache.
-        // A watch run reads the newest ads first instead: what it finds new is announced and may
-        // be pushed, and every page read stays cached, so a watch reading new ads as they appear
-        // reads them all. Cheapest first, the Crafter watch announced Kleinanzeigen vans of
-        // 27,000 € and more whose cards say nothing of their gearbox as new with it unknown,
-        // their pages left behind the cheaper unread ones, and five of the pages say "Schaltgetriebe".
+        // A watch run reads every unread page instead ([MAX_FETCHES_UNATTENDED]), newest first so
+        // only a runaway's oldest ads go unread: what it finds new is announced and may be pushed.
+        // Cheapest first, the Crafter watch announced Kleinanzeigen vans of 27,000 € and more whose
+        // cards say nothing of their gearbox as new with it unknown, their pages left behind the
+        // cheaper unread ones, and five of the pages say "Schaltgetriebe".
         val unread = listings.filter { needsDetail(it, needed) && DetailCache.get(it.id) == null || galleryUnread(it, crawler) }
-        val toFetch = (if (newestFirst) unread.sortedByDescending { it.listingDate } else unread.sortedBy { priceEurCents(it) })
-            .take(MAX_FETCHES_PER_PLATFORM)
+        val toFetch = (if (unattended) unread.sortedByDescending { it.listingDate } else unread.sortedBy { priceEurCents(it) })
+            .take(if (unattended) MAX_FETCHES_UNATTENDED else MAX_FETCHES_PER_PLATFORM)
             .mapTo(HashSet()) { it.id }
 
         if (crawler is ReadsAdsTogether && toFetch.isNotEmpty()) {
@@ -78,12 +85,18 @@ object DetailEnricher {
                 .forEach { (id, detail) -> DetailCache.put(id, detail) }
         }
 
-        val deadline = kotlin.time.Clock.System.now().toEpochMilliseconds() + MAX_WAIT_FOR_BUDGET_MS
+        val started = kotlin.time.Clock.System.now().toEpochMilliseconds()
         return listings.map { listing ->
+            // A person waiting on the search gives all its pages one wait; a watch run gives each page its own.
+            val deadline = (if (unattended) kotlin.time.Clock.System.now().toEpochMilliseconds() else started) + MAX_WAIT_FOR_BUDGET_MS
             val fetch = listing.id in toFetch && crawler !is ReadsAdsTogether &&
                 RequestMonitor.awaitBudget(crawler.platformId.displayName, deadline)
+            // A page read is the market answering, so the crawl's clock starts over: a watch run
+            // reading a hundred pages one after another outlasts the market's time limit otherwise.
             val detail = if (fetch)
-                gate.withPermit { crawler.fetchDetail(listing) }?.also { DetailCache.put(listing.id, it) } ?: DetailCache.get(listing.id)
+                gate.withPermit { crawler.fetchDetail(listing) }
+                    ?.also { DetailCache.put(listing.id, it); kotlin.coroutines.coroutineContext[CrawlClock]?.answered() }
+                    ?: DetailCache.get(listing.id)
             else DetailCache.get(listing.id)
             // Beyond the budget or unread, a listing stays inferred and badged unverified.
             val read = if (detail != null && needsDetail(listing, needed)) listing.withDetail(detail) else listing

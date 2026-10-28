@@ -63,4 +63,31 @@ class DetailEnricherTest {
         ))
         assertEquals(3640, DetailEnricher.withCachedDetail(listing).vehicle?.wheelbaseMm)
     }
+
+    private class Pages : Crawler {
+        override val platformId = PlatformId.KLEINANZEIGEN
+        val read = mutableListOf<String>()
+        override suspend fun search(query: SearchQuery) = emptyList<Listing>()
+        override suspend fun fetchDetail(listing: Listing): ListingDetail { read += listing.id; return ListingDetail(description = "Getriebe: Schaltgetriebe") }
+    }
+
+    @Test
+    fun `a watch run reads every unread page and each one restarts the crawl clock, a person's search reads the cheapest 25`() = runBlocking {
+        val stamp = System.nanoTime()
+        val gearbox = CarFilters(transmission = io.github.tieo.arbay.model.Transmission.AUTOMATIC)
+        val attended = Pages()
+        DetailEnricher.enrich((1..40).map { van("a$it-$stamp") }, gearbox, attended)
+        assertEquals(25, attended.read.size)
+
+        val watch = Pages()
+        val vans = (1..40).map { van("w$it-$stamp") }
+        // A limit no run of forty pages fits in unless each page read starts it over.
+        val enriched = withCrawlLimitOrNull(10_000) {
+            DetailEnricher.enrich(vans, gearbox, object : Crawler by watch {
+                override suspend fun fetchDetail(listing: Listing): ListingDetail? { kotlinx.coroutines.delay(400); return watch.fetchDetail(listing) }
+            }, unattended = true)
+        }
+        assertEquals(40, watch.read.size)
+        assertEquals(List(40) { io.github.tieo.arbay.model.Transmission.MANUAL }, enriched?.map { it.vehicle?.gearbox })
+    }
 }
