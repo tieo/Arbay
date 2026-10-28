@@ -15,7 +15,7 @@ each, at a time every other client got the error page.
 Protocol: one JSON request per line on stdin, one JSON answer per line on stdout.
   {"op": "get", "url": "...", "markers": ["s-card", ...], "errors": ["went wrong"],
    "accept": ["Alle akzeptieren"], "timeout": 30}
-      -> {"ok": true, "html": "...", "url": "<final url>", "page": "content"|"errorpage"|"challenge"|"unknown"}
+      -> {"ok": true, "html": "...", "url": "<final url>", "page": "content"|"errorpage"|"challenge"|"refused"|"unknown"}
      "accept" names the buttons of a consent screen to press when one stands before the page.
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
 The first line written is {"ok": true, "ready": true}.
@@ -31,10 +31,13 @@ CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_BROWSER_PROFILE", os.path.expanduser("~/.arbay/browser-profile"))
 
 
-def what_page(html: str, markers: list[str], errors: list[str]) -> str:
-    """Whether a page is the one asked for, the site's error page, or a challenge in front of it."""
+def what_page(html: str, markers: list[str], errors: list[str], refusals: list[str] = ()) -> str:
+    """Whether a page is the one asked for, the site's error page, a challenge in front of it, or
+    the site refusing the browser outright (a check that does not solve itself)."""
     if any(m in html for m in markers):
         return "content"
+    if any(r in html for r in refusals):
+        return "refused"
     if any(e in html for e in errors) and len(html) < 20000:
         return "errorpage"
     head = html[:8000].lower()
@@ -79,7 +82,7 @@ class Browser:
         )
         return bool(pressed)
 
-    async def get(self, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float) -> dict:
+    async def get(self, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float, refusals: list[str] = ()) -> dict:
         await self.tab.get(url)
         html, page = "", "unknown"
         waited = 0.0
@@ -88,10 +91,10 @@ class Browser:
             await asyncio.sleep(1)
             waited += 1
             html = await self.tab.get_content()
-            page = what_page(html, markers, errors)
+            page = what_page(html, markers, errors, refusals)
             # A challenge solves itself in a real browser and then shows the page; anything else
             # that is not the page yet is still loading, or waiting on its consent screen.
-            if page in ("content", "errorpage"):
+            if page in ("content", "errorpage", "refused"):
                 break
             if not pressed and page == "unknown":
                 pressed = await self.press_consent(accept)
@@ -120,7 +123,7 @@ async def main() -> None:
             timeout = float(req.get("timeout") or 30)
             if op == "get":
                 answer = await asyncio.wait_for(
-                    b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout),
+                    b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout, req.get("refusals") or []),
                     timeout + 15,
                 )
             elif op == "cookies":

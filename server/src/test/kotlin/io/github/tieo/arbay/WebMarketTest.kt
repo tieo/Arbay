@@ -143,6 +143,19 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a box whose title element holds its price is named by its picture`() {
+        // ManoMano's tiles put the price where the class says title; 56 offers were named "1990,00€".
+        val box = { name: String, price: String, href: String ->
+            """<div class="tile"><a href="$href"><img alt="$name" src="/i$href.jpg"></a><span class="tile-title">$price</span></div>"""
+        }
+        val html = "<section>" + box("Schulte Walk In MasterClass 160 x 200", "1990,00€", "/a") +
+            box("Schulte Duschwand Walk In 120", "740,00€", "/b") + box("Schulte Eckeinstieg Sunny 90", "590,00€", "/c") + "</section>"
+        val offers = ProductPages.offers(html, "https://m.example/s?q=schulte")
+        assertEquals(listOf("Schulte Walk In MasterClass 160 x 200", "Schulte Duschwand Walk In 120", "Schulte Eckeinstieg Sunny 90"), offers.map { it.title })
+        assertEquals(Money(199000, Currency.EUR), offers[0].price)
+    }
+
+    @Test
     fun `a JSON-LD block with an unescaped quote in a name is still read`() {
         // pearl.de writes a size's inch mark into the name as it is.
         val html = """<script type="application/ld+json"> {

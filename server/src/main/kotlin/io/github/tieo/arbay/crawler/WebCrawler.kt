@@ -25,8 +25,8 @@ import org.slf4j.LoggerFactory
 /**
  * Every shop on the web, beyond the markets Arbay has a crawler of its own for.
  *
- * The words go to a search engine (the SearXNG beside the server, which asks Bing, DuckDuckGo and
- * the others that answer it) and to the own search of every site Arbay has learned to read. Each
+ * The words go to the search engines Arbay asks itself ([SearchEngines]) and to the own search
+ * of every site Arbay has learned to read. Each
  * page found is read for its offers: the structured data shops publish for search engines first
  * ([ProductPages]), the site's [SiteRecipe] where it has one. A page that sells something and
  * yields nothing is reported to [SiteGaps], whose reader writes the site a recipe, so the next
@@ -48,16 +48,25 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         if (listed.isEmpty()) throw CrawlerBlockedException("Web: no search engine answered", ErrorType.SERVICE_UNAVAILABLE_503)
         // Learned sites' own searches first: read by their exact recipes they win over the same
         // offer an engine's page gives less exactly (gerach's card states its rate from three days
-        // on, its API one day's), and the page limit never cuts them.
-        val found = (siteSearches(words) + listed.map { withoutSession(unproxied(it)) }).distinct()
-            .filterNot { coveredElsewhere(it) }
+        // on, its API one day's). The page limit is the engines' alone, so the learned sites never
+        // push out a shop an engine found: seventeen of them left 43 of 60 pages to the engines.
+        val searches = siteSearches(words)
+        val found = searches + listed.map { withoutSession(unproxied(it)) }.distinct()
+            .filterNot { it in searches || coveredElsewhere(it) }
             .take(MAX_PAGES)
         log.info("Web: '{}' reads {} pages", words, found.size)
         val now = Clock.System.now()
         val gate = Semaphore(PARALLEL_PAGES)
         val renders = java.util.concurrent.atomic.AtomicInteger(RENDERS_PER_SEARCH)
         val pages = coroutineScope {
-            found.map { url -> async { gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) } } }.awaitAll()
+            found.map { url ->
+                async {
+                    gate.withPermit { withTimeoutOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) }
+                        // Each page's offers show as it is read: the slowest page of sixty is often
+                        // a minute behind the rest.
+                        .also { emitPartialResults(listingsOf(it.offers, now)) }
+                }
+            }.awaitAll()
         }
         val outcomes = pages.groupingBy { it.outcome }.eachCount()
         log.info("Web: '{}' read {} pages: {} with offers, {} guessed, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
@@ -211,13 +220,13 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     companion object {
 
         /**
-         * A shop page as a person's Chrome shows it once its scripts ran: [SearchBrowser], warm and on
+         * A shop page as a person's Chrome shows it once its scripts ran: [RenderBrowser], warm and on
          * a display of its own, waiting until the page carries the marks shops put on their product
          * data, or [RENDER_TIMEOUT_S] passed. A headless Playwright waiting for the network to go
          * idle timed out on every MediaMarkt and Saturn page, whose trackers never stop.
          */
         internal suspend fun rendered(url: String): String? =
-            SearchBrowser.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
+            RenderBrowser.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
 
         /** A site's own API, asked for JSON: SAP Commerce's answers a browser's Accept header in XML. */
         internal suspend fun apiAnswer(client: HttpClient, url: String): String {
@@ -265,7 +274,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
 
 
-        /** Pages read per search, of what the engines and the learned sites list. */
+        /** Pages read per search of what the engines list, beside each learned site's own search. */
         private const val MAX_PAGES = 60
         private const val PARALLEL_PAGES = 8
         private const val PAGE_TIMEOUT_MS = 45_000L

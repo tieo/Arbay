@@ -47,7 +47,7 @@ open class WarmBrowser(
     private var output: BufferedReader? = null
 
     /** A page as the browser read it: [page] says whether it is the page asked for ("content"), the
-     *  site's error page, a challenge, or none of them. */
+     *  site's error page, a challenge, the site refusing the browser ("refused"), or none of them. */
     class Page(val html: String, val url: String, val page: String)
 
     /**
@@ -55,25 +55,26 @@ open class WarmBrowser(
      * [timeoutS] passes. Null where the browser could not be started or did not answer, which
      * leaves the caller its other ways in.
      */
-    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30): Page? {
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList()): Page? {
         // One browser serves every search of its site, and a crawl waiting its turn is not its
         // market failing to answer: eBay's five sites share this one, and four waited out their
         // whole time limit behind the fifth.
         val clock = kotlin.coroutines.coroutineContext[CrawlClock]
         if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
         try {
-            return read(url, markers, timeoutS)
+            return read(url, markers, timeoutS, refusals)
         } finally {
             lock.unlock()
         }
     }
 
-    private suspend fun read(url: String, markers: List<String>, timeoutS: Int): Page? {
+    private suspend fun read(url: String, markers: List<String>, timeoutS: Int, refusals: List<String>): Page? {
         val request = JsonObject(mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
             "errors" to JsonArray(errors.map(::JsonPrimitive)),
             "accept" to JsonArray(accept.map(::JsonPrimitive)),
+            "refusals" to JsonArray(refusals.map(::JsonPrimitive)),
         ))
         val answer = try {
             withContext(Dispatchers.IO) {
@@ -171,3 +172,10 @@ object SearchBrowser : WarmBrowser(
     "search", 91, "search-profile", "search-browser.log",
     accept = listOf("Alle akzeptieren", "Accept all", "Akzeptieren", "Tout accepter", "Accetta tutto"),
 )
+
+/**
+ * The Chrome shop pages are read through once their scripts ran. Apart from [SearchBrowser], so a
+ * shop page that hangs until its time runs out, and gets the browser restarted, holds up no search
+ * engine: Duschmeister's own search did that on every web search, and each engine behind it waited.
+ */
+object RenderBrowser : WarmBrowser("render", 92, "render-profile", "render-browser.log")

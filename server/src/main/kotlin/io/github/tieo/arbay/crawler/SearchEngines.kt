@@ -29,32 +29,36 @@ class SearchEngines(private val client: HttpClient) {
      * snapshot, since that is how a changed results page shows.
      */
     suspend fun links(words: String): List<String> = coroutineScope {
-        val plain = ENGINES.filter { !it.browser }.map { e -> async { results(e, words) } }
-        val browser = ENGINES.filter { it.browser }.map { e -> results(e, words) }
+        val asked = ENGINES.filter { !resting(it) }
+        val plain = asked.filter { !it.browser }.flatMap { e -> (1..e.pages).map { page -> async { results(e, words, page) } } }
+        val browser = asked.filter { it.browser }.map { e -> results(e, words) }
         (plain.awaitAll() + browser).flatten().distinct()
     }
 
-    private suspend fun results(engine: Engine, words: String): List<String> {
-        val url = engine.url(words)
-        val html = resultsPage(engine, words).getOrElse { return emptyList() }
+    private suspend fun results(engine: Engine, words: String, page: Int = 1): List<String> {
+        val url = engine.pageUrl(words, page)
+        val html = resultsPage(engine, words, page).getOrElse { return emptyList() }
         // An ad goes through an ad network's redirect before the shop; it is followed like the
         // engine's own.
         val (ads, direct) = resultLinks(html, engine.host).partition { url -> AD_HOSTS.any { it in SiteRecipes.domainOf(url) } }
         val links = (direct + resolved(redirectsIn(html, engine) + ads, engine)).distinct()
-        if (links.isEmpty()) {
+        if (links.isEmpty() && page == 1) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
         }
-        log.info("Web: {} listed {} pages for '{}'", engine.name, links.size, words)
+        log.info("Web: {} listed {} pages for '{}'{}", engine.name, links.size, words, if (page > 1) " on its page $page" else "")
         return links
     }
 
     /** An engine's results page for the words, or why there is none. */
-    private suspend fun resultsPage(engine: Engine, words: String): Result<String> {
-        val url = engine.url(words)
+    private suspend fun resultsPage(engine: Engine, words: String, pageNo: Int = 1): Result<String> {
+        val url = engine.pageUrl(words, pageNo)
         return try {
             if (engine.browser) {
-                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25)
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25, refusals = engine.refusals)
                     ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
+                // An engine that put a bot check before its results rests a while: asked again at
+                // once it checks again, and each check held every search up for the browser's wait.
+                if (page.page == "refused") refused[engine.name] = System.currentTimeMillis()
                 if (page.page != "content") {
                     ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("no results page (${page.page})"), ErrorType.PARSE_ERROR, url, html = page.html, finalUrl = page.url)
                     log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page.page)
@@ -76,6 +80,7 @@ class SearchEngines(private val client: HttpClient) {
      */
     suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
+        val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
         suspend fun ask(e: Engine): EngineResults {
             val html = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
@@ -90,9 +95,9 @@ class SearchEngines(private val client: HttpClient) {
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
         }
-        val plain = picked.filter { !it.browser }.map { e -> async { ask(e) } }
-        val browser = picked.filter { it.browser }.map { ask(it) }
-        val all = plain.awaitAll() + browser
+        val plain = picked.filter { !it.browser && !resting(it) }.map { e -> async { ask(e) } }
+        val browser = picked.filter { it.browser && !resting(it) }.map { ask(it) }
+        val all = plain.awaitAll() + browser + resting
         val merged = all.flatMap { e -> e.results.map { e.engine to it } }
             .groupBy { (_, r) -> r.url.removeSuffix("/") }
             .map { (_, hits) ->
@@ -139,6 +144,14 @@ class SearchEngines(private val client: HttpClient) {
         engine { requestTimeout = 15_000 }
     }
 
+    /** When each engine last put a bot check before its results. */
+    private val refused = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Whether [engine] checked the server for a bot recently, and is left out until it is likely
+     *  to answer again. */
+    private fun resting(engine: Engine): Boolean =
+        refused[engine.name]?.let { System.currentTimeMillis() - it < REST_AFTER_A_CHECK_MS } == true
+
     /** A search engine: its results page for some words, whether only a browser gets it, and what
      *  shows that page arrived. */
     private class Engine(
@@ -148,12 +161,23 @@ class SearchEngines(private val client: HttpClient) {
         val markers: List<String>,
         /** Paths of the engine's own redirects its results link to, where it hides the address. */
         val redirects: List<String> = emptyList(),
+        /** Text of the bot check the engine puts before its results instead of answering. */
+        val refusals: List<String> = emptyList(),
+        /** Results pages a search reads, and the address of a page after the first. */
+        val pages: Int = 1,
+        val next: (String, Int) -> String = { url, _ -> url },
         val url: (String) -> String,
-    )
+    ) {
+        fun pageUrl(words: String, page: Int) = if (page <= 1) url(words) else next(url(words), page)
+    }
 
     companion object {
         private val ENGINES = listOf(
-            Engine("Bing", "bing.", false, emptyList()) { q -> "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE&count=30" },
+            // Bing prints ten results a page whatever count asks for; the second page adds ten more
+            // over plain HTTP, no browser needed.
+            Engine("Bing", "bing.", false, emptyList(), pages = 2, next = { url, page -> "$url&first=${(page - 1) * 10 + 1}" }) { q ->
+                "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE"
+            },
             Engine("DuckDuckGo", "duckduckgo.", false, emptyList()) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
             Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?")) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
@@ -161,7 +185,7 @@ class SearchEngines(private val client: HttpClient) {
             Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
                 "https://www.qwant.com/?q=${q.encodeUrl()}&t=web&locale=de_DE"
             },
-            Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\"")) { q ->
+            Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\""), refusals = listOf("Verifying you're not a bot", "decided to schedule a captcha")) { q ->
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
@@ -280,6 +304,9 @@ class SearchEngines(private val client: HttpClient) {
         private const val MAX_HOPS = 4
 
         private const val PARALLEL_PAGES = 8
+
+        /** How long an engine that put a bot check before its results is left out. */
+        private const val REST_AFTER_A_CHECK_MS = 60 * 60 * 1000L
     }
 }
 

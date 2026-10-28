@@ -310,8 +310,12 @@ object ProductPages {
         val heading = box.selectFirst("h2, h3, h4, [class*=title], [class*=Title], [class*=name], [class*=Name]")
         val link = heading?.selectFirst("a[href]") ?: heading?.closest("a[href]")
             ?: box.select("a[href]").maxByOrNull { it.text().length }
-        val title = (heading?.text()?.takeIf { it.length >= 6 } ?: link?.text())?.trim()
-            ?.takeIf { it.length >= 6 && !CALL_TO_ACTION.containsMatchIn(it.lowercase()) } ?: return null
+        // The first name the box gives, in what usually holds it: a heading, the longest link, the
+        // picture's description. A price is never the name, wherever it sits: ManoMano's boxes put
+        // theirs in an element whose class says title, and 56 offers were named "1990,00€".
+        val title = listOfNotNull(heading?.text(), link?.text(), box.selectFirst("img[alt]")?.attr("alt"))
+            .map { it.trim() }
+            .firstOrNull { it.length >= 6 && !CALL_TO_ACTION.containsMatchIn(it.lowercase()) && !isOnlyAPrice(it) } ?: return null
         val priceEl = priceElement(box)
         val priceText = priceEl?.let { it.attr("content").ifBlank { it.attr("data-price") }.ifBlank { it.text() } }
             ?: PRICE_IN_TEXT.find(box.text().lowercase())?.value ?: return null
@@ -327,6 +331,12 @@ object ProductPages {
     }
 
     private const val MIN_BOXES = 3
+
+    /** Text that is a price and nothing else: "1990,00€", "ab 59,90 EUR". */
+    private fun isOnlyAPrice(text: String): Boolean =
+        PRICE_IN_TEXT.containsMatchIn(text.lowercase()) && ONLY_A_PRICE.matches(text.trim())
+
+    private val ONLY_A_PRICE = Regex("""(?i)((ab|from|uvp|statt|nur)\s*)?(€|eur|chf|£)?\s*\d[\d.,\s]*\s*(€|eur|chf|£|,-)?\s*\*?""")
 
     /** A button's words, which a test report's offer boxes carry where a shop's carry the name:
      *  "Zum Angebot bei cyberport" is a link, not a product. */
