@@ -127,15 +127,21 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
     }
 
     /**
-     * An ad page's state: its technical data box while it is up; a page titled "Dieses Fahrzeug ist
-     * nicht verfügbar" once the dealer has taken it down or sold it. The address keeps answering
-     * either way, so only the page says which.
+     * An ad page's state: its technical data box while it is up; once the dealer has taken it down
+     * or sold it, either a page titled "Dieses Fahrzeug ist nicht verfügbar" or the site's "Seite
+     * nicht gefunden" page, which it tracks as page "404". The address keeps answering either way,
+     * so only the page says which. "Seite nicht gefunden" alone proves nothing: every page carries
+     * it among its translations.
      */
     internal fun adStateOf(html: String): io.github.tieo.arbay.model.AdState? = when {
         "data-testid=\"vip-technical-data-box\"" in html -> io.github.tieo.arbay.model.AdState.LIVE
         Regex("""<title>[^<]*nicht verfügbar""", RegexOption.IGNORE_CASE).containsMatchIn(html) -> io.github.tieo.arbay.model.AdState.DELETED
+        NOT_FOUND_PAGE.containsMatchIn(html) -> io.github.tieo.arbay.model.AdState.DELETED
         else -> null
     }
+
+    /** The page name the "Seite nicht gefunden" page reports, inside the page's script data. */
+    private val NOT_FOUND_PAGE = Regex("""trackingPageName\\*"\s*:\s*\\*"404\\*"""")
 
     /**
      * The gearboxes asked for, one search each; null asks for none.

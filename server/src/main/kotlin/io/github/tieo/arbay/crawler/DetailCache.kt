@@ -52,9 +52,21 @@ object DetailCache {
         log.info("Loaded ${entries.size} cached detail pages")
     }
 
+    /**
+     * When a market's pages started being read the way they are now. A page cached before then
+     * holds what the older reading made of it, so it counts as unread and is read again: a cached
+     * mobile.de page kept its equipment list run together ("NormaldachKraftstofftank") for the
+     * cache's thirty days after the list was read one item per line, and the normal roof it states
+     * kept a van in a search for high roofs.
+     */
+    private val readingChangedAtMs: Map<String, Long> = mapOf(
+        "MOBILE_DE" to kotlin.time.Instant.parse("2026-10-29T08:17:00Z").toEpochMilliseconds(),
+    )
+
     fun get(listingId: String): ListingDetail? {
         val e = entries[listingId] ?: return null
-        if (Clock.System.now().toEpochMilliseconds() - e.storedAtMs > TTL_MS) {
+        val readSince = readingChangedAtMs[listingId.substringBefore(':')] ?: 0L
+        if (Clock.System.now().toEpochMilliseconds() - e.storedAtMs > TTL_MS || e.storedAtMs < readSince) {
             entries.remove(listingId)
             return null
         }

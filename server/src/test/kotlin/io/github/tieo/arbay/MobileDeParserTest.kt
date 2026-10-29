@@ -67,6 +67,9 @@ class MobileDeParserTest {
         // Live, 2026-10-16: the Oldenburg Crafter's address answered with this page once it was sold.
         val gone = "<html><head><title>Dieses Fahrzeug ist nicht verfügbar</title></head><body>" + "x".repeat(50_000) + "</body></html>"
         assertEquals(io.github.tieo.arbay.model.AdState.DELETED, crawler.adStateOf(gone))
+        // Live, 2026-10-29: the Schrobenhausen Crafter relisted under a new id; its old address answered this.
+        val notFound = javaClass.getResource("/fixtures/mobilede_ad_gone.html")!!.readText()
+        assertEquals(io.github.tieo.arbay.model.AdState.DELETED, crawler.adStateOf(notFound))
         assertEquals(null, crawler.adStateOf("<html><title>mobile.de</title></html>"))
     }
 
