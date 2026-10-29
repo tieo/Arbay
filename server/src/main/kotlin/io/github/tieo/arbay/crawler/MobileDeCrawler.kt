@@ -222,8 +222,12 @@ class MobileDeCrawler(private val client: HttpClient) : Crawler, FiltersAtTheSou
         // element around both carries the whole of it as its label.
         val headline = doc.selectFirst("[data-testid=vip-ad-title]")?.parents()
             ?.firstOrNull { it.hasAttr("aria-label") }?.attr("aria-label")?.trim()?.takeIf { it.isNotBlank() }
+        // A line ends at a <br> and at the end of any block, such as each item of a dealer's equipment
+        // list: without the break the items run together ("NormaldachKraftstofftank") and the roof
+        // they state is not read.
         val sellersText = doc.selectFirst("[data-testid=vip-vehicle-description-text]")?.let { text ->
             text.select("br").forEach { it.after(TextNode("\n")) }
+            text.select("*").filter { it !== text && it.isBlock }.forEach { it.after(TextNode("\n")) }
             text.wholeText().lines().joinToString("\n") { it.trim() }.trim().takeIf { it.isNotBlank() }
         }
         val trimLine = fact("trimLine")

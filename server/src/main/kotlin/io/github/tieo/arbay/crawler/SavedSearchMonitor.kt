@@ -4,6 +4,8 @@ import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.biggestLosses
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
@@ -190,29 +192,39 @@ class SavedSearchMonitor(
         // The archived copy first: it is the one whose images are mirrored here, so it still shows
         // a photo after the platform drops the listing. The repo copy stands in while archiving is
         // still in flight, since that runs in the background after a crawl.
+        val product = productRepo.getById(productId)
         return ids.mapNotNull { ListingArchive.get(it) ?: listingRepo.getById(it) }
-            .map { withPhotosToday(it, productId) }
+            .map { asToday(it, product) }
     }
 
     /**
-     * [l] with the ads elsewhere that show its photos as the prints say now, not as they said when
-     * the watch found it, and its fit weighed again where that changed, since an ad showing
-     * another's photos gets no fit. Live, 2026-10-27: a Fellbach dealer's Crafter, posted under two
-     * trading names, stayed a likely scam with no fit among the Crafter search's new offers for
-     * days after the rule stopped calling one dealer's two ads a copy.
+     * [l] as the search weighs it today: with the ads elsewhere that show its photos as the prints
+     * say now, and its fit weighed again against the search's wishes and [FitScore]'s weights as
+     * they are now, not as they were when the watch found it. Live, 2026-10-27: a Fellbach dealer's
+     * Crafter, posted under two trading names, stayed a likely scam with no fit among the Crafter
+     * search's new offers for days after the rule stopped calling one dealer's two ads a copy; and
+     * on 2026-10-29 a 140 PS Crafter still headed them at 88 % the morning after power was weighed
+     * up, while the search itself put it at 80 %.
      */
-    private fun withPhotosToday(l: Listing, productId: String): Listing {
+    private fun asToday(l: Listing, product: TrackedProduct?): Listing {
         val copies = PhotoPrints.copiesOf(l)
-        if (copies == l.photosAlsoIn) return l
-        val now = l.copy(photosAlsoIn = copies)
+        val now = if (copies == l.photosAlsoIn) l else l.copy(photosAlsoIn = copies)
         if (copies.isNotEmpty()) return now.copy(matchScore = null, fit = emptyList())
-        val product = productRepo.getById(productId) ?: return now
-        val q = product.searchQuery
+        val q = product?.searchQuery ?: return now
         val things = q.productWishes?.takeUnless { it.isEmpty }
         val soft = product.fitAlert.softDriveHours
-        val fit = if (things != null) FitScore.score(now, things, FitScore.priceEur(now), soft)
-            else FitScore.score(now, q.toCarFilters() ?: io.github.tieo.arbay.model.CarFilters(), FitScore.priceEur(now), soft)
-        return fit?.let { now.copy(matchScore = it.score, fit = it.parts) } ?: now
+        // A search with neither a vehicle's nor a thing's wishes has no fit to weigh again.
+        val fit = when {
+            things != null -> FitScore.score(now, things, FitScore.priceEur(now), soft)
+            else -> FitScore.score(now, q.toCarFilters() ?: return now, FitScore.priceEur(now), soft)
+        } ?: return now.copy(matchScore = null, fit = emptyList())
+        // A description of the ideal vehicle counts half, as in the search, and is kept as it was read.
+        val described = now.fit.firstOrNull { it.wish == FitWish.DESCRIPTION }?.let { it.points / it.of }
+            ?: return now.copy(matchScore = fit.score, fit = fit.parts)
+        return now.copy(
+            matchScore = (described + fit.score) / 2,
+            fit = fit.parts.map { it.copy(points = it.points / 2, of = it.of / 2) } + FitPart(FitWish.DESCRIPTION, described * 50, 50.0, null),
+        )
     }
 
     /**

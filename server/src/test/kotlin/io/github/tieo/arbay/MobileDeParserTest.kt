@@ -130,6 +130,19 @@ class MobileDeParserTest {
     }
 
     @Test
+    fun `each item of an equipment list is a line of its own`() {
+        val html = "<html><body><div data-testid=\"vip-technical-data-box\"></div>" +
+            "<div data-testid=\"vip-vehicle-description-text\"><b>Weitere Ausstattung:</b><br>" +
+            "<ul><li>Karosserie/Aufbau: Kasten Standard</li><li>Karosserievariante: Normaldach</li><li>Kraftstofftank: 75 Ltr.</li></ul>" +
+            "<p>Radstand 3640 mm</p><div>Zul. Gesamtgewicht 3,50 t</div></div></body></html>"
+        val text = assertNotNull(MobileDeCrawler(dummyClient()).parseAd(html)?.description)
+        assertTrue("Karosserievariante: Normaldach\nKraftstofftank: 75 Ltr." in text, text)
+        assertTrue("Radstand 3640 mm\nZul. Gesamtgewicht" in text, text)
+        // The roof the list states is read: VW's Normaldach, the common scale's H1.
+        assertEquals(1, io.github.tieo.arbay.crawler.VanDimensions.read("Volkswagen Crafter\n$text", wheelbaseMm = 3640).heightMax)
+    }
+
+    @Test
     fun `an ad page says when the ad first went up`() {
         val html = javaClass.getResource("/fixtures/mobilede_ad.html")!!.readText() +
             "<script>self.__next_f.push([1,\"{\\\"created\\\":1790255912,\\\"modified\\\":1791294945,\\\"renewed\\\":1790255912,\\\"rating\\\":{\\\"count\\\":12,\\\"totalCount\\\":474,\\\"score\\\":4.9}}\"])</script>"
