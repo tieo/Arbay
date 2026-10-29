@@ -51,7 +51,7 @@ object FitScore {
     private const val UNKNOWN = 0.45
 
     private val notAClosedVan = Regex(
-        """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine|rettungswagen|krankenwagen|\b[rk]tw\b""",
+        """(?i)pritsche|kipper|koffer|ladebordwand|plane|autotransporter|blitzlader|abschlepp|kühl|frigo|sp(?:ü|ue)lwagen|wohnmobil|camper|california|womo|ausbau|rollstuhl|doka|doppelkabine|mixto|rettungswagen|krankenwagen|\b[rk]tw\b""",
     )
     // A workshop fit-out is shelving inside a closed van, "Würth Ausbau", "Sortimo-Ausbau",
     // "Werkstattausbau"; a bare "Ausbau" in a van's headline is a camper conversion.

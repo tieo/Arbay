@@ -92,6 +92,8 @@ class FitScoreTest {
     @Test
     fun `a conversion or another fuel is not the van wanted`() {
         assertNull(fit(van(title = "Volkswagen Crafter California Camper")))
+        // A Mixto is the closed van with a second seat row behind a partition, a Doka in a box.
+        assertNull(fit(van(title = "VW Crafter Mixto 6 Sitzer L3H2")))
         assertNull(fit(van(vehicle = van().vehicle!!.copy(fuel = Fuel.ELECTRIC))))
     }
 
