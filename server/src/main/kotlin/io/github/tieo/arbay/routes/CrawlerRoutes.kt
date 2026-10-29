@@ -605,8 +605,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // Checked only before a fetch: a page already read is served without resolving its host,
             // so it is still there when the server cannot reach the internet.
             val url = requirePublicHttpUrl(rawUrl)
+            // The market's own id is the listing id without its market: mobile.de builds the page
+            // address from it, and "details.html?id=MOBILE_DE:449149910" is its "not found" page.
             val stub = Listing(
-                id = id, platformId = platform, externalId = id, url = url, title = "",
+                id = id, platformId = platform, externalId = id.removePrefix("${platform.name}:"), url = url, title = "",
                 price = Money(0, Currency.EUR), scrapedAt = kotlin.time.Clock.System.now(),
             )
             val detail = crawler.fetchDetail(stub)
