@@ -144,11 +144,6 @@ private fun PricesPanel(session: Session, route: Route.Results, state: ResultsSt
         Figure("Middle", s.middle?.format() ?: "–", Modifier.weight(1f))
         Figure("Offers", "${s.count}", Modifier.weight(1f))
     }
-    state.newPrice?.let { new ->
-        HorizontalDivider(color = arbay.line)
-        Text("What it costs new", style = MaterialTheme.typography.titleMedium)
-        Figure("New, in a shop", new.format(), Modifier.fillMaxWidth())
-    }
     HorizontalDivider(color = arbay.line)
     Text("What it sold for", style = MaterialTheme.typography.titleMedium)
     val sold = s.sold
@@ -204,7 +199,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
                 HiddenKind.Condition -> TextButton(onClick = { state.showEveryCondition(products) }) { Text("Show every condition") }
                 HiddenKind.SaleType -> TextButton(onClick = { state.showBothSaleTypes(products) }) { Text("Show both") }
                 HiddenKind.NotNew -> TextButton(onClick = { state.toggleNewOnly() }) { Text("Show everything") }
-                HiddenKind.LikelyScam, HiddenKind.AboveNewPrice -> {}
+                HiddenKind.LikelyScam -> {}
                 is HiddenKind.Search -> if (kind.reason == DropReason.VEHICLE_CRITERIA) {
                     TextButton(onClick = { nav.replace(route.copy(panel = Panel.CRITERIA)) }) { Text("Edit the criteria") }
                 }
