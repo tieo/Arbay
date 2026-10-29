@@ -42,6 +42,20 @@ class EbayItemShippingTest {
     }
 
     @Test
+    fun `an item eBay says may not ship to Germany is not sent here`() {
+        // VIPOUTLET's WD_BLACK SN850X on ebay.com, read from Germany on 2026-10-29: no shipping
+        // service in its data, and this line where the delivery would be.
+        val shipping = ebayItemShipping(
+            "<html><span>May not ship to Germany. Read item description or contact seller for shipping options.</span>" +
+                "\"shippingOptions\":\"Shipping options\"</html>",
+        )!!
+        assertFalse(shipping.available)
+        assertFalse(shipping.pickup)
+        // A service that reaches Germany says more than the line does.
+        assertTrue(ebayItemShipping(page.replace("<body", "<body><span>May not ship to Germany.</span>"))!!.available)
+    }
+
+    @Test
     fun `a page without the data says nothing`() {
         assertNull(ebayItemShipping("<html>\"shippingOptions\":\"Versandoptionen\"</html>"))
         assertNull(ebaySellerNotes("<html></html>"))

@@ -69,7 +69,7 @@ fun offerFacts(listing: Listing, page: OfferReading): List<String> = buildList {
     listing.rentRates.forEach { add("${it.period.label} ${it.price.format()}") }
     page.shipping?.cost?.takeIf { it.amount > 0 }?.let { add("delivery ${it.format()}") }
     if (page.shipping?.free == true) add("free delivery")
-    if (page.shipping?.available == false && page.shipping.pickup) add("collection only")
+    if (page.shipping?.available == false) add(if (page.shipping.pickup) "collection only" else "not sent to Germany")
     if (listing.negotiable) add("negotiable")
     val profile = page.seller
     if (profile != null) add(profile.fact)

@@ -9,6 +9,7 @@ import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.NotificationSubfilter
@@ -64,9 +65,12 @@ class SavedSearchMonitor(
     private val listingRepo: ListingRepo,
     /** This server's own address, which a fit alert searches through like the app does. */
     private val selfUrl: String? = null,
-    /** The seller's own text of an offer, read off its page; null when it cannot be read. */
-    private val adText: suspend (Listing) -> String? = ::readAdText,
+    /** An offer's page as read before or read now: the seller's text and how it reaches the
+     *  buyer; null when it cannot be read. */
+    private val adPage: suspend (Listing) -> ListingDetail? = ::readAdPage,
 ) {
+    private suspend fun adText(listing: Listing): String? = adPage(listing)?.description
+
 
     private val log = LoggerFactory.getLogger(SavedSearchMonitor::class.java)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -366,7 +370,7 @@ class SavedSearchMonitor(
             }
             // The card rarely says a thing is broken, or that the seller takes buyers off the
             // market, and the ad's text often does; the few offers worth a push are read first.
-            .filterNot { (_, l) -> soldBroken(l) || offMarket(l) }
+            .filterNot { (_, l) -> soldBroken(l) || offMarket(l) || noWayHere(l) }
         if (subfilterMatches.isNotEmpty()) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
@@ -630,7 +634,7 @@ class SavedSearchMonitor(
             val better = FitScore.beatenBy(l, online) ?: return@filter true
             log.info("fit alert {}: {} beaten by {}", product.name, l.url, better.url)
             false
-        }.filterNot { (l, _) -> judgedSomethingElse(l) || offMarket(l) }
+        }.filterNot { (l, _) -> judgedSomethingElse(l) || offMarket(l) || noWayHere(l) }
         log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return
@@ -710,6 +714,16 @@ class SavedSearchMonitor(
     /** Whether the offer's title or the seller's text says it is sold broken. */
     private suspend fun soldBroken(listing: Listing): Boolean =
         Condition.soldAsDefective(listing.title, adText(listing))
+
+    /** Whether the offer's page says it is neither sent to Germany nor collected: eBay's US sites
+     *  answer a search for "2TB NVMe" with items whose page says "May not ship to Germany", and
+     *  the 2 TB watch alerted on one nobody here can buy. */
+    private suspend fun noWayHere(listing: Listing): Boolean {
+        val shipping = adPage(listing)?.shipping ?: return false
+        if (shipping.available || shipping.pickup) return false
+        log.info("not alerting {}: its page says it is not sent here", listing.url)
+        return true
+    }
 
     /** Whether the ad sends its buyer off the market ([io.github.tieo.arbay.model.OffMarket]). */
     private suspend fun offMarket(listing: Listing): Boolean =
@@ -939,11 +953,11 @@ internal fun <F> bestCopyEach(scored: List<Pair<Listing, F>>, score: (F) -> Doub
     scored.sortedByDescending { score(it.second) }
         .distinctBy { (l, _) -> listOf(FitScore.priceEur(l).toLong(), l.vehicle?.mileageKm, l.vehicle?.firstRegYear) }
 
-/** The seller's text of [listing], from a page read before or read now. */
-private suspend fun readAdText(listing: Listing): String? = try {
-    DetailCache.get(listing.id)?.description
+/** The page of [listing], read before or read now. */
+private suspend fun readAdPage(listing: Listing): ListingDetail? = try {
+    DetailCache.get(listing.id)
         ?: CrawlerRegistry.crawlerFor(listing.platformId)?.fetchDetail(listing)
-            ?.also { DetailCache.put(listing.id, it) }?.description
+            ?.also { DetailCache.put(listing.id, it) }
 } catch (e: CancellationException) {
     throw e
 } catch (_: Exception) {

@@ -937,7 +937,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         coupon?.let { c -> listOfNotNull(c.code?.let { "with code $it" } ?: "with a coupon", oldPrice?.let { "${it.amount / 100.0} without" }).joinToString(", ") },
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
-        shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else "pickup" },
+        shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else if (s.pickup) "pickup" else "not sent to Germany" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         foundAt?.let { "found ${(Clock.System.now() - it).inWholeHours} h ago" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),

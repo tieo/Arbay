@@ -872,7 +872,12 @@ internal fun ebayStock(text: String, html: String = ""): Pair<Int, Boolean>? {
  * for DHL. Null where the page states no service that reaches Germany and no collection.
  */
 internal fun ebayItemShipping(html: String): Shipping? {
-    val options = ebayJsonAfter(html, "\"shippingOptions\":") as? JsonArray ?: return null
+    // An item its seller sends only at home carries no service reaching Germany, and the page
+    // says so: "May not ship to Germany. Read item description or contact seller for shipping
+    // options." (VIPOUTLET's SN850X on ebay.com, read from Germany). Elsewhere nothing stated is
+    // nothing known.
+    val nothingStated = if (NOT_SENT_HERE.containsMatchIn(html)) Shipping(available = false) else null
+    val options = ebayJsonAfter(html, "\"shippingOptions\":") as? JsonArray ?: return nothingStated
     val services = options.flatMap { o -> (o as? JsonObject)?.get("shippingServices") as? JsonArray ?: JsonArray(emptyList()) }
         .mapNotNull { it as? JsonObject }
     val (collected, sent) = services.partition { s ->
@@ -886,10 +891,13 @@ internal fun ebayItemShipping(html: String): Shipping? {
         val currency = price["currency"]?.jsonPrimitive?.contentOrNull?.let { c -> Currency.entries.firstOrNull { it.name == c } } ?: return@mapNotNull null
         Money(kotlin.math.round(amount * 100).toLong(), currency)
     }
-    if (costs.isEmpty() && collected.isEmpty()) return null
+    if (costs.isEmpty() && collected.isEmpty()) return nothingStated
     val cheapest = costs.minByOrNull { it.amount }
     return Shipping(cost = cheapest, free = cheapest?.amount == 0L, pickup = collected.isNotEmpty(), available = cheapest != null)
 }
+
+/** eBay's line on an item page whose seller does not send to the reader's country, Germany. */
+private val NOT_SENT_HERE = Regex("""(?i)(may not|does not|doesn't) ship to germany""")
 
 /** The places a shipping service names that include a buyer in Germany. */
 private val REACHES_GERMANY = setOf("DEU", "DE", "EUROPE", "EU", "WORLDWIDE")

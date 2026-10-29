@@ -225,7 +225,7 @@ class SavedSearchMonitorTest {
     @Test
     fun `a bar set by an offer put away is learned again from the market`() {
         val products = io.github.tieo.arbay.repo.ProductRepo()
-        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adText = { null })
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adPage = { null })
         val fake = listing("Crucial P310 2TB NVMe", 84)
         val real = listing("WD Black SN770M 2TB NVMe", 120, Condition.USED)
         val rule = sf().copy(learnUntil = Instant.fromEpochMilliseconds(Long.MAX_VALUE / 4), bestSeenEur = 84, bestSeenListingId = fake.id)
@@ -255,7 +255,7 @@ class SavedSearchMonitorTest {
             working.id to "ich verkaufe eine voll funktionsfähige und schnelle M.2 NVMe SSD",
         )
         val products = io.github.tieo.arbay.repo.ProductRepo()
-        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adText = { texts[it.id] })
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo(), adPage = { l -> texts[l.id]?.let { io.github.tieo.arbay.model.ListingDetail(description = it) } })
         val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
             id = "", name = "2TB NVMe",
             searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "2TB NVMe", category = io.github.tieo.arbay.model.MarketGroup.GENERAL),
