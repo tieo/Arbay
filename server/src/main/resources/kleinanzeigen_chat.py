@@ -108,7 +108,13 @@ class Chat:
         # The window fills the display the user signs in on, and a restart (the server's, which
         # ends Chrome abruptly) leaves no restore prompt over the page.
         kwargs = {"headless": False, "user_data_dir": PROFILE,
-                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble"]}
+                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble",
+                                   # Pages left behind stay alive in the back/forward cache, each in
+                                   # a renderer of its own, and filled the container's memory. The
+                                   # last --disable-features is the one Chrome reads, so zendriver's
+                                   # own are repeated here.
+                                   "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
+                                   "--renderer-process-limit=6"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)

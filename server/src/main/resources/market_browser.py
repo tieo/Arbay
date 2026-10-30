@@ -178,7 +178,13 @@ class MarketBrowser:
         kwargs = {"headless": False, "user_data_dir": self.profile,
                   "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble",
                                    # No bar over the page warning of the automation's own flags.
-                                   "--test-type"]}
+                                   "--test-type",
+                                   # Pages left behind stay alive in the back/forward cache, each in
+                                   # a renderer of its own, and filled the container's memory. The
+                                   # last --disable-features is the one Chrome reads, so zendriver's
+                                   # own are repeated here.
+                                   "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
+                                   "--renderer-process-limit=6"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
