@@ -152,6 +152,14 @@ class FitScoreTest {
     }
 
     @Test
+    fun `air conditioning named the way dealers and VW word it counts`() {
+        fun ac(description: String) = fit(van(description = description))!!.parts.single { it.wish == FitWish.AIR_CONDITIONING }.note
+        assertEquals("yes", ac("Manuelle Klimatisierung und elektrische Fensterheber"))
+        assertEquals("yes", ac("Klimaanlage \"Climatic\" (Fahrerhaus)"))
+        assertEquals("not stated", ac("Klimatisierung: --"))
+    }
+
+    @Test
     fun `another drive than the one wanted rules the van out, an unstated one costs a little`() {
         assertNull(fit(van(vehicle = van().vehicle!!.copy(drivetrain = Drivetrain.AWD))))
         assertNull(fit(van(vehicle = van().vehicle!!.copy(drivetrain = null), description = "Crafter 35 Kasten Heckantrieb")))

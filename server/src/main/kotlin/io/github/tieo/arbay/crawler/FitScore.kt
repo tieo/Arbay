@@ -67,7 +67,11 @@ object FitScore {
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
     private val rearWheel = Regex("""(?i)heckantrieb|hinterradantrieb|\brwd\b""")
     private val noAirConditioning = Regex("""(?i)keine klimaanlage|(ohne|keine?)\s+klima""")
-    private val airConditioning = Regex("""(?i)klimaanlage|klimaautomatik|climatronic|\bklima\b|airco|air ?con""")
+    // "Manuelle Klimatisierung" and VW's "Climatic" name an air conditioning; a bare "Klimatisierung"
+    // does not, since dealer feeds print the heading empty ("Klimatisierung: --").
+    private val airConditioning = Regex(
+        """(?i)klimaanlage|klimaautomatik|climatronic|\bclimatic\b|(manuelle|automatische)\s+klimatisierung|\bklima\b|airco|air ?con""",
+    )
 
     // A straight line is shorter than the road, by about a quarter across Germany, and a long
     // drive there averages about 100 km/h: Stuttgart to Hamburg, 534 km apart, is under seven hours.
