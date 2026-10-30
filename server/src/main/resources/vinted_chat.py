@@ -216,8 +216,9 @@ class Vinted(MarketBrowser):
             if path.startswith("/myaccount"):
                 return {"ok": True, "signedIn": True}
             if await self.visible("input[type=password]"):
-                return {"ok": True, "signedIn": False, "problem": "PayPal did not take the saved password"}
-            return {"ok": True, "signedIn": False, "problem": "PayPal was not confirmed in its app" if path.startswith("/authflow") else f"PayPal stopped on {path}"}
+                return {"ok": True, "signedIn": False, "problem": "PayPal did not take the saved password", "detail": await self.page_detail()}
+            problem = "PayPal was not confirmed in its app" if path.startswith("/authflow") else f"PayPal stopped on {path}"
+            return {"ok": True, "signedIn": False, "problem": problem, "detail": await self.page_detail()}
         finally:
             self.signing = False
             await self.go(self.HOME, 2)

@@ -139,6 +139,10 @@ object Chat {
         val o = VintedChatBrowser.call("relogin_payment", 240_000, "waitConfirm" to 150)
         if (o["signedIn"]?.bool() == true) return true
         log.warn("PayPal sign-in for Vinted failed: {}", o["problem"]?.str())
+        // The page it stopped on, to read afterwards.
+        (o["detail"] as? JsonObject)?.get("picture")?.str()?.let { picture ->
+            runCatching { DataDir.file("logs/paypal-signin.jpg").writeBytes(java.util.Base64.getDecoder().decode(picture)) }
+        }
         askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         return false
     }
