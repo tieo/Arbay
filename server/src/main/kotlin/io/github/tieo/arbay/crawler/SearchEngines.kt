@@ -31,7 +31,7 @@ class SearchEngines(private val client: HttpClient) {
      * since that is how a changed results page shows.
      */
     suspend fun links(words: String): List<String> = coroutineScope {
-        val asked = ENGINES.filter { it.forOffers && !resting(it) }
+        val asked = ENGINES.filter { it.forOffers }.mapNotNull(::usable)
         // An engine's pages one after another, the next only after a page with results: Bing
         // answered two at once with a challenge for the first.
         val plain = asked.filter { !it.browser }.map { e ->
@@ -45,7 +45,9 @@ class SearchEngines(private val client: HttpClient) {
                 all
             }
         }
-        val browser = asked.filter { it.browser }.map { e -> async { results(e, words) } }
+        val browser = asked.filter { it.browser }.map { e ->
+            async { results(e, words).ifEmpty { e.fallback?.let { results(it, words) }.orEmpty() } }
+        }
         (plain.awaitAll() + browser.awaitAll()).flatten().distinct()
     }
 
@@ -86,11 +88,11 @@ class SearchEngines(private val client: HttpClient) {
         val url = engine.pageUrl(words, pageNo)
         return try {
             if (engine.browser) {
-                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25, refusals = engine.refusals, tick = engine.tick)
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = engine.waitS, refusals = engine.refusals, tick = engine.tick, solve = engine.solve)
                     ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
                 // An engine that put a bot check before its results rests a while: asked again at
                 // once it checks again, and each check held every search up for the browser's wait.
-                if (page.page == "refused") refused[engine.name] = System.currentTimeMillis()
+                if (page.page == "refused") refused[engine.url("")] = System.currentTimeMillis()
                 if (page.page != "content") {
                     ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("no results page (${page.page})"), ErrorType.PARSE_ERROR, url, html = page.html, finalUrl = page.url)
                     log.warn("Web: {} gave no results page for '{}' ({})", engine.name, words, page.page)
@@ -127,7 +129,7 @@ class SearchEngines(private val client: HttpClient) {
      */
     suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
-        val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
+        val resting = picked.filter { usable(it) == null }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
         suspend fun ask(e: Engine, again: Boolean = !e.browser): EngineResults {
             val page = (if (again || e.browser) resultsPage(e, words) else viaBrowser(e, words))
                 .getOrElse { return EngineResults(e.name, if (again || e.browser) "failed: ${it.message?.take(120)}" else "no results read", emptyList()) }
@@ -156,9 +158,9 @@ class SearchEngines(private val client: HttpClient) {
         // the engines done by then while the rest finish unseen: a read in the browser cannot be
         // cut short, and an MCP client gave up on a search started with a cold browser.
         val done = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
-        val asked = picked.filter { !resting(it) }
+        val asked = picked.mapNotNull(::usable)
         val runs = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-        val jobs = asked.map { e -> runs.launch { done[e.name] = ask(e) } }
+        val jobs = asked.map { e -> runs.launch { done[e.name] = ask(e).let { r -> if (r.results.isEmpty() && e.fallback != null) ask(e.fallback) else r } } }
         kotlinx.coroutines.withTimeoutOrNull(SERP_DEADLINE_MS) { jobs.joinAll() }
         val all = asked.map { e -> done[e.name] ?: EngineResults(e.name, "still searching after ${SERP_DEADLINE_MS / 1000} s, left out", emptyList()) } + resting
         val merged = all.flatMap { e -> e.results.map { e.engine to it } }
@@ -262,8 +264,12 @@ class SearchEngines(private val client: HttpClient) {
 
     /** Whether [engine] checked the server for a bot recently, and is left out until it is likely
      *  to answer again. */
+    /** The engine to ask in place of [engine]: itself, its fallback while it rests, or none. */
+    private fun usable(engine: Engine): Engine? =
+        if (!resting(engine)) engine else engine.fallback?.takeIf { !resting(it) }
+
     private fun resting(engine: Engine): Boolean =
-        refused[engine.name]?.let { System.currentTimeMillis() - it < REST_AFTER_A_CHECK_MS } == true
+        refused[engine.url("")]?.let { System.currentTimeMillis() - it < REST_AFTER_A_CHECK_MS } == true
 
     /** A search engine: its results page for some words, whether only a browser gets it, and what
      *  shows that page arrived. */
@@ -286,6 +292,12 @@ class SearchEngines(private val client: HttpClient) {
          *  element's `data-tr`) and go on by a link of its own ([goOn]). */
         val goOn: String? = null,
         val waitSeconds: String? = null,
+        /** The picture puzzle the browser answers when the engine puts one before its results. */
+        val solve: String? = null,
+        /** How long the browser waits for the results page. */
+        val waitS: Int = 25,
+        /** The engine asked instead when this one gives no results. */
+        val fallback: Engine? = null,
         /** Results pages a search reads, and the address of a page after the first. */
         val pages: Int = 1,
         val next: (String, Int) -> String = { url, _ -> url },
@@ -325,13 +337,19 @@ class SearchEngines(private val client: HttpClient) {
             // Three indexes of their own, beside the ones built on Bing's and Google's. Mojeek puts an
             // ALTCHA before the server's requests, plain or in a browser: the browser ticks its box,
             // and an engine that asks more after it rests like Brave on its check.
-            // Yandex's own search puts a picture puzzle before the server's requests, the browser's
-            // too. Its search for a site's own pages, given no site ("web=1"), searches its whole
-            // index over plain HTTP with none; lr=177 asks it as from Berlin.
-            // For words it finds nothing for, it fills the page with the same popular pages (Roblox's
-            // sign-in, 1C, Husqvarna), none with a searched word set in bold as its results have.
-            Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link"), item = ".b-serp-item", matched = "b:not([class])") { q ->
-                "https://yandex.ru/search/site/?searchid=2313451&web=1&lr=177&text=${q.encodeUrl()}"
+            // Yandex puts its picture puzzle before the server's searches, which the browser answers
+            // (yandex_captcha.py); once answered, Yandex lets the browser through for a while. Until
+            // it is, Yandex's search for a site's own pages stands in: given no site ("web=1") it
+            // searches the whole index over plain HTTP with no puzzle, but for many rare words it
+            // pads the page with the same popular pages (Roblox's sign-in, 1C, Husqvarna), none
+            // with a searched word in bold as its results have, which are left out.
+            Engine("Yandex", "yandex.", true, listOf("serp-item", "id=\"search-result\""),
+                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha"), tick = listOf("#js-button"),
+                solve = "yandex", waitS = 60,
+                fallback = Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link"), item = ".b-serp-item", matched = "b:not([class])") { q ->
+                    "https://yandex.ru/search/site/?searchid=2313451&web=1&lr=177&text=${q.encodeUrl()}"
+                }) { q ->
+                "https://yandex.com/search/?text=${q.encodeUrl()}&lr=177"
             },
             Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color"), tick = listOf("altcha-widget input[type=checkbox]", "#altcha-widget input")) { q ->
                 "https://www.mojeek.com/search?q=${q.encodeUrl()}"

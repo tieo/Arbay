@@ -426,6 +426,12 @@ object RelevanceFilter {
     // was blowing up the price summary.
     private const val MAX_PLAUSIBLE_MINOR_UNITS = 200_000_000_000L
 
+    /** A euro or less where the search's offers typically cost twenty or more is a seller's way of
+     *  leaving the price out ("1 € VB", a shop's fixed 1 € on a 2 TB drive), not what it sells for:
+     *  ranked by it, such an ad stood first as the cheapest of the search. */
+    private fun isATokenPrice(listing: Listing, middle: Long): Boolean =
+        listing.effectivePrice.amount in 1..100 && middle >= 2_000
+
     private fun hasSanePrice(listing: Listing): Boolean =
         listing.effectivePrice.amount in 0..MAX_PLAUSIBLE_MINOR_UNITS
 
@@ -1178,6 +1184,8 @@ object RelevanceFilter {
             asParsed.copy(positiveTokens = listOf(code), orGroups = if (names.size == 1) emptyList() else names)
         }
         val dropped = mutableListOf<DroppedListing>()
+        // What an offer of this search typically costs, for telling a placeholder from a price.
+        val middle = listings.map { it.effectivePrice.amount }.filter { it > 0 }.sorted().let { if (it.isEmpty()) 0L else it[it.size / 2] }
         val listings = listings.filter { listing ->
             val dealer = blockedDealers.blocking(listing)
             if (dealer != null) {
@@ -1186,6 +1194,7 @@ object RelevanceFilter {
             }
             val reason = when {
                 !hasSanePrice(listing) -> DropReason.IMPLAUSIBLE_PRICE
+                isATokenPrice(listing, middle) -> DropReason.NO_REAL_PRICE
                 isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
                 isRentalOffer(listing, query.text) -> DropReason.RENTAL
                 // A part number names one part, and whatever that part is, it is the thing asked

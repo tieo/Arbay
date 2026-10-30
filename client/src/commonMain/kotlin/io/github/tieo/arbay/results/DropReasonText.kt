@@ -37,5 +37,7 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
         "Sold by a dealer you blocked, on every search and every device."
     DropReason.IMPLAUSIBLE_PRICE ->
         "The price read off the page is not a price: digits from several fields run together."
+    DropReason.NO_REAL_PRICE ->
+        "Asks a euro or less where the rest cost far more: the seller left the real price out."
     null -> ""
 }

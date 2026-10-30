@@ -104,6 +104,9 @@ enum class DropReason {
 
     /** A price the scraper read wrong — digits from several fields run together. */
     IMPLAUSIBLE_PRICE,
+
+    /** A token price standing in for none, a euro or less where the search's offers cost far more. */
+    NO_REAL_PRICE,
 }
 
 /** What the app writes next to a dropped listing. */
@@ -124,4 +127,5 @@ val DropReason.label: String
         DropReason.BLOCKED_WORD -> "a word you blocked"
         DropReason.BLOCKED_DEALER -> "a dealer you blocked"
         DropReason.IMPLAUSIBLE_PRICE -> "unreadable price"
+        DropReason.NO_REAL_PRICE -> "no real price"
     }

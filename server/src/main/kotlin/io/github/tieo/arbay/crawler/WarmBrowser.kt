@@ -63,7 +63,7 @@ open class WarmBrowser(
      * [timeoutS] passes. Null where the browser could not be started or did not answer, which
      * leaves the caller its other ways in.
      */
-    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), tick: List<String> = emptyList()): Page? {
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), tick: List<String> = emptyList(), solve: String? = null): Page? {
         val request = mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
@@ -71,6 +71,7 @@ open class WarmBrowser(
             "accept" to JsonArray(accept.map(::JsonPrimitive)),
             "refusals" to JsonArray(refusals.map(::JsonPrimitive)),
             "tick" to JsonArray(tick.map(::JsonPrimitive)),
+            "solve" to JsonPrimitive(solve.orEmpty()),
         )
         val answer = ask(request, timeoutS + 30L) ?: run {
             log.warn("{} browser did not answer for {}", name, url)

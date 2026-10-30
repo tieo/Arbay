@@ -32,4 +32,16 @@ class BlockedPhraseTest {
         val params = io.ktor.http.parametersOf("exclude" to listOf("2,5 zoll", "adapter"))
         assertEquals(listOf("2,5 zoll", "adapter"), params.getAll("exclude"))
     }
+
+    @Test
+    fun `a one euro ask among real prices is a placeholder, not the cheapest`() {
+        fun priced(title: String, eur: Long) = listing(title).copy(id = "t:$title", price = Money(eur * 100, Currency.EUR))
+        val result = RelevanceFilter.partition(listOf(
+            priced("PNY XLR8 CS3030 2TB NVMe SSD", 1),
+            priced("Samsung 980 PRO 2TB NVMe", 120),
+            priced("Kingston NV3 2TB NVMe", 110),
+        ), SearchQuery(text = "2TB NVMe", category = MarketGroup.GENERAL), emptyList())
+        assertEquals(listOf("Samsung 980 PRO 2TB NVMe", "Kingston NV3 2TB NVMe").sorted(), result.kept.map { it.title }.sorted())
+        assertEquals(DropReason.NO_REAL_PRICE, result.dropped.single().reason)
+    }
 }
