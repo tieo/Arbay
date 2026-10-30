@@ -15,6 +15,10 @@ import numpy as np
 
 MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_symbols.onnx")
 SIDE = 64
+# Pixels of a blob left of the hatching at most, of an outline at least, and the width of one outline.
+MIN_PIECE = 80
+MIN_OUTLINE = 300
+ONE_WIDE = 75
 _session = None
 
 
@@ -55,29 +59,57 @@ def parts(prob, threshold=0.5, min_area=40):
 
 
 def outlines(strip):
-    """The strip's outlines, left to right; the hatching across it is thinner than their strokes.
-    The strip spaces its four to seven outlines evenly, so their number is the one whose cell
-    borders cross the least ink, and an outline is the ink of its cell."""
+    """The strip's outlines, left to right. The hatching across it is thinner than their strokes and
+    goes with the opening, but for small blobs where its lines cross; the outlines stand apart by a
+    few empty columns, not on an even grid, and two that touch make a run of ink too wide for one."""
     g = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
     ink = (g < 128).astype(np.uint8)
     ink = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    columns = ink.sum(0).astype(np.float32)
-    width = ink.shape[1]
-
-    def crossing(n):
-        borders = [int(round(k * width / n)) for k in range(1, n)]
-        return sum(columns[max(0, b - 3):b + 4].sum() for b in borders) / (n - 1)
-
-    n = min(range(4, 8), key=crossing)
-    # Each cell's own columns: two outlines that touch would read as one by their ink alone.
+    count, lab, st, _ = cv2.connectedComponentsWithStats(ink)
+    for c in range(1, count):
+        if st[c][4] < MIN_PIECE:
+            ink[lab == c] = 0
+    columns = ink.sum(0)
+    runs = []
+    for x in np.nonzero(columns)[0]:
+        if runs and x - runs[-1][1] <= 4:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x])
+    # An outline of separate strokes (three bars) leaves runs too narrow for one: each joins the
+    # nearer of its neighbours while the two together still fit one outline.
+    merged = True
+    while merged:
+        merged = False
+        for i, (a, b) in enumerate(runs):
+            if b - a >= ONE_WIDE * 0.55:
+                continue
+            near = [j for j in (i - 1, i + 1) if 0 <= j < len(runs)
+                    and max(b, runs[j][1]) - min(a, runs[j][0]) <= ONE_WIDE * 1.3]
+            if near:
+                j = min(near, key=lambda j: runs[j][0] - b if j > i else a - runs[j][1])
+                lo, hi = min(i, j), max(i, j)
+                runs[lo:hi + 1] = [[runs[lo][0], runs[hi][1]]]
+                merged = True
+                break
+    runs = [(a, b + 1) for a, b in runs if columns[a:b + 1].sum() >= MIN_OUTLINE]
+    cut = []
+    for a, b in runs:
+        k = max(1, int((b - a) / ONE_WIDE + 0.25))
+        edges = [a]
+        for i in range(1, k):
+            # where touching outlines meet: the emptiest column near the even split
+            mid = a + (b - a) * i // k
+            lo, hi = max(a + 1, mid - 12), min(b - 1, mid + 12)
+            edges.append(lo + int(np.argmin(columns[lo:hi])))
+        edges.append(b)
+        cut += list(zip(edges[:-1], edges[1:]))
     out = []
-    for i in range(n):
+    for a, b in cut:
         part = np.zeros_like(ink)
-        x0, x1 = int(round(i * width / n)), int(round((i + 1) * width / n))
-        part[:, x0:x1] = ink[:, x0:x1]
+        part[:, a:b] = ink[:, a:b]
         ys, xs = np.nonzero(part)
-        if len(xs):
-            out.append(part[ys.min():ys.max() + 1, xs.min():xs.max() + 1])
+        out.append(part[ys.min():ys.max() + 1, xs.min():xs.max() + 1])
     return out
 
 
