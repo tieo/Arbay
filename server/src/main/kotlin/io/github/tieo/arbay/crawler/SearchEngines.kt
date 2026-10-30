@@ -95,11 +95,23 @@ class SearchEngines(private val client: HttpClient) {
                     return Result.failure(Exception("no results page (${page.page})"))
                 }
                 Result.success(page.html)
-            } else Result.success(fetchWithFallback(client, url, "Web ${engine.name}"))
+            } else Result.success(afterWaiting(engine, fetchWithFallback(client, url, "Web ${engine.name}"), url))
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Web: {} failed for '{}': {}", engine.name, words, e.message?.take(100))
             Result.failure(e)
         }
+    }
+
+    /** The results behind an engine's wait page, reached as the page asks: after its seconds, by
+     *  its own link. Any other page as it is. */
+    private suspend fun afterWaiting(engine: Engine, html: String, url: String): String {
+        if (engine.goOn == null) return html
+        val doc = org.jsoup.Jsoup.parse(html, url)
+        val link = doc.selectFirst(engine.goOn)?.absUrl("href")?.takeIf { it.isNotEmpty() } ?: return html
+        val seconds = engine.waitSeconds?.let { doc.selectFirst(it)?.attr("data-tr")?.toIntOrNull() } ?: 1
+        log.info("Web: {} asked to wait {} s before its results", engine.name, seconds)
+        kotlinx.coroutines.delay(seconds.coerceIn(1, 10) * 1000L)
+        return fetchWithFallback(client, link, "Web ${engine.name}")
     }
 
     private suspend fun viaBrowser(engine: Engine, words: String): Result<String> =
@@ -130,8 +142,7 @@ class SearchEngines(private val client: HttpClient) {
                 r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(r.url)))
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
             // A plain engine that listed nothing is asked once more through the browser, as for a
-            // search: Bing answers now and then with a check, Marginalia every other request with
-            // its results page cut off before the results.
+            // search: Bing answers now and then with a check.
             if (rows.isEmpty() && again) return ask(e, again = false)
             if (unrelated(rows, words)) {
                 log.warn("Web: {} listed {} results for '{}' that share no word with it", e.name, rows.size, words)
@@ -264,6 +275,10 @@ class SearchEngines(private val client: HttpClient) {
          *  ([matched]): a result without one is not for the words, and is left out. */
         val item: String? = null,
         val matched: String? = null,
+        /** A page the engine puts first when busy, asking to wait a few seconds ([waitSeconds], an
+         *  element's `data-tr`) and go on by a link of its own ([goOn]). */
+        val goOn: String? = null,
+        val waitSeconds: String? = null,
         /** Results pages a search reads, and the address of a page after the first. */
         val pages: Int = 1,
         val next: (String, Int) -> String = { url, _ -> url },
@@ -313,7 +328,10 @@ class SearchEngines(private val client: HttpClient) {
             },
             // Marginalia indexes the small, old and non-commercial web and ranks shops down by
             // design: forums, tools and archived pages a general engine buries.
-            Engine("Marginalia", "marginalia", false, listOf("hyphens-auto"), forOffers = false) { q ->
+            // When it sees much bot traffic it first answers "Wait A Moment" for a second, with a
+            // link to go on by for a client without scripts.
+            Engine("Marginalia", "marginalia", false, listOf("hyphens-auto"), forOffers = false,
+                goOn = "noscript a[href*=sst=]", waitSeconds = "#countdown") { q ->
                 "https://marginalia-search.com/search?query=${q.encodeUrl()}"
             },
         )

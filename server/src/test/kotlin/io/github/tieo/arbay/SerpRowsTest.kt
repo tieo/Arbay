@@ -125,4 +125,13 @@ class SerpRowsTest {
         val (hummel, none) = SearchEngines.withoutUnmatched(read("yandex"), "https://yandex.ru/search/site/", ".b-serp-item", "b:not([class])")
         assertTrue(SearchEngines.serpRows(hummel, "yandex.", "https://yandex.ru/search/site/", emptyList()).size >= 8, "$none dropped")
     }
+
+    /** Marginalia's "Wait A Moment" page, for "vcds alternative diagnose software" on 2026-10-30. */
+    @Test
+    fun `marginalia's wait page names the link to go on by`() {
+        val doc = org.jsoup.Jsoup.parse(javaClass.getResource("/fixtures/serp/marginalia-wait.html")!!.readText(), "https://marginalia-search.com/search")
+        assertEquals("https://marginalia-search.com/search?query=vcds+alternative+diagnose+software&sst=SE-1c047e4546da3edd",
+            doc.selectFirst("noscript a[href*=sst=]")?.absUrl("href"))
+        assertEquals("1", doc.selectFirst("#countdown")?.attr("data-tr"))
+    }
 }
