@@ -127,6 +127,7 @@ object Chat {
                 signingIn = signing,
                 problem = s["problem"]?.str(),
                 proxySignIn = proxyPath,
+                payment = s["payment"]?.str(),
             )
         } catch (e: ChatFailure) {
             ChatAccount(market = sidecar.market, signingIn = signing, problem = e.message, proxySignIn = proxyPath)
@@ -164,9 +165,10 @@ object Chat {
         return account(market)
     }
 
-    suspend fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep {
+    /** Opens [market]'s sign-in page, or with [payment] the sign-in page of the payment service its checkout uses. */
+    suspend fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false): SignInStep {
         val sidecar = sidecarFor(market)
-        return step(sidecar.call("signin", 90_000)).also { if (it.step != SignInAsk.DONE) signingIn += sidecar.market }
+        return step(sidecar.call(if (payment) "signin_payment" else "signin", 90_000)).also { if (it.step != SignInAsk.DONE) signingIn += sidecar.market }
     }
 
     suspend fun signInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =

@@ -283,6 +283,7 @@ fun AccountPanel(session: Session) {
                 a.signedIn -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
                     TextButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
+                    a.payment?.let { payment -> TextButton(onClick = { chat.beginSignIn(a.market, payment = true) }) { Text("Sign in to $payment") } }
                 }
                 else -> {
                     a.problem?.let { Muted(it) }

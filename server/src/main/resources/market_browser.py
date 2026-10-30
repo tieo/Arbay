@@ -142,6 +142,8 @@ class MarketBrowser:
     LOGIN_LINK = ""
     CONSENT: tuple = ()
     PROFILE_ENV = ""
+    # The payment service the market's checkout hands over to, signed in to in this same browser.
+    PAYMENT = None
 
     STEP_FIELDS = {
         "password": "input[type=password]",
@@ -365,7 +367,7 @@ class MarketBrowser:
                 await self.go(self.HOME)
             if not await self.signed_in_here():
                 return {"ok": True, "signedIn": False}
-            return {"ok": True, "signedIn": True, "name": await self.account_name()}
+            return {"ok": True, "signedIn": True, "name": await self.account_name(), "payment": self.PAYMENT}
         except Exception as e:
             log(f"status: {e}")
             return {"ok": True, "signedIn": False, "problem": str(e)}

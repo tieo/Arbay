@@ -31,7 +31,7 @@ fun Route.chatRoutes() {
         get("/account") { call.respond(Chat.account(call.market())) }
         get("/accounts") { call.respond(Chat.accounts()) }
         // Signing in from inside the app; what is typed is passed to the page and not kept.
-        post("/signin") { call.chat { call.respond(Chat.beginSignIn(call.market())) } }
+        post("/signin") { call.chat { call.respond(Chat.beginSignIn(call.market(), payment = call.request.queryParameters["payment"] == "true")) } }
         get("/signin") { call.chat { call.respond(Chat.signInStep(call.market())) } }
         post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>(), call.market())) } }
         post("/signin/cancel") { call.chat { call.respond(Chat.cancelSignIn(call.market())) } }

@@ -218,6 +218,7 @@ fun AccountSection(app: WebApp) {
             a.signedIn -> Div({ classes("inline-form") }) {
                 Span({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
                 QuietButton("Sign in again") { if (a.market == PlatformId.KLEINANZEIGEN) chat.beginProxySignIn() else chat.beginSignIn(a.market) }
+                a.payment?.let { payment -> QuietButton("Sign in to $payment") { chat.beginSignIn(a.market, payment = true) } }
             }
             else -> {
                 a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }

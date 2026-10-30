@@ -22,6 +22,8 @@ data class ChatAccount(
     val problem: String? = null,
     /** While a sign-in goes on through Arbay's proxy: the address of the site's sign-in page for the browser to show. */
     val proxySignIn: String? = null,
+    /** The payment service the market's checkout hands over to, signed in to in the same browser (Vinted's PayPal). */
+    val payment: String? = null,
 )
 
 /**

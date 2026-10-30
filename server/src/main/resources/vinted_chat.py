@@ -22,11 +22,43 @@ class Vinted(MarketBrowser):
     LOGIN_LINK = "a[data-testid=header--login-button]"
     CONSENT = ("#onetrust-accept-btn-handler",)
     PROFILE_ENV = "ARBAY_VINTED_CHAT_PROFILE"
+    # The account pays with PayPal, whose own page takes the payment after "Zahlen". It knows this
+    # browser only once the user signed in to it here: a session copied in from another browser
+    # was gone after the browser's next start.
+    PAYMENT = "PayPal"
+    PAYMENT_SIGNIN = "https://www.paypal.com/signin"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.payment_signing = False
 
     async def account_name(self) -> str | None:
         # The header's avatar carries the member name as its alt text.
         name = await self.tab.evaluate("(document.querySelector('[data-testid=user-menu-button] img[alt]') || {}).alt || ''")
         return (name or "").strip() or None
+
+    async def signin_payment(self) -> dict:
+        """Opens PayPal's sign-in page for the user to sign in on, as on the market's own."""
+        self.signing = True
+        self.payment_signing = True
+        await self.go(self.PAYMENT_SIGNIN, 4)
+        for button in await self.visible("#acceptAllButton"):
+            await self.press(*button)
+            await asyncio.sleep(1)
+        return await self.signin_state()
+
+    async def signin_state(self) -> dict:
+        # PayPal shows the account's summary once it is signed in.
+        if self.payment_signing and "paypal.com" in await self.host() and "/myaccount" in await self.url():
+            self.payment_signing = False
+            self.signing = False
+            await self.go(self.HOME, 2)
+            return {"ok": True, "step": "done"}
+        return await super().signin_state()
+
+    async def signin_done(self) -> dict:
+        self.payment_signing = False
+        return await super().signin_done()
 
     async def summary(self) -> dict:
         """The checkout's price lines in euro, as its order summary shows them."""
@@ -73,6 +105,22 @@ class Vinted(MarketBrowser):
         if not submit:
             raise RuntimeError("the checkout shows no pay button")
         await self.press(*submit[0])
+        await asyncio.sleep(4)
+        # Vinted stops a payment whose order changed while the page was open (shipping picked just
+        # before it) with "Überprüfe deine Daten"; once closed, the order is read and paid again.
+        stopped = await self.visible("[data-testid=checksum-mismatch-error-modal-action-button]")
+        if stopped:
+            await self.press(*stopped[0])
+            await asyncio.sleep(3)
+            lines = await self.summary()
+            answer = {**answer, **lines}
+            if lines["total"] is None or lines["total"] > most:
+                await self.go(self.HOME, 2)
+                return {**answer, "problem": f"the total passes the limit of {most:.2f} €"}
+            submit = await self.visible("[data-testid=single-checkout-order-summary-purchase-button]")
+            if not submit:
+                raise RuntimeError("the checkout shows no pay button")
+            await self.press(*submit[0])
         return {**answer, **await self.approve_payment(lines["total"])}
 
     async def approve_payment(self, total: float) -> dict:
@@ -85,7 +133,9 @@ class Vinted(MarketBrowser):
         await asyncio.sleep(4)
         if "paypal.com" in await self.host():
             if await self.visible("input[type=email], input[type=password], #email, #password"):
-                return {"paid": False, "problem": "PayPal asks to sign in", **await self.page_detail()}
+                return {"paid": False, "problem": "PayPal asks to sign in", "paymentSignedOut": True, **await self.page_detail()}
+            if "/authflow" in await self.url():
+                return {"paid": False, "problem": "PayPal asks to confirm it is you", **await self.page_detail()}
             if f"{total:.2f}".replace(".", ",") not in (await self.tab.evaluate("document.body.innerText") or "") \
                     and f"{total:.2f}" not in (await self.tab.evaluate("document.body.innerText") or ""):
                 return {"paid": False, "problem": "PayPal shows another amount", **await self.page_detail()}
@@ -106,6 +156,8 @@ class Vinted(MarketBrowser):
         return {"paid": paid, "url": await self.url(), **({} if paid else {"problem": "Vinted shows the checkout unpaid", **await self.page_detail()})}
 
     async def handle(self, req: dict) -> dict:
+        if req.get("op") == "signin_payment":
+            return await self.signin_payment()
         if req.get("op") == "buy":
             return await self.buy(req["url"], float(req["most"]), bool(req.get("pay")))
         return await super().handle(req)

@@ -260,8 +260,8 @@ class ArbayClient(
     /** The user's account on every market Arbay can sign in to. */
     suspend fun chatAccounts(): List<ChatAccount> = client.get("$baseUrl/api/chat/accounts").body()
 
-    suspend fun beginChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
-        client.post("$baseUrl/api/chat/signin?market=${market.name}").body()
+    suspend fun beginChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false): SignInStep =
+        client.post("$baseUrl/api/chat/signin?market=${market.name}" + if (payment) "&payment=true" else "").body()
     suspend fun chatSignInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
         client.get("$baseUrl/api/chat/signin?market=${market.name}").body()
 

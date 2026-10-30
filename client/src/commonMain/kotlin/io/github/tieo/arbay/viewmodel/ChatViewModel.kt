@@ -229,13 +229,14 @@ class ChatViewModel(
     /** The market the sign-in going on is for; one goes on at a time. */
     val signInMarket: StateFlow<PlatformId> = _signInMarket.asStateFlow()
 
-    fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN) {
+    /** Starts signing in to [market], or with [payment] to the payment service its checkout uses. */
+    fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false) {
         signInFollower?.cancel()
         signInRound++
         pendingInputs.clear()
         _signIn.value = null
         _signInMarket.value = market
-        signInStep { client.beginChatSignIn(market) }
+        signInStep { client.beginChatSignIn(market, payment) }
     }
 
     /** Starts the sign-in on the site's own pages; the account then carries the page to show, until it is signed in. */
