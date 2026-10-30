@@ -219,7 +219,14 @@ open class WarmBrowser(
  * that does not look like a person's browser, and a freshly started Chrome is one of them; a Chrome
  * that keeps its profile and reads one page after another is not.
  */
-object EbayBrowser : WarmBrowser("eBay", 96, "ebay-profile", "ebay-browser.log", errors = listOf("went wrong"))
+object EbayBrowser : WarmBrowser(
+    "eBay", 96, "ebay-profile", "ebay-browser.log", errors = listOf("went wrong"),
+    // Five eBay sites, each search word's other spellings and every search running at once read
+    // through it, and a search waiting its turn here has its clock stopped: with one tab, two saved
+    // searches of a dozen spellings each held all four of the server's search slots for twenty
+    // minutes, and every other search queued as "Server busy".
+    tabs = 3,
+)
 
 /**
  * The Chrome the search engines that refuse a plain request are asked through. Google has answered
