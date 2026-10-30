@@ -286,6 +286,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 listOfNotNull(
                     "${p.id}: ${p.name}",
                     "words \"${p.searchQuery.text}\"".takeIf { p.searchQuery.text != p.name },
+                    p.searchQuery.aliases.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "also ") { "\"$it\"" },
+                    p.searchQuery.excludeKeywords.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "blocked ") { "\"$it\"" },
                     "${p.searchQuery.platforms.size} markets",
                     p.searchQuery.maxPrice?.let { "up to ${it.amount / 100} €" },
                     s?.get("newSinceOpened")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }?.let { "$it new" },
@@ -459,6 +461,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             props = {
                 string("id", "Saved search id", required = true); string("name", "New name"); string("words", "New words")
                 stringArray("other_words", "Other words for the same thing, each searched as well, e.g. \"256GB\" next to \"256 GB\"; replaces the list")
+                stringArray("blocked_words", "Words or phrases an offer's title must not carry, e.g. \"extern\" or \"2,5 zoll\"; replaces the list, as the app's Filters do")
                 number("min_price_eur", "Show nothing cheaper (0 clears)"); number("max_price_eur", "Show nothing dearer (0 clears)")
                 number("look_every_minutes", "Look again on its own this often: ${WATCH_INTERVALS.joinToString { it.first.toString() }}; 0 stops looking")
                 stringArray("remove_alert_rules", "Alert rule ids to remove, as list_saved_searches names them")
@@ -501,6 +504,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 searchQuery = p.searchQuery.copy(
                     text = args.str("words") ?: p.searchQuery.text,
                     aliases = if ("other_words" in args) args.strs("other_words") else p.searchQuery.aliases,
+                    excludeKeywords = if ("blocked_words" in args) args.strs("blocked_words") else p.searchQuery.excludeKeywords,
                     minPrice = band("min_price_eur", p.searchQuery.minPrice),
                     maxPrice = band("max_price_eur", p.searchQuery.maxPrice),
                     productWishes = wishes,
