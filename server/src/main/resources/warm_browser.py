@@ -23,7 +23,8 @@ answers come in the order they finish.
      (Yandex's checkbox, Mojeek's ALTCHA); it is clicked once, with the mouse, as a person would.
      A check that asks more after the click (a picture puzzle) stays "refused", unless "solve" names
      the puzzle: "yandex" has Yandex's picture puzzle read by yandex_captcha.py and clicked, the
-     pointer moving to each icon as a person's would, up to three puzzles.
+     pointer moving to each icon as a person's would, up to three puzzles; "brave" switches Brave
+     Search's check to its slider and drags the slider as far as brave_captcha.py reads it.
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
   {"op": "resolve", "urls": [...], "leaving": "google.", "timeout": 10}
       -> {"ok": true, "to": {"<url>": "<where it led>", ...}}
@@ -178,6 +179,61 @@ class Browser:
         await asyncio.sleep(5)
         return "AdvancedCaptcha" not in await tab.get_content()
 
+    async def pointer(self, tab, kind: str, x: float, y: float, held: bool) -> None:
+        """One mouse event at x, y: "mouseMoved", "mousePressed" or "mouseReleased", [held] saying
+        whether the left button is down while it happens. zendriver's own mouse_move ends in a
+        release, which would drop anything being dragged."""
+        from zendriver import cdp
+        await tab.send(cdp.input_.dispatch_mouse_event(kind, x=x, y=y, button=cdp.input_.MouseButton("left"),
+                                                       buttons=1 if held else 0, click_count=1))
+
+    async def solve_brave(self, tab) -> bool:
+        """Answers Brave Search's check on [tab] with its slider: the page offers a proof of work
+        first, which a browser here does not get through, and the slider beside it. True when the
+        page went on past it."""
+        import base64
+        import random
+        import brave_captcha
+        from zendriver import cdp
+        # Brave's page saw a mouse move but no press until focus was emulated for the tab, though
+        # document.hasFocus() was already true.
+        await tab.send(cdp.emulation.set_focus_emulation_enabled(True))
+        if "captcha-image-canvas" not in await tab.get_content():
+            switch = await tab.find("Switch to traditional CAPTCHA", best_match=True, timeout=5)
+            await switch.mouse_click()
+            for _ in range(20):
+                await asyncio.sleep(1)
+                if "captcha-image-canvas" in await tab.get_content():
+                    break
+            await asyncio.sleep(random.uniform(0.8, 1.6))
+        shown = await tab.evaluate("[...document.querySelectorAll('canvas.captcha-image-canvas, canvas.captcha-slider-canvas')]"
+                                   ".map(c => [c.toDataURL('image/png'), c.getBoundingClientRect().width])")
+        if not isinstance(shown, list) or len(shown) != 2:
+            return False
+        (picture, shown_width), (piece, _) = shown
+        found = brave_captcha.solve(base64.b64decode(picture.split(",", 1)[1]), base64.b64decode(piece.split(",", 1)[1]))
+        # The canvases are drawn a little narrower than their own 310 pixels, and Brave measures
+        # the answer in canvas pixels: unscaled, a long slide overshot by seven and was refused.
+        distance = (found["target"][0] - found["piece"][0]) * shown_width / found["width"]
+        handle = await (await tab.select("button.captcha-slider-button", timeout=5)).get_position()
+        x0, y0 = handle.left + handle.width / 2, handle.top + handle.height / 2
+        await self.pointer(tab, "mouseMoved", x0 - random.uniform(25, 50), y0 + random.uniform(15, 35), held=False)
+        await asyncio.sleep(random.uniform(0.2, 0.5))
+        await self.pointer(tab, "mouseMoved", x0 + random.uniform(-3, 3), y0 + random.uniform(-3, 3), held=False)
+        await asyncio.sleep(random.uniform(0.1, 0.3))
+        await self.pointer(tab, "mousePressed", x0, y0, held=True)
+        await asyncio.sleep(random.uniform(0.08, 0.2))
+        steps = random.randint(28, 40)
+        for k in range(1, steps + 1):
+            f = k / steps
+            ease = 1 - (1 - f) ** 3
+            await self.pointer(tab, "mouseMoved", x0 + distance * ease + random.uniform(-0.5, 0.5), y0 + random.uniform(-1.2, 1.2), held=True)
+            await asyncio.sleep(random.uniform(0.01, 0.028))
+        await asyncio.sleep(random.uniform(0.15, 0.35))
+        await self.pointer(tab, "mouseReleased", x0 + distance, y0, held=False)
+        await asyncio.sleep(5)
+        return "captcha-image-canvas" not in await tab.get_content()
+
     async def get(self, tab, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
                   refusals: list[str] = (), tick: list[str] = (), solve: str = "") -> dict:
         await tab.get(url)
@@ -206,6 +262,14 @@ class Browser:
                     await self.solve_yandex(tab)
                 except Exception as e:
                     print(f"yandex puzzle: {e}", file=sys.stderr, flush=True)
+                ticked_at = time.monotonic() - start
+                continue
+            if page == "refused" and solve == "brave" and solved < PUZZLES and ("Switch to traditional CAPTCHA" in html or "captcha-image-canvas" in html) and timeout - waited > PUZZLE_S:
+                solved += 1
+                try:
+                    await self.solve_brave(tab)
+                except Exception as e:
+                    print(f"brave puzzle: {e}", file=sys.stderr, flush=True)
                 ticked_at = time.monotonic() - start
                 continue
             if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:

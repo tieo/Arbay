@@ -1,7 +1,8 @@
 # Dev shell for local crawler testing on NixOS.
 #
 # Provides the same fetch fallback chain dependencies as the Docker image:
-# python3 with curl_cffi (CurlCffiClient shells out to `python3 cffi_fetch.py`),
+# python3 with curl_cffi (CurlCffiClient shells out to `python3 cffi_fetch.py`) and OpenCV,
+# numpy and onnxruntime (the search browser's captcha readers, tested by CaptchaSolversTest),
 # Xvfb (HeadlessBrowser launches non-headless Chromium on DISPLAY :99),
 # JDK 21, and the Playwright browsers from nixpkgs.
 #
@@ -12,7 +13,7 @@
 
 pkgs.mkShell {
   packages = [
-    (pkgs.python3.withPackages (ps: [ ps.curl-cffi ]))
+    (pkgs.python3.withPackages (ps: [ ps.curl-cffi ps.opencv4 ps.numpy ps.onnxruntime ]))
     pkgs.xvfb
     pkgs.xvfb-run
     pkgs.jdk21

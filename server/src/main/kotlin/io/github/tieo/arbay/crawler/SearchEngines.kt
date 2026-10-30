@@ -330,8 +330,10 @@ class SearchEngines(private val client: HttpClient) {
                 "https://www.qwant.com/?q=${q.encodeUrl()}&t=web&locale=de_DE"
             },
             Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\""), refusals = listOf("Verifying you're not a bot", "decided to schedule a captcha"),
-                // Its check passes on its "Verify" button, the one marked busy while it checks.
-                tick = listOf("button[aria-busy]")) { q ->
+                // Its check offers a proof of work, on which 142 of the server's searches ended in two
+                // weeks, and a slider beside it, which passed seven of seven tries: the browser
+                // switches to the slider and drags it.
+                solve = "brave") { q ->
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
             // Its "language" keeps only pages in that language, one result of eleven for English
