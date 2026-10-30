@@ -166,6 +166,8 @@ open class WarmBrowser(
                 it.environment()["DISPLAY"] = ":$display"
                 it.environment()["ARBAY_BROWSER_PROFILE"] = DataDir.file(profileDir).absolutePath
                 it.environment()["ARBAY_BROWSER_TABS"] = tabs.toString()
+                // The puzzle readers' models: CLIP for listing photos is already kept there.
+                it.environment()["ARBAY_MODELS_DIR"] = DataDir.models.absolutePath
             }
             .start()
         val output = started.inputStream.bufferedReader()

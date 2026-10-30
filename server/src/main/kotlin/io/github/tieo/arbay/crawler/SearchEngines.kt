@@ -323,7 +323,10 @@ class SearchEngines(private val client: HttpClient) {
                 "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE"
             },
             Engine("DuckDuckGo", "duckduckgo.", false, listOf("result__a")) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
-            Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?")) { q ->
+            // Its "unusual traffic" page is a reCAPTCHA, answered with the picture grid it puts up;
+            // once passed, Google lets the browser's profile search again for a good while.
+            Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?"),
+                solve = "recaptcha", waitS = 90) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
             },
             Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->

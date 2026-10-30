@@ -24,7 +24,8 @@ answers come in the order they finish.
      A check that asks more after the click (a picture puzzle) stays "refused", unless "solve" names
      the puzzle: "yandex" has Yandex's picture puzzle read by yandex_captcha.py and clicked, the
      pointer moving to each icon as a person's would, up to three puzzles; "brave" switches Brave
-     Search's check to its slider and drags the slider as far as brave_captcha.py reads it.
+     Search's check to its slider and drags the slider as far as brave_captcha.py reads it;
+     "recaptcha" answers the reCAPTCHA on Google's own "unusual traffic" page (solve_recaptcha).
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
   {"op": "resolve", "urls": [...], "leaving": "google.", "timeout": 10}
       -> {"ok": true, "to": {"<url>": "<where it led>", ...}}
@@ -51,6 +52,11 @@ TICK_WAIT_S = 12
 PUZZLES = 3
 # Seconds one puzzle takes, reading it to its answer: a page answers one only with that much left.
 PUZZLE_S = 20
+# Puzzles a reCAPTCHA is answered through before giving up: a passed grid is often followed by
+# another one.
+RECAPTCHA_ROUNDS = 5
+# Seconds a reCAPTCHA takes at most, its rounds of puzzles and new squares included.
+RECAPTCHA_S = 75
 
 
 def what_page(html: str, markers: list[str], errors: list[str], refusals: list[str] = ()) -> str:
@@ -243,6 +249,124 @@ class Browser:
         await asyncio.sleep(5)
         return "captcha-image-canvas" not in await tab.get_content()
 
+    async def click_at(self, tab, x: float, y: float) -> None:
+        """A click at x, y with the pointer coming from a little way off, as a person's would."""
+        import random
+        await self.pointer(tab, "mouseMoved", x + random.uniform(-30, 30), y + random.uniform(-20, 20), held=False)
+        await asyncio.sleep(random.uniform(0.08, 0.2))
+        await self.pointer(tab, "mouseMoved", x, y, held=False)
+        await asyncio.sleep(random.uniform(0.05, 0.15))
+        await self.pointer(tab, "mousePressed", x, y, held=True)
+        await asyncio.sleep(random.uniform(0.05, 0.12))
+        await self.pointer(tab, "mouseReleased", x, y, held=False)
+
+    # Reads reCAPTCHA's two frames from the page holding them, where they share its origin (Google's
+    # own pages): the box's state, and the puzzle's word, grid, picture and the page positions of
+    # its squares and buttons. Squares a dynamic grid put in place of clicked ones are listed with
+    # their address and picture.
+    RECAPTCHA_STATE = """(async () => {
+        const doc = sel => { const f = document.querySelector(sel); try { return f && f.contentDocument ? [f, f.contentDocument] : null; } catch (e) { return null; } };
+        const at = (frame, el) => { const a = frame.getBoundingClientRect(), b = el.getBoundingClientRect();
+                                    return [a.left + b.left + b.width / 2, a.top + b.top + b.height / 2]; };
+        const data = async src => { const blob = await (await fetch(src)).blob();
+                                    return await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); }); };
+        const out = {};
+        const a = doc('iframe[src*="api2/anchor"], iframe[src*="enterprise/anchor"]');
+        if (a) { const box = a[1].querySelector('#recaptcha-anchor'); if (box) { out.box = at(a[0], box); out.checked = box.getAttribute('aria-checked') === 'true'; } }
+        const b = doc('iframe[src*="api2/bframe"], iframe[src*="enterprise/bframe"]');
+        if (!b || b[0].getBoundingClientRect().height < 100) return out;
+        const d = b[1], table = d.querySelector('table[class*="rc-imageselect-table"]');
+        if (!table) return out;
+        const desc = d.querySelector('.rc-imageselect-desc-wrapper');
+        out.word = (desc && desc.querySelector('strong') || {}).innerText || '';
+        out.text = desc ? desc.innerText : '';
+        out.grid = table.className.match(/table-(\\d+)/)[1];
+        out.tiles = [...d.querySelectorAll('td.rc-imageselect-tile')].map(td => at(b[0], td));
+        out.selected = [...d.querySelectorAll('td.rc-imageselect-tile')].map(td => td.classList.contains('rc-imageselect-tileselected'));
+        const whole = d.querySelector('img.rc-image-tile-33, img.rc-image-tile-44');
+        out.picture = whole ? await data(whole.src) : null;
+        out.single = {};
+        const tds = [...d.querySelectorAll('td.rc-imageselect-tile')];
+        for (let i = 0; i < tds.length; i++) { const img = tds[i].querySelector('img.rc-image-tile-11');
+            if (img && img.complete && !tds[i].classList.contains('rc-imageselect-dynamic-selected')) out.single[i] = [img.src, await data(img.src)]; }
+        out.verify = at(b[0], d.querySelector('#recaptcha-verify-button'));
+        const reload = d.querySelector('#recaptcha-reload-button'); if (reload) out.reload = at(b[0], reload);
+        out.wrong = [...d.querySelectorAll('.rc-imageselect-incorrect-response, .rc-imageselect-error-select-more, .rc-imageselect-error-dynamic-more')]
+            .some(e => e.offsetParent !== null && getComputedStyle(e).display !== 'none');
+        return out;
+    })()"""
+
+    async def recaptcha_state(self, tab) -> dict:
+        state = await tab.evaluate(self.RECAPTCHA_STATE, await_promise=True)
+        return state if isinstance(state, dict) else {}
+
+    async def solve_recaptcha(self, tab) -> bool:
+        """Answers a reCAPTCHA on a page of Google's own (its "unusual traffic" page): ticks the box,
+        and where a picture grid follows, clicks the squares recaptcha_tiles.py reads as showing the
+        asked object, new squares included until none shows it, then confirms. True when the box
+        ended ticked or the page went on past it."""
+        import base64
+        import random
+        import recaptcha_tiles
+        from zendriver import cdp
+        if not recaptcha_tiles.available():
+            print("recaptcha: the CLIP model is not downloaded yet", file=sys.stderr, flush=True)
+            return False
+        await tab.send(cdp.emulation.set_focus_emulation_enabled(True))
+        state = await self.recaptcha_state(tab)
+        if "box" not in state:
+            return False
+        if not state.get("checked"):
+            await self.click_at(tab, *state["box"])
+            await asyncio.sleep(random.uniform(3, 4.5))
+        for _ in range(RECAPTCHA_ROUNDS):
+            state = await self.recaptcha_state(tab)
+            if state.get("checked") or "box" not in state:
+                return True
+            if "grid" not in state:
+                await asyncio.sleep(2)
+                continue
+            thing = recaptcha_tiles.obj(state["word"])
+            n = {"33": 3, "44": 4}.get(state["grid"])
+            if thing is None or n is None or not state.get("picture"):
+                print(f"recaptcha: new puzzle for '{state.get('word')}' in a {state.get('grid')} grid", file=sys.stderr, flush=True)
+                await self.click_at(tab, *state["reload"])
+                await asyncio.sleep(random.uniform(2.5, 4))
+                continue
+            picture = recaptcha_tiles.decode(base64.b64decode(state["picture"].split(",", 1)[1]))
+            if picture is None:
+                await self.click_at(tab, *state["reload"])
+                await asyncio.sleep(random.uniform(2.5, 4))
+                continue
+            chosen = await asyncio.get_running_loop().run_in_executor(None, recaptcha_tiles.choose, picture, n, thing)
+            for i in chosen:
+                await self.click_at(tab, *state["tiles"][i])
+                await asyncio.sleep(random.uniform(0.3, 0.8))
+            # A grid that puts a new square in place of each clicked one until none shows the
+            # object: each new square is read once its picture differs from the one clicked.
+            if n == 3 and chosen:
+                was = {i: (state.get("single") or {}).get(str(i), [None])[0] for i in chosen}
+                for _ in range(12):
+                    if not was:
+                        break
+                    await asyncio.sleep(random.uniform(1.5, 2.5))
+                    s = await self.recaptcha_state(tab)
+                    for key, (src, data) in (s.get("single") or {}).items():
+                        i = int(key)
+                        if i not in was or src == was[i]:
+                            continue
+                        del was[i]
+                        square = recaptcha_tiles.decode(base64.b64decode(data.split(",", 1)[1]))
+                        if square is not None and await asyncio.get_running_loop().run_in_executor(None, recaptcha_tiles.shows, square, thing):
+                            await self.click_at(tab, *s["tiles"][i])
+                            was[i] = src
+                            await asyncio.sleep(random.uniform(0.3, 0.8))
+            await asyncio.sleep(random.uniform(0.6, 1.2))
+            await self.click_at(tab, *state["verify"])
+            await asyncio.sleep(random.uniform(3, 4.5))
+        state = await self.recaptcha_state(tab)
+        return bool(state.get("checked")) or "box" not in state
+
     async def get(self, tab, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
                   refusals: list[str] = (), tick: list[str] = (), solve: str = "") -> dict:
         await tab.get(url)
@@ -280,6 +404,13 @@ class Browser:
                 except Exception as e:
                     print(f"brave puzzle: {e}", file=sys.stderr, flush=True)
                 ticked_at = time.monotonic() - start
+                continue
+            if page == "challenge" and solve == "recaptcha" and solved < 1 and "recaptcha" in html and timeout - waited > RECAPTCHA_S:
+                solved += 1
+                try:
+                    await asyncio.wait_for(self.solve_recaptcha(tab), RECAPTCHA_S)
+                except Exception as e:
+                    print(f"recaptcha: {e}", file=sys.stderr, flush=True)
                 continue
             if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:
                 continue
