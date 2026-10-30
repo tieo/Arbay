@@ -181,7 +181,9 @@ class SearchEngines(private val client: HttpClient) {
         // the browser at once: a result's title link left unresolved is opened there.
         if (engine.browser) {
             val titles = links.filter { it.selectFirst("h1, h2, h3, h4") != null }.map { it.absUrl("href") }.distinct().filter { it !in to }
-            if (titles.isNotEmpty()) to += SearchBrowser.resolve(titles.take(MAX_REDIRECTS), engine.host)
+            val opened = if (titles.isEmpty()) emptyMap() else SearchBrowser.resolve(titles.take(MAX_REDIRECTS), engine.host)
+            log.info("Web: {} redirects: {} of {} resolved plainly, {} of {} titles left resolved in the browser", engine.name, to.size, links.size, opened.size, titles.size)
+            to += opened
         }
         for (a in links) a.attr("href", to[a.absUrl("href")] ?: engine.url(""))
         return doc.outerHtml()
