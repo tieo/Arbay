@@ -49,7 +49,7 @@ class SearchEngines(private val client: HttpClient) {
 
     private suspend fun results(engine: Engine, words: String, page: Int = 1): List<String> {
         val url = engine.pageUrl(words, page)
-        val html = resultsPage(engine, words, page).getOrElse { return emptyList() }
+        val html = matchedOnly(resultsPage(engine, words, page).getOrElse { return emptyList() }, engine)
         // An ad goes through an ad network's redirect before the shop; it is followed like the
         // engine's own.
         val (ads, direct) = resultLinks(html, engine.host).partition { url -> AD_HOSTS.any { it in SiteRecipes.domainOf(url) } }
@@ -125,7 +125,7 @@ class SearchEngines(private val client: HttpClient) {
             // link: a result's title and its "Diese Seite übersetzen" read as two addresses, which
             // split the result in two. The redirects are resolved first and read as the addresses
             // they lead to, the translation's to Google's translate host and so to no result.
-            val html = if (e.redirects.isEmpty()) page else withRedirectsResolved(page, e)
+            val html = matchedOnly(if (e.redirects.isEmpty()) page else withRedirectsResolved(page, e), e)
             val rows = serpRows(html, e.host, e.url(""), emptyList()).map { r ->
                 r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(r.url)))
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
@@ -220,6 +220,14 @@ class SearchEngines(private val client: HttpClient) {
         }.awaitAll().mapNotNull { (start, url) -> url?.let { start to it } }.toMap()
     }
 
+    /** [html] without the results the engine marked none of the searched words in. */
+    private fun matchedOnly(html: String, engine: Engine): String {
+        if (engine.item == null || engine.matched == null) return html
+        val (kept, dropped) = withoutUnmatched(html, engine.url(""), engine.item, engine.matched)
+        if (dropped > 0) log.info("Web: {} marked no searched word in {} of its results, left out", engine.name, dropped)
+        return kept
+    }
+
     /** The links of a results page that are the engine's own redirects to a result. */
     private fun redirectsIn(html: String, engine: Engine): List<String> =
         if (engine.redirects.isEmpty()) emptyList()
@@ -252,6 +260,10 @@ class SearchEngines(private val client: HttpClient) {
         val refusals: List<String> = emptyList(),
         /** The "I'm not a robot" box of a check that passes on a click, by CSS selector. */
         val tick: List<String> = emptyList(),
+        /** A result ([item]) and the mark the engine puts on the searched words it matched in it
+         *  ([matched]): a result without one is not for the words, and is left out. */
+        val item: String? = null,
+        val matched: String? = null,
         /** Results pages a search reads, and the address of a page after the first. */
         val pages: Int = 1,
         val next: (String, Int) -> String = { url, _ -> url },
@@ -277,7 +289,9 @@ class SearchEngines(private val client: HttpClient) {
             Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
                 "https://www.qwant.com/?q=${q.encodeUrl()}&t=web&locale=de_DE"
             },
-            Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\""), refusals = listOf("Verifying you're not a bot", "decided to schedule a captcha")) { q ->
+            Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\""), refusals = listOf("Verifying you're not a bot", "decided to schedule a captcha"),
+                // Its check passes on its "Verify" button, the one marked busy while it checks.
+                tick = listOf("button[aria-busy]")) { q ->
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
@@ -289,7 +303,9 @@ class SearchEngines(private val client: HttpClient) {
             // Yandex's own search puts a picture puzzle before the server's requests, the browser's
             // too. Its search for a site's own pages, given no site ("web=1"), searches its whole
             // index over plain HTTP with none; lr=177 asks it as from Berlin.
-            Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link")) { q ->
+            // For words it finds nothing for, it fills the page with the same popular pages (Roblox's
+            // sign-in, 1C, Husqvarna), none with a searched word set in bold as its results have.
+            Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link"), item = ".b-serp-item", matched = "b:not([class])") { q ->
                 "https://yandex.ru/search/site/?searchid=2313451&web=1&lr=177&text=${q.encodeUrl()}"
             },
             Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color"), tick = listOf("altcha-widget input[type=checkbox]", "#altcha-widget input")) { q ->
@@ -325,6 +341,16 @@ class SearchEngines(private val client: HttpClient) {
             if (rows.isEmpty() || wanted.isEmpty()) return false
             val sharing = rows.count { r -> "${r.title} ${r.snippet} ${r.url}".lowercase().let { text -> wanted.any { it in text } } }
             return sharing * 3 < rows.size
+        }
+
+        /** A results page without its results ([item]) holding no [matched] mark, and how many
+         *  those were. */
+        internal fun withoutUnmatched(html: String, base: String, item: String, matched: String): Pair<String, Int> {
+            val doc = org.jsoup.Jsoup.parse(html, base)
+            val unmatched = doc.select(item).filter { it.selectFirst(matched) == null }
+            if (unmatched.isEmpty()) return html to 0
+            unmatched.forEach { it.remove() }
+            return doc.outerHtml() to unmatched.size
         }
 
         /** The pages a results page links to, apart from the engine's own and its redirects'. */

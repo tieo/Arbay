@@ -115,4 +115,14 @@ class SerpRowsTest {
         val bing = rows("bing", "bing.", "https://www.bing.com/search")
         assertTrue(!SearchEngines.unrelated(bing, "Lägler Hummel Parkettschleifmaschine"), bing.joinToString("\n"))
     }
+
+    @Test
+    fun `yandex's results without a searched word in bold are left out`() {
+        fun read(name: String) = javaClass.getResource("/fixtures/serp/$name.html")!!.readText()
+        val (filler, dropped) = SearchEngines.withoutUnmatched(read("yandex-unrelated"), "https://yandex.ru/search/site/", ".b-serp-item", "b:not([class])")
+        assertTrue(dropped >= 10, "$dropped")
+        assertEquals(emptyList(), SearchEngines.serpRows(filler, "yandex.", "https://yandex.ru/search/site/", emptyList()))
+        val (hummel, none) = SearchEngines.withoutUnmatched(read("yandex"), "https://yandex.ru/search/site/", ".b-serp-item", "b:not([class])")
+        assertTrue(SearchEngines.serpRows(hummel, "yandex.", "https://yandex.ru/search/site/", emptyList()).size >= 8, "$none dropped")
+    }
 }
