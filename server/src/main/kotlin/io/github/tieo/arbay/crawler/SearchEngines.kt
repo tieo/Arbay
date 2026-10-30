@@ -12,10 +12,10 @@ import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
 
 /**
- * The search engines Arbay asks itself (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage): the
- * pages they list for some words, for the web market to read for offers ([links]), and their
- * results as a person reads them, title, address and snippet, for a search of the web on any
- * words ([serp]).
+ * The search engines Arbay asks itself (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage, Yandex,
+ * Mojeek, Marginalia): the pages they list for some words, for the web market to read for offers
+ * ([links]), and their results as a person reads them, title, address and snippet, for a search of
+ * the web on any words ([serp]).
  */
 class SearchEngines(private val client: HttpClient) {
     private val log = LoggerFactory.getLogger(SearchEngines::class.java)
@@ -29,7 +29,7 @@ class SearchEngines(private val client: HttpClient) {
      * snapshot, since that is how a changed results page shows.
      */
     suspend fun links(words: String): List<String> = coroutineScope {
-        val asked = ENGINES.filter { !resting(it) }
+        val asked = ENGINES.filter { it.forOffers && !resting(it) }
         // An engine's pages one after another, the next only after a page with results: Bing
         // answered two at once with a challenge for the first.
         val plain = asked.filter { !it.browser }.map { e ->
@@ -101,15 +101,17 @@ class SearchEngines(private val client: HttpClient) {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
         val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
         suspend fun ask(e: Engine): EngineResults {
-            val html = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
+            val page = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
             // page is mended against.
-            runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(html) }
-            val found = serpRows(html, e.host, e.url(""), e.redirects.filter { it != "/aclk?" })
-            // Google hides each address behind its own redirect, resolved like a search's.
-            val rows = found.mapNotNull { r ->
-                val url = if (e.redirects.any { it in r.url }) resolved(listOf(r.url), e).firstOrNull() ?: return@mapNotNull null else r.url
-                r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(url)))
+            runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(page) }
+            // Google hides each address behind a redirect of its own, a token different for every
+            // link: a result's title and its "Diese Seite übersetzen" read as two addresses, which
+            // split the result in two. The redirects are resolved first and read as the addresses
+            // they lead to, the translation's to Google's translate host and so to no result.
+            val html = if (e.redirects.isEmpty()) page else withRedirectsResolved(page, e)
+            val rows = serpRows(html, e.host, e.url(""), emptyList()).map { r ->
+                r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(r.url)))
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
@@ -132,10 +134,25 @@ class SearchEngines(private val client: HttpClient) {
      * its Shopping ads to `/aclk?...`, the token encrypted, so the address is what the redirect
      * answers; read without following it, one request per result, no browser needed.
      */
-    private suspend fun resolved(redirects: List<String>, engine: Engine): List<String> = coroutineScope {
+    private suspend fun resolved(redirects: List<String>, engine: Engine): List<String> =
+        resolvedEach(redirects, engine).values.toList()
+
+    /** [html] with every link to one of the engine's own redirects pointing where it leads, and one
+     *  that leads nowhere readable pointing at the engine itself, which no result is. Ads stay out. */
+    private suspend fun withRedirectsResolved(html: String, engine: Engine): String {
+        val doc = org.jsoup.Jsoup.parse(html, engine.url(""))
+        val links = doc.select("a[href]").filter { a -> engine.redirects.any { it != "/aclk?" && it in a.absUrl("href") } }
+        val to = resolvedEach(links.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS * 2), engine)
+        for (a in links) a.attr("href", to[a.absUrl("href")] ?: engine.url(""))
+        return doc.outerHtml()
+    }
+
+    /** Where each of [redirects] leads, for those that lead to a page off the engine. */
+    private suspend fun resolvedEach(redirects: List<String>, engine: Engine): Map<String, String> = coroutineScope {
         val gate = Semaphore(PARALLEL_PAGES)
         redirects.map { start ->
             async {
+                start to
                 gate.withPermit {
                     var url = start
                     // An ad passes through the engine's ad server before the shop.
@@ -149,7 +166,7 @@ class SearchEngines(private val client: HttpClient) {
                     null
                 }
             }
-        }.awaitAll().filterNotNull()
+        }.awaitAll().mapNotNull { (start, url) -> url?.let { start to it } }.toMap()
     }
 
     /** The links of a results page that are the engine's own redirects to a result. */
@@ -185,6 +202,9 @@ class SearchEngines(private val client: HttpClient) {
         /** Results pages a search reads, and the address of a page after the first. */
         val pages: Int = 1,
         val next: (String, Int) -> String = { url, _ -> url },
+        /** Whether a search for offers reads what it lists: an index that ranks shops down on
+         *  purpose lists none worth a page of the search's budget. */
+        val forOffers: Boolean = true,
         val url: (String) -> String,
     ) {
         fun pageUrl(words: String, page: Int) = if (page <= 1) url(words) else next(url(words), page)
@@ -209,6 +229,21 @@ class SearchEngines(private val client: HttpClient) {
             },
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
                 "https://www.startpage.com/do/search?q=${q.encodeUrl()}&language=deutsch"
+            },
+            // Three indexes of their own, beside the ones built on Bing's and Google's. Yandex and
+            // Mojeek answer plain HTTP with a captcha and a script challenge, a browser passes the
+            // challenge; Yandex's captcha rests it like Brave's check.
+            Engine("Yandex", "yandex.", true, listOf("class=\"serp-item", "id=\"search-result\""),
+                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha")) { q ->
+                "https://yandex.com/search/?text=${q.encodeUrl()}"
+            },
+            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\"")) { q ->
+                "https://www.mojeek.com/search?q=${q.encodeUrl()}"
+            },
+            // Marginalia indexes the small, old and non-commercial web and ranks shops down by
+            // design: forums, tools and archived pages a general engine buries.
+            Engine("Marginalia", "marginalia", false, listOf("<h2"), forOffers = false) { q ->
+                "https://marginalia-search.com/search?query=${q.encodeUrl()}"
             },
         )
 
@@ -238,9 +273,12 @@ class SearchEngines(private val client: HttpClient) {
                     host.isNotEmpty() && engineHost !in host && ENGINE_HOSTS.none { it in host } && AD_HOSTS.none { it in host }
                 }
             }
-            // The engine's own header, menus and footer link elsewhere too, and list no result.
+            // The engine's own header, menus, side panels and footer link elsewhere too, and list no
+            // result, nor does a dialog the page keeps hidden (Marginalia's language menu). Being
+            // aria-hidden says nothing: Google's results are, behind its consent dialog.
             fun inFrame(a: org.jsoup.nodes.Element) = a.parents().any { p ->
-                p.tagName() in setOf("footer", "nav", "header") || p.attr("role") in setOf("contentinfo", "navigation", "banner")
+                p.tagName() in setOf("footer", "nav", "header", "aside") || p.attr("role") in setOf("contentinfo", "navigation", "banner", "dialog") ||
+                    p.hasAttr("hidden")
             }
             val target = LinkedHashMap<org.jsoup.nodes.Element, String>()
             for (a in doc.select("a[href]")) if (!inFrame(a)) target[a] = targetOf(a) ?: continue
@@ -312,7 +350,7 @@ class SearchEngines(private val client: HttpClient) {
         /** Ad networks an engine's ads pass through on their way to the shop. */
         internal val AD_HOSTS = listOf("admarketplace.", "doubleclick.", "googleadservices.", "adservice.", "awin1.", "tradedoubler.", "clickserve.", "ad.atdmt.", "partners.webmasterplan.", "pvn.", "tc.tradetracker.", "go.skimresources.")
 
-        private val ENGINE_HOSTS = listOf("google.", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "youtube.", "schema.org",
+        private val ENGINE_HOSTS = listOf("google.", "translate.goog", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "yandex.", "ya.ru", "mojeek.", "marginalia", "youtube.", "schema.org",
             // Bing's footer: its terms and how it ranks.
             "go.microsoft.", "support.microsoft.",
             // Startpage's note on the ads it shows.

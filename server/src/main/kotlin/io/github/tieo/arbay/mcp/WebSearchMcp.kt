@@ -28,13 +28,14 @@ class WebSearchMcp(private val http: HttpClient, private val base: String) {
         ServerOptions(capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = false))),
         instructions = """
             Searches the web on any words with several engines at once (Bing, DuckDuckGo, Google, Qwant, Brave,
-            Startpage) from a home server, and gives every result's title, address and snippet, the addresses
-            most engines list first. The engines search in German.
+            Startpage, and the independent indexes of Yandex, Mojeek and Marginalia, the last for the small, old
+            and technical web) from a home server, and gives every result's title, address and snippet, the
+            addresses most engines list first. The engines search in German.
         """.trimIndent(),
     ).apply {
         textTool(
             "web_search",
-            "What the search engines (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage) list for any words: every result with its title, address and snippet, merged by address, the ones most engines list first, and how each engine answered. Takes up to two minutes, the browser engines being asked one after another.",
+            "What the search engines (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage, Yandex, Mojeek, Marginalia) list for any words: every result with its title, address and snippet, merged by address, the ones most engines list first, and how each engine answered. Takes up to three minutes, the browser engines being asked one after another.",
             readOnly = true,
             props = {
                 string("query", "The words, as typed into a search engine (quotes and operators pass through)", required = true)

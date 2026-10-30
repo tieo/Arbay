@@ -72,4 +72,15 @@ class SerpRowsTest {
         assertEquals("HUMMEL - LÄGLER", r[0].title)
         assertTrue(r.none { "microsoft" in it.url || "Anonymer Ansicht" in it.snippet }, r.joinToString("\n"))
     }
+
+    /** Marginalia's own index, for "vcds alternative diagnose software" on 2026-10-30. */
+    @Test
+    fun `marginalia lists its results with their snippets`() {
+        val r = rows("marginalia", "marginalia", "https://marginalia-search.com/search")
+        assertTrue(r.size >= 20, r.joinToString("\n"))
+        val forum = r.first { "dieselschrauber.org" in it.url }
+        assertEquals("VCDS and OBD diagnostic tools | Dieselschrauber", forum.title)
+        assertTrue(forum.snippet.isNotEmpty(), r.joinToString("\n"))
+        assertTrue(r.none { "marginalia" in it.url || "github.com" in it.url }, r.joinToString("\n"))
+    }
 }
