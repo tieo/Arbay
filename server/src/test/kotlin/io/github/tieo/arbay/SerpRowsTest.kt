@@ -94,4 +94,14 @@ class SerpRowsTest {
         assertTrue(obi.image.startsWith("https://bilder.obi.de/"), obi.toString())
         assertTrue(r.count { it.size != null } >= 30, r.joinToString("\n") { it.size.toString() })
     }
+
+    /** Yandex's site search over its whole index, for "Parkettschleifmaschine Hummel" on 2026-10-30. */
+    @Test
+    fun `yandex lists its results without its own links`() {
+        val r = rows("yandex", "yandex.", "https://yandex.ru/search/site/")
+        assertTrue(r.size >= 8, r.joinToString("\n"))
+        assertTrue(r.none { "yandex." in it.url || "ya.ru" in it.url }, r.joinToString("\n"))
+        val bluemel = r.first { "maschinenverleih-bluemel.de" in it.url }
+        assertTrue(bluemel.snippet.startsWith("Auch wenn die Hummel"), bluemel.snippet)
+    }
 }

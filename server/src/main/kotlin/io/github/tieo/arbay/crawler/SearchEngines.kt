@@ -261,13 +261,14 @@ class SearchEngines(private val client: HttpClient) {
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
                 "https://www.startpage.com/do/search?q=${q.encodeUrl()}&language=deutsch"
             },
-            // Three indexes of their own, beside the ones built on Bing's and Google's. Yandex puts a
-            // checkbox captcha and Mojeek an ALTCHA before the server's requests, plain or in a
-            // browser: the browser ticks the box, and an engine that asks more after it (a picture
-            // puzzle) rests like Brave on its check.
-            Engine("Yandex", "yandex.", true, listOf("class=\"serp-item", "id=\"search-result\""),
-                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha"), tick = listOf("#js-button", ".CheckboxCaptcha-Button")) { q ->
-                "https://yandex.com/search/?text=${q.encodeUrl()}"
+            // Three indexes of their own, beside the ones built on Bing's and Google's. Mojeek puts an
+            // ALTCHA before the server's requests, plain or in a browser: the browser ticks its box,
+            // and an engine that asks more after it rests like Brave on its check.
+            // Yandex's own search puts a picture puzzle before the server's requests, the browser's
+            // too. Its search for a site's own pages, given no site ("web=1"), searches its whole
+            // index over plain HTTP with none; lr=177 asks it as from Berlin.
+            Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link")) { q ->
+                "https://yandex.ru/search/site/?searchid=2313451&web=1&lr=177&text=${q.encodeUrl()}"
             },
             Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color"), tick = listOf("altcha-widget input[type=checkbox]", "#altcha-widget input")) { q ->
                 "https://www.mojeek.com/search?q=${q.encodeUrl()}"
@@ -358,6 +359,8 @@ class SearchEngines(private val client: HttpClient) {
                 // prints the address's path before the text ("laegler.com ‣ produkte ‣ hummel").
                 val snippet = org.jsoup.parser.Parser.unescapeEntities(rest.text(), false)
                     .replace(Regex("""\s+"""), " ").trim().replace(LEADING_PATH, "").trim()
+                    // Yandex numbers its results in their text ("1. Die Bandschleifmaschine …").
+                    .replace(LIST_NUMBER, "")
                 SerpResult(0, title, url, snippet.take(SNIPPET_LENGTH))
             }.let { rows ->
                 // An ad or a shopping card comes with a title and an address alone (Qwant's ads above
@@ -368,6 +371,8 @@ class SearchEngines(private val client: HttpClient) {
         }
 
         private val LEADING_PATH = Regex("""^(\S+\s)?([›‣]\s*\S+\s*)+""")
+
+        private val LIST_NUMBER = Regex("""^\d{1,3}\.\s+""")
 
         private const val SNIPPET_LENGTH = 500
 
