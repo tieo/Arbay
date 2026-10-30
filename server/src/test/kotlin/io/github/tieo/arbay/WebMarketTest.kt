@@ -66,6 +66,18 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a shop's page of one review reads the reviewed product's offer at the product's address`() {
+        // galaxus.ch's /productrating/ page states the review, the product inside it with the shop's offer.
+        val html = """<script type="application/ld+json">{"@type":"Review","author":{"@type":"Person","name":"TobiTop12"},
+            "itemReviewed":{"@type":"Product","name":"USB 10 Gbps USB Type-C Switch 2 auf 1 bidirektional 8K","brand":{"@type":"Brand","name":"Delock"},
+            "offers":{"@type":"Offer","price":32,"priceCurrency":"CHF","availability":"InStock","itemCondition":"NewCondition",
+            "url":"https://www.galaxus.ch/de/s1/product/delock-usb-10-gbps-usb-type-c-switch-24860179"}}}</script>"""
+        val offer = ProductPages.offers(html, "https://www.galaxus.ch/de/productrating/erfuellt-den-zweck-10439025").single()
+        assertEquals(Money(3200, Currency.CHF), offer.price)
+        assertEquals("https://www.galaxus.ch/de/s1/product/delock-usb-10-gbps-usb-type-c-switch-24860179", offer.url)
+    }
+
+    @Test
     fun `a page that sells something is told from one that only talks about it`() {
         assertTrue(ProductPages.sellsSomething("<body><span>129,99 €</span><button>In den Warenkorb</button></body>"))
         assertFalse(ProductPages.sellsSomething("<body><p>Test: das Gehäuse kostet etwa 130 Euro.</p></body>"))

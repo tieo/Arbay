@@ -462,8 +462,10 @@ object ProductPages {
                     }
                 }
             // A page stating the product as what an action or the page is about: MediaMarkt's
-            // BuyAction carries it as its `object`, others a WebPage its `mainEntity`.
-            else -> listOf("object", "mainEntity").flatMap { k -> (node[k] as? JsonObject)?.let { productsIn(it) }.orEmpty() }
+            // BuyAction carries it as its `object`, others a WebPage its `mainEntity`, and a
+            // shop's page of one customer review its `itemReviewed`, with the shop's own offer
+            // and the product page's address (galaxus.ch's /productrating/ pages).
+            else -> listOf("object", "mainEntity", "itemReviewed").flatMap { k -> (node[k] as? JsonObject)?.let { productsIn(it) }.orEmpty() }
         }
     }
 
