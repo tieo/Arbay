@@ -297,6 +297,11 @@ class WebMarketTest {
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Käuferschutz bis 20.000 € je Kauf!</p><p>Ab 2.000 € Warenwert liefern wir frei</p><h1>Dusch-WC kaufen: Ja oder Nein?</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>0,00 €* Warenkorb</a><h1>Maschinenvermietung</h1><p>Mieten statt kaufen</p></body>"))
+        // ipc-computer.de's end-of-life RAM module shows only an alternative it has none of either.
+        assertFalse(ProductPages.sellsSomething("""<body><h1>Substitut für Dell RN12H Arbeitsspeicher 96GB</h1><span>EOL</span><span>Nicht mehr lieferbar</span>
+            <div class="card"><a>RN12H Original Dell CAMM Adapter</a><span>Aktuell nicht lieferbar</span><span>55</span><sup>00</sup><span>€</span> inkl. 19% MwSt</div>
+            <a>Warenkorb</a></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><a>Warenkorb</a><div>Adapter A: Aktuell nicht lieferbar</div><div>Adapter B: sofort lieferbar 49,90 €</div></body>"))
     }
 
     @Test

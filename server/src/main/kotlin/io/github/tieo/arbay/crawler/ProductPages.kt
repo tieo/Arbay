@@ -88,7 +88,7 @@ object ProductPages {
             val after = text.substring(end, minOf(text.length, end + 45))
             val reach = if (ALTERNATIVE_AMOUNT.containsMatchIn(after)) 45 else 15
             val before = text.substring(maxOf(0, m.range.first - 30), m.range.first)
-            m.value.any { it in '1'..'9' } && !RECOMMENDED_BEFORE.containsMatchIn(before) && !RECOMMENDED_AFTER.containsMatchIn(after) && !NOT_A_PRICE.containsMatchIn(
+            m.value.any { it in '1'..'9' } && !RECOMMENDED_BEFORE.containsMatchIn(before) && !UNAVAILABLE_BEFORE.containsMatchIn(before) && !RECOMMENDED_AFTER.containsMatchIn(after) && !NOT_A_PRICE.containsMatchIn(
                 before + " " + after.take(reach))
         } && BUY_WORDS.containsMatchIn(text)
     }
@@ -147,6 +147,10 @@ object ProductPages {
     private val LIST_PRICE = Regex("""\d\s?€\s{0,3}uvp\b|\buvp\W{0,3}\d""")
 
     private val RECOMMENDED_BEFORE =Regex("""(uvp|unverbindliche preisempfehlung|statt)\W{0,3}$""")
+
+    // An amount right after the shop saying it has none is no price on offer: ipc-computer.de's
+    // page of an end-of-life RAM module shows only an alternative "Aktuell nicht lieferbar 55,00 €".
+    private val UNAVAILABLE_BEFORE = Regex("""(nicht (mehr )?(lieferbar|bestellbar|verfügbar|erhältlich)|ausverkauft|vergriffen|sold out|out of stock|épuisé|esaurito|agotado)\W{0,3}$""")
 
     private val RECOMMENDED_AFTER = Regex("""^\W{0,3}(uvp|unverbindliche preisempfehlung)\b""")
 
