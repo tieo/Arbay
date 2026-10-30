@@ -76,13 +76,16 @@ object ProductPages {
         // Nor is what delivery costs, a voucher or an order's minimum: "Versandkosten ab 5,95 €"
         // stands in a shop's header, "10 €-Gutschein ab 100 € Einkaufswert" on its newsletter page.
         // An amount named beside another ("€ 1,99 bzw. € 3,98 Mini-Versand") is what the other is.
+        // A maker's recommended price is no price of the page's own: hansgrohe.de shows
+        // "215,75 € UVP" beside "Fachhändler finden", a shop "UVP 299 €" beside what it asks.
         return PRICE_IN_TEXT.findAll(text).any { m ->
             // Read on from the amount's last digit: "€ 3" is how "€ 3,98" matches.
             val end = m.range.last + 1 + (AMOUNT_TAIL.find(text, m.range.last + 1)?.takeIf { it.range.first == m.range.last + 1 }?.value?.length ?: 0)
             val after = text.substring(end, minOf(text.length, end + 45))
             val reach = if (ALTERNATIVE_AMOUNT.containsMatchIn(after)) 45 else 15
-            m.value.any { it in '1'..'9' } && !NOT_A_PRICE.containsMatchIn(
-                text.substring(maxOf(0, m.range.first - 30), m.range.first) + " " + after.take(reach))
+            val before = text.substring(maxOf(0, m.range.first - 30), m.range.first)
+            m.value.any { it in '1'..'9' } && !RECOMMENDED_BEFORE.containsMatchIn(before) && !RECOMMENDED_AFTER.containsMatchIn(after) && !NOT_A_PRICE.containsMatchIn(
+                before + " " + after.take(reach))
         } && BUY_WORDS.containsMatchIn(text)
     }
 
@@ -134,6 +137,10 @@ object ProductPages {
         doc.selectFirst("html#XenForo, html#XF, html[data-app=public][data-template=thread_view], body#phpbb, #vbulletin_html, meta[name=generator][content*=Discourse], meta[name=generator][content*=phpBB], meta[name=generator][content*=vBulletin]") != null
 
     private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|im wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese""")
+
+    private val RECOMMENDED_BEFORE = Regex("""(uvp|unverbindliche preisempfehlung|statt)\W{0,3}$""")
+
+    private val RECOMMENDED_AFTER = Regex("""^\W{0,3}(uvp|unverbindliche preisempfehlung)\b""")
 
     private val AMOUNT_TAIL = Regex("""[\d.,]+""")
 

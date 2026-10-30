@@ -218,6 +218,17 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a maker's page showing only its recommended price sells nothing`() {
+        // hansgrohe.de's article pages: the list price, a dealer finder and a header basket.
+        val maker = """<body><header><a>Merkliste</a><a>Warenkorb</a><a>Händler finden</a></header>
+            <div class="product-data"><h1>Talis E Einhebel-Waschtischmischer 110</h1><span><strong>215,75 €</strong></span> UVP inkl. MwSt.<a>Fachhändler finden</a></div></body>"""
+        assertFalse(ProductPages.sellsSomething(maker))
+        // A shop naming the recommended price beside its own still sells.
+        assertTrue(ProductPages.sellsSomething("<body><s>UVP 215,75 €</s> <b>149,90 €</b><button>In den Warenkorb</button></body>"))
+        assertTrue(ProductPages.sellsSomething("<body><s>statt 215,75 €</s> <b>149,90 €</b><button>In den Warenkorb</button></body>"))
+    }
+
+    @Test
     fun `an article naming prices and shops sells nothing`() {
         // technikkram.net's WD Red Plus review, with its affiliate boxes.
         val html = """<script type="application/ld+json">{"@graph":[{"@type":"WebPage"},{"@type":"BlogPosting","headline":"WD Red Plus im Überblick"}]}</script>
