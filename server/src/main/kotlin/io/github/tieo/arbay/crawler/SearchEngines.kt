@@ -65,6 +65,12 @@ class SearchEngines(private val client: HttpClient) {
         val results = if (engine.redirects.isEmpty()) emptyList()
             else resultLinks(withRedirectsResolved(html, engine), engine.host).filterNot { u -> AD_HOSTS.any { it in SiteRecipes.domainOf(u) } }
         val adRedirects = redirectsIn(html, engine).filter { "/aclk?" in it }
+        // An engine that found nothing for the words may list something else instead (Yandex lists
+        // popular pages for many rare words): its links are no pages for these words.
+        if (unrelated(serpRows(html, engine.host, engine.url(""), engine.redirects), words)) {
+            log.warn("Web: {} listed pages for '{}' that share no word with it", engine.name, words)
+            return emptyList()
+        }
         val links = (direct + results + resolved(adRedirects + ads, engine)).distinct()
         if (links.isEmpty() && page == 1) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
@@ -111,7 +117,7 @@ class SearchEngines(private val client: HttpClient) {
         val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
         suspend fun ask(e: Engine, again: Boolean = !e.browser): EngineResults {
             val page = (if (again || e.browser) resultsPage(e, words) else viaBrowser(e, words))
-                .getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
+                .getOrElse { return EngineResults(e.name, if (again || e.browser) "failed: ${it.message?.take(120)}" else "no results read", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
             // page is mended against.
             runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(page) }
@@ -127,6 +133,10 @@ class SearchEngines(private val client: HttpClient) {
             // search: Bing answers now and then with a check, Marginalia every other request with
             // its results page cut off before the results.
             if (rows.isEmpty() && again) return ask(e, again = false)
+            if (unrelated(rows, words)) {
+                log.warn("Web: {} listed {} results for '{}' that share no word with it", e.name, rows.size, words)
+                return EngineResults(e.name, "results unrelated to the words, left out", emptyList())
+            }
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
         }
@@ -304,6 +314,18 @@ class SearchEngines(private val client: HttpClient) {
                 val size = a.parents().firstOrNull { it.selectFirst(".img_info") != null }?.selectFirst(".img_info span.nowrap")?.text()?.trim()
                 ImageResult(0, field("t").orEmpty(), image, page, field("turl"), size?.takeIf { it.isNotBlank() })
             }
+
+        /**
+         * Whether an engine's results are for other words than [words]: fewer than a third of them
+         * name any of its words in their title, text or address. Yandex answers many rare words
+         * with popular pages (Roblox's sign-in, a bank), counted as results all the same.
+         */
+        internal fun unrelated(rows: List<SerpResult>, words: String): Boolean {
+            val wanted = words.lowercase().split(Regex("""[^\p{L}\p{N}]+""")).filter { it.length >= 3 }.toSet()
+            if (rows.isEmpty() || wanted.isEmpty()) return false
+            val sharing = rows.count { r -> "${r.title} ${r.snippet} ${r.url}".lowercase().let { text -> wanted.any { it in text } } }
+            return sharing * 3 < rows.size
+        }
 
         /** The pages a results page links to, apart from the engine's own and its redirects'. */
         internal fun resultLinks(html: String, engineHost: String): List<String> =

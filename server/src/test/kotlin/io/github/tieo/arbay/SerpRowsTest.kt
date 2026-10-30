@@ -104,4 +104,15 @@ class SerpRowsTest {
         val bluemel = r.first { "maschinenverleih-bluemel.de" in it.url }
         assertTrue(bluemel.snippet.startsWith("Auch wenn die Hummel"), bluemel.snippet)
     }
+
+    /** Yandex for "ford ids odx b420 module database" on 2026-10-30: popular pages, none for the words. */
+    @Test
+    fun `results sharing no word with the search are told apart`() {
+        val junk = rows("yandex-unrelated", "yandex.", "https://yandex.ru/search/site/")
+        assertTrue(SearchEngines.unrelated(junk, "ford ids odx b420 module database"), junk.joinToString("\n"))
+        val hummel = rows("yandex", "yandex.", "https://yandex.ru/search/site/")
+        assertTrue(!SearchEngines.unrelated(hummel, "Parkettschleifmaschine Hummel"), hummel.joinToString("\n"))
+        val bing = rows("bing", "bing.", "https://www.bing.com/search")
+        assertTrue(!SearchEngines.unrelated(bing, "Lägler Hummel Parkettschleifmaschine"), bing.joinToString("\n"))
+    }
 }
