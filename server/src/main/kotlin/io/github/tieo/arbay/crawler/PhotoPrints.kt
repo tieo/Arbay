@@ -154,7 +154,7 @@ object PhotoPrints {
      * [firstFile]. Answers whether any of them is printed, false when not one could be fetched.
      */
     suspend fun record(listing: Listing, photos: List<String>, firstFile: File? = null): Boolean {
-        if (photos.isEmpty()) return false
+        if (photos.isEmpty() || fromShop(listing.id)) return false
         val known = synchronized(this) { entries[listing.id] }
         val at = whereIs(listing)
         if (known != null && known.prints.size >= photos.size) {
@@ -184,6 +184,7 @@ object PhotoPrints {
 
     /** [record] in the background, for a listing just archived. */
     fun recordAsync(listing: Listing, firstFile: File?) {
+        if (fromShop(listing.id)) return
         scope.launch { runCatching { record(listing, listing.imageUrls.take(1), firstFile) } }
     }
 
@@ -209,6 +210,7 @@ object PhotoPrints {
 
     /** The ads placed elsewhere or by someone else that show one of [listing]'s photos. */
     fun copiesOf(listing: Listing): List<PhotoCopy> = synchronized(this) {
+        if (fromShop(listing.id)) return emptyList()
         val own = entries[listing.id]?.let { e ->
             if (e.lat != null) e else whereIs(listing)?.let { e.copy(lat = it.first, lon = it.second) } ?: e
         } ?: return emptyList()
@@ -216,6 +218,14 @@ object PhotoPrints {
             .distinctBy { it.id }
             .map { PhotoCopy(it.id, it.url, it.place) }
     }
+
+    /**
+     * Whether an offer comes from a shop on the web market. Shops show the maker's photos of what
+     * they sell, the same pictures on every shop: for "Juniper Moon Glimmer" five yarn shops read
+     * as likely scams made of each other's photos. A shop's photos tell nothing about where an
+     * ad's came from, so shop offers are neither printed nor judged.
+     */
+    private fun fromShop(id: String) = id.startsWith("${io.github.tieo.arbay.model.PlatformId.WEB.name}:")
 
     /** The other entries showing [print], unless so many places show it that it is a stock picture. */
     private fun othersWith(print: Long, own: Entry): List<Entry> {
@@ -227,7 +237,7 @@ object PhotoPrints {
         for (i in 0 until 8) byByte[key(print, i)]?.forEach { id -> shared.merge(id, 1, Int::plus) }
         val same = shared.filter { (id, n) -> n >= 8 - SAME_PHOTO_BITS && id != own.id }.keys
             .mapNotNull { entries[it] }
-            .filter { e -> e.prints.any { java.lang.Long.bitCount(it xor print) <= SAME_PHOTO_BITS } }
+            .filter { e -> !fromShop(e.id) && e.prints.any { java.lang.Long.bitCount(it xor print) <= SAME_PHOTO_BITS } }
         if (isTemplate(same + own)) return emptyList()
         val elsewhere = same.filter { apart(it, own) }
         return if (elsewhere.distinctBy { placeKey(it) }.size > STOCK_PLACES) emptyList() else elsewhere

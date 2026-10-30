@@ -127,6 +127,20 @@ class PhotoPrintsTest {
     }
 
     @Test
+    fun `shops showing the maker's photo are no copies of each other`() = runBlocking {
+        val dir = File("build/test-data/photo-prints").apply { mkdirs() }
+        fun file(name: String, bytes: ByteArray) = File(dir, name).apply { writeBytes(bytes) }
+        fun shop(id: String, city: String) = ad(id, city, id).copy(id = "WEB:$id", platformId = PlatformId.WEB)
+        val yarn = photo(11)
+        val one = shop("pp-shop-a", "Murnau")
+        val other = shop("pp-shop-b", "Köln")
+        PhotoPrints.record(one, listOf("local"), file("shop-a.jpg", jpeg(yarn, 0.9f)))
+        PhotoPrints.record(other, listOf("local"), file("shop-b.jpg", jpeg(yarn, 0.7f, 0.6)))
+        assertEquals(emptyList(), PhotoPrints.copiesOf(one))
+        assertEquals(emptyList(), PhotoPrints.copiesOf(other))
+    }
+
+    @Test
     fun `a dealer's ad in a district and the same ad in its city are one place`() {
         // AP-Automobile's Crafter: Kleinanzeigen places it in Aubing by its postcode 81249, mobile.de
         // in München by name. Compared by their names they were two places, and the van read as a
