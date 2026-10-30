@@ -160,9 +160,15 @@ class SearchEngines(private val client: HttpClient) {
         val done = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
         val asked = picked.mapNotNull(::usable)
         val runs = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-        val jobs = asked.map { e -> runs.launch { done[e.name] = ask(e).let { r -> if (r.results.isEmpty() && e.fallback != null) ask(e.fallback) else r } } }
+        // An engine's fallback is asked alongside it rather than after: Yandex's puzzles can hold
+        // its own page past the deadline, and a fallback started only then answered too late.
+        val standIns = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
+        val jobs = asked.map { e ->
+            val standIn = e.fallback?.let { f -> runs.async { ask(f).also { if (it.results.isNotEmpty()) standIns[e.name] = it } } }
+            runs.launch { done[e.name] = ask(e).let { r -> if (r.results.isEmpty() && standIn != null) standIn.await() else r } }
+        }
         kotlinx.coroutines.withTimeoutOrNull(SERP_DEADLINE_MS) { jobs.joinAll() }
-        val all = asked.map { e -> done[e.name] ?: EngineResults(e.name, "still searching after ${SERP_DEADLINE_MS / 1000} s, left out", emptyList()) } + resting
+        val all = asked.map { e -> done[e.name] ?: standIns[e.name] ?: EngineResults(e.name, "still searching after ${SERP_DEADLINE_MS / 1000} s, left out", emptyList()) } + resting
         val merged = all.flatMap { e -> e.results.map { e.engine to it } }
             .groupBy { (_, r) -> r.url.removeSuffix("/") }
             .map { (_, hits) ->
