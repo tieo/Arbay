@@ -73,7 +73,7 @@ class SearchEngines(private val client: HttpClient) {
         val url = engine.pageUrl(words, pageNo)
         return try {
             if (engine.browser) {
-                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25, refusals = engine.refusals)
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = 25, refusals = engine.refusals, tick = engine.tick)
                     ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
                 // An engine that put a bot check before its results rests a while: asked again at
                 // once it checks again, and each check held every search up for the browser's wait.
@@ -228,6 +228,8 @@ class SearchEngines(private val client: HttpClient) {
         val redirects: List<String> = emptyList(),
         /** Text of the bot check the engine puts before its results instead of answering. */
         val refusals: List<String> = emptyList(),
+        /** The "I'm not a robot" box of a check that passes on a click, by CSS selector. */
+        val tick: List<String> = emptyList(),
         /** Results pages a search reads, and the address of a page after the first. */
         val pages: Int = 1,
         val next: (String, Int) -> String = { url, _ -> url },
@@ -261,13 +263,13 @@ class SearchEngines(private val client: HttpClient) {
             },
             // Three indexes of their own, beside the ones built on Bing's and Google's. Yandex puts a
             // checkbox captcha and Mojeek an ALTCHA before the server's requests, plain or in a
-            // browser; asked anyway, they answer whenever they let the server through, and Yandex's
-            // captcha rests it like Brave's check.
+            // browser: the browser ticks the box, and an engine that asks more after it (a picture
+            // puzzle) rests like Brave on its check.
             Engine("Yandex", "yandex.", true, listOf("class=\"serp-item", "id=\"search-result\""),
-                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha")) { q ->
+                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha"), tick = listOf("#js-button", ".CheckboxCaptcha-Button")) { q ->
                 "https://yandex.com/search/?text=${q.encodeUrl()}"
             },
-            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color")) { q ->
+            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color"), tick = listOf("altcha-widget input[type=checkbox]", "#altcha-widget input")) { q ->
                 "https://www.mojeek.com/search?q=${q.encodeUrl()}"
             },
             // Marginalia indexes the small, old and non-commercial web and ranks shops down by

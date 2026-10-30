@@ -17,6 +17,9 @@ Protocol: one JSON request per line on stdin, one JSON answer per line on stdout
    "accept": ["Alle akzeptieren"], "timeout": 30}
       -> {"ok": true, "html": "...", "url": "<final url>", "page": "content"|"errorpage"|"challenge"|"refused"|"unknown"}
      "accept" names the buttons of a consent screen to press when one stands before the page.
+     "tick" names, by CSS selector, the "I'm not a robot" box of a check that passes on a click
+     (Yandex's checkbox, Mojeek's ALTCHA); it is clicked once, with the mouse, as a person would.
+     A check that asks more after the click (a picture puzzle) is left alone and stays "refused".
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
 The first line written is {"ok": true, "ready": true}.
 """
@@ -29,6 +32,8 @@ import zendriver as zd
 
 CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_BROWSER_PROFILE", os.path.expanduser("~/.arbay/browser-profile"))
+# How long the page behind a ticked box is given to replace the check.
+TICK_WAIT_S = 12
 
 
 def what_page(html: str, markers: list[str], errors: list[str], refusals: list[str] = ()) -> str:
@@ -82,16 +87,38 @@ class Browser:
         )
         return bool(pressed)
 
-    async def get(self, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float, refusals: list[str] = ()) -> dict:
+    async def tick_box(self, selectors: list[str]) -> bool:
+        """Clicks the first of [selectors] the page shows, with the mouse, where one is there."""
+        for sel in selectors:
+            try:
+                box = await self.tab.select(sel, timeout=1)
+            except Exception:
+                continue
+            if box:
+                await box.mouse_click()
+                return True
+        return False
+
+    async def get(self, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
+                  refusals: list[str] = (), tick: list[str] = ()) -> dict:
         await self.tab.get(url)
         html, page = "", "unknown"
         waited = 0.0
         pressed = False
+        ticked_at = None
         while waited < timeout:
             await asyncio.sleep(1)
             waited += 1
             html = await self.tab.get_content()
             page = what_page(html, markers, errors, refusals)
+            # A check passed by ticking its box is ticked once; the page behind it then loads in its
+            # place, given a few seconds to.
+            if page in ("refused", "challenge", "unknown") and tick and ticked_at is None:
+                if await self.tick_box(tick):
+                    ticked_at = waited
+                    continue
+            if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:
+                continue
             # A challenge solves itself in a real browser and then shows the page; anything else
             # that is not the page yet is still loading, or waiting on its consent screen.
             if page in ("content", "errorpage", "refused"):
@@ -123,7 +150,7 @@ async def main() -> None:
             timeout = float(req.get("timeout") or 30)
             if op == "get":
                 answer = await asyncio.wait_for(
-                    b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout, req.get("refusals") or []),
+                    b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout, req.get("refusals") or [], req.get("tick") or []),
                     timeout + 15,
                 )
             elif op == "cookies":

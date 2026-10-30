@@ -55,26 +55,27 @@ open class WarmBrowser(
      * [timeoutS] passes. Null where the browser could not be started or did not answer, which
      * leaves the caller its other ways in.
      */
-    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList()): Page? {
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), tick: List<String> = emptyList()): Page? {
         // One browser serves every search of its site, and a crawl waiting its turn is not its
         // market failing to answer: eBay's five sites share this one, and four waited out their
         // whole time limit behind the fifth.
         val clock = kotlin.coroutines.coroutineContext[CrawlClock]
         if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
         try {
-            return read(url, markers, timeoutS, refusals)
+            return read(url, markers, timeoutS, refusals, tick)
         } finally {
             lock.unlock()
         }
     }
 
-    private suspend fun read(url: String, markers: List<String>, timeoutS: Int, refusals: List<String>): Page? {
+    private suspend fun read(url: String, markers: List<String>, timeoutS: Int, refusals: List<String>, tick: List<String> = emptyList()): Page? {
         val request = JsonObject(mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
             "errors" to JsonArray(errors.map(::JsonPrimitive)),
             "accept" to JsonArray(accept.map(::JsonPrimitive)),
             "refusals" to JsonArray(refusals.map(::JsonPrimitive)),
+            "tick" to JsonArray(tick.map(::JsonPrimitive)),
         ))
         val answer = try {
             withContext(Dispatchers.IO) {
