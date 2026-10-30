@@ -114,9 +114,10 @@ class Chat:
                                    # last --disable-features is the one Chrome reads, so zendriver's
                                    # own are repeated here.
                                    "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
-                                   "--renderer-process-limit=6",
                                    # Ad frames each took a process of their own while only
-                                   # site isolation's feature was off; this switch ends it.
+                                   # site isolation's feature was off; this switch keeps them in
+                                   # their page's. No cap on renderers: under one, tabs share a
+                                   # process and a busy page held Google's tab past its deadline.
                                    "--disable-site-isolation-trials"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
