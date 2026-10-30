@@ -90,7 +90,13 @@ class Browser:
         kwargs = {"headless": False, "user_data_dir": PROFILE,
                   "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble",
                                    "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows",
-                                   "--disable-renderer-backgrounding"]}
+                                   "--disable-renderer-backgrounding",
+                                   # Pages left behind stay alive in the back/forward cache, each in
+                                   # a renderer of its own: three tabs walking through result pages
+                                   # held twelve renderers and 2 GB. The last --disable-features is
+                                   # the one Chrome reads, so zendriver's own are repeated here.
+                                   "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
+                                   "--renderer-process-limit=6"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
