@@ -100,7 +100,7 @@ class SearchEngines(private val client: HttpClient) {
     suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
         val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
-        suspend fun ask(e: Engine): EngineResults {
+        suspend fun ask(e: Engine, again: Boolean = !e.browser): EngineResults {
             val page = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
             // page is mended against.
@@ -113,6 +113,9 @@ class SearchEngines(private val client: HttpClient) {
             val rows = serpRows(html, e.host, e.url(""), emptyList()).map { r ->
                 r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(r.url)))
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
+            // Marginalia answers every other request with its results page empty, and a plain engine
+            // costs one more request: it is asked once more before it counts as listing nothing.
+            if (rows.isEmpty() && again) return ask(e, again = false)
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
         }
@@ -230,14 +233,15 @@ class SearchEngines(private val client: HttpClient) {
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
                 "https://www.startpage.com/do/search?q=${q.encodeUrl()}&language=deutsch"
             },
-            // Three indexes of their own, beside the ones built on Bing's and Google's. Yandex and
-            // Mojeek answer plain HTTP with a captcha and a script challenge, a browser passes the
-            // challenge; Yandex's captcha rests it like Brave's check.
+            // Three indexes of their own, beside the ones built on Bing's and Google's. Yandex puts a
+            // checkbox captcha and Mojeek an ALTCHA before the server's requests, plain or in a
+            // browser; asked anyway, they answer whenever they let the server through, and Yandex's
+            // captcha rests it like Brave's check.
             Engine("Yandex", "yandex.", true, listOf("class=\"serp-item", "id=\"search-result\""),
                 refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha")) { q ->
                 "https://yandex.com/search/?text=${q.encodeUrl()}"
             },
-            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\"")) { q ->
+            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color")) { q ->
                 "https://www.mojeek.com/search?q=${q.encodeUrl()}"
             },
             // Marginalia indexes the small, old and non-commercial web and ranks shops down by
