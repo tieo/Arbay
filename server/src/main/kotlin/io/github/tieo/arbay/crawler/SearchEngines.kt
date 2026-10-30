@@ -176,15 +176,14 @@ class SearchEngines(private val client: HttpClient) {
     private suspend fun withRedirectsResolved(html: String, engine: Engine): String {
         val doc = org.jsoup.Jsoup.parse(html, engine.url(""))
         val links = doc.select("a[href]").filter { a -> engine.redirects.any { it != "/aclk?" && it in a.absUrl("href") } }
-        val to = resolvedEach(links.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS * 2), engine).toMutableMap()
         // Google answers plain requests to its redirects with a wait page after the first few, and
-        // the browser at once: a result's title link left unresolved is opened there.
-        if (engine.browser) {
-            val titles = links.filter { it.selectFirst("h1, h2, h3, h4") != null }.map { it.absUrl("href") }.distinct().filter { it !in to }
-            val opened = if (titles.isEmpty()) emptyMap() else SearchBrowser.resolve(titles.take(MAX_REDIRECTS), engine.host)
-            log.info("Web: {} redirects: {} of {} resolved plainly, {} of {} titles left resolved in the browser", engine.name, to.size, links.size, opened.size, titles.size)
-            to += opened
-        }
+        // its browser at once, so a browser engine's are opened there: only each result's title link,
+        // the others ("Diese Seite übersetzen") leading to the same result or to Google's own pages.
+        val to = if (engine.browser) {
+            val titles = links.filter { it.selectFirst("h1, h2, h3, h4") != null }.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS)
+            SearchBrowser.resolve(titles, engine.host, timeoutS = REDIRECT_TIMEOUT_S)
+                .also { log.info("Web: {} redirects: {} of {} result titles resolved in the browser", engine.name, it.size, titles.size) }
+        } else resolvedEach(links.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS * 2), engine)
         for (a in links) a.attr("href", to[a.absUrl("href")] ?: engine.url(""))
         return doc.outerHtml()
     }
@@ -422,6 +421,9 @@ class SearchEngines(private val client: HttpClient) {
         /** Redirects resolved per results page, and hops followed per redirect. */
         private const val MAX_REDIRECTS = 30
         private const val MAX_HOPS = 4
+        /** How long a redirect opened in the browser is given to leave the engine: Google's took up
+         *  to 9 s when asked many times in a row. */
+        private const val REDIRECT_TIMEOUT_S = 15
 
         private const val PARALLEL_PAGES = 8
 
