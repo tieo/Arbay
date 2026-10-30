@@ -182,7 +182,9 @@ object SearchBrowser : WarmBrowser(
  */
 object RenderBrowsers {
     private val pool = kotlinx.coroutines.channels.Channel<WarmBrowser>(RENDER_BROWSERS).apply {
-        repeat(RENDER_BROWSERS) { i -> trySend(WarmBrowser("render${i + 1}", 92 + i, "render-profile-${i + 1}", "render-browser-${i + 1}.log")) }
+        // From :100 up: the market account browsers hold :92 and :93, and a render browser on one of
+        // them took the sign-in pictures and the clicks the user made on them.
+        repeat(RENDER_BROWSERS) { i -> trySend(WarmBrowser("render${i + 1}", 100 + i, "render-profile-${i + 1}", "render-browser-${i + 1}.log")) }
     }
 
     /** [WarmBrowser.get] on whichever browser is free first. */
