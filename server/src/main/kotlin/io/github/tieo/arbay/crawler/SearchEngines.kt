@@ -91,6 +91,10 @@ class SearchEngines(private val client: HttpClient) {
         }
     }
 
+    private suspend fun viaBrowser(engine: Engine, words: String): Result<String> =
+        SearchBrowser.get(engine.url(words), engine.markers, timeoutS = 10)?.takeIf { it.page == "content" }?.html
+            ?.let { Result.success(it) } ?: Result.failure(Exception("no results page through the browser either"))
+
     /**
      * What each engine lists for [words], as a person reads its results page: every result's title,
      * address and snippet in the engine's order, and all of them merged by address. [engines] picks
@@ -101,7 +105,8 @@ class SearchEngines(private val client: HttpClient) {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
         val resting = picked.filter { resting(it) }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
         suspend fun ask(e: Engine, again: Boolean = !e.browser): EngineResults {
-            val page = resultsPage(e, words).getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
+            val page = (if (again || e.browser) resultsPage(e, words) else viaBrowser(e, words))
+                .getOrElse { return EngineResults(e.name, "failed: ${it.message?.take(120)}", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
             // page is mended against.
             runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(page) }
@@ -113,8 +118,9 @@ class SearchEngines(private val client: HttpClient) {
             val rows = serpRows(html, e.host, e.url(""), emptyList()).map { r ->
                 r.copy(url = WebCrawler.withoutSession(WebCrawler.unproxied(r.url)))
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
-            // Marginalia answers every other request with its results page empty, and a plain engine
-            // costs one more request: it is asked once more before it counts as listing nothing.
+            // A plain engine that listed nothing is asked once more through the browser, as for a
+            // search: Bing answers now and then with a check, Marginalia every other request with
+            // its results page cut off before the results.
             if (rows.isEmpty() && again) return ask(e, again = false)
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
@@ -246,7 +252,7 @@ class SearchEngines(private val client: HttpClient) {
             },
             // Marginalia indexes the small, old and non-commercial web and ranks shops down by
             // design: forums, tools and archived pages a general engine buries.
-            Engine("Marginalia", "marginalia", false, listOf("<h2"), forOffers = false) { q ->
+            Engine("Marginalia", "marginalia", false, listOf("hyphens-auto"), forOffers = false) { q ->
                 "https://marginalia-search.com/search?query=${q.encodeUrl()}"
             },
         )
