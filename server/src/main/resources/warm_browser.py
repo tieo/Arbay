@@ -38,6 +38,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import zendriver as zd
 
@@ -47,6 +48,8 @@ PROFILE = os.environ.get("ARBAY_BROWSER_PROFILE", os.path.expanduser("~/.arbay/b
 TICK_WAIT_S = 12
 # Puzzles answered per page before it counts as refused: Yandex takes about two in five.
 PUZZLES = 3
+# Seconds one puzzle takes, reading it to its answer: a page answers one only with that much left.
+PUZZLE_S = 20
 
 
 def what_page(html: str, markers: list[str], errors: list[str], refusals: list[str] = ()) -> str:
@@ -179,13 +182,16 @@ class Browser:
                   refusals: list[str] = (), tick: list[str] = (), solve: str = "") -> dict:
         await tab.get(url)
         html, page = "", "unknown"
+        # Time as it passes, puzzles answered included: counting only the waits let a page with
+        # puzzles run past the request's limit, and the browser was restarted as stuck.
+        start = time.monotonic()
         waited = 0.0
         pressed = False
         ticked_at = None
         solved = 0
         while waited < timeout:
             await asyncio.sleep(1)
-            waited += 1
+            waited = time.monotonic() - start
             html = await tab.get_content()
             page = what_page(html, markers, errors, refusals)
             # A check passed by ticking its box is ticked once; the page behind it then loads in its
@@ -194,13 +200,13 @@ class Browser:
                 if await self.tick_box(tab, tick):
                     ticked_at = waited
                     continue
-            if page == "refused" and solve == "yandex" and solved < PUZZLES and "AdvancedCaptcha" in html:
+            if page == "refused" and solve == "yandex" and solved < PUZZLES and "AdvancedCaptcha" in html and timeout - waited > PUZZLE_S:
                 solved += 1
                 try:
                     await self.solve_yandex(tab)
                 except Exception as e:
                     print(f"yandex puzzle: {e}", file=sys.stderr, flush=True)
-                ticked_at = waited
+                ticked_at = time.monotonic() - start
                 continue
             if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:
                 continue
