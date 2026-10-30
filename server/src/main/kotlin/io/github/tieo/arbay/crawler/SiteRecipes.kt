@@ -332,11 +332,13 @@ object SiteRecipes {
         if (recipe.pricesNet && (recipe.netWhere == null || doc.selectFirst(recipe.netWhere) != null)) ProductPages.withVat(price, pageUrl) else price
 
     /** A link as a page hides it: mietmeile.de writes each ad's address base64-encoded into a
-     *  `data-submit` its script follows. A value that decodes to an address is that address. */
+     *  `data-submit` its script follows, kuechentechnik-mueller.de its articles' into an `onclick`
+     *  of `window.location="…"`. A value that decodes to an address, or sends the page to one, is
+     *  that address. */
     private fun decodedLink(raw: String): String {
+        Regex("""location(?:\.href)?\s*=\s*['"]([^'"]+)['"]""").find(raw)?.let { return it.groupValues[1] }
         if ('/' in raw || '.' in raw || !Regex("""[A-Za-z0-9+_=-]{8,}""").matches(raw)) return raw
         val decoded = runCatching { String(java.util.Base64.getMimeDecoder().decode(raw.replace('-', '+').replace('_', '/'))) }.getOrNull() ?: return raw
-        Regex("""location(?:\.href)?\s*=\s*['"]([^'"]+)['"]""").find(raw)?.let { return it.groupValues[1] }
         return decoded.takeIf { it.startsWith("/") || it.startsWith("http") }?.takeIf { d -> d.all { it.code in 33..126 } } ?: raw
     }
 

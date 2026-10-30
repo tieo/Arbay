@@ -582,4 +582,13 @@ class WebMarketTest {
             <p>Interface avec l'ordinateur 1 x USB 3.1 Type C</p><p>Largeur 268 mm Hauteur 150 mm</p><a>Panier</a><a>Acheter</a></body>"""))
         assertTrue(ProductPages.sellsSomething("<body><span>EUR 129,99</span><a>Jetzt kaufen</a></body>"))
     }
+
+    @Test
+    fun `a link the page sends to by script is read off its onclick`() {
+        // kuechentechnik-mueller.de's search lists each article as boxes with only an onclick.
+        val html = """<div class="artikel_liste_neu"><div class="artikel_liste_text_neu"><div onclick='window.location="../Artikel/Blanco-ANDANO-525247-343354.html"'><div class="liste_bezeichnung"><h1>Blanco ANDANO 340/180-IF/A</h1></div></div><span class="preis">662,20 €</span></div></div>"""
+        val recipe = SiteRecipe(domain = "kuechentechnik-mueller.de", item = "div.artikel_liste_neu", title = ".liste_bezeichnung h1", price = "span.preis", link = "[onclick*=Artikel]@onclick")
+        val offers = SiteRecipes.read(recipe, html, "https://www.kuechentechnik-mueller.de/Shop/Index/index.php?searchq=Andano")
+        assertEquals("https://www.kuechentechnik-mueller.de/Shop/Artikel/Blanco-ANDANO-525247-343354.html", offers.single().url)
+    }
 }
