@@ -310,9 +310,10 @@ class SearchEngines(private val client: HttpClient) {
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
             // Its "language" keeps only pages in that language, one result of eleven for English
-            // words; "lui" sets only the language it speaks.
+            // words, and a browser keeps the last one asked for: "all" asks for every language,
+            // "lui" sets only the language it speaks.
             Engine("Startpage", "startpage.", true, listOf("class=\"w-gl", "class=\"result")) { q ->
-                "https://www.startpage.com/do/search?q=${q.encodeUrl()}&lui=deutsch"
+                "https://www.startpage.com/do/search?q=${q.encodeUrl()}&lui=deutsch&language=all"
             },
             // Three indexes of their own, beside the ones built on Bing's and Google's. Mojeek puts an
             // ALTCHA before the server's requests, plain or in a browser: the browser ticks its box,
