@@ -28,6 +28,11 @@ fun main() {
     System.setProperty("java.awt.headless", "true")
     ModelWordEvidence.install(DataDir.file("model_word_evidence.json"))
     io.github.tieo.arbay.crawler.OfferJudge.install(DataDir.file("offer_verdicts.json"))
+    // The search engines' browser is started with the server: a search of the web asked right
+    // after a restart otherwise waited for its start and ran past an MCP client's time limit.
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        runCatching { io.github.tieo.arbay.crawler.SearchBrowser.warm() }
+    }
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }

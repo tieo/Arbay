@@ -7,6 +7,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.slf4j.LoggerFactory
@@ -151,9 +153,16 @@ class SearchEngines(private val client: HttpClient) {
             if (rows.isEmpty()) ErrorSnapshotStore.capture("web-serp-${e.name}", words, Exception("results page without results"), ErrorType.PARSE_ERROR, e.url(words), html = html)
             return EngineResults(e.name, if (rows.isEmpty()) "no results read" else "ok", rows)
         }
-        val plain = picked.filter { !it.browser && !resting(it) }.map { e -> async { ask(e) } }
-        val browser = picked.filter { it.browser && !resting(it) }.map { ask(it) }
-        val all = plain.awaitAll() + browser + resting
+        // The engines run on a scope of their own, so the search can answer at its deadline with
+        // the engines done by then while the rest finish unseen: a read in the browser cannot be
+        // cut short, and an MCP client gave up on a search started with a cold browser.
+        val done = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
+        val asked = picked.filter { !resting(it) }
+        val runs = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        val jobs = asked.filter { !it.browser }.map { e -> runs.launch { done[e.name] = ask(e) } } +
+            runs.launch { for (e in asked.filter { it.browser }) done[e.name] = ask(e) }
+        kotlinx.coroutines.withTimeoutOrNull(SERP_DEADLINE_MS) { jobs.joinAll() }
+        val all = asked.map { e -> done[e.name] ?: EngineResults(e.name, "still searching after ${SERP_DEADLINE_MS / 1000} s, left out", emptyList()) } + resting
         val merged = all.flatMap { e -> e.results.map { e.engine to it } }
             .groupBy { (_, r) -> r.url.removeSuffix("/") }
             .map { (_, hits) ->
@@ -499,6 +508,9 @@ class SearchEngines(private val client: HttpClient) {
         /** Bing Images' pages read for one image search, and the pictures on each. */
         private const val IMAGE_PAGES = 3
         private const val IMAGES_PER_PAGE = 35
+
+        /** When a search of the web answers, with the engines done by then. */
+        private const val SERP_DEADLINE_MS = 50_000L
 
         /** How long an engine that put a bot check before its results is left out. */
         private const val REST_AFTER_A_CHECK_MS = 60 * 60 * 1000L

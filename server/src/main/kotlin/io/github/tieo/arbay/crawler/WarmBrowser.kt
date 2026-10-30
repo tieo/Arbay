@@ -148,6 +148,12 @@ open class WarmBrowser(
         return json.parseToJsonElement(reply).jsonObject
     }
 
+    /** Starts the browser ahead of its first page, so that page waits for no start. */
+    suspend fun warm() {
+        lock.lock()
+        try { withContext(Dispatchers.IO) { ensureRunning() } } finally { lock.unlock() }
+    }
+
     private fun ensureRunning() {
         if (process?.isAlive == true) return
         ensureXvfb()

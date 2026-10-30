@@ -37,7 +37,7 @@ class WebSearchMcp(private val http: HttpClient, private val base: String) {
     ).apply {
         textTool(
             "web_search",
-            "What the search engines (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage, Yandex, Mojeek, Marginalia) list for any words: every result with its title, address and snippet, merged by address, the ones most engines list first, and how each engine answered. Takes up to three minutes, the browser engines being asked one after another.",
+            "What the search engines (Bing, DuckDuckGo, Google, Qwant, Brave, Startpage, Yandex, Mojeek, Marginalia) list for any words: every result with its title, address and snippet, merged by address, the ones most engines list first, and how each engine answered. Answers within a minute, with the engines done by then.",
             readOnly = true,
             props = {
                 string("query", "The words, as typed into a search engine (quotes and operators pass through)", required = true)
