@@ -84,6 +84,12 @@ fun Route.chatRoutes() {
             call.chat { Chat.reply(id, text); call.respond(HttpStatusCode.OK, mapOf("ok" to true)) }
         }
 
+        // Buying a Vinted item outright: its checkout read, and paid only with pay and a total within allInEur.
+        post("/buy") {
+            val request = call.receive<io.github.tieo.arbay.model.PurchaseRequest>()
+            call.chat { call.respond(Chat.buy(request)) }
+        }
+
         // A price offer through "Sicher bezahlen": with only allInEur, the dialog is filled and read
         // and nothing is sent; with a price and send, that price is sent if the payment fits allInEur.
         post("/conversations/{id}/offer") {

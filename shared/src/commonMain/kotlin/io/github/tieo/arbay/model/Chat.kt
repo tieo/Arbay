@@ -220,6 +220,32 @@ data class PriceOffer(
     val picture: String? = null,
 )
 
+/**
+ * Buying an item outright at a market's checkout (Vinted's): [allInEur] is the most the whole
+ * payment may come to, and only with [pay] is anything paid.
+ */
+@Serializable
+data class PurchaseRequest(val url: String, val allInEur: Double, val pay: Boolean = false)
+
+/**
+ * A checkout as Arbay read it: the item's price, the market's buyer protection [feeEur], the
+ * shipping and the [totalEur] it adds up to, the saved [payment] method, and whether it was [paid].
+ * [buyable] is false where the item page no longer offers to buy it. [problem] says why a payment
+ * stopped, and [picture] is the page it stopped on, a JPEG in base64.
+ */
+@Serializable
+data class Purchase(
+    val buyable: Boolean,
+    val itemEur: Double? = null,
+    val feeEur: Double? = null,
+    val shippingEur: Double? = null,
+    val totalEur: Double? = null,
+    val payment: String? = null,
+    val paid: Boolean = false,
+    val problem: String? = null,
+    val picture: String? = null,
+)
+
 /** A market's buyer protection, as the buyer pays for it: a fixed part and a share of the price. */
 @Serializable
 data class BuyerProtection(val fixedEur: Double, val share: Double)

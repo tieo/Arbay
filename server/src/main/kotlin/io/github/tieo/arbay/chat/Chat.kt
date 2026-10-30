@@ -14,6 +14,8 @@ import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PriceOffer
+import io.github.tieo.arbay.model.Purchase
+import io.github.tieo.arbay.model.PurchaseRequest
 import io.github.tieo.arbay.model.ShippingOption
 import io.github.tieo.arbay.model.offerWithin
 import io.github.tieo.arbay.crawler.KleinanzeigenCosts
@@ -350,6 +352,29 @@ object Chat {
             sent = o["sent"]?.bool() == true,
             picture = o["picture"]?.str(),
         ).also { if (send) Live.changed(LiveKind.CHAT) }
+    }
+
+    /**
+     * Buys a Vinted item at its checkout with the account's saved payment method, delivered to the
+     * door; paid only with [PurchaseRequest.pay] and a total within [PurchaseRequest.allInEur],
+     * otherwise the checkout is only read and left unpaid.
+     */
+    suspend fun buy(request: PurchaseRequest): Purchase {
+        val host = runCatching { java.net.URI(request.url).host }.getOrNull()
+        if (host != "www.vinted.de") throw ChatFailure("Arbay buys at Vinted's checkout only, not at $host", signedOut = false)
+        val o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
+        fun num(key: String) = (o[key] as? JsonPrimitive)?.doubleOrNull
+        return Purchase(
+            buyable = o["buyable"]?.bool() == true,
+            itemEur = num("item"),
+            feeEur = num("fee"),
+            shippingEur = num("shipping"),
+            totalEur = num("total"),
+            payment = o["payment"]?.str(),
+            paid = o["paid"]?.bool() == true,
+            problem = o["problem"]?.str(),
+            picture = o["picture"]?.str(),
+        ).also { if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur) }
     }
 
     /**

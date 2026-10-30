@@ -807,6 +807,25 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             (if (offer.sent) "Sent. " else "Not sent. ") + offer.describe()
         }
 
+        tool(
+            "checkout",
+            "Read what buying a Vinted offer outright costs at Vinted's checkout, signed in to the user's Vinted account: item, " +
+                "Vinted's buyer protection fee, shipping to the door, total and the saved payment method. Pays nothing.",
+            props = { string("listing_id", "A Vinted offer id from search", required = true) },
+        ) { args -> purchase(args.str("listing_id")!!, Double.MAX_VALUE, pay = false) }
+
+        tool(
+            "buy",
+            "Buy a Vinted offer outright, as the user approved: at Vinted's checkout, delivered to the door, paid with the " +
+                "account's saved payment method. Refused before paying if the total would pass the all-in limit; counts as " +
+                "bought only once Vinted no longer offers to pay.",
+            destructive = true,
+            props = {
+                string("listing_id", "A Vinted offer id from search", required = true)
+                number("all_in_eur", "Most the user pays, fee and shipping included", required = true)
+            },
+        ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true) }
+
         // ── Selling ──
 
         tool("ads_for_sale", "The user's ads for sale on Kleinanzeigen: drafts not posted yet, and the ones posted.") {
@@ -1014,6 +1033,18 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ?: io.github.tieo.arbay.repo.ListingArchive.get(id))
         ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.crawler.PhotoPrints.copiesOf(it)) }
 
+    /** [id]'s checkout read, or bought within [allInEur] with [pay]. */
+    private suspend fun purchase(id: String, allInEur: Double, pay: Boolean): String {
+        val l = offer(id) ?: return "Unknown offer; search first."
+        if (l.platformId != io.github.tieo.arbay.model.PlatformId.VINTED_DE) return "Arbay buys outright only on Vinted; this offer is on ${l.platformId.displayName}."
+        val r = http.post("$base/api/chat/buy") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay)))
+        }
+        if (!r.status.isSuccess()) return "${if (pay) "Not bought" else "Could not read the checkout"}: ${r.bodyAsText()}"
+        return json.decodeFromString(io.github.tieo.arbay.model.Purchase.serializer(), r.bodyAsText()).describe()
+    }
+
     private suspend fun hiddenOffers(): Set<String> =
         ((getJsonElement("/api/state") as? JsonObject)?.get("hiddenOffers") as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
 
@@ -1050,8 +1081,19 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     ) = textTool(name, description, destructive, readOnly = !destructive && name.startsWith("list") || name in READ_ONLY, props, run)
 
     private companion object {
-        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout")
     }
+}
+
+/** A Vinted checkout in words: what it adds up to, and whether it was paid or why not. */
+internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
+    !buyable -> "Vinted no longer offers to buy it."
+    else -> listOfNotNull(
+        if (paid) "Paid." else "Not paid.",
+        problem,
+        "item ${itemEur ?: "?"} € + Vinted fee ${feeEur ?: "?"} € + shipping ${shippingEur ?: "?"} € = ${totalEur ?: "?"} €",
+        payment?.let { "paid with $it" },
+    ).joinToString(" · ")
 }
 
 /** A line per offer of a saved search's status that came down in price since it was last opened,
