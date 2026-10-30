@@ -277,6 +277,17 @@ private const val LEARNING_WAIT_MS = 15 * 60_000L
  */
 private val crawlSlots = kotlinx.coroutines.sync.Semaphore(4)
 
+/**
+ * A crawl slot, taken within [own], one search's share of them: half, so a search started while
+ * another runs is crawled alongside it. The slots were taken first come, first served, and a
+ * saved search asking fifteen markets under fourteen spellings each held all four for minutes
+ * while "RN12H", asked after it, had no market answer at all.
+ */
+private suspend inline fun <T> crawlSlot(own: kotlinx.coroutines.sync.Semaphore, block: () -> T): T =
+    own.withPermit { crawlSlots.withPermit { block() } }
+
+private const val SLOTS_PER_SEARCH = 2
+
 /** The car post-filter pipeline, run AFTER the crawl cache so a filter tweak re-filters cached
  *  listings instead of re-crawling: card-level filter → detail-verify the survivors → final
  *  filter. Specs come from structured sources only (card + detail table), never free-text
@@ -799,6 +810,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
 
                     val resultChannel = Channel<CrawlerSearchEvent>(Channel.UNLIMITED)
                     val crawlsLeft = java.util.concurrent.atomic.AtomicInteger(platforms.size)
+                    val ownSlots = kotlinx.coroutines.sync.Semaphore(SLOTS_PER_SEARCH)
                     val jobs = platforms.map { platformId ->
                         launch {
                           // The report this market finished with, kept so its listings can be placed
@@ -812,7 +824,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // its coroutine holds the stream open, the stream holds the scrape permit,
                           // and the server refuses every later search as busy until it restarts.
                           // The budget starts when the crawl does, not when it joins the queue.
-                          crawlSlots.withPermit {
+                          crawlSlot(ownSlots) {
                           withCrawlLimitOrNull(PLATFORM_BUDGET_MS) crawl@{
                             val crawler = CrawlerRegistry.crawlerFor(platformId)
                             if (crawler == null) {
