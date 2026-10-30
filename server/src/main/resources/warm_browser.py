@@ -135,11 +135,17 @@ class Browser:
         return {"ok": True, "html": html, "url": final, "page": page}
 
     async def resolve(self, urls: list[str], leaving: str, timeout: float) -> dict:
-        if self.side is None:
-            self.side = await self.browser.get("about:blank", new_tab=True)
         to = {}
         for url in urls:
-            await self.side.evaluate("location.href = %s" % json.dumps(url))
+            # A tab that broke on the last redirect (zendriver's "invalid state" on a page torn down
+            # mid-answer) is replaced, so one bad page costs that redirect, not the rest.
+            try:
+                if self.side is None:
+                    self.side = await self.browser.get("about:blank", new_tab=True)
+                await self.side.evaluate("location.href = %s" % json.dumps(url))
+            except Exception:
+                self.side = None
+                continue
             waited = 0.0
             while waited < timeout:
                 await asyncio.sleep(0.25)

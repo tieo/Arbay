@@ -94,6 +94,10 @@ open class WarmBrowser(
                 stop()
                 return emptyMap()
             }
+            if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
+                log.warn("{} browser failed to resolve {} redirects: {}", name, urls.size, answer["error"]?.jsonPrimitive?.contentOrNull)
+                return emptyMap()
+            }
             return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
         } finally {
             lock.unlock()
