@@ -40,6 +40,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -323,6 +325,14 @@ private fun SignInSteps(step: SignInStep, market: PlatformId, onType: (String) -
         // away as that many backspaces, and the keyboard's own Enter as Enter.
         // A new field on the page starts empty here too.
         var mirror by remember(step.step) { mutableStateOf("") }
+        // A sign-in opened from a push starts below the fold of Settings: it comes into view with
+        // its field focused, so the keyboard is up for what the page asks.
+        val seen = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+        val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) {
+            seen.bringIntoView()
+            runCatching { focus.requestFocus() }
+        }
         OutlinedTextField(
             value = mirror,
             onValueChange = { next ->
@@ -333,7 +343,7 @@ private fun SignInSteps(step: SignInStep, market: PlatformId, onType: (String) -
                 }
                 mirror = next
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().bringIntoViewRequester(seen).focusRequester(focus),
             placeholder = { Text("Type on the page") },
             singleLine = true,
             visualTransformation = if (step.step == SignInAsk.PASSWORD) PasswordVisualTransformation() else VisualTransformation.None,
