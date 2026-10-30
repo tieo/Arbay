@@ -184,7 +184,10 @@ class MarketBrowser:
                                    # last --disable-features is the one Chrome reads, so zendriver's
                                    # own are repeated here.
                                    "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
-                                   "--renderer-process-limit=6"]}
+                                   "--renderer-process-limit=6",
+                                   # Ad frames each took a process of their own while only
+                                   # site isolation's feature was off; this switch ends it.
+                                   "--disable-site-isolation-trials"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
