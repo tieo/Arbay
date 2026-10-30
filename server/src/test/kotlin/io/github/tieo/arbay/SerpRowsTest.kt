@@ -134,4 +134,14 @@ class SerpRowsTest {
             doc.selectFirst("noscript a[href*=sst=]")?.absUrl("href"))
         assertEquals("1", doc.selectFirst("#countdown")?.attr("data-tr"))
     }
+
+    /** Bing for "ford ids odx" on 2026-10-30: each result links its address line and its heading
+     *  through a /ck/a redirect of its own. */
+    @Test
+    fun `bing's results keep their heading for a title`() {
+        val r = rows("bing-ck", "bing.", "https://www.bing.com/search")
+        assertEquals("GitHub - Ford-IDS/ford-ids-diagnostic: Ford IDS is the official Ford ...", r[0].title)
+        assertEquals(r.size, r.map { it.url }.distinct().size, r.joinToString("\n"))
+        assertTrue(r.none { "https://" in it.title }, r.joinToString("\n"))
+    }
 }

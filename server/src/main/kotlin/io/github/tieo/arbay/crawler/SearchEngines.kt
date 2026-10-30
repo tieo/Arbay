@@ -408,21 +408,30 @@ class SearchEngines(private val client: HttpClient) {
                 }
             }
             // The engine's own header, menus, side panels and footer link elsewhere too, and list no
-            // result, nor does a dialog the page keeps hidden (Marginalia's language menu). Being
+            // result, nor does a dialog the page keeps hidden (Marginalia's language menu) or an inert
+            // part (Bing's AI answer, whose source links read as results under its own words). Being
             // aria-hidden says nothing: Google's results are, behind its consent dialog.
             fun inFrame(a: org.jsoup.nodes.Element) = a.parents().any { p ->
                 p.tagName() in setOf("footer", "nav", "header", "aside") || p.attr("role") in setOf("contentinfo", "navigation", "banner", "dialog") ||
-                    p.hasAttr("hidden")
+                    p.hasAttr("hidden") || p.hasAttr("inert")
             }
             val target = LinkedHashMap<org.jsoup.nodes.Element, String>()
-            for (a in doc.select("a[href]")) if (!inFrame(a)) target[a] = targetOf(a) ?: continue
+            // A link that opens a popup rather than the page (role "button": Bing's AI answer cites
+            // its sources so) is no result.
+            for (a in doc.select("a[href]")) if (!inFrame(a) && a.attr("role") != "button") target[a] = targetOf(a) ?: continue
             fun targetsIn(e: org.jsoup.nodes.Element) = e.select("a[href]").mapNotNullTo(HashSet()) { target[it] }
             fun headings(e: org.jsoup.nodes.Element) = e.select("h1, h2, h3, h4").size
+            val place = target.keys.withIndex().associate { (i, a) -> a to i }
             return target.entries.groupBy({ it.value }, { it.key }).mapNotNull { (url, anchors) ->
                 // The result is the largest part of the page holding this address and no other, and
                 // no heading beyond its own: a page listing one result holds it in a section that
                 // has the page's own headings too.
-                var block = anchors.first()
+                // An address linked from several places (Bing's AI answer lists its sources as
+                // cards above the results) is read where a heading links it, the result itself.
+                fun inHeading(a: org.jsoup.nodes.Element) =
+                    a.selectFirst("h1, h2, h3, h4") != null || a.parents().any { it.tagName() in setOf("h1", "h2", "h3", "h4") }
+                val start = anchors.firstOrNull(::inHeading) ?: anchors.first()
+                var block = start
                 while (true) {
                     val up = block.parent() ?: break
                     if (up.tagName() == "body" || targetsIn(up).size > 1 || headings(up) > maxOf(1, headings(block))) break
@@ -449,8 +458,8 @@ class SearchEngines(private val client: HttpClient) {
                     .replace(Regex("""\s+"""), " ").trim().replace(LEADING_PATH, "").trim()
                     // Yandex numbers its results in their text ("1. Die Bandschleifmaschine …").
                     .replace(LIST_NUMBER, "")
-                SerpResult(0, title, url, snippet.take(SNIPPET_LENGTH))
-            }.let { rows ->
+                place.getValue(start) to SerpResult(0, title, url, snippet.take(SNIPPET_LENGTH))
+            }.sortedBy { it.first }.map { it.second }.let { rows ->
                 // An ad or a shopping card comes with a title and an address alone (Qwant's ads above
                 // its results, Google's "Von Testberichte.de"); where results have snippets, one
                 // without is one of those.
