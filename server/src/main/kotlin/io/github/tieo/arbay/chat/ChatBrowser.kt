@@ -156,3 +156,6 @@ object EbayChatBrowser : MarketSidecar(PlatformId.EBAY_DE, "ebay_chat.py", 93, "
 
 /** The user's willhaben session, kept by willhaben_chat.py. */
 object WillhabenChatBrowser : MarketSidecar(PlatformId.WILLHABEN, "willhaben_chat.py", 92, "ARBAY_WILLHABEN_CHAT_PROFILE", "willhaben-chat-profile", "willhaben-chat-browser.log", 5903)
+
+/** The user's Vinted session, kept by vinted_chat.py. */
+object VintedChatBrowser : MarketSidecar(PlatformId.VINTED_DE, "vinted_chat.py", 95, "ARBAY_VINTED_CHAT_PROFILE", "vinted-chat-profile", "vinted-chat-browser.log", 5904)

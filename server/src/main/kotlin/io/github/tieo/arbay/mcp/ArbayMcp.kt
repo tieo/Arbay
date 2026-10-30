@@ -627,7 +627,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         // ── Talking to sellers ──
 
-        tool("seller_account", "Whether Arbay is signed in to the user's account on each market it can sign in to (Kleinanzeigen, eBay, willhaben).") {
+        tool("seller_account", "Whether Arbay is signed in to the user's account on each market it can sign in to (Kleinanzeigen, eBay, willhaben, Vinted).") {
             getJsonElement("/api/chat/accounts").toString()
         }
 

@@ -76,7 +76,7 @@ object Chat {
     private var settings: ChatSettings
 
     /** Every market the user can sign in to, each with the browser that holds its session. */
-    val sidecars: Map<PlatformId, MarketSidecar> = listOf(ChatBrowser, EbayChatBrowser, WillhabenChatBrowser).associateBy { it.market }
+    val sidecars: Map<PlatformId, MarketSidecar> = listOf(ChatBrowser, EbayChatBrowser, WillhabenChatBrowser, VintedChatBrowser).associateBy { it.market }
 
     /** The browser of [market]; one eBay account answers for every eBay site. */
     fun sidecarFor(market: PlatformId): MarketSidecar =
