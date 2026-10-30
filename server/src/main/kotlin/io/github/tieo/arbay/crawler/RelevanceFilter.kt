@@ -27,6 +27,8 @@ object RelevanceFilter {
         /** A word typed with an umlaut, by the spelling without it: "lägler" is "laegler" here and
          *  "Lagler" on most of the ads selling one. */
         val plainVowels: Map<String, String> = emptyMap(),
+        /** Each blocked token as the reader typed it, to name it back to them: "2,5 zoll", not "2p5zoll". */
+        val blockedAs: Map<String, String> = emptyMap(),
     )
 
     /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
@@ -43,6 +45,8 @@ object RelevanceFilter {
         return ParsedQuery(
             positiveTokens = positiveTokens,
             negativeTokens = query.excludeKeywords.map { normalizeToken(it) },
+            // Two spellings of one blocked phrase ("2,5 zoll", "2.5 zoll") are named as the first.
+            blockedAs = query.excludeKeywords.asReversed().associateBy { normalizeToken(it) },
             orGroups = orGroups,
             asksForASize = (positiveTokens + orGroups.flatten()).any { namesAUnit(it) },
             typed = positiveTokens,
@@ -105,7 +109,7 @@ object RelevanceFilter {
         if (parsed.negativeTokens.isEmpty()) return null
         val words = canonicalizeMakes(normalize(gluedThousands(listing.title.lowercase())))
             .split(" ").filter { it.isNotBlank() }
-        return parsed.negativeTokens.firstOrNull { token -> matchesNegative(words, token) }
+        return parsed.negativeTokens.firstOrNull { token -> matchesNegative(words, token) }?.let { parsed.blockedAs[it] ?: it }
     }
 
     /** A thousands group written German-style is one number: "30.000 km" is thirty thousand, not

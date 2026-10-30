@@ -22,8 +22,8 @@ class BlockedPhraseTest {
         // The SSD search blocks 2.5 inch SATA drives; "2 TB" and "2TB" are the size it asks for.
         assertNull(RelevanceFilter.blockedWord(listing("Samsung 980 PRO 2 TB NVMe M.2"), asked))
         assertNull(RelevanceFilter.blockedWord(listing("Kingston NV2 2TB M.2 NVMe PCIe 4.0"), asked))
-        assertEquals("2p5zoll", RelevanceFilter.blockedWord(listing("Crucial MX500 2TB SSD 2,5 Zoll SATA"), asked))
-        assertEquals("2p5zoll", RelevanceFilter.blockedWord(listing("Samsung 870 EVO 2TB 2.5 Zoll"), asked))
+        assertEquals("2,5 zoll", RelevanceFilter.blockedWord(listing("Crucial MX500 2TB SSD 2,5 Zoll SATA"), asked))
+        assertEquals("2,5 zoll", RelevanceFilter.blockedWord(listing("Samsung 870 EVO 2TB 2.5 Zoll"), asked))
     }
 
     @Test

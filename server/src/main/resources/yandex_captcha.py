@@ -1,14 +1,21 @@
 """
-Reads Yandex's silhouette challenge: a picture with line icons drawn crisply over a soft painting,
-and a strip of the same icons' outlines in the order to click them. Returns where to click.
+Reads Yandex's silhouette challenge: a picture with line symbols drawn over a painting, a few faint
+ones among them that are not asked for, and a strip of the asked symbols' outlines in the order to
+click them. Returns where to click.
+
+A small network (yandex_symbols.onnx, trained on paintings with symbols drawn on them) marks the
+symbols' strokes and leaves the painting and the faint symbols out; each marked part is then
+compared with each outline of the strip over every turn, and each outline gets the part that fits
+it, no part twice.
 """
-from concurrent.futures import ThreadPoolExecutor
+import os
 
 import cv2
 import numpy as np
 
-SCALES = (0.38, 0.45, 0.52, 0.59, 0.66)
-STEP = 5
+MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_symbols.onnx")
+SIDE = 64
+_session = None
 
 
 def flat(png_bytes):
@@ -19,104 +26,110 @@ def flat(png_bytes):
     return im
 
 
-def detail(img, sigma=1.0):
-    """Fine detail: the icons' one-pixel edges, which the painting's soft strokes lack."""
-    f = img.astype(np.float32)
-    if f.ndim == 2:
-        f = f[:, :, None]
-    d = np.abs(f - cv2.GaussianBlur(f, (0, 0), sigma).reshape(f.shape)).sum(2)
-    return np.clip(d / (np.percentile(d, 99.5) + 1e-6), 0, 1).astype(np.float32)
+def strokes(picture):
+    """How likely each pixel is part of an asked symbol's stroke."""
+    global _session
+    if _session is None:
+        import onnxruntime
+        _session = onnxruntime.InferenceSession(MODEL, providers=["CPUExecutionProvider"])
+    x = picture.astype(np.float32).transpose(2, 0, 1)[None] / 255
+    y = _session.run(None, {"x": x})[0][0, 0]
+    return 1 / (1 + np.exp(-y))
 
 
-def shift(a, dx, dy):
-    return np.roll(np.roll(a, dy, 0), dx, 1)
-def bar(img, half=(2, 3)):
-    """Flat bars about four pixels wide with a sharp edge on each side: the icons' strokes. The
-    painting's soft strokes have no sharp edges, its fine lines no flat middle."""
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
-    out = np.zeros(img.shape[:2], np.float32)
-    for dx, dy in [(1, 0), (0, 1), (1, 1), (1, -1)]:
-        best = np.zeros_like(out)
-        for h in half:
-            c = lab
-            flat = np.maximum(np.abs(c - shift(c, dx, dy)).sum(2), np.abs(c - shift(c, -dx, -dy)).sum(2))
-            a = np.abs(c - shift(c, dx * (h + 1), dy * (h + 1))).sum(2)
-            b = np.abs(c - shift(c, -dx * (h + 1), -dy * (h + 1))).sum(2)
-            score = np.minimum(a, b) - 1.5 * flat
-            best = np.maximum(best, score)
-        out = np.maximum(out, best)
-    out = np.clip(out, 0, None)
-    return out / (np.percentile(out, 99.5) + 1e-6)
-
-
-def strip_icons(strip, n=6):
-    g = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
-    ink = (g < 128).astype(np.uint8) * 255
-    # The hatching across the strip is thinner than the icons' strokes.
-    clean = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    w = strip.shape[1] // n
-    icons = []
-    for i in range(n):
-        cell = clean[:, i * w:(i + 1) * w]
-        ys, xs = np.nonzero(cell)
-        icons.append(cell[ys.min():ys.max() + 1, xs.min():xs.max() + 1] if len(xs) else None)
-    return [ic for ic in icons if ic is not None]
-
-
-def templates(icon):
-    """The icon's strokes as the picture shows them, at each size and turn: the bar filter runs once
-    per size and its result is turned, which matches filtering each turned outline closely enough
-    to give the same answers, in a fraction of the time."""
-    h, w = icon.shape
-    side = int(np.ceil(np.hypot(h, w))) + 6
-    pad = np.zeros((side, side), np.uint8)
-    pad[(side - h) // 2:(side - h) // 2 + h, (side - w) // 2:(side - w) // 2 + w] = icon
-    for s in SCALES:
-        sz = max(10, int(side * s))
-        base = bar(cv2.cvtColor(cv2.resize(pad, (sz, sz), interpolation=cv2.INTER_AREA), cv2.COLOR_GRAY2BGR))
-        for a in range(0, 360, STEP):
-            yield cv2.warpAffine(base, cv2.getRotationMatrix2D((sz / 2, sz / 2), a, 1.0), (sz, sz))
-
-
-def responses(F, icon):
-    """The best match of [icon] at every place of F, over its turns and sizes, by centre."""
-    best = np.full(F.shape, -1, np.float32)
-    for tp in templates(icon):
-        th, tw = tp.shape
-        if th >= F.shape[0] or tw >= F.shape[1]:
-            continue
-        r = cv2.matchTemplate(F, tp, cv2.TM_CCOEFF_NORMED)
-        y0, x0 = th // 2, tw // 2
-        view = best[y0:y0 + r.shape[0], x0:x0 + r.shape[1]]
-        np.maximum(view, r, out=view)
-    return best
-
-
-def peaks(M, k, sep):
-    M = M.copy()
+def parts(prob, threshold=0.5, min_area=40):
+    """The symbols the network marked, each with its centre; a symbol's separate strokes (a face's
+    eyes) join it when they are a few pixels apart."""
+    m = (prob > threshold).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+    joined = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    n, lab = cv2.connectedComponents(joined)
     out = []
-    for _ in range(k):
-        _, mv, _, (x, y) = cv2.minMaxLoc(M)
-        if mv <= 0:
-            break
-        out.append((x, y))
-        cv2.circle(M, (x, y), sep, -1, -1)
+    for c in range(1, n):
+        part = (lab == c) & (m > 0)
+        if part.sum() < min_area:
+            continue
+        ys, xs = np.nonzero(part)
+        out.append((part[ys.min():ys.max() + 1, xs.min():xs.max() + 1], (float(xs.mean()), float(ys.mean()))))
     return out
+
+
+def outlines(strip, n=6):
+    """The strip's outlines, left to right; the hatching across it is thinner than their strokes."""
+    g = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
+    ink = (g < 128).astype(np.uint8)
+    ink = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    count, lab, st, _ = cv2.connectedComponentsWithStats(ink)
+    w = strip.shape[1] // n
+    out = []
+    for i in range(n):
+        part = np.zeros_like(ink)
+        for c in range(1, count):
+            x, _, cw, _, area = st[c]
+            if area >= 15 and i * w <= x + cw / 2 < (i + 1) * w:
+                part[lab == c] = 1
+        ys, xs = np.nonzero(part)
+        if len(xs):
+            out.append(part[ys.min():ys.max() + 1, xs.min():xs.max() + 1])
+    return out
+
+
+def thin(mask):
+    """A mask's strokes worn down to about a pixel, so a thick outline and a thin symbol compare."""
+    m = (mask > 0).astype(np.uint8)
+    skel = np.zeros_like(m)
+    cross = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    while m.any():
+        eroded = cv2.erode(m, cross)
+        skel |= m & ~cv2.dilate(eroded, cross)
+        m = eroded
+    return skel
+
+
+def points(mask):
+    """A shape's centre line around its centroid, scaled so its farthest point is at radius 1."""
+    ys, xs = np.nonzero(thin(mask))
+    if len(xs) < 5:
+        return None
+    mo = cv2.moments(mask.astype(np.uint8))
+    cx, cy = (mo["m10"] / mo["m00"], mo["m01"] / mo["m00"]) if mo["m00"] else (xs.mean(), ys.mean())
+    p = np.stack([xs - cx, ys - cy], 1).astype(np.float32)
+    return p / max(float(np.sqrt((p ** 2).sum(1)).max()), 1e-6)
+
+
+def render(p, angle=0.0):
+    a = np.deg2rad(angle)
+    rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]], np.float32)
+    q = ((p @ rot.T) * (SIDE / 2 - 4) + SIDE / 2).astype(int)
+    c = np.zeros((SIDE, SIDE), np.uint8)
+    for x, y in q:
+        cv2.circle(c, (int(x), int(y)), 2, 1, -1)
+    return c
+
+
+def similarity(a, b):
+    """How well shape b fits shape a at its best turn: the overlap of their drawn centre lines."""
+    ra = render(a)
+    best = 0.0
+    for angle in range(0, 360, 5):
+        rb = render(b, angle)
+        best = max(best, (ra & rb).sum() / max(1, (ra | rb).sum()))
+    return best
 
 
 def assignment(cost):
     """The column for each row that makes the total cost least, each column used once (Hungarian
     method; rows no more than columns)."""
     n, m = cost.shape
-    INF = float("inf")
+    inf = float("inf")
     u, v = [0.0] * (n + 1), [0.0] * (m + 1)
     p, way = [0] * (m + 1), [0] * (m + 1)
     for i in range(1, n + 1):
         p[0], j0 = i, 0
-        minv, used = [INF] * (m + 1), [False] * (m + 1)
+        minv, used = [inf] * (m + 1), [False] * (m + 1)
         while True:
             used[j0] = True
-            i0, delta, j1 = p[j0], INF, 0
+            i0, delta, j1 = p[j0], inf, 0
             for j in range(1, m + 1):
                 if not used[j]:
                     cur = cost[i0 - 1][j - 1] - u[i0] - v[j]
@@ -145,15 +158,13 @@ def assignment(cost):
 
 
 def solve(picture_png, strip_png):
-    """Click points in the picture's pixels, in the strip's order."""
-    pic, strip = flat(picture_png), flat(strip_png)
-    F = np.clip(bar(pic), 0, 1).astype(np.float32)
-    icons = strip_icons(strip)
-    # OpenCV lets go of Python's lock while it matches, so the icons are matched side by side.
-    with ThreadPoolExecutor(max_workers=len(icons)) as pool:
-        maps = list(pool.map(lambda ic: responses(F, ic), icons))
-    # Every icon in the picture, the ones not asked for too: places any outline fits well.
-    cands = peaks(np.max(maps, axis=0), len(icons) + 6, 15)
-    S = np.array([[m[max(0, y - 4):y + 5, max(0, x - 4):x + 5].max() for (x, y) in cands] for m in maps])
-    pick = assignment(-S)
-    return [cands[j] for j in pick]
+    """Click points in the picture's pixels, in the strip's order; empty where the picture holds
+    fewer symbols than the strip asks for."""
+    picture, strip = flat(picture_png), flat(strip_png)
+    found = parts(strokes(picture))
+    asked = [points(o) for o in outlines(strip)]
+    shapes = [points(m) for m, _ in found]
+    if len(found) < len(asked):
+        return []
+    score = np.array([[similarity(s, a) if a is not None and s is not None else 0.0 for s in shapes] for a in asked])
+    return [found[j][1] for j in assignment(-score)]
