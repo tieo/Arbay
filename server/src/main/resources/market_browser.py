@@ -228,6 +228,9 @@ class MarketBrowser:
         if self.origin:
             return self.origin
         if not await self.on_site_host():
+            # A sign-in page is the user's: leaving it to measure lost what they were typing into.
+            if self.signing:
+                raise RuntimeError("the page's place on the display is unknown on the sign-in page")
             await self.tab.get(self.HOME)
             await asyncio.sleep(3)
         await self.tab.evaluate("window.__arbayOrigin = null; addEventListener('mousemove', e => { window.__arbayOrigin = [e.screenX - e.clientX, e.screenY - e.clientY]; }, {once: true}); true")
@@ -267,7 +270,10 @@ class MarketBrowser:
         renderer was ended ("Aw, Snap!": the container's memory limit ends the biggest one first)
         answers nothing again, so a page that does not answer is replaced and [url] opened anew."""
         await self.tab.get(url)
-        self.origin = None
+        # The page's place on the display is measured again on the next site page, except during
+        # a sign-in: its pages are not measured (see calibrate), and the window has not moved.
+        if not self.signing:
+            self.origin = None
         await asyncio.sleep(settle)
         try:
             await within("page alive", self.tab.evaluate("1"), 10)

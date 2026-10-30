@@ -9,6 +9,7 @@ picture of the page, and the e-mail form's fields are typed as on every other ma
 import asyncio
 import json
 import re
+from urllib.parse import urlparse
 
 from market_browser import MarketBrowser, SignedOut, serve
 
@@ -39,6 +40,9 @@ class Vinted(MarketBrowser):
 
     async def signin_payment(self) -> dict:
         """Opens PayPal's sign-in page for the user to sign in on, as on the market's own."""
+        # Where the page sits on the display is measured on Vinted's own page, before PayPal's,
+        # whose login runs no script of Arbay's (see calibrate).
+        await self.calibrate()
         self.signing = True
         self.payment_signing = True
         await self.go(self.PAYMENT_SIGNIN, 4)
@@ -48,8 +52,10 @@ class Vinted(MarketBrowser):
         return await self.signin_state()
 
     async def signin_state(self) -> dict:
-        # PayPal shows the account's summary once it is signed in.
-        if self.payment_signing and "paypal.com" in await self.host() and "/myaccount" in await self.url():
+        # PayPal shows the account's summary once it is signed in. Its pages before that (the
+        # device check) carry the summary's address in their query as where to go next, so only
+        # the path counts.
+        if self.payment_signing and "paypal.com" in await self.host() and urlparse(await self.url()).path.startswith("/myaccount"):
             self.payment_signing = False
             self.signing = False
             await self.go(self.HOME, 2)
