@@ -241,6 +241,9 @@ class WebMarketTest {
         // globus-baumarkt.de's rental info page: the only amount on it is the header's basket.
         // pearl.de's search finding nothing names its hotline's rates and its small-order shipping.
         assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Hotline 01806 - 000 - 265 (€ 0,20/Anruf aus dem dt. Festnetz), Österreich (€ 0,20/Min.)</p><p>zahlen Sie nur € 1,99 bzw. € 3,98 Mini-Versandkosten</p><p>(1-0 von 0)</p></body>"))
+        // kicker.de's front page: its cookie wall sells a subscription by the month.
+        assertFalse(ProductPages.sellsSomething("<body><h2>Alle Fußball &amp; Sport News</h2><p>Mehr Infos zu kicker+ findest du hier. Nur 2,49 EUR im Monat</p><button>PUR-Abo kaufen</button><a>Tickets bestellen</a></body>"))
+        assertFalse(ProductPages.sellsSomething("<body><p>Nur 2,00 CHF im Monat</p><button>PUR-Abo kaufen</button></body>"))
         // bauexpertenforum.de's XenForo thread: a reply guesses the part's price.
         assertFalse(ProductPages.sellsSomething("<html id=\"XenForo\"><body><h1>Urinal-Deckel: Scharnier befestigen</h1><p>Da musst du vermutlich in den 90€ teuren Apfel beißen. Nicht ohne Grund kaufen viele neu.</p></body></html>"))
         // techtest.org's review, an article by its OpenGraph type alone.
