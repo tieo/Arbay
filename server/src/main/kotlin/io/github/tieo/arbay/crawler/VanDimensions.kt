@@ -154,6 +154,29 @@ object VanDimensions {
         }
     }
 
+    // The van's own height as a dealer feed states it ("Höhe: 2590 mm", a private seller "Höhe: ca.
+    // 2,59 m"), never the load space's ("Laderaumhöhe"). On 75 cached Crafter pages every height of
+    // 2,500 to 2,590 mm came with Hochdach or "Hochraum Standard" and none with Superhochdach, the
+    // Normaldach stood at 2,350 to 2,400, and the old Crafter's Hochdach at 2,700 and more, where
+    // the new one's Superhochdach also lies. So 2,300 to 2,450 says the normal roof, 2,480 to 2,650
+    // the high one, and any other height says nothing: a box body or a roof rack reads 3,000 and up.
+    private val vanHeight = Regex(
+        """(?<!\p{L})h(?:ö|oe)he\W{0,3}(?:ca\.?\s*)?(?:(\d[\d.]{3,5})\s*mm|(\d[,.]\d{1,2})\s*m\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun statedRoof(text: String): Set<Int>? {
+        val m = vanHeight.find(text) ?: return null
+        val mm = m.groupValues[1].takeIf { it.isNotEmpty() }?.replace(".", "")?.toIntOrNull()
+            ?: m.groupValues[2].replace(",", ".").toDoubleOrNull()?.let { (it * 1000).toInt() }
+            ?: return null
+        return when (mm) {
+            in 2300..2450 -> setOf(VanSize.NORMAL_ROOF)
+            in 2480..2650 -> setOf(VanSize.HIGH_ROOF)
+            else -> null
+        }
+    }
+
     /** The sizes every source allows, taken in the order given; a source that would leave none is
      *  passed over, so a seller's slip does not erase what a surer source said. */
     private fun narrowed(sources: List<Set<Int>>): Set<Int>? =
@@ -198,6 +221,7 @@ object VanDimensions {
             setOf(VanSize.LONG, VanSize.EXTRA_LONG).takeIf { longWords.containsMatchIn(text) },
         ))
         val roofs = narrowed(listOfNotNull(
+            statedRoof(text),
             setOf(VanSize.HIGH_ROOF).takeIf { catalogueHighRoof.containsMatchIn(text) && !superHighRoof.containsMatchIn(text) },
             setOf(VanSize.SUPER_HIGH_ROOF).takeIf { superHighRoof.containsMatchIn(text) },
             setOf(VanSize.NORMAL_ROOF).takeIf { normalRoof.containsMatchIn(text) },

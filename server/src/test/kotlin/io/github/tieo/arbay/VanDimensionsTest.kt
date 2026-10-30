@@ -81,6 +81,22 @@ class VanDimensionsTest {
     }
 
     @Test
+    fun `a stated vehicle height settles a Crafter's roof`() {
+        // Kleinanzeigen 3529234916, Husum: "Kasten Hochraum Standard" and "Höhe: 2590 mm" read as
+        // high or higher, so the search scored its roof as not certain.
+        val text = "Volkswagen Crafter 35 2.0 TDI Autom. VA HD\nKarosserie/Aufbau: Kasten Hochraum Standard\nBreite: 2040 mm\nHöhe: 2590 mm\nLaderaumhöhe: --"
+        val d = VanDimensions.read(text)
+        assertEquals(VanSize.HIGH_ROOF, d.height); assertTrue(d.heightSure)
+        val privateSeller = VanDimensions.read("VW Crafter 2.0 TDI | Automatik | L4 H3\n• Länge: ca. 6,84 m\n• Höhe: ca. 2,59 m")
+        assertEquals(VanSize.HIGH_ROOF, privateSeller.height); assertTrue(privateSeller.heightSure)
+        val normal = VanDimensions.read("VW Crafter Kasten Hochdach\nHöhe: 2355 mm")
+        assertEquals(VanSize.NORMAL_ROOF, normal.height); assertTrue(normal.heightSure)
+        // The load space's height and a height no roof stands at say nothing.
+        assertFalse(VanDimensions.read("VW Crafter Kasten Hochdach\nLaderaumhöhe: 2.590 mm").heightSure)
+        assertFalse(VanDimensions.read("VW Crafter Kasten Hochdach\nHöhe: 3080 mm").heightSure)
+    }
+
+    @Test
     fun `VW's own trim line names the roof exactly`() {
         val d = VanDimensions.read("Volkswagen Crafter\n\nAusstattungslinie: 35 mittellang Hochdach FWD\n\nKasten Hoch")
         assertEquals(VanSize.HIGH_ROOF, d.height)
