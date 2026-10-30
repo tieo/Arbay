@@ -321,6 +321,12 @@ class RelevanceFilterTest {
         // A seller who never prints the number is left to the market's own search, as before.
         assertEquals(1, RelevanceFilter.filter(listOf(listing("Crucial 32GB DDR4 3200 SO-DIMM Arbeitsspeicher")), crucial).size)
         assertEquals(1, RelevanceFilter.filter(listOf(listing("Crucial DDR4-3200 32GB SODIMM PC4-25600")), crucial).size)
+        // Part of an answer is no answer: duschmeister.de's catalogue page streamed in for "RN12H",
+        // printing the code nowhere, and its gaskets showed until the whole answer was judged.
+        val rn12h = SearchQuery(text = "RN12H", category = MarketGroup.GENERAL)
+        val gaskets = listOf(listing("CORNAT Fiberring ø 18 mm, ø 12mm, 1,5 mm"), listing("CORNAT Kontermutter 1/2\" IG"))
+        assertEquals(emptyList(), RelevanceFilter.filter(gaskets, rn12h, answerComplete = false))
+        assertEquals(1, RelevanceFilter.filter(listOf(listing("Laptop Memory Board For DELL Precision 7670 7680 LS-L88BP 0RN12H RN12H New")), rn12h, answerComplete = false).size)
         // eBay, live, for "IB-3805-C31": the maker's other cases, each printing its own code.
         val icyBox = SearchQuery(text = "IB-3805-C31", category = MarketGroup.GENERAL)
         assertEquals(emptyList(), RelevanceFilter.filter(listOf(

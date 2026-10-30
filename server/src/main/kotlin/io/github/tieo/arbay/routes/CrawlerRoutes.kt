@@ -931,8 +931,19 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             val emittedIds = java.util.Collections.synchronizedSet(HashSet<String>())
                             val partialFilters = pq.toCarFilters() ?: CarFilters()
                             val partsIntent = CarFilterEngine.isPartQuery(pq.positiveText)
+                            // Every page this market has sent so far, which each new page is judged
+                            // among: whether its sellers write a word of the search is read off the
+                            // answer, and one page alone is no answer. The web market's pages are a
+                            // shop each; duschmeister.de's catalogue for "RN12H" printed the code
+                            // nowhere, so nothing was required of its gaskets, and they streamed in
+                            // to be dropped only once the whole answer was in.
+                            val sentSoFar = mutableListOf<Listing>()
                             val partialEmitter = PartialResultEmitter { pageListings ->
-                                val relevant = RelevanceFilter.filter(pageListings, pq)
+                                val pageIds = pageListings.map { it.id }.toSet()
+                                val relevant = synchronized(sentSoFar) {
+                                    sentSoFar += pageListings
+                                    RelevanceFilter.filter(sentSoFar.toList(), pq, answerComplete = false).filter { it.id in pageIds }
+                                }
                                 val classified = relevant.map { SoldDetector.classify(it) }
                                 val card = if (isCarQuery)
                                     CarFilterEngine.apply(

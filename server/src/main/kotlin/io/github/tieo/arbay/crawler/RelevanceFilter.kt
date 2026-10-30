@@ -1127,7 +1127,8 @@ object RelevanceFilter {
         listings: List<Listing>,
         query: SearchQuery,
         blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
-    ): List<Listing> = partition(listings, query, blockedDealers).kept
+        answerComplete: Boolean = true,
+    ): List<Listing> = partition(listings, query, blockedDealers, answerComplete).kept
 
     /**
      * Whether the listing's own title carries any word of the search.
@@ -1161,6 +1162,9 @@ object RelevanceFilter {
         listings: List<Listing>,
         query: SearchQuery,
         blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+        /** False for the part of an answer streamed so far, of which nobody can tell yet that none
+         *  of its listings will print a model code asked for alone. */
+        answerComplete: Boolean = true,
     ): Partitioned {
         val asParsed = parseQuery(query)
         val namesOnePart = isAPartNumber(asParsed)
@@ -1266,7 +1270,7 @@ object RelevanceFilter {
                 // "Sprinter" in its title. A word carrying letters as well as digits is a form
                 // factor or a trim as often as a model — "M.2" is on half the drives that have one
                 // — so those follow the market's own answer like any other word.
-                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && (parsed.positiveTokens.size > 1 || shareCarrying(token) > 0.0)) ||
+                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && (parsed.positiveTokens.size > 1 || !answerComplete || shareCarrying(token) > 0.0)) ||
                     shareCarrying(token) >= WORDS_ARE_WRITTEN
             }
             // A requirement made only of words the whole answer carries decides nothing. Asked for
