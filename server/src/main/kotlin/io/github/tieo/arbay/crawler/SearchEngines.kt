@@ -398,8 +398,8 @@ class SearchEngines(private val client: HttpClient) {
         private val ENGINE_HOSTS = listOf("google.", "translate.goog", "gstatic.", "googleusercontent.", "qwant.", "bing.", "duckduckgo.", "brave.", "startpage.", "yandex.", "ya.ru", "mojeek.", "marginalia", "youtube.", "schema.org",
             // Bing's footer: its terms and how it ranks.
             "go.microsoft.", "support.microsoft.",
-            // Startpage's note on the ads it shows.
-            "privacy.microsoft.")
+            // Startpage's note on the ads it shows, and Mojeek's survey above its results.
+            "privacy.microsoft.", "blocksurvey.")
 
         /** Redirects resolved per results page, and hops followed per redirect. */
         private const val MAX_REDIRECTS = 30
