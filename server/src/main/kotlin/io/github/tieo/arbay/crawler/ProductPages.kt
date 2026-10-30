@@ -71,6 +71,10 @@ object ProductPages {
         val doc = Jsoup.parse(html)
         if (isArticle(doc) || isForum(doc) || soldOut(doc)) return false
         val text = doc.body()?.text()?.lowercase() ?: return false
+        // A maker's page names its price a recommended one and sends the buyer to a dealer: every
+        // amount on it is a list price, its variant table's "ab 237,60 €" beside the others too
+        // (hansgrohe.at). A shop showing a recommended price sends nobody to a dealer.
+        if (DEALER_FINDER.containsMatchIn(text) && LIST_PRICE.containsMatchIn(text)) return false
         // An amount of nothing is no price: an empty basket's "0,00 €" stands on every page of a
         // shop, its articles too.
         // Nor is what delivery costs, a voucher or an order's minimum: "Versandkosten ab 5,95 €"
@@ -138,7 +142,11 @@ object ProductPages {
 
     private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|im wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese""")
 
-    private val RECOMMENDED_BEFORE = Regex("""(uvp|unverbindliche preisempfehlung|statt)\W{0,3}$""")
+    private val DEALER_FINDER = Regex("""(fach)?händler finden|händlersuche|find a (dealer|retailer)|where to buy""")
+
+    private val LIST_PRICE = Regex("""\d\s?€\s{0,3}uvp\b|\buvp\W{0,3}\d""")
+
+    private val RECOMMENDED_BEFORE =Regex("""(uvp|unverbindliche preisempfehlung|statt)\W{0,3}$""")
 
     private val RECOMMENDED_AFTER = Regex("""^\W{0,3}(uvp|unverbindliche preisempfehlung)\b""")
 

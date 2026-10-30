@@ -223,6 +223,9 @@ class WebMarketTest {
         val maker = """<body><header><a>Merkliste</a><a>Warenkorb</a><a>Händler finden</a></header>
             <div class="product-data"><h1>Talis E Einhebel-Waschtischmischer 110</h1><span><strong>215,75 €</strong></span> UVP inkl. MwSt.<a>Fachhändler finden</a></div></body>"""
         assertFalse(ProductPages.sellsSomething(maker))
+        // hansgrohe.at's adds a table of the line's other articles, each "ab" its list price.
+        val variants = maker.replace("</div></body>", """</div><div class="product-variant-table__price">ab&nbsp;<strong>237,60<span>&nbsp;€</span></strong></div></body>""")
+        assertFalse(ProductPages.sellsSomething(variants))
         // A shop naming the recommended price beside its own still sells.
         assertTrue(ProductPages.sellsSomething("<body><s>UVP 215,75 €</s> <b>149,90 €</b><button>In den Warenkorb</button></body>"))
         assertTrue(ProductPages.sellsSomething("<body><s>statt 215,75 €</s> <b>149,90 €</b><button>In den Warenkorb</button></body>"))
