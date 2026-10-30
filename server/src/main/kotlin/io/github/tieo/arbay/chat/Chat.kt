@@ -107,6 +107,40 @@ object Chat {
                 delay(5_000)
             }
         }
+        scope.launch {
+            while (true) {
+                delay(3_600_000)
+                runCatching { checkPaymentDaily() }.onFailure { log.warn("Payment check failed: {}", it.message) }
+            }
+        }
+    }
+
+    private val paymentCheckFile = DataDir.file("payment_check.txt")
+
+    /**
+     * Once a day, whether the payment service Vinted's checkout hands over to still knows Arbay's
+     * browser, signing in again with the password its Chrome keeps where it does not: a buy that
+     * meets a signed-out PayPal loses the offer while the user is asked. The last check's time is
+     * kept on disk, as the server restarts more often than once a day.
+     */
+    private suspend fun checkPaymentDaily() {
+        val last = paymentCheckFile.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0
+        if (System.currentTimeMillis() - last < 24 * 3_600_000L) return
+        paymentCheckFile.writeText(System.currentTimeMillis().toString())
+        if (VintedChatBrowser.call("status")["payment"] == null) return
+        reloginPayment()
+    }
+
+    /**
+     * Signs the Vinted browser in to its payment service again on its own (see vinted_chat.py's
+     * relogin_payment); where that fails, the user is asked on the phone. True when it is signed in.
+     */
+    suspend fun reloginPayment(): Boolean {
+        val o = VintedChatBrowser.call("relogin_payment", 240_000, "waitConfirm" to 150)
+        if (o["signedIn"]?.bool() == true) return true
+        log.warn("PayPal sign-in for Vinted failed: {}", o["problem"]?.str())
+        askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
+        return false
     }
 
     // --- account ---
@@ -364,7 +398,11 @@ object Chat {
     suspend fun buy(request: PurchaseRequest): Purchase {
         val host = runCatching { java.net.URI(request.url).host }.getOrNull()
         if (host != "www.vinted.de") throw ChatFailure("Arbay buys at Vinted's checkout only, not at $host", signedOut = false)
-        val o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
+        var o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
+        // PayPal signed out: signed in again with the saved password, the buy is made once more.
+        if (o["paymentSignedOut"]?.bool() == true && reloginPayment()) {
+            o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
+        }
         fun num(key: String) = (o[key] as? JsonPrimitive)?.doubleOrNull
         return Purchase(
             buyable = o["buyable"]?.bool() == true,
@@ -378,7 +416,6 @@ object Chat {
             picture = o["picture"]?.str(),
         ).also {
             if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur)
-            if (o["paymentSignedOut"]?.bool() == true) askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         }
     }
 

@@ -30,6 +30,9 @@ fun Route.chatRoutes() {
         // Kleinanzeigen where a request names no market, as the apps before other markets ask.
         get("/account") { call.respond(Chat.account(call.market())) }
         get("/accounts") { call.respond(Chat.accounts()) }
+        // Whether Vinted's payment service still knows Arbay's browser, signed in again with the
+        // saved password where it does not, as the daily check does.
+        post("/payment/check") { call.chat { call.respond(mapOf("signedIn" to Chat.reloginPayment())) } }
         // A push to the user's phone that opens the app on the sign-in page.
         post("/signin/ask") {
             val link = io.github.tieo.arbay.model.SignInLink(call.market(), call.request.queryParameters["payment"] == "true")

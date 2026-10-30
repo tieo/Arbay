@@ -290,8 +290,9 @@ class ArbayClient(
     suspend fun buy(request: PurchaseRequest): Purchase = client.post("$baseUrl/api/chat/buy") {
         contentType(ContentType.Application.Json)
         setBody(request)
-        // Paying waits on the payment method's own page and Vinted's answer after it.
-        timeout { requestTimeoutMillis = 200_000; socketTimeoutMillis = 200_000 }
+        // Paying waits on the payment method's own page and Vinted's answer after it, and a PayPal
+        // that signed out is signed in again (its app confirmation waited for) before a second try.
+        timeout { requestTimeoutMillis = 660_000; socketTimeoutMillis = 660_000 }
     }.body()
 
     suspend fun reply(id: String, text: String) {

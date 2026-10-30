@@ -28,6 +28,7 @@ class Vinted(MarketBrowser):
     # was gone after the browser's next start.
     PAYMENT = "PayPal"
     PAYMENT_SIGNIN = "https://www.paypal.com/signin"
+    PAYMENT_HOME = "https://www.paypal.com/myaccount/summary"
 
     def __init__(self) -> None:
         super().__init__()
@@ -161,7 +162,69 @@ class Vinted(MarketBrowser):
         paid = not await self.visible("[data-testid=single-checkout-order-summary-purchase-button]")
         return {"paid": paid, "url": await self.url(), **({} if paid else {"problem": "Vinted shows the checkout unpaid", **await self.page_detail()})}
 
+    async def relogin_payment(self, wait_confirm: float) -> dict:
+        """Signs in to PayPal again on its own, with the password this browser's Chrome keeps for
+        it, as a person lets the browser fill in a saved password: the field is clicked, Chrome
+        fills it, Enter sends it. PayPal may then ask its account holder to confirm in the PayPal
+        app; that is waited for up to [wait_confirm] seconds. Answers whether PayPal is signed in
+        now, and if not, why."""
+        await self.calibrate()
+        self.signing = True
+        try:
+            # The account's summary answers whether PayPal still knows this browser; its sign-in
+            # page asks the password again even of a signed-in browser, and then a confirmation
+            # in the PayPal app on top.
+            await self.go(self.PAYMENT_HOME, 5)
+            if urlparse(await self.url()).path.startswith("/myaccount"):
+                return {"ok": True, "signedIn": True}
+            for button in await self.visible("#acceptAllButton"):
+                await self.press(*button)
+                await asyncio.sleep(1)
+            # Some visits ask the e-mail on a page of its own first; Chrome fills that one as well.
+            if not await self.visible("input[type=password]"):
+                email = await self.visible("input[type=email], #email")
+                if not email:
+                    return {"ok": True, "signedIn": False, "problem": "PayPal shows no sign-in form"}
+                await self.press(*email[0])
+                await asyncio.sleep(1.5)
+                await self.hand.key("Return")
+                await asyncio.sleep(4)
+            fields = await self.visible("input[type=password]")
+            if not fields:
+                return {"ok": True, "signedIn": False, "problem": "PayPal shows no password field"}
+            await self.press(*fields[0])
+            await asyncio.sleep(1.5)
+            await self.hand.key("Return")
+            for _ in range(20):
+                await asyncio.sleep(1)
+                if urlparse(await self.url()).path != "/signin":
+                    break
+            path = urlparse(await self.url()).path
+            if path.startswith("/authflow"):
+                # The PayPal app is the confirmation that needs nothing typed.
+                for option in await self.visible("[data-testid*=push], label, li"):
+                    if "PayPal-App" in (option[0].text_all or ""):
+                        await self.press(*option)
+                        break
+                for button in await self.visible("#challenge-submit-button"):
+                    await self.press(*button)
+                waited = 0.0
+                while waited < wait_confirm and urlparse(await self.url()).path.startswith("/authflow"):
+                    await asyncio.sleep(3)
+                    waited += 3
+                path = urlparse(await self.url()).path
+            if path.startswith("/myaccount"):
+                return {"ok": True, "signedIn": True}
+            if await self.visible("input[type=password]"):
+                return {"ok": True, "signedIn": False, "problem": "PayPal did not take the saved password"}
+            return {"ok": True, "signedIn": False, "problem": "PayPal was not confirmed in its app" if path.startswith("/authflow") else f"PayPal stopped on {path}"}
+        finally:
+            self.signing = False
+            await self.go(self.HOME, 2)
+
     async def handle(self, req: dict) -> dict:
+        if req.get("op") == "relogin_payment":
+            return await self.relogin_payment(float(req.get("waitConfirm") or 150))
         if req.get("op") == "signin_payment":
             return await self.signin_payment()
         if req.get("op") == "buy":
