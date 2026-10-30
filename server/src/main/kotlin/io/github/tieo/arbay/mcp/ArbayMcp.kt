@@ -218,8 +218,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             while (throttled) http.prepareGet("$base/api/crawler/search/stream") {
                 parameter("q", words)
                 q?.platforms?.takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
-                q?.excludeKeywords?.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
-                q?.aliases?.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+                q?.excludeKeywords?.forEach { parameter("exclude", it) }
+                q?.aliases?.forEach { parameter("alias", it) }
                 q?.productWishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", json.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
                 q?.location?.let { parameter("near", it) }
                 q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }

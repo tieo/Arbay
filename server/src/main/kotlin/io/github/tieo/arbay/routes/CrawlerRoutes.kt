@@ -193,8 +193,13 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
  *  typed into the box a person or a catalog entry's [io.github.tieo.arbay.catalog.KnownProduct]
  *  names their search by. */
 private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQuery): SearchQuery {
-    val excludeKeywords = queryParameters["excludeKeywords"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
-    val aliases = queryParameters["aliases"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
+    // One parameter per word or phrase, as it was typed: a blocked "2,5 zoll" sent inside one
+    // comma-joined list came apart into "2" and "5 zoll", and the "2" took every "2 TB" drive.
+    // The joined form is still read from apps built before.
+    fun each(name: String, joined: String) = (queryParameters.getAll(name).orEmpty() +
+        queryParameters[joined]?.split(",").orEmpty()).map { it.trim() }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }
+    val excludeKeywords = each("exclude", "excludeKeywords")
+    val aliases = each("alias", "aliases")
     // How far this search may travel from the typed words, sent per search rather than configured
     // once on the server: what one search is allowed to ask a market is not a property of the box
     // the words were typed into.

@@ -21,7 +21,9 @@ answers come in the order they finish.
      "accept" names the buttons of a consent screen to press when one stands before the page.
      "tick" names, by CSS selector, the "I'm not a robot" box of a check that passes on a click
      (Yandex's checkbox, Mojeek's ALTCHA); it is clicked once, with the mouse, as a person would.
-     A check that asks more after the click (a picture puzzle) is left alone and stays "refused".
+     A check that asks more after the click (a picture puzzle) stays "refused", unless "solve" names
+     the puzzle: "yandex" has Yandex's picture puzzle read by yandex_captcha.py and clicked, the
+     pointer moving to each icon as a person's would, up to three puzzles.
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
   {"op": "resolve", "urls": [...], "leaving": "google.", "timeout": 10}
       -> {"ok": true, "to": {"<url>": "<where it led>", ...}}
@@ -31,8 +33,10 @@ answers come in the order they finish.
 The first line written is {"ok": true, "ready": true}.
 """
 import asyncio
+import html as html_lib
 import json
 import os
+import re
 import sys
 
 import zendriver as zd
@@ -41,6 +45,8 @@ CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_BROWSER_PROFILE", os.path.expanduser("~/.arbay/browser-profile"))
 # How long the page behind a ticked box is given to replace the check.
 TICK_WAIT_S = 12
+# Puzzles answered per page before it counts as refused: Yandex takes about two in five.
+PUZZLES = 3
 
 
 def what_page(html: str, markers: list[str], errors: list[str], refusals: list[str] = ()) -> str:
@@ -120,13 +126,63 @@ class Browser:
                 return True
         return False
 
+    async def solve_yandex(self, tab) -> bool:
+        """Answers Yandex's picture puzzle on [tab]: the icons the strip shows, clicked in its order.
+        True when the page went on past it."""
+        import random
+        import urllib.request
+        import yandex_captcha
+        h = await tab.get_content()
+        if "AdvancedCaptcha_audio" in h:
+            await (await tab.select('button[data-testid="challenge-type"]', timeout=5)).mouse_click()
+            await asyncio.sleep(3)
+            h = await tab.get_content()
+        pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
+        strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
+        if not pic or not strip:
+            return False
+        jar = "; ".join(f"{c.name}={c.value}" for c in await self.browser.cookies.get_all() if "yandex" in (c.domain or ""))
+        agent = await tab.evaluate("navigator.userAgent")
+
+        def fetch(u):
+            req = urllib.request.Request(html_lib.unescape(u), headers={"Cookie": jar, "User-Agent": agent})
+            return urllib.request.urlopen(req, timeout=20).read()
+
+        loop = asyncio.get_running_loop()
+        picture = await loop.run_in_executor(None, fetch, pic.group(1))
+        order = await loop.run_in_executor(None, fetch, strip.group(1) or strip.group(2))
+        points = await loop.run_in_executor(None, yandex_captcha.solve, picture, order)
+        img = await tab.select(".AdvancedCaptcha-ImageWrapper img", timeout=5)
+        pos = await img.get_position()
+        height, width = yandex_captcha.flat(picture).shape[:2]
+        sx, sy = pos.width / width, pos.height / height
+        await asyncio.sleep(random.uniform(1.5, 3.0))
+        cx, cy = pos.left + random.uniform(-40, 40), pos.top + pos.height + 60
+        for x, y in points:
+            tx = pos.left + x * sx + random.uniform(-1.5, 1.5)
+            ty = pos.top + y * sy + random.uniform(-1.5, 1.5)
+            steps = random.randint(8, 16)
+            for k in range(1, steps + 1):
+                f = k / steps
+                ease = f * f * (3 - 2 * f)
+                await tab.mouse_move(cx + (tx - cx) * ease + random.uniform(-1, 1), cy + (ty - cy) * ease + random.uniform(-1, 1), steps=1)
+                await asyncio.sleep(random.uniform(0.012, 0.035))
+            await tab.mouse_click(tx, ty)
+            cx, cy = tx, ty
+            await asyncio.sleep(random.uniform(0.5, 1.1))
+        await asyncio.sleep(random.uniform(0.6, 1.2))
+        await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
+        await asyncio.sleep(5)
+        return "AdvancedCaptcha" not in await tab.get_content()
+
     async def get(self, tab, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
-                  refusals: list[str] = (), tick: list[str] = ()) -> dict:
+                  refusals: list[str] = (), tick: list[str] = (), solve: str = "") -> dict:
         await tab.get(url)
         html, page = "", "unknown"
         waited = 0.0
         pressed = False
         ticked_at = None
+        solved = 0
         while waited < timeout:
             await asyncio.sleep(1)
             waited += 1
@@ -138,6 +194,14 @@ class Browser:
                 if await self.tick_box(tab, tick):
                     ticked_at = waited
                     continue
+            if page == "refused" and solve == "yandex" and solved < PUZZLES and "AdvancedCaptcha" in html:
+                solved += 1
+                try:
+                    await self.solve_yandex(tab)
+                except Exception as e:
+                    print(f"yandex puzzle: {e}", file=sys.stderr, flush=True)
+                ticked_at = waited
+                continue
             if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:
                 continue
             # A challenge solves itself in a real browser and then shows the page; anything else
@@ -189,7 +253,7 @@ class Browser:
             if op == "get":
                 return await asyncio.wait_for(
                     self.get(tab, req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout,
-                             req.get("refusals") or [], req.get("tick") or []),
+                             req.get("refusals") or [], req.get("tick") or [], req.get("solve") or ""),
                     timeout + 15,
                 )
             if op == "resolve":

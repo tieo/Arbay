@@ -480,8 +480,8 @@ class ArbayClient(
             carFilters?.takeUnless { it.isEmpty }?.let {
                 parameter("carFilters", streamJson.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), it))
             }
-            if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
-            if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
+            excludeKeywords.forEach { parameter("exclude", it) }
+            aliases.forEach { parameter("alias", it) }
         }.body()
 
     // ── Free Items ────────────────────────────────────────────────────────────
@@ -695,8 +695,8 @@ class ArbayClient(
                 // mirrors the native-param fields itself.
                 parameter("carFilters", streamJson.encodeToString(CarFilters.serializer(), f))
             }
-            if (excludeKeywords.isNotEmpty()) parameter("excludeKeywords", excludeKeywords.joinToString(","))
-            if (aliases.isNotEmpty()) parameter("aliases", aliases.joinToString(","))
+            excludeKeywords.forEach { parameter("exclude", it) }
+            aliases.forEach { parameter("alias", it) }
             wishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", streamJson.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
             near?.takeIf { it.isNotBlank() }?.let { parameter("near", it) }
             radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }

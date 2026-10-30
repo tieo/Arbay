@@ -507,8 +507,8 @@ class SavedSearchMonitor(
         loopback.prepareGet("$selfUrl/api/crawler/search/stream") {
             parameter("q", q.text)
             (platforms ?: q.platforms).takeIf { it.isNotEmpty() }?.let { parameter("platforms", it.joinToString(",") { p -> p.name }) }
-            q.excludeKeywords.takeIf { it.isNotEmpty() }?.let { parameter("excludeKeywords", it.joinToString(",")) }
-            q.aliases.takeIf { it.isNotEmpty() }?.let { parameter("aliases", it.joinToString(",")) }
+            q.excludeKeywords.forEach { parameter("exclude", it) }
+            q.aliases.forEach { parameter("alias", it) }
             parameter("carFilters", json.encodeToString(io.github.tieo.arbay.model.CarFilters.serializer(), crawl))
             q.productWishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", json.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
             home?.let { (lat, lon) -> parameter("lat", lat); parameter("lon", lon) }

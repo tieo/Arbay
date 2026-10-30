@@ -122,6 +122,9 @@ object RelevanceFilter {
     /** Short tokens ("s", "x") match as whole words only, so a blocked "-s" does not take every
      *  "Series". Longer ones also match German plurals and compounds. */
     private fun matchesNegative(words: List<String>, token: String): Boolean {
+        // A phrase is blocked as the words it is written as, side by side in the title: "2,5 zoll"
+        // is kept as one token ("2p5zoll"), which no single word of "SSD 2,5 Zoll" equals.
+        if ((2..4).any { n -> words.windowed(n).any { it.joinToString("") == token } }) return true
         // A number is blocked as the whole number it is: "50" is the Crafter 50, and a title
         // reading "50 mm" or "1950" is not that van.
         if (token.all { it.isDigit() }) return words.any { it == token }
