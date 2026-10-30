@@ -475,7 +475,19 @@ class Browser:
                 return await self.cookies(tab, req.get("domain") or "")
             return {"ok": False, "error": f"unknown op {op}"}
         except asyncio.TimeoutError:
-            return {"ok": False, "error": "page did not load in time", "stuck": True}
+            # A page that hung costs its own tab, not the browser: restarting it for one slow
+            # Mojeek page ended the reads of the other tabs, Google's among them. The browser
+            # counts as stuck only where it cannot open a tab in its place.
+            hung = tab
+            try:
+                tab = await asyncio.wait_for(self.fresh_tab(), 15)
+            except Exception:
+                return {"ok": False, "error": "page did not load in time", "stuck": True}
+            try:
+                await asyncio.wait_for(hung.close(), 5)
+            except Exception:
+                pass
+            return {"ok": False, "error": "page did not load in time"}
         except Exception as e:
             try:
                 tab = await self.fresh_tab()
