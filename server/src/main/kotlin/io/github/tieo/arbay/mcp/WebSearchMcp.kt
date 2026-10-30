@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.mcp
 
+import io.github.tieo.arbay.crawler.ImageResult
 import io.github.tieo.arbay.crawler.WebSearch
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -30,7 +31,8 @@ class WebSearchMcp(private val http: HttpClient, private val base: String) {
             Searches the web on any words with several engines at once (Bing, DuckDuckGo, Google, Qwant, Brave,
             Startpage, and the independent indexes of Yandex, Mojeek and Marginalia, the last for the small, old
             and technical web) from a home server, and gives every result's title, address and snippet, the
-            addresses most engines list first. The engines search in German.
+            addresses most engines list first. The engines search in German. image_search finds pictures
+            (Bing Images) with the page each stands on.
         """.trimIndent(),
     ).apply {
         textTool(
@@ -53,6 +55,25 @@ class WebSearchMcp(private val http: HttpClient, private val base: String) {
                 found.results.withIndex().joinToString("\n") { (i, r) ->
                     "${i + 1}. ${r.title} | ${r.url} | ${r.engines.joinToString("+")} best #${r.bestRank}" + (if (r.snippet.isNotBlank()) "\n   ${r.snippet}" else "")
                 }
+        }
+        textTool(
+            "image_search",
+            "Pictures Bing Images finds for any words: each picture's address, the page it stands on, its title and size, 35 a page in Bing's order. Fetch a picture's address to look at it.",
+            readOnly = true,
+            props = {
+                string("query", "The words, as typed into an image search", required = true)
+                integer("pages", "Pages of 35 pictures to read, 1 to 10; 3 when left out")
+            },
+        ) { args ->
+            val response = http.get("$base/api/web/images") {
+                parameter("q", args["query"]?.jsonPrimitive?.contentOrNull)
+                args["pages"]?.jsonPrimitive?.contentOrNull?.let { parameter("pages", it) }
+            }
+            val body = response.bodyAsText()
+            if (!response.status.isSuccess()) throw IllegalStateException(body.ifBlank { response.status.description })
+            val found = json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ImageResult.serializer()), body)
+            if (found.isEmpty()) "No pictures found."
+            else found.joinToString("\n") { r -> "${r.rank}. ${r.title}${r.size?.let { " ($it)" }.orEmpty()}\n   image: ${r.image}\n   page: ${r.page}" }
         }
     }
 }

@@ -139,6 +139,26 @@ class SearchEngines(private val client: HttpClient) {
     }
 
     /**
+     * The pictures Bing Images finds for [words], each with the page it stands on, in Bing's order:
+     * [pages] pages of 35. Its results page holds one picture until its script loads the rest from
+     * `/images/async`, which answers plain HTTP, so that is what is read, page after page.
+     */
+    suspend fun images(words: String, pages: Int = IMAGE_PAGES): List<ImageResult> {
+        val found = LinkedHashMap<String, ImageResult>()
+        for (page in 0 until pages) {
+            val url = "https://www.bing.com/images/async?q=${words.encodeUrl()}&first=${page * IMAGES_PER_PAGE}" +
+                "&count=$IMAGES_PER_PAGE&mmasync=1&setlang=de&cc=DE"
+            val html = try { fetchWithFallback(client, url, "Web Bing Images") } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                log.warn("Web: Bing Images failed for '{}': {}", words, e.message?.take(100)); break
+            }
+            val before = found.size
+            for (r in imageRows(html)) found.putIfAbsent(r.image, r)
+            if (found.size == before) break
+        }
+        return found.values.mapIndexed { i, r -> r.copy(rank = i + 1) }
+    }
+
+    /**
      * Where an engine's own redirects lead. Google's results link only to `/goto?url=<token>` and
      * its Shopping ads to `/aclk?...`, the token encrypted, so the address is what the redirect
      * answers; read without following it, one request per result, no browser needed.
@@ -257,6 +277,19 @@ class SearchEngines(private val client: HttpClient) {
             },
         )
 
+        /** The pictures of a Bing Images page: each link to a picture carries it as JSON in its `m`
+         *  attribute, the picture's address (`murl`), its page's (`purl`), a thumbnail's and a title. */
+        internal fun imageRows(html: String): List<ImageResult> =
+            org.jsoup.Jsoup.parse(html).select("a.iusc[m]").mapNotNull { a ->
+                val m = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(a.attr("m")) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: return@mapNotNull null
+                fun field(name: String) = (m[name] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+                val image = field("murl")?.takeIf { it.startsWith("http") } ?: return@mapNotNull null
+                val page = field("purl")?.takeIf { it.startsWith("http") } ?: return@mapNotNull null
+                // The picture's size and type stand beside it as "1500 x 1500 · jpeg".
+                val size = a.parents().firstOrNull { it.selectFirst(".img_info") != null }?.selectFirst(".img_info span.nowrap")?.text()?.trim()
+                ImageResult(0, field("t").orEmpty(), image, page, field("turl"), size?.takeIf { it.isNotBlank() })
+            }
+
         /** The pages a results page links to, apart from the engine's own and its redirects'. */
         internal fun resultLinks(html: String, engineHost: String): List<String> =
             org.jsoup.Jsoup.parse(html).select("a[href]").mapNotNull { a ->
@@ -372,6 +405,10 @@ class SearchEngines(private val client: HttpClient) {
 
         private const val PARALLEL_PAGES = 8
 
+        /** Bing Images' pages read for one image search, and the pictures on each. */
+        private const val IMAGE_PAGES = 3
+        private const val IMAGES_PER_PAGE = 35
+
         /** How long an engine that put a bot check before its results is left out. */
         private const val REST_AFTER_A_CHECK_MS = 60 * 60 * 1000L
     }
@@ -393,3 +430,8 @@ data class WebResult(val url: String, val title: String, val snippet: String, va
  *  addresses most engines list first. */
 @kotlinx.serialization.Serializable
 data class WebSearch(val query: String, val engines: List<EngineResults>, val results: List<WebResult>)
+
+/** One picture an image search found: its place in the engine's list from 1, its title, the
+ *  picture's address, the page it stands on, a thumbnail, and its size as the engine states it. */
+@kotlinx.serialization.Serializable
+data class ImageResult(val rank: Int, val title: String, val image: String, val page: String, val thumbnail: String? = null, val size: String? = null)

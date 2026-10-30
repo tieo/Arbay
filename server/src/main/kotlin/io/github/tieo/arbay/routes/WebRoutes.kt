@@ -77,6 +77,14 @@ fun Route.webRoutes() {
                 ?: throw NotFoundException("The web market is not running")
             call.respond(web.engines.serp(q, engines))
         }
+        // The pictures Bing Images finds for any words, each with the page it stands on.
+        get("/images") {
+            val q = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() } ?: throw BadRequestException("Missing q")
+            val pages = call.request.queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 10) ?: 3
+            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler
+                ?: throw NotFoundException("The web market is not running")
+            call.respond(web.engines.images(q, pages))
+        }
         put("/recipes") {
             val recipe = call.receive<SiteRecipe>()
             if (recipe.domain.isBlank()) throw BadRequestException("A recipe needs its domain")

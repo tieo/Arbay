@@ -83,4 +83,15 @@ class SerpRowsTest {
         assertTrue(forum.snippet.isNotEmpty(), r.joinToString("\n"))
         assertTrue(r.none { "marginalia" in it.url || "github.com" in it.url }, r.joinToString("\n"))
     }
+
+    /** Bing Images' async page for "Stahlzarge weiß schwarze Dichtung" on 2026-10-30. */
+    @Test
+    fun `bing images lists each picture with the page it stands on`() {
+        val r = SearchEngines.imageRows(javaClass.getResource("/fixtures/serp/bing-images.html")!!.readText())
+        assertEquals(35, r.size, r.joinToString("\n"))
+        assertTrue(r.all { it.image.startsWith("http") && it.page.startsWith("http") }, r.joinToString("\n"))
+        val obi = r.first { "obi.de" in it.page }
+        assertTrue(obi.image.startsWith("https://bilder.obi.de/"), obi.toString())
+        assertTrue(r.count { it.size != null } >= 30, r.joinToString("\n") { it.size.toString() })
+    }
 }
