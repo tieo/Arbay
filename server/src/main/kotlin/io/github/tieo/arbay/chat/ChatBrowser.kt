@@ -73,7 +73,7 @@ open class MarketSidecar(
         idleClose?.let { idle ->
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
                 while (true) {
-                    delay(60_000)
+                    delay(minOf(60_000, idle.inWholeMilliseconds / 2))
                     if (process?.isAlive != true || System.currentTimeMillis() - lastUsed < idle.inWholeMilliseconds) continue
                     // A request under way holds the lock; the browser is closed only between requests.
                     if (lock.tryLock()) try {
@@ -162,7 +162,8 @@ open class MarketSidecar(
         log.info("{} browser started: {}", market.displayName, ready)
     }
 
-    private fun ensureXvfb() {
+    /** The display the browser draws on, started once and kept. */
+    protected open fun ensureXvfb() {
         if (xvfb?.isAlive == true) return
         File("/tmp/.X$display-lock").delete()
         File("/tmp/.X11-unix/X$display").delete()
@@ -172,6 +173,9 @@ open class MarketSidecar(
             .start()
         Thread.sleep(500)
     }
+
+    /** Whether the browser is running now. */
+    val running: Boolean get() = process?.isAlive == true
 
     fun stop() {
         process?.let { p ->
