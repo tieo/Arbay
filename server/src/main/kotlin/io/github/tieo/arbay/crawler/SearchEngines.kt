@@ -269,7 +269,7 @@ class SearchEngines(private val client: HttpClient) {
         if (!resting(engine)) engine else engine.fallback?.takeIf { !resting(it) }
 
     private fun resting(engine: Engine): Boolean =
-        refused[engine.url("")]?.let { System.currentTimeMillis() - it < REST_AFTER_A_CHECK_MS } == true
+        refused[engine.url("")]?.let { System.currentTimeMillis() - it < if (engine.solve != null) REST_AFTER_PUZZLES_MS else REST_AFTER_A_CHECK_MS } == true
 
     /** A search engine: its results page for some words, whether only a browser gets it, and what
      *  shows that page arrived. */
@@ -544,6 +544,10 @@ class SearchEngines(private val client: HttpClient) {
 
         /** How long an engine that put a bot check before its results is left out. */
         private const val REST_AFTER_A_CHECK_MS = 60 * 60 * 1000L
+
+        /** How long an engine whose puzzle the browser answers is left out after missing all of a
+         *  page's puzzles: each page brings new ones, and about three in five are passed. */
+        private const val REST_AFTER_PUZZLES_MS = 10 * 60 * 1000L
     }
 }
 
