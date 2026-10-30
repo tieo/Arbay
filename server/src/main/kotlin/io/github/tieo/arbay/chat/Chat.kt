@@ -376,7 +376,32 @@ object Chat {
             paid = o["paid"]?.bool() == true,
             problem = o["problem"]?.str(),
             picture = o["picture"]?.str(),
-        ).also { if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur) }
+        ).also {
+            if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur)
+            if (o["paymentSignedOut"]?.bool() == true) askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
+        }
+    }
+
+    /** When each sign-in was last asked for on the phone, so a run of failed buys sends one push. */
+    private val signInAsked = java.util.concurrent.ConcurrentHashMap<io.github.tieo.arbay.model.SignInLink, Long>()
+
+    /**
+     * Pushes a request to sign in to the user's phone, opening the app on the sign-in page: an
+     * account Arbay needs signed the user out, and only they can sign in again. At most one push an
+     * hour for the same sign-in; [force] sends it anyway, for a request the user made just now.
+     */
+    suspend fun askSignIn(link: io.github.tieo.arbay.model.SignInLink, force: Boolean = false): Boolean {
+        val now = System.currentTimeMillis()
+        val last = signInAsked[link]
+        if (!force && last != null && now - last < 3_600_000) return false
+        signInAsked[link] = now
+        val what = if (link.payment) sidecarFor(link.market).call("status")["payment"]?.str() ?: "the payment service" else link.market.displayName
+        return io.github.tieo.arbay.crawler.Ntfy.send(
+            title = "$what needs you to sign in",
+            message = if (link.payment) "${link.market.displayName} pays with $what, which has signed Arbay out. Tap to sign in." else "Tap to sign in to ${link.market.displayName} again.",
+            click = link.appLink(),
+            tags = listOf("key"),
+        )
     }
 
     /**

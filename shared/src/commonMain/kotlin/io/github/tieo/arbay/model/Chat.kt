@@ -323,3 +323,28 @@ fun fillIn(text: String, price: Int?, title: String, shipping: String?, directPr
         .replace("{preis}", price?.toString() ?: "{preis}")
         .replace("{titel}", title)
         .replace("{versand}", shipping ?: "{versand}")
+
+/**
+ * A sign-in an address asks the app to open: Settings with [market]'s sign-in page, or with
+ * [payment] the page of the payment service its checkout uses, under `/settings?signin=VINTED_DE&payment=true`.
+ * A push sends it when an account Arbay needs signed the user out, so a tap opens the field to type in.
+ */
+data class SignInLink(val market: PlatformId, val payment: Boolean = false) {
+    fun query(): String = "signin=${market.name}" + if (payment) "&payment=true" else ""
+
+    /** The address the phone app opens, its scheme registered by the app. */
+    fun appLink(): String = "$APP_SCHEME://open/settings?${query()}"
+
+    companion object {
+        const val APP_SCHEME = "arbay"
+
+        /** The sign-in [query] (an address's part after "?") asks for; null where it asks none. */
+        fun parse(query: String?): SignInLink? {
+            val params = query.orEmpty().removePrefix("?").split('&').mapNotNull {
+                it.split('=', limit = 2).takeIf { kv -> kv.size == 2 }?.let { (k, v) -> k to v }
+            }.toMap()
+            val market = params["signin"]?.let { name -> PlatformId.entries.firstOrNull { it.name == name } } ?: return null
+            return SignInLink(market, params["payment"] == "true")
+        }
+    }
+}

@@ -631,6 +631,22 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             getJsonElement("/api/chat/accounts").toString()
         }
 
+        tool(
+            "ask_sign_in",
+            "Push a request to the user's phone that opens the Arbay app on a market's sign-in page, or with payment on the " +
+                "sign-in page of the payment service the market's checkout uses (Vinted's PayPal), for the user to sign in themselves.",
+            props = {
+                string("market", "The market, as KLEINANZEIGEN, EBAY_DE, WILLHABEN or VINTED_DE", required = true)
+                boolean("payment", "The payment service's sign-in rather than the market's")
+            },
+        ) { args ->
+            val r = http.post("$base/api/chat/signin/ask") {
+                parameter("market", args.str("market")!!)
+                if (args.bool("payment") == true) parameter("payment", "true")
+            }
+            if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else if ("true" in r.bodyAsText()) "Sent to the phone." else "Not sent: no push topic is set."
+        }
+
         tool("list_texts", "The user's own texts for sellers, with their fill-ins.") {
             getJson<ChatSettings>("/api/chat/settings").templates.joinToString("\n\n") { "${it.id} \"${it.name}\":\n${it.text}" }.ifEmpty { "No texts kept." }
         }

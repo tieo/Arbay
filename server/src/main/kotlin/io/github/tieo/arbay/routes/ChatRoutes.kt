@@ -30,6 +30,11 @@ fun Route.chatRoutes() {
         // Kleinanzeigen where a request names no market, as the apps before other markets ask.
         get("/account") { call.respond(Chat.account(call.market())) }
         get("/accounts") { call.respond(Chat.accounts()) }
+        // A push to the user's phone that opens the app on the sign-in page.
+        post("/signin/ask") {
+            val link = io.github.tieo.arbay.model.SignInLink(call.market(), call.request.queryParameters["payment"] == "true")
+            call.chat { call.respond(mapOf("sent" to Chat.askSignIn(link, force = true))) }
+        }
         // Signing in from inside the app; what is typed is passed to the page and not kept.
         post("/signin") { call.chat { call.respond(Chat.beginSignIn(call.market(), payment = call.request.queryParameters["payment"] == "true")) } }
         get("/signin") { call.chat { call.respond(Chat.signInStep(call.market())) } }

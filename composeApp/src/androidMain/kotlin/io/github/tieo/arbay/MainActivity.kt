@@ -23,7 +23,14 @@ class MainActivity : ComponentActivity() {
         val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debuggable) registerDebugDumpReceiver()
 
+        AppLinks.open(intent?.dataString)
         setContent { App() }
+    }
+
+    // The app is already open when a push is tapped: the link comes here instead of to onCreate.
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        AppLinks.open(intent.dataString)
     }
 
 }
