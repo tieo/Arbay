@@ -1,18 +1,22 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.DataDir
-import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -24,8 +28,8 @@ import org.slf4j.LoggerFactory
 /**
  * A Chrome a site is read through, kept running by warm_browser.py: one per site that turns away
  * anything not looking like a person's browser, for the life of the server, on a display of its
- * own, its profile in the data directory so its cookies outlive restarts. Its pages are read one at
- * a time, which is also the pace such a site lets through.
+ * own, its profile in the data directory so its cookies outlive restarts. It reads as many pages at
+ * once as it has [tabs], one by default, which is also the pace such a site lets through.
  */
 open class WarmBrowser(
     private val name: String,
@@ -36,15 +40,19 @@ open class WarmBrowser(
     private val errors: List<String> = emptyList(),
     /** The buttons of a consent screen the site puts before its pages. */
     private val accept: List<String> = emptyList(),
+    /** Pages read at once, each in a tab of its own. */
+    private val tabs: Int = 1,
 ) {
     private val log = LoggerFactory.getLogger("${WarmBrowser::class.java.name}.$name")
     private val json = Json { ignoreUnknownKeys = true }
-    private val lock = Mutex()
+    private val free = Semaphore(tabs)
+    private val starting = Mutex()
 
     private var xvfb: Process? = null
-    private var process: Process? = null
+    @Volatile private var process: Process? = null
     private var input: BufferedWriter? = null
-    private var output: BufferedReader? = null
+    private val pending = ConcurrentHashMap<Long, CompletableDeferred<JsonObject>>()
+    private val ids = AtomicLong()
 
     /** A page as the browser read it: [page] says whether it is the page asked for ("content"), the
      *  site's error page, a challenge, the site refusing the browser ("refused"), or none of them. */
@@ -56,74 +64,16 @@ open class WarmBrowser(
      * leaves the caller its other ways in.
      */
     suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), tick: List<String> = emptyList()): Page? {
-        // One browser serves every search of its site, and a crawl waiting its turn is not its
-        // market failing to answer: eBay's five sites share this one, and four waited out their
-        // whole time limit behind the fifth.
-        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
-        if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
-        try {
-            return read(url, markers, timeoutS, refusals, tick)
-        } finally {
-            lock.unlock()
-        }
-    }
-
-    /**
-     * Where each of a site's redirects [urls] leads: the first address off [leaving] it reaches in
-     * this browser, one after another, each given [timeoutS]. Those that led nowhere in time are left
-     * out, and all are when the browser does not answer.
-     */
-    suspend fun resolve(urls: List<String>, leaving: String, timeoutS: Int = 10): Map<String, String> {
-        if (urls.isEmpty()) return emptyMap()
-        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
-        if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
-        try {
-            val request = JsonObject(mapOf(
-                "op" to JsonPrimitive("resolve"), "urls" to JsonArray(urls.map(::JsonPrimitive)),
-                "leaving" to JsonPrimitive(leaving), "timeout" to JsonPrimitive(timeoutS),
-            ))
-            val answer = try {
-                withContext(Dispatchers.IO) {
-                    coroutineScope {
-                        val watchdog = launch { delay((timeoutS.toLong() * urls.size + 30) * 1000L); process?.let(::killTree) }
-                        try { exchange(request.toString()) } finally { watchdog.cancel() }
-                    }
-                }
-            } catch (e: Exception) {
-                log.warn("{} browser did not resolve {} redirects: {}", name, urls.size, e.message)
-                stop()
-                return emptyMap()
-            }
-            if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
-                log.warn("{} browser failed to resolve {} redirects: {}", name, urls.size, answer["error"]?.jsonPrimitive?.contentOrNull)
-                return emptyMap()
-            }
-            return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
-        } finally {
-            lock.unlock()
-        }
-    }
-
-    private suspend fun read(url: String, markers: List<String>, timeoutS: Int, refusals: List<String>, tick: List<String> = emptyList()): Page? {
-        val request = JsonObject(mapOf(
+        val request = mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
             "errors" to JsonArray(errors.map(::JsonPrimitive)),
             "accept" to JsonArray(accept.map(::JsonPrimitive)),
             "refusals" to JsonArray(refusals.map(::JsonPrimitive)),
             "tick" to JsonArray(tick.map(::JsonPrimitive)),
-        ))
-        val answer = try {
-            withContext(Dispatchers.IO) {
-                coroutineScope {
-                    // A blocked read cannot be cancelled; ending the sidecar ends the read.
-                    val watchdog = launch { delay((timeoutS + 30) * 1000L); process?.let(::killTree) }
-                    try { exchange(request.toString()) } finally { watchdog.cancel() }
-                }
-            }
-        } catch (e: Exception) {
-            log.warn("{} browser did not answer for {}: {}", name, url, e.message)
-            stop()
+        )
+        val answer = ask(request, timeoutS + 30L) ?: run {
+            log.warn("{} browser did not answer for {}", name, url)
             return null
         }
         // Any page the site answers with, its error page too, is the site answering: the crawl's time
@@ -141,17 +91,67 @@ open class WarmBrowser(
         )
     }
 
-    private fun exchange(line: String): JsonObject {
-        ensureRunning()
-        input!!.apply { write(line); newLine(); flush() }
-        val reply = output!!.readLine() ?: throw IllegalStateException("$name browser exited")
-        return json.parseToJsonElement(reply).jsonObject
+    /**
+     * Where each of a site's redirects [urls] leads: the first address off [leaving] it reaches in
+     * this browser, one after another, each given [timeoutS]. Those that led nowhere in time are left
+     * out, and all are when the browser does not answer.
+     */
+    suspend fun resolve(urls: List<String>, leaving: String, timeoutS: Int = 10): Map<String, String> {
+        if (urls.isEmpty()) return emptyMap()
+        val request = mapOf(
+            "op" to JsonPrimitive("resolve"), "urls" to JsonArray(urls.map(::JsonPrimitive)),
+            "leaving" to JsonPrimitive(leaving), "timeout" to JsonPrimitive(timeoutS),
+        )
+        val answer = ask(request, timeoutS.toLong() * urls.size + 30) ?: run {
+            log.warn("{} browser did not resolve {} redirects", name, urls.size)
+            return emptyMap()
+        }
+        if (answer["ok"]?.jsonPrimitive?.booleanOrNull != true) {
+            log.warn("{} browser failed to resolve {} redirects: {}", name, urls.size, answer["error"]?.jsonPrimitive?.contentOrNull)
+            return emptyMap()
+        }
+        return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
+    }
+
+    /**
+     * Sends [request] once a tab is free and waits for its answer, [limitS] at most: a browser that
+     * answers nothing in that time is ended, which ends every read it had, and started again on the
+     * next. Null where it did not answer.
+     */
+    private suspend fun ask(request: Map<String, JsonElement>, limitS: Long): JsonObject? {
+        // One browser serves every search of its site, and a crawl waiting its turn is not its
+        // market failing to answer: eBay's five sites share this one, and four waited out their
+        // whole time limit behind the fifth.
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        if (clock != null) clock.waitingOnOthers { free.acquire() } else free.acquire()
+        try {
+            val id = ids.incrementAndGet()
+            val reply = CompletableDeferred<JsonObject>()
+            pending[id] = reply
+            try {
+                withContext(Dispatchers.IO) {
+                    starting.withLock { ensureRunning() }
+                    val line = JsonObject(request + ("id" to JsonPrimitive(id))).toString()
+                    synchronized(this@WarmBrowser) { input!!.apply { write(line); newLine(); flush() } }
+                }
+                return withTimeoutOrNull(limitS * 1000) { reply.await() } ?: run { stop(); null }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("{} browser: {}", name, e.message)
+                stop()
+                return null
+            } finally {
+                pending.remove(id)
+            }
+        } finally {
+            free.release()
+        }
     }
 
     /** Starts the browser ahead of its first page, so that page waits for no start. */
     suspend fun warm() {
-        lock.lock()
-        try { withContext(Dispatchers.IO) { ensureRunning() } } finally { lock.unlock() }
+        withContext(Dispatchers.IO) { starting.withLock { ensureRunning() } }
     }
 
     private fun ensureRunning() {
@@ -164,16 +164,31 @@ open class WarmBrowser(
             .also {
                 it.environment()["DISPLAY"] = ":$display"
                 it.environment()["ARBAY_BROWSER_PROFILE"] = DataDir.file(profileDir).absolutePath
+                it.environment()["ARBAY_BROWSER_TABS"] = tabs.toString()
             }
             .start()
-        process = started
-        input = started.outputStream.bufferedWriter()
-        output = started.inputStream.bufferedReader()
-        val ready = output!!.readLine() ?: run {
-            stop()
+        val output = started.inputStream.bufferedReader()
+        val ready = output.readLine() ?: run {
+            killTree(started)
             throw IllegalStateException("$name browser exited on start; see logs/$logName")
         }
+        process = started
+        input = started.outputStream.bufferedWriter()
         log.info("{} browser started: {}", name, ready)
+        // Answers come in the order their pages finish, each carrying its request's id.
+        Thread({
+            try {
+                while (true) {
+                    val line = output.readLine() ?: break
+                    val answer = runCatching { json.parseToJsonElement(line).jsonObject }.getOrNull() ?: continue
+                    answer["id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()?.let { pending[it]?.complete(answer) }
+                }
+            } catch (_: Exception) {
+            }
+            // The browser ended: every read it still had fails now rather than at its time limit.
+            if (process === started) process = null
+            pending.values.forEach { it.completeExceptionally(IllegalStateException("$name browser exited")) }
+        }, "$name-browser-answers").apply { isDaemon = true }.start()
     }
 
     private fun ensureXvfb() {
@@ -188,13 +203,11 @@ open class WarmBrowser(
     }
 
     fun stop() {
-        process?.let { p ->
-            runCatching { input?.close() }
-            if (!p.waitFor(5, TimeUnit.SECONDS)) killTree(p)
-        }
+        val p = process ?: return
         process = null
+        runCatching { input?.close() }
+        if (!p.waitFor(5, TimeUnit.SECONDS)) killTree(p)
         input = null
-        output = null
     }
 }
 
@@ -214,6 +227,9 @@ object EbayBrowser : WarmBrowser("eBay", 96, "ebay-profile", "ebay-browser.log",
 object SearchBrowser : WarmBrowser(
     "search", 91, "search-profile", "search-browser.log",
     accept = listOf("Alle akzeptieren", "Accept all", "Akzeptieren", "Tout accepter", "Accetta tutto"),
+    // Each web search asks five engines through it, and two searches at once queued every engine
+    // of the second behind the first's past the search's deadline.
+    tabs = 3,
 )
 
 /**

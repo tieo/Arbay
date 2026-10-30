@@ -12,7 +12,9 @@ browser: started once, its cookies kept, every page read in the same tab, one af
 Measured on 2026-10-24 for eBay: twelve searches and item pages in a row in two to four seconds
 each, at a time every other client got the error page.
 
-Protocol: one JSON request per line on stdin, one JSON answer per line on stdout.
+Protocol: one JSON request per line on stdin, one JSON answer per line on stdout, carrying the
+request's "id". Requests run at once, one per tab (ARBAY_BROWSER_TABS, one by default), and their
+answers come in the order they finish.
   {"op": "get", "url": "...", "markers": ["s-card", ...], "errors": ["went wrong"],
    "accept": ["Alle akzeptieren"], "timeout": 30}
       -> {"ok": true, "html": "...", "url": "<final url>", "page": "content"|"errorpage"|"challenge"|"refused"|"unknown"}
@@ -57,10 +59,14 @@ def what_page(html: str, markers: list[str], errors: list[str], refusals: list[s
 
 
 class Browser:
+    """The Chrome and its tabs: ARBAY_BROWSER_TABS of them, each reading one page at a time, so a
+    browser several searches share reads that many pages at once. Each tab is a window of its own,
+    in front, since a page in a background tab runs its scripts (a bot check among them) slowly."""
+
     def __init__(self) -> None:
         self.browser = None
-        self.tab = None
-        self.side = None
+        self.tabs: asyncio.Queue = asyncio.Queue()
+        self.count = max(1, int(os.environ.get("ARBAY_BROWSER_TABS", "1")))
 
     async def start(self) -> None:
         os.makedirs(PROFILE, exist_ok=True)
@@ -72,17 +78,26 @@ class Browser:
             except FileNotFoundError:
                 pass
         kwargs = {"headless": False, "user_data_dir": PROFILE,
-                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble"]}
+                  "browser_args": ["--window-position=0,0", "--window-size=1280,900", "--hide-crash-restore-bubble",
+                                   "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows",
+                                   "--disable-renderer-backgrounding"]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
-        self.tab = await self.browser.get("about:blank")
+        self.tabs.put_nowait(await self.browser.get("about:blank"))
+        for _ in range(self.count - 1):
+            self.tabs.put_nowait(await self.browser.get("about:blank", new_window=True))
 
-    async def press_consent(self, labels: list[str]) -> bool:
+    async def fresh_tab(self):
+        """A tab in place of one a page broke (zendriver's "invalid state" on a page torn down
+        mid-answer)."""
+        return await self.browser.get("about:blank", new_window=True)
+
+    async def press_consent(self, tab, labels: list[str]) -> bool:
         """Presses the first button carrying one of [labels], where a consent screen shows one."""
         if not labels:
             return False
-        pressed = await self.tab.evaluate(
+        pressed = await tab.evaluate(
             """((labels) => {
                 const buttons = [...document.querySelectorAll('button, [role=button], input[type=submit]')];
                 const b = buttons.find(e => labels.some(l => (e.innerText || e.value || '').trim().toLowerCase() === l.toLowerCase()));
@@ -93,11 +108,11 @@ class Browser:
         )
         return bool(pressed)
 
-    async def tick_box(self, selectors: list[str]) -> bool:
+    async def tick_box(self, tab, selectors: list[str]) -> bool:
         """Clicks the first of [selectors] the page shows, with the mouse, where one is there."""
         for sel in selectors:
             try:
-                box = await self.tab.select(sel, timeout=1)
+                box = await tab.select(sel, timeout=1)
             except Exception:
                 continue
             if box:
@@ -105,9 +120,9 @@ class Browser:
                 return True
         return False
 
-    async def get(self, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
+    async def get(self, tab, url: str, markers: list[str], errors: list[str], accept: list[str], timeout: float,
                   refusals: list[str] = (), tick: list[str] = ()) -> dict:
-        await self.tab.get(url)
+        await tab.get(url)
         html, page = "", "unknown"
         waited = 0.0
         pressed = False
@@ -115,12 +130,12 @@ class Browser:
         while waited < timeout:
             await asyncio.sleep(1)
             waited += 1
-            html = await self.tab.get_content()
+            html = await tab.get_content()
             page = what_page(html, markers, errors, refusals)
             # A check passed by ticking its box is ticked once; the page behind it then loads in its
             # place, given a few seconds to.
             if page in ("refused", "challenge", "unknown") and tick and ticked_at is None:
-                if await self.tick_box(tick):
+                if await self.tick_box(tab, tick):
                     ticked_at = waited
                     continue
             if page == "refused" and ticked_at is not None and waited - ticked_at < TICK_WAIT_S:
@@ -130,42 +145,70 @@ class Browser:
             if page in ("content", "errorpage", "refused"):
                 break
             if not pressed and page == "unknown":
-                pressed = await self.press_consent(accept)
-        final = await self.tab.evaluate("location.href")
+                pressed = await self.press_consent(tab, accept)
+        final = await tab.evaluate("location.href")
         return {"ok": True, "html": html, "url": final, "page": page}
 
-    async def resolve(self, urls: list[str], leaving: str, timeout: float) -> dict:
+    async def resolve(self, tab, urls: list[str], leaving: str, timeout: float) -> tuple:
+        """Where each of [urls] leads, and the tab to give back: a new one where a page broke it."""
         to = {}
         for url in urls:
-            # A tab that broke on the last redirect (zendriver's "invalid state" on a page torn down
-            # mid-answer) is replaced, so one bad page costs that redirect, not the rest.
             try:
-                if self.side is None:
-                    self.side = await self.browser.get("about:blank", new_tab=True)
-                await self.side.evaluate("location.href = %s" % json.dumps(url))
+                await tab.evaluate("location.href = %s" % json.dumps(url))
             except Exception:
-                self.side = None
+                tab = await self.fresh_tab()
                 continue
             waited = 0.0
             while waited < timeout:
                 await asyncio.sleep(0.25)
                 waited += 0.25
                 try:
-                    now = await self.side.evaluate("location.href")
+                    now = await tab.evaluate("location.href")
                 except Exception:
                     continue
                 if isinstance(now, str) and now.startswith("http") and leaving not in now.split("/")[2]:
                     to[url] = now
                     break
             try:
-                await self.side.evaluate("window.stop(); location.href = 'about:blank'")
+                await tab.evaluate("window.stop(); location.href = 'about:blank'")
+            except Exception:
+                tab = await self.fresh_tab()
+        return {"ok": True, "to": to}, tab
+
+    async def cookies(self, tab, domain: str) -> dict:
+        jar = {c.name: c.value for c in await self.browser.cookies.get_all() if domain in (c.domain or "")}
+        return {"ok": True, "cookies": jar, "userAgent": await tab.evaluate("navigator.userAgent")}
+
+    async def answer(self, req: dict) -> dict:
+        """One request on whichever tab is free, the tab given back after; a tab that broke is
+        replaced."""
+        op = req.get("op")
+        timeout = float(req.get("timeout") or 30)
+        tab = await self.tabs.get()
+        try:
+            if op == "get":
+                return await asyncio.wait_for(
+                    self.get(tab, req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout,
+                             req.get("refusals") or [], req.get("tick") or []),
+                    timeout + 15,
+                )
+            if op == "resolve":
+                urls = req.get("urls") or []
+                answer, tab = await asyncio.wait_for(self.resolve(tab, urls, req.get("leaving") or "", timeout), timeout * len(urls) + 15)
+                return answer
+            if op == "cookies":
+                return await self.cookies(tab, req.get("domain") or "")
+            return {"ok": False, "error": f"unknown op {op}"}
+        except asyncio.TimeoutError:
+            return {"ok": False, "error": "page did not load in time", "stuck": True}
+        except Exception as e:
+            try:
+                tab = await self.fresh_tab()
             except Exception:
                 pass
-        return {"ok": True, "to": to}
-
-    async def cookies(self, domain: str) -> dict:
-        jar = {c.name: c.value for c in await self.browser.cookies.get_all() if domain in (c.domain or "")}
-        return {"ok": True, "cookies": jar, "userAgent": await self.tab.evaluate("navigator.userAgent")}
+            return {"ok": False, "error": str(e)[:300]}
+        finally:
+            self.tabs.put_nowait(tab)
 
 
 async def main() -> None:
@@ -175,31 +218,26 @@ async def main() -> None:
     reader = asyncio.StreamReader(limit=1 << 20)
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
     print(json.dumps({"ok": True, "ready": True}), flush=True)
+
+    async def handle(req: dict) -> None:
+        answer = await b.answer(req)
+        if "id" in req:
+            answer["id"] = req["id"]
+        print(json.dumps(answer), flush=True)
+
+    running = set()
     while True:
         line = await reader.readline()
         if not line:
             break
         try:
             req = json.loads(line)
-            op = req.get("op")
-            timeout = float(req.get("timeout") or 30)
-            if op == "get":
-                answer = await asyncio.wait_for(
-                    b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout, req.get("refusals") or [], req.get("tick") or []),
-                    timeout + 15,
-                )
-            elif op == "resolve":
-                urls = req.get("urls") or []
-                answer = await asyncio.wait_for(b.resolve(urls, req.get("leaving") or "", timeout), timeout * len(urls) + 15)
-            elif op == "cookies":
-                answer = await b.cookies(req.get("domain") or "")
-            else:
-                answer = {"ok": False, "error": f"unknown op {op}"}
-        except asyncio.TimeoutError:
-            answer = {"ok": False, "error": "page did not load in time", "stuck": True}
         except Exception as e:
-            answer = {"ok": False, "error": str(e)[:300]}
-        print(json.dumps(answer), flush=True)
+            print(json.dumps({"ok": False, "error": str(e)[:300]}), flush=True)
+            continue
+        task = asyncio.create_task(handle(req))
+        running.add(task)
+        task.add_done_callback(running.discard)
     await b.browser.stop()
 
 

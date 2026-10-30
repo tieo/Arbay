@@ -24,11 +24,11 @@ class SearchEngines(private val client: HttpClient) {
 
     /**
      * The pages every engine lists for the words. The engines that print their results as plain
-     * HTML (Bing, DuckDuckGo) are read over HTTP, the others in [SearchBrowser]: from the server's
-     * address Google and Qwant refuse anything that does not run their scripts, Brave throttles it
-     * and Startpage answers it with nothing. A browser engine's pages come one after another, so
-     * the plain ones are read meanwhile. An engine that lists nothing keeps its page as an error
-     * snapshot, since that is how a changed results page shows.
+     * HTML (Bing, DuckDuckGo, Yandex's site search, Marginalia) are read over HTTP, the others in
+     * [SearchBrowser]: from the server's address Google and Qwant refuse anything that does not run
+     * their scripts, and Brave and Mojeek put a check first. Every engine is asked at once, the
+     * browser ones in its tabs. An engine that lists nothing keeps its page as an error snapshot,
+     * since that is how a changed results page shows.
      */
     suspend fun links(words: String): List<String> = coroutineScope {
         val asked = ENGINES.filter { it.forOffers && !resting(it) }
@@ -45,8 +45,8 @@ class SearchEngines(private val client: HttpClient) {
                 all
             }
         }
-        val browser = asked.filter { it.browser }.map { e -> results(e, words) }
-        (plain.awaitAll() + browser).flatten().distinct()
+        val browser = asked.filter { it.browser }.map { e -> async { results(e, words) } }
+        (plain.awaitAll() + browser.awaitAll()).flatten().distinct()
     }
 
     private suspend fun results(engine: Engine, words: String, page: Int = 1): List<String> {
@@ -123,8 +123,7 @@ class SearchEngines(private val client: HttpClient) {
     /**
      * What each engine lists for [words], as a person reads its results page: every result's title,
      * address and snippet in the engine's order, and all of them merged by address. [engines] picks
-     * engines by name; none picks every one. The browser engines are asked one after another, as
-     * for a search, the plain ones meanwhile.
+     * engines by name; none picks every one. Every engine is asked at once, as for a search.
      */
     suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
@@ -159,8 +158,7 @@ class SearchEngines(private val client: HttpClient) {
         val done = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
         val asked = picked.filter { !resting(it) }
         val runs = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-        val jobs = asked.filter { !it.browser }.map { e -> runs.launch { done[e.name] = ask(e) } } +
-            runs.launch { for (e in asked.filter { it.browser }) done[e.name] = ask(e) }
+        val jobs = asked.map { e -> runs.launch { done[e.name] = ask(e) } }
         kotlinx.coroutines.withTimeoutOrNull(SERP_DEADLINE_MS) { jobs.joinAll() }
         val all = asked.map { e -> done[e.name] ?: EngineResults(e.name, "still searching after ${SERP_DEADLINE_MS / 1000} s, left out", emptyList()) } + resting
         val merged = all.flatMap { e -> e.results.map { e.engine to it } }
