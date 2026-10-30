@@ -326,6 +326,7 @@ object SiteRecipes {
 
     private val WITH_CURRENCY = Regex("""\d[\d.,]*\s?(€|\beur\b|\bchf\b|£|\$)|(€|\beur|\bchf|£|\$)\s?\d[\d.,]*""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""\d[\d.]*(,\d{1,2})?""")
+    private val CSS_URL = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""")
 
     private fun withVat(recipe: SiteRecipe, price: io.github.tieo.arbay.model.Money, doc: Element, pageUrl: String) =
         if (recipe.pricesNet && (recipe.netWhere == null || doc.selectFirst(recipe.netWhere) != null)) ProductPages.withVat(price, pageUrl) else price
@@ -335,6 +336,7 @@ object SiteRecipes {
     private fun decodedLink(raw: String): String {
         if ('/' in raw || '.' in raw || !Regex("""[A-Za-z0-9+_=-]{8,}""").matches(raw)) return raw
         val decoded = runCatching { String(java.util.Base64.getMimeDecoder().decode(raw.replace('-', '+').replace('_', '/'))) }.getOrNull() ?: return raw
+        Regex("""location(?:\.href)?\s*=\s*['"]([^'"]+)['"]""").find(raw)?.let { return it.groupValues[1] }
         return decoded.takeIf { it.startsWith("/") || it.startsWith("http") }?.takeIf { d -> d.all { it.code in 33..126 } } ?: raw
     }
 
@@ -346,7 +348,9 @@ object SiteRecipes {
         val at = spec.lastIndexOf('@')
         val (selector, attribute) = if (at >= 0 && !spec.substring(at + 1).contains(' ')) spec.substring(0, at) to spec.substring(at + 1) else spec to null
         val el = if (selector.isBlank()) scope else scope.selectFirst(selector) ?: return null
-        if (attribute != null) return el.attr(attribute).takeIf { it.isNotBlank() }
+        // A picture set as a CSS background (thalhofer's `style="background-image: url('…')"`)
+        // is read as the address inside url().
+        if (attribute != null) return el.attr(attribute).let { CSS_URL.find(it)?.groupValues?.get(1) ?: it }.takeIf { it.isNotBlank() }
         val text = if (spaced) buildString { org.jsoup.select.NodeTraversor.traverse({ node, _ -> if (node is org.jsoup.nodes.TextNode) append(node.text()).append(' ') }, el) }.replace(Regex("""\s+"""), " ").trim() else el.text()
         return text.takeIf { it.isNotBlank() }
     }

@@ -85,6 +85,17 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a picture set as a css background is read from its url`() {
+        // shop.thalhofer.de's tiles draw each product's picture as the background of a div.
+        val html = """<a class="itemboxa" href="4518_Platte.html?suchtext=x"><div class="artikelbild" style="background-image: url('https://shop.example/medium/1.jpg');"></div>
+            <div class="artikelname">EGGER F206 PG/ST9</div><div class="artikelpreis">41,40 €/m²</div></a>"""
+        val recipe = SiteRecipe(domain = "shop.example", item = "a.itemboxa", title = ".artikelname", price = ".artikelpreis", link = "@href", image = ".artikelbild@style")
+        val offers = SiteRecipes.read(recipe, html, "https://shop.example/produkte/?suchtext=x")
+        assertEquals("https://shop.example/medium/1.jpg", offers.single().image)
+        assertEquals("https://shop.example/produkte/4518_Platte.html?suchtext=x", offers.single().url)
+    }
+
+    @Test
     fun `a results page gives the pages it links to, not the engine's own`() {
         val html = """<div id="rso"><a href="https://shop.example/p/1"><h3>One</h3></a>
             <a href="/url?q=https://other.example/p/2&sa=U">Two</a>
