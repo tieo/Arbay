@@ -4,6 +4,7 @@ import io.github.tieo.arbay.mcp.ArbayMcp
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -86,11 +87,14 @@ private fun toolsDigest(server: io.modelcontextprotocol.kotlin.sdk.server.Server
 }
 
 /** For calling this server's own API, as the MCP tools and the saved-search fit alert do; a search
- *  runs for minutes, so no overall limit. */
+ *  runs for minutes, so no overall limit: each market ends on its own crawl clock, and a stream
+ *  that stops sending ends on the socket limit. A 15 minute cap failed every run of the parquet
+ *  sander watch, whose fourteen other names across eighteen markets read for longer, and a run
+ *  given up on records nothing. */
 internal fun loopbackClient() = HttpClient(CIO) {
     install(HttpTimeout) {
         connectTimeoutMillis = 10_000
-        requestTimeoutMillis = 15 * 60_000
+        requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
         socketTimeoutMillis = 5 * 60_000
     }
 }
