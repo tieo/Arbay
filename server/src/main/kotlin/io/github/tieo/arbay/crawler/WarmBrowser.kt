@@ -68,6 +68,38 @@ open class WarmBrowser(
         }
     }
 
+    /**
+     * Where each of a site's redirects [urls] leads: the first address off [leaving] it reaches in
+     * this browser, one after another, each given [timeoutS]. Those that led nowhere in time are left
+     * out, and all are when the browser does not answer.
+     */
+    suspend fun resolve(urls: List<String>, leaving: String, timeoutS: Int = 10): Map<String, String> {
+        if (urls.isEmpty()) return emptyMap()
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        if (clock != null) clock.waitingOnOthers { lock.lock() } else lock.lock()
+        try {
+            val request = JsonObject(mapOf(
+                "op" to JsonPrimitive("resolve"), "urls" to JsonArray(urls.map(::JsonPrimitive)),
+                "leaving" to JsonPrimitive(leaving), "timeout" to JsonPrimitive(timeoutS),
+            ))
+            val answer = try {
+                withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        val watchdog = launch { delay((timeoutS.toLong() * urls.size + 30) * 1000L); process?.let(::killTree) }
+                        try { exchange(request.toString()) } finally { watchdog.cancel() }
+                    }
+                }
+            } catch (e: Exception) {
+                log.warn("{} browser did not resolve {} redirects: {}", name, urls.size, e.message)
+                stop()
+                return emptyMap()
+            }
+            return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
+        } finally {
+            lock.unlock()
+        }
+    }
+
     private suspend fun read(url: String, markers: List<String>, timeoutS: Int, refusals: List<String>, tick: List<String> = emptyList()): Page? {
         val request = JsonObject(mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),

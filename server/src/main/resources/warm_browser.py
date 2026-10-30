@@ -21,6 +21,11 @@ Protocol: one JSON request per line on stdin, one JSON answer per line on stdout
      (Yandex's checkbox, Mojeek's ALTCHA); it is clicked once, with the mouse, as a person would.
      A check that asks more after the click (a picture puzzle) is left alone and stays "refused".
   {"op": "cookies", "domain": "ebay"} -> {"ok": true, "cookies": {...}, "userAgent": "..."}
+  {"op": "resolve", "urls": [...], "leaving": "google.", "timeout": 10}
+      -> {"ok": true, "to": {"<url>": "<where it led>", ...}}
+     Opens each of a site's redirects in a tab of their own, one after another, and notes the first
+     address off the site it leads to, leaving that page unloaded. Google's result redirects answer
+     plain requests with a wait page after a few, and a browser at once.
 The first line written is {"ok": true, "ready": true}.
 """
 import asyncio
@@ -55,6 +60,7 @@ class Browser:
     def __init__(self) -> None:
         self.browser = None
         self.tab = None
+        self.side = None
 
     async def start(self) -> None:
         os.makedirs(PROFILE, exist_ok=True)
@@ -128,6 +134,29 @@ class Browser:
         final = await self.tab.evaluate("location.href")
         return {"ok": True, "html": html, "url": final, "page": page}
 
+    async def resolve(self, urls: list[str], leaving: str, timeout: float) -> dict:
+        if self.side is None:
+            self.side = await self.browser.get("about:blank", new_tab=True)
+        to = {}
+        for url in urls:
+            await self.side.evaluate("location.href = %s" % json.dumps(url))
+            waited = 0.0
+            while waited < timeout:
+                await asyncio.sleep(0.25)
+                waited += 0.25
+                try:
+                    now = await self.side.evaluate("location.href")
+                except Exception:
+                    continue
+                if isinstance(now, str) and now.startswith("http") and leaving not in now.split("/")[2]:
+                    to[url] = now
+                    break
+            try:
+                await self.side.evaluate("window.stop(); location.href = 'about:blank'")
+            except Exception:
+                pass
+        return {"ok": True, "to": to}
+
     async def cookies(self, domain: str) -> dict:
         jar = {c.name: c.value for c in await self.browser.cookies.get_all() if domain in (c.domain or "")}
         return {"ok": True, "cookies": jar, "userAgent": await self.tab.evaluate("navigator.userAgent")}
@@ -153,6 +182,9 @@ async def main() -> None:
                     b.get(req["url"], req.get("markers") or [], req.get("errors") or [], req.get("accept") or [], timeout, req.get("refusals") or [], req.get("tick") or []),
                     timeout + 15,
                 )
+            elif op == "resolve":
+                urls = req.get("urls") or []
+                answer = await asyncio.wait_for(b.resolve(urls, req.get("leaving") or "", timeout), timeout * len(urls) + 15)
             elif op == "cookies":
                 answer = await b.cookies(req.get("domain") or "")
             else:

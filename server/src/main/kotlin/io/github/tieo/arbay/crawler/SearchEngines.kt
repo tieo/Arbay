@@ -60,7 +60,12 @@ class SearchEngines(private val client: HttpClient) {
             if (page != null) return resultLinks(page, engine.host).filterNot { u -> AD_HOSTS.any { it in SiteRecipes.domainOf(u) } }
                 .also { log.info("Web: {} listed {} pages for '{}' through the browser", engine.name, it.size, words) }
         }
-        val links = (direct + resolved(redirectsIn(html, engine) + ads, engine)).distinct()
+        // The engine's result redirects are resolved as for a web search, the browser opening those
+        // plain requests could not; its ad redirects lead on through ad networks, followed here.
+        val results = if (engine.redirects.isEmpty()) emptyList()
+            else resultLinks(withRedirectsResolved(html, engine), engine.host).filterNot { u -> AD_HOSTS.any { it in SiteRecipes.domainOf(u) } }
+        val adRedirects = redirectsIn(html, engine).filter { "/aclk?" in it }
+        val links = (direct + results + resolved(adRedirects + ads, engine)).distinct()
         if (links.isEmpty() && page == 1) {
             ErrorSnapshotStore.capture("web-${engine.name}", words, Exception("results page without result links"), ErrorType.PARSE_ERROR, url, html = html)
         }
@@ -171,7 +176,13 @@ class SearchEngines(private val client: HttpClient) {
     private suspend fun withRedirectsResolved(html: String, engine: Engine): String {
         val doc = org.jsoup.Jsoup.parse(html, engine.url(""))
         val links = doc.select("a[href]").filter { a -> engine.redirects.any { it != "/aclk?" && it in a.absUrl("href") } }
-        val to = resolvedEach(links.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS * 2), engine)
+        val to = resolvedEach(links.map { it.absUrl("href") }.distinct().take(MAX_REDIRECTS * 2), engine).toMutableMap()
+        // Google answers plain requests to its redirects with a wait page after the first few, and
+        // the browser at once: a result's title link left unresolved is opened there.
+        if (engine.browser) {
+            val titles = links.filter { it.selectFirst("h1, h2, h3, h4") != null }.map { it.absUrl("href") }.distinct().filter { it !in to }
+            if (titles.isNotEmpty()) to += SearchBrowser.resolve(titles.take(MAX_REDIRECTS), engine.host)
+        }
         for (a in links) a.attr("href", to[a.absUrl("href")] ?: engine.url(""))
         return doc.outerHtml()
     }
