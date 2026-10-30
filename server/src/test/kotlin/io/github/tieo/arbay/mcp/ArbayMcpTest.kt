@@ -79,11 +79,11 @@ class ArbayMcpTest {
         assertTrue("error" !in body, reply.bodyAsText())
     }
 
-    /** A client keeps the session id it was given when it listed the tools. Across a restart with
-     *  the same tools its calls are answered; a client holding the id of other tools is told its
-     *  session is gone, so it starts again and lists the tools as they are now. */
+    /** A client keeps the session id it was given when it listed the tools. Its calls are answered
+     *  across every restart and deploy, also once the tools changed: Claude Code takes a 404 to its
+     *  session id as a failed call and never starts again. */
     @Test
-    fun aCallFromBeforeARestartIsAnsweredWhileTheToolsAreTheSame() = testApplication {
+    fun aCallFromBeforeARestartIsAnswered() = testApplication {
         application {
             install(SSE)
             configureSerialization()
@@ -102,8 +102,9 @@ class ArbayMcpTest {
         val answered = post(session, call)
         assertEquals(200, answered.status.value, answered.bodyAsText())
         assertTrue("error" !in Json.parseToJsonElement(answered.bodyAsText()).jsonObject, answered.bodyAsText())
-        assertEquals(404, post("a-session-from-other-tools", call).status.value)
-        // A client that was never given an id is answered, since only an id makes it start again.
+        val stale = post("a-session-from-other-tools", call)
+        assertEquals(200, stale.status.value, stale.bodyAsText())
+        assertEquals(session, stale.headers["mcp-session-id"], "the current tools' id")
         assertEquals(200, post(null, call).status.value)
     }
 

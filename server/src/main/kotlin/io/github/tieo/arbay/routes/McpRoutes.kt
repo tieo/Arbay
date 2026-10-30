@@ -18,8 +18,6 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.header
-import io.ktor.server.response.respondText
-import io.ktor.http.ContentType
 
 /**
  * Arbay for an LLM, over MCP's Streamable HTTP at /mcp (see [ArbayMcp]).
@@ -31,10 +29,11 @@ import io.ktor.http.ContentType
  * every other route.
  *
  * The session id a client is given is the tools it was shown: a digest of their definitions. A
- * client lists the tools once, when it starts its session, and kept calling a tool by the schema
- * of an older deploy, without a parameter added since. A request naming another digest is told its
- * session is gone, and the client starts again and lists the tools anew; a deploy that leaves the
- * tools as they were costs nothing.
+ * request naming another digest, a client connected before a deploy, is answered all the same
+ * and given the current id. Claude Code takes a 404 to its session id as a failed call and never
+ * starts again, so answering it "session not found" broke every running session on each deploy
+ * until it was reconnected by hand. A client calling by an older schema only lacks a parameter
+ * added since, and the call still works.
  */
 fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     val arbay = ArbayMcp(http, selfUrl)
@@ -53,17 +52,6 @@ private fun Route.mcpEndpoint(path: String, server: () -> io.modelcontextprotoco
         // and add nulls, and strict clients refuse the reply.
         install(ContentNegotiation) { json(McpJson) }
         post {
-            // A client holding no id is answered: the spec has a client start again only after a
-            // 404 to a request that carried one, and one connected before ids were given out
-            // would otherwise fail every call until it is restarted by hand.
-            val sent = call.request.headers[SESSION_HEADER]
-            if (sent != null && sent != toolsId) {
-                call.respondText(
-                    """{"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found: the tools changed, start a new session"},"id":null}""",
-                    ContentType.Application.Json, HttpStatusCode.NotFound,
-                )
-                return@post
-            }
             call.response.header(SESSION_HEADER, toolsId)
             val transport = StreamableHttpServerTransport(StreamableHttpServerTransport.Configuration(enableJsonResponse = true))
             transport.setSessionIdGenerator(null)
