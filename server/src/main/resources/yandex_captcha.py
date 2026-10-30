@@ -54,20 +54,27 @@ def parts(prob, threshold=0.5, min_area=40):
     return out
 
 
-def outlines(strip, n=6):
-    """The strip's outlines, left to right; the hatching across it is thinner than their strokes."""
+def outlines(strip):
+    """The strip's outlines, left to right; the hatching across it is thinner than their strokes.
+    The strip spaces its four to seven outlines evenly, so their number is the one whose cell
+    borders cross the least ink, and an outline is the ink of its cell."""
     g = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
     ink = (g < 128).astype(np.uint8)
     ink = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    count, lab, st, _ = cv2.connectedComponentsWithStats(ink)
-    w = strip.shape[1] // n
+    columns = ink.sum(0).astype(np.float32)
+    width = ink.shape[1]
+
+    def crossing(n):
+        borders = [int(round(k * width / n)) for k in range(1, n)]
+        return sum(columns[max(0, b - 3):b + 4].sum() for b in borders) / (n - 1)
+
+    n = min(range(4, 8), key=crossing)
+    # Each cell's own columns: two outlines that touch would read as one by their ink alone.
     out = []
     for i in range(n):
         part = np.zeros_like(ink)
-        for c in range(1, count):
-            x, _, cw, _, area = st[c]
-            if area >= 15 and i * w <= x + cw / 2 < (i + 1) * w:
-                part[lab == c] = 1
+        x0, x1 = int(round(i * width / n)), int(round((i + 1) * width / n))
+        part[:, x0:x1] = ink[:, x0:x1]
         ys, xs = np.nonzero(part)
         if len(xs):
             out.append(part[ys.min():ys.max() + 1, xs.min():xs.max() + 1])

@@ -144,4 +144,15 @@ class SerpRowsTest {
         assertEquals(r.size, r.map { it.url }.distinct().size, r.joinToString("\n"))
         assertTrue(r.none { "https://" in it.title }, r.joinToString("\n"))
     }
+
+    /** Yandex's own search for "ford ids odx module 3" on 2026-10-30, reached past its picture puzzle. */
+    @Test
+    fun `yandex's own search lists its results`() {
+        val r = rows("yandex-search", "yandex.", "https://yandex.com/search/")
+        val fdrs = r.first { "motorcraftservice.com" in it.url }
+        assertTrue(fdrs.snippet.startsWith("IDS requires the use of Ford diagnostic hardware"), fdrs.snippet)
+        assertTrue(r.none { "Missing:" in it.snippet }, r.joinToString("\n"))
+        assertTrue(r.size >= 8, r.joinToString("\n"))
+        assertTrue(r.none { "yandex." in it.url || "ya.ru" in it.url }, r.joinToString("\n"))
+    }
 }

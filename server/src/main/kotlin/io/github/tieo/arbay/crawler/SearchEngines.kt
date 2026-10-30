@@ -471,11 +471,14 @@ class SearchEngines(private val client: HttpClient) {
                     targetOf(a) == null || text == title || looksLikeAddress(text) || text.split(' ').size < 4 || title in text
                 }.forEach { it.remove() }
                 // Bing writes some of its snippets' symbols as entities twice over ("&#9742;"); Qwant
-                // prints the address's path before the text ("laegler.com ‣ produkte ‣ hummel").
+                // prints the address's path before the text ("laegler.com ‣ produkte ‣ hummel"),
+                // Yandex the site's name and the path ("Motorcraftservice.com motorcraftservice.com
+                // › Diagnostic › HelmSupport") and after it the words it did not find ("Missing: ,").
                 val snippet = org.jsoup.parser.Parser.unescapeEntities(rest.text(), false)
                     .replace(Regex("""\s+"""), " ").trim().replace(LEADING_PATH, "").trim()
-                    // Yandex numbers its results in their text ("1. Die Bandschleifmaschine …").
+                    // Yandex numbers its site search's results in their text ("1. Die Bandschleifmaschine …").
                     .replace(LIST_NUMBER, "")
+                    .replace(MISSING_WORDS, "").trim()
                 place.getValue(start) to SerpResult(0, title, url, snippet.take(SNIPPET_LENGTH))
             }.sortedBy { it.first }.map { it.second }.let { rows ->
                 // An ad or a shopping card comes with a title and an address alone (Qwant's ads above
@@ -485,7 +488,9 @@ class SearchEngines(private val client: HttpClient) {
             }.mapIndexed { i, r -> r.copy(rank = i + 1) }
         }
 
-        private val LEADING_PATH = Regex("""^(\S+\s)?([›‣]\s*\S+\s*)+""")
+        private val LEADING_PATH = Regex("""^(\S+\s){0,2}([›‣]\s*\S+\s*)+""")
+
+        private val MISSING_WORDS = Regex("""\s*Missing:.*$""")
 
         private val LIST_NUMBER = Regex("""^\d{1,3}\.\s+""")
 
