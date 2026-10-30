@@ -280,9 +280,12 @@ fun AccountPanel(session: Session) {
                 busy && signInMarket == a.market -> Busy()
                 // A market can ask its password again before a message (eBay does), so a signed-in
                 // account can be signed in afresh too.
-                a.signedIn -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
-                    TextButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
+                a.signedIn -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
+                        TextButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
+                    }
+                    // The payment service the checkout hands over to, signed in to in the same browser.
                     a.payment?.let { payment -> TextButton(onClick = { chat.beginSignIn(a.market, payment = true) }) { Text("Sign in to $payment") } }
                 }
                 else -> {
