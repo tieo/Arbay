@@ -24,6 +24,7 @@ import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PlatformSearchStatus
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.euroText
 import io.github.tieo.arbay.model.displayName
 import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.model.summaryText
@@ -604,6 +605,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
                 }
             }
             if (!isArchived) SellerAction(app, route, listing)
+            if (!isArchived && listing.platformId == PlatformId.VINTED_DE) BuyAction(app, listing)
             if (!isArchived) listing.seller?.let { seller ->
                 if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) QuietButton("Block ${seller.shownName}", Glyph.No) {
                     app.listings.blockDealer(listing)
@@ -612,6 +614,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             }
         }
 
+        if (!isArchived && listing.platformId == PlatformId.VINTED_DE) Checkout(app, listing)
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
@@ -751,6 +754,54 @@ private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
 
 /** An auction runs out whether or not the page is open, so the useful thing is to be told a chosen
  *  stretch before it does, while a bid can still be made. */
+/** Opens a Vinted offer's checkout, read first; shown until one is open for this offer. */
+@Composable
+private fun BuyAction(app: WebApp, listing: Listing) {
+    val checkout by app.chat.checkout.collectAsState()
+    if (checkout?.listingId == listing.id) return
+    QuietButton("Buy on Vinted", Glyph.Cart) { app.chat.readCheckout(listing) }
+}
+
+/** A Vinted offer's checkout as Arbay read it, paid at the total it showed. */
+@Composable
+private fun Checkout(app: WebApp, listing: Listing) {
+    val checkout by app.chat.checkout.collectAsState()
+    val here = checkout?.takeIf { it.listingId == listing.id } ?: return
+    val purchase = here.purchase
+    Div({ classes("checkout") }) {
+        when {
+            here.working -> Div({ classes("inline-form") }) {
+                Busy()
+                Span { Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading Vinted's checkout") }
+            }
+            purchase?.paid == true -> Div({ classes("inline-form") }) {
+                Icon(Glyph.Check); Span { Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}") }
+            }
+            purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text("Vinted no longer offers to buy it") }
+            purchase != null -> {
+                CheckoutLine("Item", purchase.itemEur)
+                CheckoutLine("Vinted fee", purchase.feeEur)
+                CheckoutLine("Shipping to the door", purchase.shippingEur)
+                CheckoutLine("Total", purchase.totalEur, total = true)
+                purchase.payment?.let { P({ classes("muted", "small") }) { Text("Payment: $it") } }
+                purchase.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
+                purchase.totalEur?.let { total ->
+                    Div({ classes("actions") }) { PrimaryButton("Pay ${euroText(total)}") { app.chat.pay(listing) } }
+                }
+            }
+        }
+        here.error?.let { P({ classes("muted", "small") }) { Text(it) } }
+    }
+}
+
+@Composable
+private fun CheckoutLine(label: String, eur: Double?, total: Boolean = false) {
+    Div({ classes(*listOfNotNull("checkout-line", "total".takeIf { total }).toTypedArray()) }) {
+        Span { Text(label) }
+        Span { Text(eur?.let(::euroText) ?: "?") }
+    }
+}
+
 @Composable
 private fun AuctionReminder(app: WebApp, listing: Listing) {
     var lead by remember(listing.id) { mutableStateOf<Int?>(null) }

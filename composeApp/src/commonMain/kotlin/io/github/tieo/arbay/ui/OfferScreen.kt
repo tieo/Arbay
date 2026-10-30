@@ -19,6 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ShoppingCart
+import io.github.tieo.arbay.model.euroText
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
@@ -55,6 +58,7 @@ import io.github.tieo.arbay.model.shownName
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.SaleType
+import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.openBrowser
 import io.github.tieo.arbay.results.ResultsState
@@ -182,6 +186,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
                 if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
+                if (listing.platformId == PlatformId.VINTED_DE && !isArchived) VintedCheckout(session, listing)
                 if (!isArchived) listing.seller?.let { seller ->
                     if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) {
                         OutlinedButton(onClick = { session.listings.blockDealer(listing); nav.back() }, modifier = Modifier.fillMaxWidth()) {
@@ -385,6 +390,53 @@ private fun SellerButton(session: Session, listing: Listing) {
         Text(if (conversation != null) "Conversation" + (conversation.partner?.let { " with $it" } ?: "") else "Write to the seller")
     }
     mark?.let { Muted(it) }
+}
+
+/** Buying a Vinted offer outright: its checkout read first, then paid at the total it showed. */
+@Composable
+private fun VintedCheckout(session: Session, listing: Listing) {
+    val checkout by session.chat.checkout.collectAsState()
+    val here = checkout?.takeIf { it.listingId == listing.id }
+    val purchase = here?.purchase
+    when {
+        here?.working == true -> Panel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Busy(); HGap()
+                Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading Vinted's checkout", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        purchase?.paid == true -> Panel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary); HGap()
+                Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        purchase != null && !purchase.buyable -> Muted("Vinted no longer offers to buy it")
+        purchase != null -> Panel {
+            CheckoutLine("Item", purchase.itemEur)
+            CheckoutLine("Vinted fee", purchase.feeEur)
+            CheckoutLine("Shipping to the door", purchase.shippingEur)
+            CheckoutLine("Total", purchase.totalEur, total = true)
+            purchase.payment?.let { Muted("Payment: $it") }
+            purchase.problem?.let { Muted(it) }
+            purchase.totalEur?.let { total ->
+                Button(onClick = { session.chat.pay(listing) }, modifier = Modifier.fillMaxWidth()) { Text("Pay ${euroText(total)}") }
+            }
+        }
+        else -> OutlinedButton(onClick = { session.chat.readCheckout(listing) }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.ShoppingCart, null, Modifier.size(18.dp)); HGap(); Text("Buy on Vinted")
+        }
+    }
+    here?.error?.let { Muted(it) }
+}
+
+@Composable
+private fun CheckoutLine(label: String, eur: Double?, total: Boolean = false) {
+    val style = if (total) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium
+    Row(Modifier.fillMaxWidth()) {
+        Text(label, style = style, modifier = Modifier.weight(1f))
+        Text(eur?.let(::euroText) ?: "?", style = style)
+    }
 }
 
 @Composable

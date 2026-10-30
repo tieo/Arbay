@@ -746,3 +746,8 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 /* Something on its way: a small turning ring in the muted text colour. */
 .busy { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--muted, currentColor); border-radius: 50%; animation: busy-turn 0.8s linear infinite; }
 @keyframes busy-turn { to { transform: rotate(360deg); } }
+
+/* A Vinted checkout under an offer's actions: its price lines, the total set apart. */
+.checkout { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.checkout-line { display: flex; justify-content: space-between; gap: 12px; }
+.checkout-line.total { font-weight: 600; border-top: 1px solid var(--line); padding-top: 6px; }

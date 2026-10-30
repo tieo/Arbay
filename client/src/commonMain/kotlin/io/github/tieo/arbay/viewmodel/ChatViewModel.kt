@@ -13,6 +13,9 @@ import io.github.tieo.arbay.model.OutgoingMessage
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.Purchase
+import io.github.tieo.arbay.model.PurchaseRequest
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.model.SignInStep
@@ -349,6 +352,37 @@ class ChatViewModel(
 
     fun dismissError() { _error.value = null }
 
+    private val _checkout = MutableStateFlow<CheckoutState?>(null)
+    /** The Vinted checkout on screen, for one offer at a time. */
+    val checkout: StateFlow<CheckoutState?> = _checkout.asStateFlow()
+
+    /** Reads what buying [listing] outright at Vinted's checkout adds up to; pays nothing. */
+    fun readCheckout(listing: Listing) = runCheckout(listing, PurchaseRequest(listing.url, Double.MAX_VALUE))
+
+    /**
+     * Pays for [listing] at Vinted's checkout, up to the total the user was shown: a checkout that
+     * has come to more since is refused by the server before paying.
+     */
+    fun pay(listing: Listing) {
+        val shown = _checkout.value?.takeIf { it.listingId == listing.id }?.purchase?.totalEur ?: return
+        runCheckout(listing, PurchaseRequest(listing.url, shown, pay = true))
+    }
+
+    private fun runCheckout(listing: Listing, request: PurchaseRequest) {
+        if (rendersASample || _checkout.value?.working == true) return
+        val before = _checkout.value?.takeIf { it.listingId == listing.id }?.purchase
+        _checkout.value = CheckoutState(listing.id, before, working = true, paying = request.pay)
+        viewModelScope.launch {
+            _checkout.value = try {
+                CheckoutState(listing.id, client.buy(request))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CheckoutState(listing.id, before, error = e.message ?: "The server could not be reached")
+            }
+        }
+    }
+
     private suspend fun attempt(block: suspend () -> Unit) {
         try {
             block()
@@ -360,3 +394,12 @@ class ChatViewModel(
         }
     }
 }
+
+/** A Vinted checkout for the offer [listingId]: what it read, and whether a read or a payment is [working]. */
+data class CheckoutState(
+    val listingId: String,
+    val purchase: Purchase? = null,
+    val working: Boolean = false,
+    val paying: Boolean = false,
+    val error: String? = null,
+)

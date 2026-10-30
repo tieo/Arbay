@@ -1092,7 +1092,7 @@ internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
         if (paid) "Paid." else "Not paid.",
         problem,
         "item ${itemEur ?: "?"} € + Vinted fee ${feeEur ?: "?"} € + shipping ${shippingEur ?: "?"} € = ${totalEur ?: "?"} €",
-        payment?.let { "paid with $it" },
+        payment?.let { "payment: $it" },
     ).joinToString(" · ")
 }
 

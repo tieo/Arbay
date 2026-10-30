@@ -185,6 +185,9 @@ fun doorDeliveryUsed(shipping: Shipping?, toDoor: Boolean): String? {
 
 private fun formatEuroCents(cents: Long): String = "${cents / 100},${(cents % 100).toString().padStart(2, '0')} €"
 
+/** An amount in euro as a German price reads: "193,39 €". */
+fun euroText(eur: Double): String = formatEuroCents(kotlin.math.round(eur * 100).toLong())
+
 /**
  * What to offer a seller so that everything the buyer pays stays within [allInEur].
  *

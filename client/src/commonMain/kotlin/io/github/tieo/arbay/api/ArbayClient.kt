@@ -286,6 +286,14 @@ class ArbayClient(
         client.post("$baseUrl/api/chat/conversations/${id.encodeURLPathPart()}/read")
     }
 
+    /** A Vinted item's checkout read, or bought within the request's all-in limit when it says pay. */
+    suspend fun buy(request: PurchaseRequest): Purchase = client.post("$baseUrl/api/chat/buy") {
+        contentType(ContentType.Application.Json)
+        setBody(request)
+        // Paying waits on the payment method's own page and Vinted's answer after it.
+        timeout { requestTimeoutMillis = 200_000; socketTimeoutMillis = 200_000 }
+    }.body()
+
     suspend fun reply(id: String, text: String) {
         client.post("$baseUrl/api/chat/conversations/${id.encodeURLPathPart()}/reply") {
             contentType(ContentType.Application.Json)

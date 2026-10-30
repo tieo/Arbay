@@ -8,6 +8,7 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +45,14 @@ open class MarketSidecar(
     private val profileDir: String,
     private val logName: String,
     private val vncPort: Int,
+    /**
+     * How long the browser may sit unused before it is closed, for a market only asked now and
+     * then: the server's container has one memory limit for every Chrome in it, and three account
+     * browsers kept open all day took over a gigabyte of it, so pages of the crawlers and of the one
+     * account browser in use were ended by the kernel. The session stays in the profile on disk and
+     * the next request opens the browser again. Null keeps it open for good.
+     */
+    private val idleClose: kotlin.time.Duration? = null,
 ) {
     private val log = LoggerFactory.getLogger("${MarketSidecar::class.java.name}.${market.name}")
     private val json = Json { ignoreUnknownKeys = true }
@@ -54,10 +63,37 @@ open class MarketSidecar(
     private var input: BufferedWriter? = null
     private var output: BufferedReader? = null
 
+    /** When a request last finished, for [idleClose]. */
+    @Volatile private var lastUsed = System.currentTimeMillis()
+
+    /** The last status the browser answered, given for a closed browser rather than opening it to ask. */
+    @Volatile private var lastStatus: JsonObject? = null
+
+    init {
+        idleClose?.let { idle ->
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO).launch {
+                while (true) {
+                    delay(60_000)
+                    if (process?.isAlive != true || System.currentTimeMillis() - lastUsed < idle.inWholeMilliseconds) continue
+                    // A request under way holds the lock; the browser is closed only between requests.
+                    if (lock.tryLock()) try {
+                        log.info("{} browser unused for {}; closing it", market.displayName, idle)
+                        stop()
+                    } finally { lock.unlock() }
+                }
+            }
+        }
+    }
+
     /** Ask the sidecar for [op] and wait at most [timeoutMs] for its answer. A page call that never
      *  answered once held this lock, and every request behind it, with the app left waiting on the
      *  server for a minute at a time; the sidecar is ended instead. */
     suspend fun call(op: String, timeoutMs: Long = 60_000, vararg args: Pair<String, Any?>): JsonObject = lock.withLock {
+        if (op == "status" && idleClose != null && process?.isAlive != true) lastStatus?.let { return@withLock it }
+        try { exchangeOp(op, timeoutMs, *args) } finally { lastUsed = System.currentTimeMillis() }
+    }
+
+    private suspend fun exchangeOp(op: String, timeoutMs: Long, vararg args: Pair<String, Any?>): JsonObject {
         // The sidecar gives up a little before this side does, and answers that it did.
         val request = JsonObject(mapOf("op" to JsonPrimitive(op), "timeout" to JsonPrimitive(timeoutMs / 1000.0 - 5)) + args.associate { (k, v) ->
             k to when (v) {
@@ -91,7 +127,9 @@ open class MarketSidecar(
                 detail = answer["detail"] as? JsonObject,
             )
         }
-        answer
+        // A sign-in changes what the account's status is, so it is asked afresh after one.
+        if (op == "status") lastStatus = answer else if (op.startsWith("signin") || op == "set_cookies") lastStatus = null
+        return answer
     }
 
     private fun exchange(line: String): JsonObject {
@@ -152,10 +190,10 @@ open class MarketSidecar(
 object ChatBrowser : MarketSidecar(PlatformId.KLEINANZEIGEN, "kleinanzeigen_chat.py", 97, "ARBAY_CHAT_PROFILE", "chat-profile", "chat-browser.log", 5901)
 
 /** The user's eBay session, for every eBay site, kept by ebay_chat.py; apart from the crawler's Chrome. */
-object EbayChatBrowser : MarketSidecar(PlatformId.EBAY_DE, "ebay_chat.py", 93, "ARBAY_EBAY_CHAT_PROFILE", "ebay-chat-profile", "ebay-chat-browser.log", 5902)
+object EbayChatBrowser : MarketSidecar(PlatformId.EBAY_DE, "ebay_chat.py", 93, "ARBAY_EBAY_CHAT_PROFILE", "ebay-chat-profile", "ebay-chat-browser.log", 5902, idleClose = 15.minutes)
 
 /** The user's willhaben session, kept by willhaben_chat.py. */
-object WillhabenChatBrowser : MarketSidecar(PlatformId.WILLHABEN, "willhaben_chat.py", 92, "ARBAY_WILLHABEN_CHAT_PROFILE", "willhaben-chat-profile", "willhaben-chat-browser.log", 5903)
+object WillhabenChatBrowser : MarketSidecar(PlatformId.WILLHABEN, "willhaben_chat.py", 92, "ARBAY_WILLHABEN_CHAT_PROFILE", "willhaben-chat-profile", "willhaben-chat-browser.log", 5903, idleClose = 15.minutes)
 
 /** The user's Vinted session, kept by vinted_chat.py. */
-object VintedChatBrowser : MarketSidecar(PlatformId.VINTED_DE, "vinted_chat.py", 95, "ARBAY_VINTED_CHAT_PROFILE", "vinted-chat-profile", "vinted-chat-browser.log", 5904)
+object VintedChatBrowser : MarketSidecar(PlatformId.VINTED_DE, "vinted_chat.py", 95, "ARBAY_VINTED_CHAT_PROFILE", "vinted-chat-profile", "vinted-chat-browser.log", 5904, idleClose = 15.minutes)

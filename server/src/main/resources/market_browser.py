@@ -261,10 +261,19 @@ class MarketBrowser:
         await self.hand.click(ox + x, oy + y)
 
     async def go(self, url: str, settle: float = 3) -> None:
-        """Opens [url] as a person does, by its address, and waits for it to settle."""
+        """Opens [url] as a person does, by its address, and waits for it to settle. A page whose
+        renderer was ended ("Aw, Snap!": the container's memory limit ends the biggest one first)
+        answers nothing again, so a page that does not answer is replaced and [url] opened anew."""
         await self.tab.get(url)
         self.origin = None
         await asyncio.sleep(settle)
+        try:
+            await within("page alive", self.tab.evaluate("1"), 10)
+        except Exception as e:
+            log(f"{url} gave a page that does not answer ({e}); opening a new one")
+            await self.replace_page()
+            await self.tab.get(url)
+            await asyncio.sleep(settle)
 
     async def fetch(self, url: str, method: str = "GET", headers: dict | None = None, body: str | None = None) -> dict:
         """fetch() inside the signed-in page; answers status, headers and text."""
