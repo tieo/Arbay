@@ -130,12 +130,12 @@ class SearchEngines(private val client: HttpClient) {
     suspend fun serp(words: String, engines: Set<String> = emptySet()): WebSearch = coroutineScope {
         val picked = ENGINES.filter { e -> engines.isEmpty() || engines.any { it.equals(e.name, ignoreCase = true) } }
         val resting = picked.filter { usable(it) == null }.map { EngineResults(it.name, "resting: it answered the server with a bot check", emptyList()) }
-        suspend fun ask(e: Engine, again: Boolean = !e.browser): EngineResults {
+        suspend fun ask(e: Engine, again: Boolean = !e.browser, kept: String = e.name): EngineResults {
             val page = (if (again || e.browser) resultsPage(e, words) else viaBrowser(e, words))
                 .getOrElse { return EngineResults(e.name, if (again || e.browser) "failed: ${it.message?.take(120)}" else "no results read", emptyList()) }
             // The last results page of each engine is kept, which is what a reader of a changed
             // page is mended against.
-            runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("${e.name}.html").writeText(page) }
+            runCatching { io.github.tieo.arbay.DataDir.file("serp_pages").apply { mkdirs() }.resolve("$kept.html").writeText(page) }
             // Google hides each address behind a redirect of its own, a token different for every
             // link: a result's title and its "Diese Seite übersetzen" read as two addresses, which
             // split the result in two. The redirects are resolved first and read as the addresses
@@ -146,7 +146,7 @@ class SearchEngines(private val client: HttpClient) {
             }.distinctBy { it.url }.mapIndexed { i, r -> r.copy(rank = i + 1) }
             // A plain engine that listed nothing is asked once more through the browser, as for a
             // search: Bing answers now and then with a check.
-            if (rows.isEmpty() && again) return ask(e, again = false)
+            if (rows.isEmpty() && again) return ask(e, again = false, kept = kept)
             if (unrelated(rows, words)) {
                 log.warn("Web: {} listed {} results for '{}' that share no word with it", e.name, rows.size, words)
                 return EngineResults(e.name, "results unrelated to the words, left out", emptyList())
@@ -164,7 +164,7 @@ class SearchEngines(private val client: HttpClient) {
         // its own page past the deadline, and a fallback started only then answered too late.
         val standIns = java.util.concurrent.ConcurrentHashMap<String, EngineResults>()
         val jobs = asked.map { e ->
-            val standIn = e.fallback?.let { f -> runs.async { ask(f).also { if (it.results.isNotEmpty()) standIns[e.name] = it } } }
+            val standIn = e.fallback?.let { f -> runs.async { ask(f, kept = "${e.name} fallback").also { if (it.results.isNotEmpty()) standIns[e.name] = it } } }
             runs.launch { done[e.name] = ask(e).let { r -> if (r.results.isEmpty() && standIn != null) standIn.await() else r } }
         }
         kotlinx.coroutines.withTimeoutOrNull(SERP_DEADLINE_MS) { jobs.joinAll() }
