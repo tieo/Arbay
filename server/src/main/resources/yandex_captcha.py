@@ -94,34 +94,40 @@ def thin(mask):
 
 
 def points(mask):
-    """A shape's centre line around its centroid, scaled so its farthest point is at radius 1."""
+    """A shape's centre line around its centroid, scaled by its spread (the root mean square of its
+    points' distances) rather than its farthest point, which one stray stroke would set."""
     ys, xs = np.nonzero(thin(mask))
     if len(xs) < 5:
         return None
     mo = cv2.moments(mask.astype(np.uint8))
     cx, cy = (mo["m10"] / mo["m00"], mo["m01"] / mo["m00"]) if mo["m00"] else (xs.mean(), ys.mean())
     p = np.stack([xs - cx, ys - cy], 1).astype(np.float32)
-    return p / max(float(np.sqrt((p ** 2).sum(1)).max()), 1e-6)
+    spread = float(np.sqrt(((p ** 2).sum(1)).mean())) * 1.6
+    return p / max(spread, 1e-6)
 
 
-def render(p, angle=0.0):
+def drawn(p, angle=0.0):
+    """Shape p turned by [angle] on a canvas: the canvas (its line at 0, the rest 1) and the points."""
     a = np.deg2rad(angle)
     rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]], np.float32)
-    q = ((p @ rot.T) * (SIDE / 2 - 4) + SIDE / 2).astype(int)
-    c = np.zeros((SIDE, SIDE), np.uint8)
-    for x, y in q:
-        cv2.circle(c, (int(x), int(y)), 2, 1, -1)
-    return c
+    q = np.clip(((p @ rot.T) * (SIDE / 2 - 4) + SIDE / 2).astype(int), 0, SIDE - 1)
+    c = np.ones((SIDE, SIDE), np.uint8)
+    c[q[:, 1], q[:, 0]] = 0
+    return c, q
 
 
 def similarity(a, b):
-    """How well shape b fits shape a at its best turn: the overlap of their drawn centre lines."""
-    ra = render(a)
-    best = 0.0
-    for angle in range(0, 360, 5):
-        rb = render(b, angle)
-        best = max(best, (ra & rb).sum() / max(1, (ra | rb).sum()))
-    return best
+    """How well shape b fits shape a at its best turn: minus the mean distance from each one's line
+    to the other's, both ways (chamfer distance). It tells a face from an envelope where the
+    overlap of the two lines did not."""
+    ca, qa = drawn(a)
+    da = cv2.distanceTransform(ca, cv2.DIST_L2, 3)
+    best = float("inf")
+    for angle in range(0, 360, 3):
+        cb, qb = drawn(b, angle)
+        db = cv2.distanceTransform(cb, cv2.DIST_L2, 3)
+        best = min(best, float(da[qb[:, 1], qb[:, 0]].mean() + db[qa[:, 1], qa[:, 0]].mean()))
+    return -best
 
 
 def assignment(cost):
@@ -173,5 +179,5 @@ def solve(picture_png, strip_png):
     shapes = [points(m) for m, _ in found]
     if len(found) < len(asked):
         return []
-    score = np.array([[similarity(s, a) if a is not None and s is not None else 0.0 for s in shapes] for a in asked])
+    score = np.array([[similarity(s, a) if a is not None and s is not None else -1e9 for s in shapes] for a in asked])
     return [found[j][1] for j in assignment(-score)]
