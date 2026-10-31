@@ -25,7 +25,7 @@ BEAM = 12
 # How much likelier, in log probability, a free reading must be before it beats the dictionary.
 MARGIN = 8.0
 # The log probability a reading needs before it is typed (see sure()).
-SURE = -3.0
+SURE = -2.0
 _enc = _step = None
 _words = None
 
@@ -114,6 +114,6 @@ def solve(png_bytes):
 
 def sure(score):
     """Whether a reading this likely is worth typing rather than asking for another picture: on
-    real puzzles read by eye, about one reading in three clears it, and those are right nearly nine
-    times in ten, against four in ten below it."""
+    real puzzles read by eye, about one reading in three clears it, and those are right nine times
+    in ten, against half of those below it."""
     return score >= SURE
