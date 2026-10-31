@@ -29,19 +29,24 @@ object Geocoder {
     )
     private val dir = DataDir.file("geonames")
 
-    // "CC:zip" and "CC:city" → (lat, lon). Built once, lazily.
+    // "CC:zip" and "CC:city" → the postal row. Built once, lazily.
     // Every postal row as well, for the way back from a point to the place it is in.
-    private val loaded: Pair<Map<String, Pair<Double, Double>>, List<Place>> by lazy { buildIndex() }
-    private val index: Map<String, Pair<Double, Double>> get() = loaded.first
+    // A row is one object however many keys lead to it: half a million rows kept as a Place and a
+    // boxed coordinate pair per key, each with a country string of its own, held about a fifth of
+    // the server's live memory.
+    private val loaded: Pair<Map<String, Place>, List<Place>> by lazy { buildIndex() }
+    private val index: Map<String, Place> get() = loaded.first
     private val places: List<Place> get() = loaded.second
 
     /** A postcode with the place it belongs to, as written in GeoNames. */
-    data class Place(val country: String, val zip: String, val name: String, val lat: Double, val lon: Double)
+    data class Place(val country: String, val zip: String, val name: String, val lat: Double, val lon: Double) {
+        val point: Pair<Double, Double> get() = lat to lon
+    }
 
     val isAvailable: Boolean get() = index.isNotEmpty()
 
-    private fun buildIndex(): Pair<Map<String, Pair<Double, Double>>, List<Place>> {
-        val map = HashMap<String, Pair<Double, Double>>()
+    private fun buildIndex(): Pair<Map<String, Place>, List<Place>> {
+        val map = HashMap<String, Place>()
         val placeRows = ArrayList<Place>()
         dir.mkdirs()
         for (cc in COUNTRIES) {
@@ -50,19 +55,18 @@ object Geocoder {
             txt.lineSequence().forEach { line ->
                 val c = line.split('\t')
                 if (c.size < 11) return@forEach
-                val country = c[0]
+                val country = cc.takeIf { it == c[0] } ?: c[0]
                 val lat = c[9].toDoubleOrNull() ?: return@forEach
                 val lon = c[10].toDoubleOrNull() ?: return@forEach
-                c[1].trim().takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", lat to lon) }
+                val row = Place(country, c[1].trim(), c[2].trim(), lat, lon)
+                row.zip.takeIf { it.isNotEmpty() }?.let { map.putIfAbsent("$country:$it", row) }
                 // Germany gives courts, authorities and companies postcodes of their own, listed
                 // under their names with a numeric state code and no accuracy; real places carry
                 // the state's letters ("BW"). Austria and Switzerland have no such rows.
                 val organisation = c.getOrNull(11).isNullOrBlank() && c[4].isNotEmpty() && c[4].all { it.isDigit() }
-                if (!organisation && c[1].isNotBlank() && c[2].isNotBlank()) {
-                    placeRows.add(Place(country, c[1].trim(), c[2].trim(), lat, lon))
-                }
-                c[2].trim().lowercase().takeIf { it.isNotEmpty() }?.let { name ->
-                    (listOf(name) + listOfNotNull(bracketForm(name))).forEach { map.putIfAbsent("$country:$it", lat to lon) }
+                if (!organisation && row.zip.isNotEmpty() && row.name.isNotEmpty()) placeRows.add(row)
+                row.name.lowercase().takeIf { it.isNotEmpty() }?.let { name ->
+                    (listOf(name) + listOfNotNull(bracketForm(name))).forEach { map.putIfAbsent("$country:$it", row) }
                 }
             }
         }
@@ -111,12 +115,12 @@ object Geocoder {
         val prefix = "$cc:"
         var best: String? = null
         var bestKm = Double.MAX_VALUE
-        index.forEach { (key, coords) ->
+        index.forEach { (key, row) ->
             if (!key.startsWith(prefix)) return@forEach
             val value = key.removePrefix(prefix)
             // Only the postal keys: a place name is not what the site's field takes.
             if (!value.all { it.isDigit() || it == ' ' || it == '-' }) return@forEach
-            val km = haversine(lat, lon, coords.first, coords.second)
+            val km = haversine(lat, lon, row.lat, row.lon)
             if (km < bestKm) { bestKm = km; best = value }
         }
         return best
@@ -135,14 +139,14 @@ object Geocoder {
         val z = zip?.trim()?.takeIf { it.isNotEmpty() }
         val cty = city?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         if (cc != null) {
-            z?.let { index["$cc:$it"]?.let { p -> return p } }
-            cty?.let { index["$cc:$it"]?.let { p -> return p } }
+            z?.let { index["$cc:$it"]?.let { p -> return p.point } }
+            cty?.let { index["$cc:$it"]?.let { p -> return p.point } }
             return null
         }
         // Unknown country: the zip alone is often unambiguous enough for a rough distance, and a
         // place name is taken from the first country, home markets first, that has one by that name.
-        z?.let { zz -> COUNTRIES.forEach { c -> index["$c:$zz"]?.let { return it } } }
-        cty?.let { name -> COUNTRIES.forEach { c -> index["$c:$name"]?.let { return it } } }
+        z?.let { zz -> COUNTRIES.forEach { c -> index["$c:$zz"]?.let { return it.point } } }
+        cty?.let { name -> COUNTRIES.forEach { c -> index["$c:$name"]?.let { return it.point } } }
         return null
     }
 
