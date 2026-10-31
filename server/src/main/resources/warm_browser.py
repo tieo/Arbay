@@ -48,6 +48,8 @@ CHROME = os.environ.get("STEALTH_CHROME", "/usr/bin/google-chrome-stable")
 PROFILE = os.environ.get("ARBAY_BROWSER_PROFILE", os.path.expanduser("~/.arbay/browser-profile"))
 # How long the page behind a ticked box is given to replace the check.
 TICK_WAIT_S = 12
+# Ticks of a check's box per page before it counts as refused.
+TICKS = 3
 # Puzzles answered per page before it counts as refused: Yandex takes about two in five.
 PUZZLES = 3
 # Seconds one puzzle takes, reading it to its answer: a page answers one only with that much left.
@@ -427,16 +429,20 @@ class Browser:
         waited = 0.0
         pressed = False
         ticked_at = None
+        ticks = 0
         solved = 0
         while waited < timeout:
             await asyncio.sleep(1)
             waited = time.monotonic() - start
             html = await tab.get_content()
             page = what_page(html, markers, errors, refusals)
-            # A check passed by ticking its box is ticked once; the page behind it then loads in its
-            # place, given a few seconds to.
-            if page in ("refused", "challenge", "unknown") and tick and ticked_at is None:
+            # A check passed by ticking its box is ticked, and the page behind it given a few seconds
+            # to load in its place; a box still there after them is ticked again: one tick in two
+            # did not take on Yandex, and the search ended on its checkbox.
+            if page in ("refused", "challenge", "unknown") and tick and ticks < TICKS \
+                    and (ticked_at is None or waited - ticked_at >= TICK_WAIT_S):
                 if await self.tick_box(tab, tick):
+                    ticks += 1
                     ticked_at = waited
                     continue
             if page == "refused" and solve == "yandex" and solved < PUZZLES and "AdvancedCaptcha" in html and timeout - waited > PUZZLE_S:
