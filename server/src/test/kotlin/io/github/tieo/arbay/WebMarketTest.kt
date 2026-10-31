@@ -340,7 +340,8 @@ class WebMarketTest {
         assertFalse(ProductPages.sellsSomething("""<body><h1>LINQ USB4 Pro-Kabel</h1><p>Leider keine Lieferung möglich</p><a>Warenkorb</a>
             <footer>** Nur für myMediaMarkt-Kunden: 0% effektiver Jahreszins ab € 100.- Finanzierungssumme. Nettodarlehensbetrag
             bonitätsabhängig bis 10.000 €. 20,90 % effektiver Jahreszinssatz. Mind. aber 2,8% des jeweils höchsten, auf volle 100 €
-            gerundeten Sollsaldos der Folgeverfügungen (mind. 9,10 €) leisten.</footer></body>"""))
+            gerundeten Sollsaldos der Folgeverfügungen (mind. 9,10 €) leisten. Zwei Einkaufscoupons im Wert von je 15 € (insgesamt 30 €;
+            Einkaufscoupons gültig bis zum 31.12.).</footer></body>"""))
         assertTrue(ProductPages.sellsSomething("<body><h1>LINQ USB4 Pro-Kabel</h1><span>19,99 €</span><a>In den Warenkorb</a><footer>ab € 100.- Finanzierungssumme</footer></body>"))
     }
 
