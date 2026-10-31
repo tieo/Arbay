@@ -355,6 +355,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a popup's amounts are no price of the page`() {
+        // delicious-aqua.de's dispenser, sold on request only: the amounts stand in its closed savings calculator.
+        assertFalse(ProductPages.sellsSomething("""<body><h1>blupura Blusoda 30 Fizz</h1><p>Preis auf Anfrage</p><a>Angebot anfragen</a>
+            <div id="sparrechner-modal" class="hidden" role="dialog" aria-modal="true"><span>Anlagenpreis (einmalig)</span>
+            <span>2.499 €</span><span>Kästen</span><span>551,08 €/Jahr</span><a>Jetzt kaufen</a></div></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><h1>blupura Blusoda 30 Fizz</h1><span>2.499 €</span><a>In den Warenkorb</a><dialog>Newsletter</dialog></body>"))
+    }
+
+    @Test
     fun `a rental page is a page that offers something`() {
         assertTrue(ProductPages.sellsSomething("<body><h1>Parkettschleifmaschine mieten</h1><p>45,00 € pro Tag</p><a>Jetzt mieten</a></body>"))
     }
