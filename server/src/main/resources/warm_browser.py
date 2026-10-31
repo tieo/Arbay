@@ -74,6 +74,26 @@ def what_page(html: str, markers: list[str], errors: list[str], refusals: list[s
     return "unknown"
 
 
+def keep_rejected(state: dict, thing: str, n: int, chosen: list) -> None:
+    """Keeps a grid Google refused, its picture and the squares clicked, in ARBAY_RECAPTCHA_DUMP:
+    puzzles the reader got wrong are what its next training needs."""
+    import base64
+    import hashlib
+    folder = os.environ.get("ARBAY_RECAPTCHA_DUMP")
+    if not folder or not state.get("picture"):
+        return
+    try:
+        os.makedirs(folder, exist_ok=True)
+        data = base64.b64decode(state["picture"].split(",", 1)[1])
+        key = hashlib.sha1(data).hexdigest()[:16]
+        with open(os.path.join(folder, key + ".png"), "wb") as f:
+            f.write(data)
+        with open(os.path.join(folder, "rejected.jsonl"), "a") as f:
+            f.write(json.dumps({"t": time.time(), "picture": key, "word": state.get("word"), "thing": thing, "n": n, "chosen": chosen}) + "\n")
+    except Exception as e:
+        print(f"recaptcha: could not keep the refused grid: {e}", file=sys.stderr, flush=True)
+
+
 class Browser:
     """The Chrome and its tabs: ARBAY_BROWSER_TABS of them, each reading one page at a time, so a
     browser several searches share reads that many pages at once. Each tab is a window of its own,
@@ -365,6 +385,8 @@ class Browser:
             await asyncio.sleep(random.uniform(0.6, 1.2))
             await self.click_at(tab, *state["verify"])
             await asyncio.sleep(random.uniform(3, 4.5))
+            if (await self.recaptcha_state(tab)).get("wrong"):
+                keep_rejected(state, thing, n, chosen)
         state = await self.recaptcha_state(tab)
         return bool(state.get("checked")) or "box" not in state
 

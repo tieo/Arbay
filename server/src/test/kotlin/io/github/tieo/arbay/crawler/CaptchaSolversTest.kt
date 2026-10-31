@@ -39,14 +39,17 @@ class CaptchaSolversTest {
 
     @Test
     fun `reCAPTCHA grids are read to the squares Google accepted`() {
-        // Squares row by row from 0. The car and bicycle grids passed with these answers on Google's
-        // demo page; the stairs grid was refused four times with [2] alone, and its other steps
-        // are in squares 1, 3 and 7.
+        // Squares row by row from 0. The car, bicycle, bridge and bus grids passed with these answers
+        // on Google's demo page; the stairs grid was refused four times with [2] alone, and its
+        // other steps are in squares 1, 3 and 7.
         val expected = mapOf(
             "car-3x3-a" to ("car" to listOf(0, 1, 3, 4)),
             "car-3x3-b" to ("car" to listOf(0, 2, 4, 8)),
             "bicycle-3x3" to ("bicycle" to listOf(3, 6, 8)),
             "stairs-3x3" to ("stairs" to listOf(1, 2, 3, 7)),
+            // Cars drive under two of the bridges, which a one-class reading takes for car squares.
+            "bridge-3x3" to ("bridge" to listOf(2, 3, 5, 7)),
+            "bus-3x3" to ("bus" to listOf(0, 1, 4)),
         )
         val wrong = expected.mapNotNull { (name, want) ->
             val out = python("recaptcha_tiles.py", File(dir, "recaptcha/$name.png").path, "3", want.first).trim().lines().last()

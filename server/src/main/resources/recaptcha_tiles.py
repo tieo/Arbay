@@ -2,6 +2,18 @@
 Reads reCAPTCHA's picture grids ("select all squares with traffic lights"): which squares of a 3x3
 or 4x4 grid show the asked object, and whether a single new square does.
 
+A 3x3 grid's squares (and a dynamic grid's new ones) are read by a linear probe on CLIP's picture
+embedding, trained on about 20,000 real reCAPTCHA squares in 14 classes (recaptcha_probe.json, from
+DannyLuna/recaptcha-57k-images-dataset, MIT): on that set's validation squares it found cars with
+precision 0.80 and recall 0.67 where comparing CLIP with words managed 0.54 and 0.09, crosswalks
+0.97/0.87 against 0.74/0.81, stairs 0.81/0.95 against 0.84/0.63. A square is chosen where the probe
+gives the asked object at least PROBE_THRESHOLD, or, for the detector's objects, where a found box
+covers it, and for the others where comparing CLIP with words chooses it as below. The probe
+gives each square one class, so a bridge with cars under it came out "car 0.98, bridge 0.02";
+reCAPTCHA wants every square showing a part of the object, which the other two readings catch.
+Joined like this, all 13 grids Google accepted in testing are answered as accepted. A 4x4 grid is one picture cut in pieces, which the probe was not trained on, and is read
+as below.
+
 Things an object detector trained on COCO knows (cars, buses, bicycles, motorcycles, traffic
 lights, fire hydrants, boats) are found by YOLOX-s on the whole grid picture, and a square is
 chosen where a found box covers a part of it. CLIP missed those where they are small in a street
@@ -62,8 +74,13 @@ STEMS = [("motorr", "motorcycle"), ("motorcycle", "motorcycle"), ("bus", "bus"),
          ("schornstein", "chimney"), ("chimney", "chimney"), ("berg", "mountain"), ("hügel", "mountain"), ("mountain", "mountain"),
          ("palme", "palm"), ("palm", "palm"), ("traktor", "tractor"), ("tractor", "tractor")]
 
+# On the probe's validation squares 0.3 keeps precision within a few points of 0.5's for most
+# objects while recall rises (cars 0.67 to 0.73, crosswalks 0.87 to 0.92).
+PROBE_THRESHOLD = 0.3
+
 _clip = None
 _words = None
+_probe = None
 _yolox = None
 
 
@@ -101,14 +118,41 @@ def _clip_model():
     return _clip, _words
 
 
-def likelihood(square, thing: str) -> float:
-    """How much of CLIP's probability over all known things goes to [thing] for one square."""
-    session, words = _clip_model()
+def embedding(square):
+    """CLIP's normalised picture embedding of one square."""
+    session, _ = _clip_model()
     rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
     x = cv2.resize(rgb, (224, 224), interpolation=cv2.INTER_CUBIC).astype(np.float32) / 255
     x = ((x - MEAN) / STD).transpose(2, 0, 1)[None]
     e = session.run(None, {session.get_inputs()[0].name: x})[0][0]
-    e = e / np.linalg.norm(e)
+    return e / np.linalg.norm(e)
+
+
+def _probe_model():
+    global _probe
+    if _probe is None:
+        with open(os.path.join(HERE, "recaptcha_probe.json")) as f:
+            d = json.load(f)
+        _probe = (np.array(d["weights"], np.float32), np.array(d["bias"], np.float32), d["classes"])
+    return _probe
+
+
+def probed(thing: str) -> bool:
+    return thing in _probe_model()[2]
+
+
+def probability(square, thing: str) -> float:
+    """The probe's probability that one square shows [thing]."""
+    w, b, classes = _probe_model()
+    logits = w @ embedding(square) + b
+    p = np.exp(logits - logits.max())
+    return float(p[classes.index(thing)] / p.sum())
+
+
+def likelihood(square, thing: str) -> float:
+    """How much of CLIP's probability over all known things goes to [thing] for one square."""
+    _, words = _clip_model()
+    e = embedding(square)
     names = list(words["objects"])
     bank = np.array([words["objects"][k] for k in names] + list(words["others"].values()), np.float32)
     logits = SCALE * bank @ e
@@ -188,8 +232,16 @@ def _taxi(crop) -> bool:
 
 def choose(picture, n: int, thing: str) -> list:
     """The indexes (row by row, from 0) of the squares showing [thing]."""
+    if n == 3 and probed(thing):
+        also = set(covered(picture, n, found(picture, thing))) if thing in DETECTED else set(_by_words(picture, n, thing))
+        return [i for i, sq in enumerate(squares(picture, n)) if i in also or probability(sq, thing) >= PROBE_THRESHOLD]
     if thing in DETECTED:
         return covered(picture, n, found(picture, thing, BOX_CONFIDENCE_WHOLE if n == 4 else BOX_CONFIDENCE))
+    return _by_words(picture, n, thing)
+
+
+def _by_words(picture, n: int, thing: str) -> list:
+    """The squares comparing CLIP with words chooses: at least THRESHOLD, or a tenth of the grid's best."""
     scores = [likelihood(sq, thing) for sq in squares(picture, n)]
     bar = min(THRESHOLD, max(FLOOR, SHARE_OF_BEST * max(scores)))
     return [i for i, s in enumerate(scores) if s >= bar]
@@ -197,6 +249,8 @@ def choose(picture, n: int, thing: str) -> list:
 
 def shows(square, thing: str) -> bool:
     """Whether a single square (a dynamic grid's new one) shows [thing]."""
+    if probed(thing):
+        return probability(square, thing) >= PROBE_THRESHOLD or (thing in DETECTED and bool(found(square, thing)))
     if thing in DETECTED:
         return bool(found(square, thing))
     return likelihood(square, thing) >= THRESHOLD

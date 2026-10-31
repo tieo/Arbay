@@ -168,6 +168,8 @@ open class WarmBrowser(
                 it.environment()["ARBAY_BROWSER_TABS"] = tabs.toString()
                 // The puzzle readers' models: CLIP for listing photos is already kept there.
                 it.environment()["ARBAY_MODELS_DIR"] = DataDir.models.absolutePath
+                // Grids reCAPTCHA refused, kept for training its reader again.
+                it.environment()["ARBAY_RECAPTCHA_DUMP"] = DataDir.file("recaptcha_rejected").absolutePath
             }
             .start()
         val output = started.inputStream.bufferedReader()
