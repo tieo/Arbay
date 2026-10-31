@@ -7,7 +7,10 @@ A small network (yandex_symbols.onnx, trained on paintings with symbols drawn on
 symbols' strokes and leaves the painting and the faint symbols out. Each marked part, and each
 group of two or three parts close together (a symbol of separate strokes, three bars or two
 chevrons, comes out of the network in pieces), is compared with each outline of the strip over
-every turn; the outlines then get the parts that fit them best together, no part twice.
+every turn. A second network (yandex_match_icon.onnx and yandex_match_crop.onnx, trained on such
+pictures and on real puzzles checked by eye) looks at the picture itself around each group, turned
+eight ways, and says how well it shows each outline; both judgements together decide, and the
+outlines get the groups that fit them best, no part twice.
 """
 import itertools
 import os
@@ -26,7 +29,14 @@ ONE_WIDE = 75
 GROUP_NEAR = 42
 GROUP_BOX = 62
 EXTRA_PART = 0.5
+MATCHER = [os.path.join(os.path.dirname(os.path.abspath(__file__)), f"yandex_match_{half}.onnx") for half in ("icon", "crop")]
+# How much the matcher's judgement (log probability of a group among the picture's groups) counts
+# against the outline fit: measured on real puzzles checked by eye, each half scored by a matcher
+# trained on the other.
+MATCH_WEIGHT = 0.5
+TURNS = 8
 _session = None
+_matcher = None
 
 
 def flat(png_bytes):
@@ -218,12 +228,47 @@ def choose(score, members, top=10):
     return best[1]
 
 
+def _icon(mask):
+    """An outline as the matcher takes it: square, 56 pixels across inside 64."""
+    h, w = mask.shape
+    side = max(h, w)
+    sq = np.zeros((side, side), np.float32)
+    sq[(side - h) // 2:(side - h) // 2 + h, (side - w) // 2:(side - w) // 2 + w] = mask > 0
+    out = np.zeros((SIDE, SIDE), np.float32)
+    out[4:60, 4:60] = cv2.resize(sq, (56, 56), interpolation=cv2.INTER_AREA)
+    return out
+
+
+def _crop(picture, cx, cy, angle):
+    m = cv2.getRotationMatrix2D((float(cx), float(cy)), angle, 1.0)
+    m[0, 2] += SIDE / 2 - cx
+    m[1, 2] += SIDE / 2 - cy
+    return cv2.warpAffine(picture, m, (SIDE, SIDE), borderMode=cv2.BORDER_REFLECT)
+
+
+def matched(picture, outlines_, centres):
+    """For each outline (row), the log probability the matcher gives each group (column) of being
+    the one it shows, the best of eight turns of the picture around the group."""
+    global _matcher
+    if _matcher is None:
+        import onnxruntime
+        _matcher = [onnxruntime.InferenceSession(m, providers=["CPUExecutionProvider"]) for m in MATCHER]
+    icons = np.stack([_icon(o) for o in outlines_])[:, None]
+    crops = np.stack([_crop(picture, x, y, 360 / TURNS * k).transpose(2, 0, 1) for k in range(TURNS) for x, y in centres])
+    a = _matcher[0].run(None, {"x": icons})[0]
+    z = _matcher[1].run(None, {"x": crops.astype(np.float32) / 255})[0]
+    logits = (a @ z.T).reshape(len(icons), TURNS, len(centres)).max(1)
+    logits = logits - logits.max(1, keepdims=True)
+    return logits - np.log(np.exp(logits).sum(1, keepdims=True))
+
+
 def solve(picture_png, strip_png):
     """Click points in the picture's pixels, in the strip's order; empty where the picture holds
     fewer symbols than the strip asks for."""
     picture, strip = flat(picture_png), flat(strip_png)
     found = parts(strokes(picture))
-    asked = [points(o) for o in outlines(strip)]
+    shown = outlines(strip)
+    asked = [points(o) for o in shown]
     if len(found) < len(asked):
         return []
     candidates = groups(found)
@@ -231,5 +276,6 @@ def solve(picture_png, strip_png):
     shapes = [points(c[0]) for c in cut]
     score = np.array([[similarity(s, a) - EXTRA_PART * (len(g) - 1) if a is not None and s is not None else -1e9
                        for s, (g, _) in zip(shapes, candidates)] for a in asked])
+    score = score + MATCH_WEIGHT * matched(picture, shown, [c[1] for c in cut])
     pick = choose(score, [g for g, _ in candidates])
     return [cut[pick[i]][1] for i in range(len(asked))] if pick else []
