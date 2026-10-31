@@ -10,7 +10,9 @@ chevrons, comes out of the network in pieces), is compared with each outline of 
 every turn. A second network (yandex_match_icon.onnx and yandex_match_crop.onnx, trained on such
 pictures and on real puzzles checked by eye) looks at the picture itself around each group, turned
 eight ways, and says how well it shows each outline; both judgements together decide, and the
-outlines get the groups that fit them best, no part twice.
+outlines get the groups that fit them best, no part twice. Where the first network misses symbols
+(warm colours over a warm painting), the second one alone scans the picture on a grid and its best
+spots for each outline become the candidates.
 """
 import itertools
 import os
@@ -35,6 +37,12 @@ MATCHER = [os.path.join(os.path.dirname(os.path.abspath(__file__)), f"yandex_mat
 # trained on the other.
 MATCH_WEIGHT = 0.5
 TURNS = 8
+# The grid the matcher scans when the stroke network finds fewer parts than outlines: its step and
+# turns, each outline's best spots kept, and how far apart two spots must be to be two symbols.
+SCAN_STEP = 12
+SCAN_TURNS = 4
+SCAN_PEAKS = 3
+SCAN_APART = 22
 _session = None
 _matcher = None
 
@@ -246,31 +254,66 @@ def _crop(picture, cx, cy, angle):
     return cv2.warpAffine(picture, m, (SIDE, SIDE), borderMode=cv2.BORDER_REFLECT)
 
 
-def matched(picture, outlines_, centres):
-    """For each outline (row), the log probability the matcher gives each group (column) of being
-    the one it shows, the best of eight turns of the picture around the group."""
+def _sessions_matcher():
     global _matcher
     if _matcher is None:
         import onnxruntime
         _matcher = [onnxruntime.InferenceSession(m, providers=["CPUExecutionProvider"]) for m in MATCHER]
+    return _matcher
+
+
+def scanned(picture, outlines_):
+    """Candidate centres found by the matcher alone, for a picture whose strokes the first network
+    missed: every grid spot scored against every outline over a few turns, each outline's best spots
+    kept, spots on the same symbol counted once."""
+    icon, crop = _sessions_matcher()
+    h, w = picture.shape[:2]
+    spots = [(x, y) for y in range(14, h - 13, SCAN_STEP) for x in range(14, w - 13, SCAN_STEP)]
+    a = icon.run(None, {"x": np.stack([_icon(o) for o in outlines_])[:, None]})[0]
+    best = None
+    for k in range(SCAN_TURNS):
+        crops = np.stack([_crop(picture, x, y, 360 / SCAN_TURNS * k).transpose(2, 0, 1) for x, y in spots]).astype(np.float32) / 255
+        z = np.concatenate([crop.run(None, {"x": crops[i:i + 256]})[0] for i in range(0, len(crops), 256)])
+        best = a @ z.T if best is None else np.maximum(best, a @ z.T)
+    near = lambda p, q: (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 <= SCAN_APART ** 2
+    found = []
+    for row in best:
+        mine = []
+        for j in np.argsort(-row):
+            if not any(near(spots[j], q) for q in mine):
+                mine.append(spots[j])
+            if len(mine) == SCAN_PEAKS:
+                break
+        found += [p for p in mine if not any(near(p, q) for q in found)]
+    return found
+
+
+def matched(picture, outlines_, centres):
+    """For each outline (row), the log probability the matcher gives each group (column) of being
+    the one it shows, the best of eight turns of the picture around the group."""
     icons = np.stack([_icon(o) for o in outlines_])[:, None]
     crops = np.stack([_crop(picture, x, y, 360 / TURNS * k).transpose(2, 0, 1) for k in range(TURNS) for x, y in centres])
-    a = _matcher[0].run(None, {"x": icons})[0]
-    z = _matcher[1].run(None, {"x": crops.astype(np.float32) / 255})[0]
+    icon, crop = _sessions_matcher()
+    a = icon.run(None, {"x": icons})[0]
+    z = crop.run(None, {"x": crops.astype(np.float32) / 255})[0]
     logits = (a @ z.T).reshape(len(icons), TURNS, len(centres)).max(1)
     logits = logits - logits.max(1, keepdims=True)
     return logits - np.log(np.exp(logits).sum(1, keepdims=True))
 
 
 def solve(picture_png, strip_png):
-    """Click points in the picture's pixels, in the strip's order; empty where the picture holds
-    fewer symbols than the strip asks for."""
+    """Click points in the picture's pixels, in the strip's order; empty where not even the
+    matcher's scan finds as many symbols as the strip asks for."""
     picture, strip = flat(picture_png), flat(strip_png)
     found = parts(strokes(picture))
     shown = outlines(strip)
     asked = [points(o) for o in shown]
     if len(found) < len(asked):
-        return []
+        spots = scanned(picture, shown)
+        if len(spots) < len(asked):
+            return []
+        pick = choose(matched(picture, shown, spots), [[k] for k in range(len(spots))])
+        return [spots[pick[i]] for i in range(len(asked))] if pick else []
     candidates = groups(found)
     cut = [shape(m) for _, m in candidates]
     shapes = [points(c[0]) for c in cut]
