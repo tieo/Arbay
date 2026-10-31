@@ -4,10 +4,12 @@ ones among them that are not asked for, and a strip of the asked symbols' outlin
 click them. Returns where to click.
 
 A small network (yandex_symbols.onnx, trained on paintings with symbols drawn on them) marks the
-symbols' strokes and leaves the painting and the faint symbols out; each marked part is then
-compared with each outline of the strip over every turn, and each outline gets the part that fits
-it, no part twice.
+symbols' strokes and leaves the painting and the faint symbols out. Each marked part, and each
+group of two or three parts close together (a symbol of separate strokes, three bars or two
+chevrons, comes out of the network in pieces), is compared with each outline of the strip over
+every turn; the outlines then get the parts that fit them best together, no part twice.
 """
+import itertools
 import os
 
 import cv2
@@ -19,6 +21,11 @@ SIDE = 64
 MIN_PIECE = 80
 MIN_OUTLINE = 300
 ONE_WIDE = 75
+# Parts whose centres lie this close and whose joint box is at most this wide may be one symbol,
+# and what each part beyond the first costs a group's fit.
+GROUP_NEAR = 42
+GROUP_BOX = 62
+EXTRA_PART = 0.5
 _session = None
 
 
@@ -42,8 +49,8 @@ def strokes(picture):
 
 
 def parts(prob, threshold=0.5, min_area=40):
-    """The symbols the network marked, each with its centre; a symbol's separate strokes (a face's
-    eyes) join it when they are a few pixels apart."""
+    """The symbols the network marked, each a mask over the whole picture; a symbol's separate
+    strokes (a face's eyes) join it when they are a few pixels apart."""
     m = (prob > threshold).astype(np.uint8)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
     joined = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
@@ -51,10 +58,32 @@ def parts(prob, threshold=0.5, min_area=40):
     out = []
     for c in range(1, n):
         part = (lab == c) & (m > 0)
-        if part.sum() < min_area:
-            continue
-        ys, xs = np.nonzero(part)
-        out.append((part[ys.min():ys.max() + 1, xs.min():xs.max() + 1], (float(xs.mean()), float(ys.mean()))))
+        if part.sum() >= min_area:
+            out.append(part)
+    return out
+
+
+def shape(mask):
+    """A mask cut to its box, its centre and its box (x0, y0, x1, y1)."""
+    ys, xs = np.nonzero(mask)
+    return mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1], (float(xs.mean()), float(ys.mean())), (xs.min(), ys.min(), xs.max(), ys.max())
+
+
+def groups(masks):
+    """Each part alone, and each two or three parts close enough together to be one symbol: the
+    indices of the parts and their joint mask."""
+    info = [shape(m) for m in masks]
+    out = [((i,), m) for i, m in enumerate(masks)]
+    for k in (2, 3):
+        for g in itertools.combinations(range(len(masks)), k):
+            centres = [info[i][1] for i in g]
+            if any(np.hypot(a[0] - b[0], a[1] - b[1]) > GROUP_NEAR for a, b in itertools.combinations(centres, 2)):
+                continue
+            x0, y0 = min(info[i][2][0] for i in g), min(info[i][2][1] for i in g)
+            x1, y1 = max(info[i][2][2] for i in g), max(info[i][2][3] for i in g)
+            if x1 - x0 > GROUP_BOX or y1 - y0 > GROUP_BOX:
+                continue
+            out.append((g, np.logical_or.reduce([masks[i] for i in g])))
     return out
 
 
@@ -162,44 +191,31 @@ def similarity(a, b):
     return -best
 
 
-def assignment(cost):
-    """The column for each row that makes the total cost least, each column used once (Hungarian
-    method; rows no more than columns)."""
-    n, m = cost.shape
-    inf = float("inf")
-    u, v = [0.0] * (n + 1), [0.0] * (m + 1)
-    p, way = [0] * (m + 1), [0] * (m + 1)
-    for i in range(1, n + 1):
-        p[0], j0 = i, 0
-        minv, used = [inf] * (m + 1), [False] * (m + 1)
-        while True:
-            used[j0] = True
-            i0, delta, j1 = p[j0], inf, 0
-            for j in range(1, m + 1):
-                if not used[j]:
-                    cur = cost[i0 - 1][j - 1] - u[i0] - v[j]
-                    if cur < minv[j]:
-                        minv[j], way[j] = cur, j0
-                    if minv[j] < delta:
-                        delta, j1 = minv[j], j
-            for j in range(m + 1):
-                if used[j]:
-                    u[p[j]] += delta
-                    v[j] -= delta
-                else:
-                    minv[j] -= delta
-            j0 = j1
-            if p[j0] == 0:
-                break
-        while j0:
-            j1 = way[j0]
-            p[j0] = p[j1]
-            j0 = j1
-    pick = [0] * n
-    for j in range(1, m + 1):
-        if p[j]:
-            pick[p[j] - 1] = j - 1
-    return pick
+def choose(score, members, top=10):
+    """For each outline (row) a group (column) so that no part serves two outlines and the summed
+    fit is greatest: a search over each outline's best groups, cut off where even the best of the
+    rest could no longer beat the best choice found."""
+    rows = sorted(range(score.shape[0]), key=lambda i: -score[i].max())
+    best_rest = [sum(score[i].max() for i in rows[k:]) for k in range(len(rows) + 1)]
+    tops = {i: np.argsort(-score[i])[:top] for i in rows}
+    best = [-float("inf"), None]
+
+    def search(k, used, total, pick):
+        if total + best_rest[k] <= best[0]:
+            return
+        if k == len(rows):
+            best[0], best[1] = total, dict(pick)
+            return
+        i = rows[k]
+        for j in tops[i]:
+            if used & set(members[j]):
+                continue
+            pick[i] = j
+            search(k + 1, used | set(members[j]), total + score[i, j], pick)
+            del pick[i]
+
+    search(0, set(), 0.0, {})
+    return best[1]
 
 
 def solve(picture_png, strip_png):
@@ -208,8 +224,12 @@ def solve(picture_png, strip_png):
     picture, strip = flat(picture_png), flat(strip_png)
     found = parts(strokes(picture))
     asked = [points(o) for o in outlines(strip)]
-    shapes = [points(m) for m, _ in found]
     if len(found) < len(asked):
         return []
-    score = np.array([[similarity(s, a) if a is not None and s is not None else -1e9 for s in shapes] for a in asked])
-    return [found[j][1] for j in assignment(-score)]
+    candidates = groups(found)
+    cut = [shape(m) for _, m in candidates]
+    shapes = [points(c[0]) for c in cut]
+    score = np.array([[similarity(s, a) - EXTRA_PART * (len(g) - 1) if a is not None and s is not None else -1e9
+                       for s, (g, _) in zip(shapes, candidates)] for a in asked])
+    pick = choose(score, [g for g, _ in candidates])
+    return [cut[pick[i]][1] for i in range(len(asked))] if pick else []
