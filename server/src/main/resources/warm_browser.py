@@ -99,6 +99,22 @@ def keep_rejected(state: dict, thing: str, n: int, chosen: list) -> None:
         print(f"recaptcha: could not keep the refused grid: {e}", file=sys.stderr, flush=True)
 
 
+def keep_puzzle(env, passed, files):
+    """Keeps a Yandex puzzle answered, its files under one name ending in _ok or _no for Yandex's
+    verdict, in the folder [env] names: answers Yandex took are labelled real puzzles to train on."""
+    folder = os.environ.get(env)
+    if not folder:
+        return
+    try:
+        os.makedirs(folder, exist_ok=True)
+        name = os.path.join(folder, f"{int(time.time() * 1000)}_{'ok' if passed else 'no'}")
+        for suffix, data in files.items():
+            with open(name + suffix, "wb") as f:
+                f.write(data)
+    except Exception as e:
+        print(f"yandex: could not keep the puzzle: {e}", file=sys.stderr, flush=True)
+
+
 class Browser:
     """The Chrome and its tabs: ARBAY_BROWSER_TABS of them, each reading one page at a time, so a
     browser several searches share reads that many pages at once. Each tab is a window of its own,
@@ -216,13 +232,7 @@ class Browser:
             await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
             await asyncio.sleep(5)
             passed = "AdvancedCaptcha" not in await tab.get_content()
-            # An answer Yandex took is a picture read right: kept in ARBAY_TEXT_PUZZLES to train on.
-            keep = os.environ.get("ARBAY_TEXT_PUZZLES")
-            if keep:
-                os.makedirs(keep, exist_ok=True)
-                name = f"{keep}/{int(time.time() * 1000)}_{'ok' if passed else 'no'}"
-                open(name + ".png", "wb").write(picture)
-                open(name + ".txt", "w").write(f"{answer}\t{score:.2f}")
+            keep_puzzle("ARBAY_TEXT_PUZZLES", passed, {".png": picture, ".txt": f"{answer}\t{score:.2f}".encode()})
             return passed
         pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
         strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
@@ -252,7 +262,10 @@ class Browser:
         await asyncio.sleep(random.uniform(0.6, 1.2))
         await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
         await asyncio.sleep(5)
-        return "AdvancedCaptcha" not in await tab.get_content()
+        passed = "AdvancedCaptcha" not in await tab.get_content()
+        keep_puzzle("ARBAY_SYMBOL_PUZZLES", passed, {".pic.png": picture, ".strip.png": order,
+                                                     ".json": json.dumps([list(map(float, p)) for p in points]).encode()})
+        return passed
 
     async def pointer(self, tab, kind: str, x: float, y: float, held: bool) -> None:
         """One mouse event at x, y: "mouseMoved", "mousePressed" or "mouseReleased", [held] saying

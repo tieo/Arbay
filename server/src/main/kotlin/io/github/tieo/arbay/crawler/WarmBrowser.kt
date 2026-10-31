@@ -170,9 +170,10 @@ open class WarmBrowser(
                 it.environment()["ARBAY_MODELS_DIR"] = DataDir.models.absolutePath
                 // Grids reCAPTCHA refused, kept for training its reader again.
                 it.environment()["ARBAY_RECAPTCHA_DUMP"] = DataDir.file("recaptcha_rejected").absolutePath
-                // Yandex's typed-text puzzles with the answer given and whether it passed: the
-                // passed ones are labelled real puzzles for training its reader again.
+                // Yandex's puzzles with the answer given and whether it passed: the passed ones are
+                // labelled real puzzles for training their readers again.
                 it.environment()["ARBAY_TEXT_PUZZLES"] = DataDir.file("yandex_text_puzzles").absolutePath
+                it.environment()["ARBAY_SYMBOL_PUZZLES"] = DataDir.file("yandex_symbol_puzzles").absolutePath
             }
             .start()
         val output = started.inputStream.bufferedReader()
