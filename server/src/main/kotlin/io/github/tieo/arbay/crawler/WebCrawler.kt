@@ -56,6 +56,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         log.info("Web: '{}' reads {} pages", words, found.size)
         val now = Clock.System.now()
         val gate = Semaphore(PARALLEL_PAGES)
+        val shownOnce = ShopOnce()
         val renders = java.util.concurrent.atomic.AtomicInteger(RENDERS_PER_SEARCH)
         val pages = coroutineScope {
             found.map { url ->
@@ -66,7 +67,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                     gate.withPermit { withCrawlLimitOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) }
                         // Each page's offers show as it is read: the slowest page of sixty is often
                         // a minute behind the rest.
-                        .also { emitPartialResults(listingsOf(it.offers, now)) }
+                        .also { emitPartialResults(shownOnce.keep(listingsOf(it.offers, now))) }
                 }
             }.awaitAll()
         }
@@ -302,21 +303,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
          * addresses, and it stood three times in one search. Offers of one site keep apart, as a
          * shop's variants of one title and price do.
          */
-        internal fun oneShopOnce(listings: List<Listing>): List<Listing> {
-            val kept = mutableListOf<Listing>()
-            val seen = HashMap<Triple<String, String, Long>, MutableSet<String>>()
-            for (l in listings) {
-                val domain = SiteRecipes.domainOf(l.url)
-                val path = runCatching { java.net.URI(l.url).rawPath.orEmpty() }.getOrDefault("")
-                val origin = "$domain${path.split('/').getOrNull(1)?.takeIf { it.length == 2 }?.let { "/$it" }.orEmpty()}"
-                val key = Triple(siteName(domain), l.title.lowercase().trim(), l.price.amount)
-                val origins = seen.getOrPut(key) { mutableSetOf() }
-                if (origins.isNotEmpty() && origin !in origins) continue
-                origins += origin
-                kept += l
-            }
-            return kept
-        }
+        internal fun oneShopOnce(listings: List<Listing>): List<Listing> = ShopOnce().keep(listings)
 
 
         internal fun siteName(host: String): String {
@@ -366,5 +353,22 @@ object RenderedSites {
         if (sites.add(domain)) runCatching {
             file.writeText(kotlinx.serialization.json.Json.encodeToString(sites.sorted()))
         }
+    }
+}
+
+/** One search's record of the shop offers already taken, by shop name, title and price, with the
+ *  site each came from: the web market streams page by page, and compuram's French site, read
+ *  after its German one, showed the same board again. */
+internal class ShopOnce {
+    private val seen = HashMap<Triple<String, String, Long>, MutableSet<String>>()
+
+    @Synchronized
+    fun keep(listings: List<Listing>): List<Listing> = listings.filter { l ->
+        val domain = SiteRecipes.domainOf(l.url)
+        val path = runCatching { java.net.URI(l.url).rawPath.orEmpty() }.getOrDefault("")
+        // A country site under one host ("compuram.de/it") is a site of its own.
+        val origin = "$domain${path.split('/').getOrNull(1)?.takeIf { it.length == 2 }?.let { "/$it" }.orEmpty()}"
+        val origins = seen.getOrPut(Triple(WebCrawler.siteName(domain), l.title.lowercase().trim(), l.price.amount)) { mutableSetOf() }
+        (origins.isEmpty() || origin in origins).also { if (it) origins += origin }
     }
 }
