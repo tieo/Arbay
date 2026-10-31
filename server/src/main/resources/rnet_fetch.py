@@ -43,7 +43,10 @@ def status_int(resp) -> int:
 
 
 async def run(url: str, prime: str | None) -> tuple[int, str]:
-    client = rnet.Client(impersonate=Impersonate.Chrome136)
+    # rnet keeps no cookies unless asked, and without them the warm-up visit sets nothing the
+    # second request carries: TruckScout24 answers every page past the first with a 403 captcha
+    # page to a client that has not brought back the cookies its first page set.
+    client = rnet.Client(impersonate=Impersonate.Chrome136, cookie_store=True)
     origin = prime or f"{urlsplit(url).scheme}://{urlsplit(url).netloc}/"
     try:
         await client.get(origin, headers=HEADERS)

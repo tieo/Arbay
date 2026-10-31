@@ -44,11 +44,12 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
             append("&sort-field=preis&sort-direction=asc")
         }
         // Twenty-five vans to a page. A page past the last answers 404, so a page short of full is
-        // the last one asked for.
+        // the last one asked for. Every page past the first answers a 403 captcha page to a client
+        // without the cookies any page of the site sets, so the fetch warms the site first.
         var lastWasFull = true
         return paginate(query.wholePriceBand()) { page ->
             if (!lastWasFull) return@paginate emptyList()
-            parse(fetchWithFallback(client, if (page <= 1) url else "$url&page=$page", "TruckScout24"))
+            parse(fetchWithFallback(client, if (page <= 1) url else "$url&page=$page", "TruckScout24", primeUrl = ORIGIN))
                 .also { lastWasFull = it.size >= PAGE_SIZE }
         }
     }
@@ -275,5 +276,7 @@ class TruckScout24Crawler(private val client: HttpClient) : Crawler, FiltersAtTh
     private companion object {
         /** Vans on one page of the site's results. */
         const val PAGE_SIZE = 25
+
+        const val ORIGIN = "https://www.truckscout24.de/"
     }
 }
