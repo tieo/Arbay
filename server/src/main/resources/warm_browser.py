@@ -192,7 +192,8 @@ class Browser:
             shown = re.search(r'AdvancedCaptcha-View.*?<img[^>]*src="([^"]*captchaimage[^"]+)"', h, re.S)
             if not shown:
                 return False
-            answer = await loop.run_in_executor(None, yandex_text.solve, await loop.run_in_executor(None, fetch, shown.group(1)))
+            picture = await loop.run_in_executor(None, fetch, shown.group(1))
+            answer = await loop.run_in_executor(None, yandex_text.solve, picture)
             field = await tab.select('input[name="rep"]', timeout=5)
             await field.mouse_click()
             await asyncio.sleep(random.uniform(0.4, 0.9))
@@ -202,7 +203,15 @@ class Browser:
             await asyncio.sleep(random.uniform(0.5, 1.2))
             await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
             await asyncio.sleep(5)
-            return "AdvancedCaptcha" not in await tab.get_content()
+            passed = "AdvancedCaptcha" not in await tab.get_content()
+            # An answer Yandex took is a picture read right: kept, where a folder is named, to train on.
+            keep = os.environ.get("ARBAY_TEXT_PUZZLES")
+            if keep:
+                os.makedirs(keep, exist_ok=True)
+                name = f"{keep}/{int(time.time() * 1000)}_{'ok' if passed else 'no'}"
+                open(name + ".png", "wb").write(picture)
+                open(name + ".txt", "w").write(answer)
+            return passed
         pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
         strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
         if not pic or not strip:
