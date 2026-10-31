@@ -167,8 +167,9 @@ class Browser:
         return False
 
     async def solve_yandex(self, tab) -> bool:
-        """Answers Yandex's picture puzzle on [tab]: the icons the strip shows, clicked in its order.
-        True when the page went on past it."""
+        """Answers Yandex's puzzle on [tab]: the symbol puzzle by clicking the icons the strip shows in
+        its order, the typed-text puzzle by typing the two words it shows. True when the page went
+        on past it."""
         import random
         import urllib.request
         import yandex_captcha
@@ -177,10 +178,6 @@ class Browser:
             await (await tab.select('button[data-testid="challenge-type"]', timeout=5)).mouse_click()
             await asyncio.sleep(3)
             h = await tab.get_content()
-        pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
-        strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
-        if not pic or not strip:
-            return False
         jar = "; ".join(f"{c.name}={c.value}" for c in await self.browser.cookies.get_all() if "yandex" in (c.domain or ""))
         agent = await tab.evaluate("navigator.userAgent")
 
@@ -189,6 +186,27 @@ class Browser:
             return urllib.request.urlopen(req, timeout=20).read()
 
         loop = asyncio.get_running_loop()
+        # The stricter kind, typed text: two words along a curve, read and typed into its field.
+        if "AdvancedCaptcha_image" in h and "TaskImage-Img" not in h:
+            import yandex_text
+            shown = re.search(r'AdvancedCaptcha-View.*?<img[^>]*src="([^"]*captchaimage[^"]+)"', h, re.S)
+            if not shown:
+                return False
+            answer = await loop.run_in_executor(None, yandex_text.solve, await loop.run_in_executor(None, fetch, shown.group(1)))
+            field = await tab.select('input[name="rep"]', timeout=5)
+            await field.mouse_click()
+            await asyncio.sleep(random.uniform(0.4, 0.9))
+            for ch in answer:
+                await field.send_keys(ch)
+                await asyncio.sleep(random.uniform(0.05, 0.18))
+            await asyncio.sleep(random.uniform(0.5, 1.2))
+            await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
+            await asyncio.sleep(5)
+            return "AdvancedCaptcha" not in await tab.get_content()
+        pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
+        strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
+        if not pic or not strip:
+            return False
         picture = await loop.run_in_executor(None, fetch, pic.group(1))
         order = await loop.run_in_executor(None, fetch, strip.group(1) or strip.group(2))
         points = await loop.run_in_executor(None, yandex_captcha.solve, picture, order)
