@@ -140,7 +140,10 @@ object ProductPages {
     private fun isForum(doc: Document): Boolean =
         doc.selectFirst("html#XenForo, html#XF, html[data-app=public][data-template=thread_view], body#phpbb, #vbulletin_html, meta[name=generator][content*=Discourse], meta[name=generator][content*=phpBB], meta[name=generator][content*=vBulletin]") != null
 
-    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|im wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese""")
+    // A shop's financing terms are no price either: mediamarkt.de's footer under a product it
+    // cannot deliver named "ab € 100.- Finanzierungssumme", "auf volle 100 € gerundeten Sollsaldos"
+    // and "(mind. 9,10 €)", and the page was reported as one Arbay could not read.
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|im wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese|finanzierung|darlehen|sollsaldo|jahreszins|bonitätsabhängig|gerundet|\bmind\.""")
 
     private val DEALER_FINDER = Regex("""(fach)?händler finden|händlersuche|find a (dealer|retailer)|where to buy""")
 

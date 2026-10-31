@@ -335,6 +335,16 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a shop's financing terms are no price`() {
+        // mediamarkt.de's page of a cable it cannot deliver: no price of its own, only the footer's credit terms.
+        assertFalse(ProductPages.sellsSomething("""<body><h1>LINQ USB4 Pro-Kabel</h1><p>Leider keine Lieferung möglich</p><a>Warenkorb</a>
+            <footer>** Nur für myMediaMarkt-Kunden: 0% effektiver Jahreszins ab € 100.- Finanzierungssumme. Nettodarlehensbetrag
+            bonitätsabhängig bis 10.000 €. 20,90 % effektiver Jahreszinssatz. Mind. aber 2,8% des jeweils höchsten, auf volle 100 €
+            gerundeten Sollsaldos der Folgeverfügungen (mind. 9,10 €) leisten.</footer></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><h1>LINQ USB4 Pro-Kabel</h1><span>19,99 €</span><a>In den Warenkorb</a><footer>ab € 100.- Finanzierungssumme</footer></body>"))
+    }
+
+    @Test
     fun `a rental page is a page that offers something`() {
         assertTrue(ProductPages.sellsSomething("<body><h1>Parkettschleifmaschine mieten</h1><p>45,00 € pro Tag</p><a>Jetzt mieten</a></body>"))
     }
