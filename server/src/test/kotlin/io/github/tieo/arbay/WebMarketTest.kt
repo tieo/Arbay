@@ -66,6 +66,23 @@ class WebMarketTest {
     }
 
     @Test
+    fun `one shop's country sites listing one offer show it once`() {
+        fun web(url: String, title: String = "SO-DIMM Interposer Daughterboard", cents: Long = 5680) = io.github.tieo.arbay.model.Listing(
+            id = "WEB:$url", platformId = io.github.tieo.arbay.model.PlatformId.WEB, externalId = url, url = url, title = title,
+            price = Money(cents, Currency.EUR), scrapedAt = kotlin.time.Clock.System.now())
+        val kept = WebCrawler.oneShopOnce(listOf(
+            web("https://www.compuram.de/zubehoer/adapter/so-dimm-interposer-daughterboard/rn12h-m11dcb.htm"),
+            web("https://www.compuram.de/it/accessori/adattatore/so-dimm-interposer-daughterboard/rn12h-m11dcb.htm"),
+            web("https://www.compuram.biz/fr/accessories/adapter/so-dimm-interposer-daughterboard/rn12h-m11dcb.htm"),
+            // One site's two variants of one title and price stay two.
+            web("https://www.compuram.de/zubehoer/adapter/so-dimm-interposer-daughterboard/rn12h-m11dcc.htm"),
+            web("https://www.compuram.de/zubehoer/adapter/other.htm", title = "Anderes Board"),
+        ))
+        assertEquals(3, kept.size)
+        assertEquals("https://www.compuram.de/zubehoer/adapter/so-dimm-interposer-daughterboard/rn12h-m11dcb.htm", kept.first().url)
+    }
+
+    @Test
     fun `a shop's page of one review reads the reviewed product's offer at the product's address`() {
         // galaxus.ch's /productrating/ page states the review, the product inside it with the shop's offer.
         val html = """<script type="application/ld+json">{"@type":"Review","author":{"@type":"Person","name":"TobiTop12"},
@@ -94,6 +111,19 @@ class WebMarketTest {
         assertEquals("https://c.example/x/1", offers[0].url)
         assertTrue(offers[0].inStock)
         assertFalse(offers[1].inStock)
+    }
+
+    @Test
+    fun `a tile without an address links to the product page the page's structured data names it at`() {
+        // kaufland.de's tiles carry no address; its ItemList names the first products with theirs.
+        val html = """<script type="application/ld+json">{"@type":"ItemList","itemListElement":[{"@type":"ListItem","position":1,
+            "url":"https://www.kaufland.de/product/558133807/","name":"2000 ml tragbare Outdoor-Urinflasche mit Deckel"}]}</script>
+            <div class="tile"><span class="t" title="2000 ml tragbare Outdoor-Urinflasche mit Deckel">2000 ml…</span><b>12,99 €</b></div>
+            <div class="tile"><span class="t" title="ROCA NEXO Urinal">ROCA…</span><b>199,00 €</b></div>"""
+        val recipe = SiteRecipe(domain = "kaufland.de", item = "div.tile", title = ".t@title", price = "b")
+        val offers = SiteRecipes.read(recipe, html, "https://www.kaufland.de/s/?search_value=urinal")
+        assertEquals("https://www.kaufland.de/product/558133807/", offers[0].url)
+        assertEquals("https://www.kaufland.de/s/?search_value=urinal", offers[1].url)
     }
 
     @Test

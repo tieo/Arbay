@@ -125,7 +125,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 mpn = o.mpn ?: ProductPages.modelInAddress(o.url, o.title),
                 scrapedAt = now,
             )
-        }.distinctBy { it.id }
+        }.distinctBy { it.id }.let(::oneShopOnce)
 
 
     /** The shop's own address where a page links its offer through an affiliate network, which
@@ -296,6 +296,29 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             setOf("ebay", "amazon", "idealo", "geizhals")
 
         /** A host's name without its country or kind: "amazon" for www.amazon.co.jp. */
+        /**
+         * One shop's offer once, however many of its country sites list it: compuram sells its RN12H
+         * board on compuram.de, compuram.de/it and compuram.biz/fr, the same title and price at three
+         * addresses, and it stood three times in one search. Offers of one site keep apart, as a
+         * shop's variants of one title and price do.
+         */
+        internal fun oneShopOnce(listings: List<Listing>): List<Listing> {
+            val kept = mutableListOf<Listing>()
+            val seen = HashMap<Triple<String, String, Long>, MutableSet<String>>()
+            for (l in listings) {
+                val domain = SiteRecipes.domainOf(l.url)
+                val path = runCatching { java.net.URI(l.url).rawPath.orEmpty() }.getOrDefault("")
+                val origin = "$domain${path.split('/').getOrNull(1)?.takeIf { it.length == 2 }?.let { "/$it" }.orEmpty()}"
+                val key = Triple(siteName(domain), l.title.lowercase().trim(), l.price.amount)
+                val origins = seen.getOrPut(key) { mutableSetOf() }
+                if (origins.isNotEmpty() && origin !in origins) continue
+                origins += origin
+                kept += l
+            }
+            return kept
+        }
+
+
         internal fun siteName(host: String): String {
             val labels = host.split('.').filter { it.isNotEmpty() }
             if (labels.size < 2) return host

@@ -203,6 +203,7 @@ object SiteRecipes {
         val boxes: List<Element> = if (recipe.item == null) listOf(doc) else doc.select(recipe.item)
         val pageCurrency = recipe.currency?.let { c -> ProductPages.currencyOf(c) ?: pick(doc, c)?.let(ProductPages::currencyOf) }
         val context = recipe.context?.let { pick(doc, it, spaced = true) }
+        val listed by lazy { listedAddresses(doc) }
         return boxes.mapNotNull { box ->
             val maker = recipe.brand?.let { pick(box, it, spaced = true)?.trim() }?.takeIf { it.isNotEmpty() }
             val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() }
@@ -214,7 +215,8 @@ object SiteRecipes {
             PageOffer(
                 title = title,
                 price = price,
-                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(decodedLink(it), pageUrl) } ?: pageUrl,
+                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(decodedLink(it), pageUrl) }
+                    ?: listed[title.lowercase()]?.let { ProductPages.absolute(it, pageUrl) } ?: pageUrl,
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
@@ -346,6 +348,29 @@ object SiteRecipes {
      *  [spaced] text keeps a space where one element ends and the next begins, as a name reads on
      *  screen: loxam's `<h1>Parkettschleifmaschine<span>45 kg</span></h1>` is two words apart. A
      *  price is read unspaced, since one written as `12<sup>,99</sup>` is one number. */
+    /**
+     * The addresses the page's structured data lists its products at, by name: kaufland.de's tiles
+     * carry no address (their script builds it), while its ItemList names each of the first ones
+     * with its product page, which a tile of that name links to.
+     */
+    private fun listedAddresses(doc: Element): Map<String, String> {
+        val found = HashMap<String, String>()
+        fun walk(e: JsonElement) {
+            when (e) {
+                is JsonArray -> e.forEach(::walk)
+                is JsonObject -> {
+                    val name = (e["name"] as? JsonPrimitive)?.contentOrNull
+                    val url = ((e["url"] ?: (e["item"] as? JsonObject)?.get("url")) as? JsonPrimitive)?.contentOrNull
+                    if (name != null && url != null && (e["@type"] as? JsonPrimitive)?.contentOrNull == "ListItem") found.putIfAbsent(name.trim().lowercase(), url)
+                    e.values.forEach(::walk)
+                }
+                else -> {}
+            }
+        }
+        doc.select("script[type=application/ld+json]").forEach { s -> runCatching { json.parseToJsonElement(s.data().trim()) }.getOrNull()?.let(::walk) }
+        return found
+    }
+
     private fun pick(scope: Element, spec: String, spaced: Boolean = false): String? {
         val at = spec.lastIndexOf('@')
         val (selector, attribute) = if (at >= 0 && !spec.substring(at + 1).contains(' ')) spec.substring(0, at) to spec.substring(at + 1) else spec to null
