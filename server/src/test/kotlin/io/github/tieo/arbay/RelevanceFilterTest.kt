@@ -327,6 +327,8 @@ class RelevanceFilterTest {
         val gaskets = listOf(listing("CORNAT Fiberring ø 18 mm, ø 12mm, 1,5 mm"), listing("CORNAT Kontermutter 1/2\" IG"))
         assertEquals(emptyList(), RelevanceFilter.filter(gaskets, rn12h, answerComplete = false))
         assertEquals(1, RelevanceFilter.filter(listOf(listing("Laptop Memory Board For DELL Precision 7670 7680 LS-L88BP 0RN12H RN12H New")), rn12h, answerComplete = false).size)
+        // refurbed, live, answered it with a dock for a tablet numbered R12.
+        assertEquals(emptyList(), RelevanceFilter.filter(listOf(listing("Zebra Akkuladestation 1-Fach für XSLATE R12")), rn12h))
         // eBay, live, for "IB-3805-C31": the maker's other cases, each printing its own code.
         val icyBox = SearchQuery(text = "IB-3805-C31", category = MarketGroup.GENERAL)
         assertEquals(emptyList(), RelevanceFilter.filter(listOf(

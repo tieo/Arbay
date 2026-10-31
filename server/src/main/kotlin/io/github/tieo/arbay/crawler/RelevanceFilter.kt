@@ -1442,7 +1442,15 @@ object RelevanceFilter {
      */
     private fun namesAnotherModel(title: String, typed: String): Boolean {
         val code = normalize(typed.lowercase()).replace(NON_ALNUM, "")
-        return modelCodesIn(title).any { c -> c != code && !code.startsWith(c) && !c.startsWith(code) && code !in c }
+        fun another(c: String) = c != code && !code.startsWith(c) && !c.startsWith(code) && code !in c
+        // A shorter code numbered as the one searched for is a model beside it too: refurbed
+        // answered "RN12H" with a Zebra dock "für XSLATE R12", whose "R12" is too short to read as
+        // a code of its own.
+        val digits = code.filter(Char::isDigit)
+        val sameNumber = digits.isNotEmpty() && normalize(title.lowercase()).split(" ").map { it.replace(NON_ALNUM, "") }.any { w ->
+            w.length >= 3 && w.any(Char::isLetter) && w.filter(Char::isDigit) == digits && another(w)
+        }
+        return sameNumber || modelCodesIn(title).any(::another)
     }
 
     /** The model codes a title prints: a word of letters and digits joined by hyphens ("IB-287-C31",
