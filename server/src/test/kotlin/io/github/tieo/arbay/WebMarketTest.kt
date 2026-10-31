@@ -346,6 +346,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a basket's total is no price`() {
+        // h2o-konzepte.de's dispensers, sold on request only: the one amount is its basket template's placeholder total.
+        assertFalse(ProductPages.sellsSomething("""<body><table class="cart-content"></table><div class="cart-sum">Gesamtbetrag :
+            <span class="sum-calculated">123</span> &euro;</div><div>Zur Kasse</div><h2>BLUSODA</h2><p>Optional kann die Blusoda
+            Anlage mit folgenden Features ausgerüstet werden</p><a>Anfrage erstellen</a><a>Shop</a></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><div>Gesamtbetrag : 0 €</div><a>Zur Kasse</a><h1>BLUSODA Tafelwasseranlage</h1><span>1.499,00 €</span><a>In den Warenkorb</a></body>"))
+    }
+
+    @Test
     fun `a rental page is a page that offers something`() {
         assertTrue(ProductPages.sellsSomething("<body><h1>Parkettschleifmaschine mieten</h1><p>45,00 € pro Tag</p><a>Jetzt mieten</a></body>"))
     }
