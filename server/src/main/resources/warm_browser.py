@@ -54,6 +54,9 @@ TICKS = 3
 PUZZLES = 3
 # Seconds one puzzle takes, reading it to its answer: a page answers one only with that much left.
 PUZZLE_S = 20
+# Pictures of Yandex's typed-text puzzle looked at before one is typed: the reader is sure of about
+# one in three, and each new picture costs some five seconds.
+TEXT_PICTURES = 5
 # Puzzles a reCAPTCHA is answered through before giving up: a passed grid is often followed by
 # another one.
 RECAPTCHA_ROUNDS = 5
@@ -191,11 +194,18 @@ class Browser:
         # The stricter kind, typed text: two words along a curve, read and typed into its field.
         if "AdvancedCaptcha_image" in h and "TaskImage-Img" not in h:
             import yandex_text
-            shown = re.search(r'AdvancedCaptcha-View.*?<img[^>]*src="([^"]*captchaimage[^"]+)"', h, re.S)
-            if not shown:
-                return False
-            picture = await loop.run_in_executor(None, fetch, shown.group(1))
-            answer = await loop.run_in_executor(None, yandex_text.solve, picture)
+            # A picture the reader is unsure of is swapped for another rather than guessed at.
+            for attempt in range(TEXT_PICTURES):
+                shown = re.search(r'AdvancedCaptcha-View.*?<img[^>]*src="([^"]*captchaimage[^"]+)"', h, re.S)
+                if not shown:
+                    return False
+                picture = await loop.run_in_executor(None, fetch, shown.group(1))
+                answer, score = await loop.run_in_executor(None, yandex_text.read, picture)
+                if yandex_text.sure(score) or attempt == TEXT_PICTURES - 1:
+                    break
+                await (await tab.select('button[data-testid="refresh"]', timeout=5)).mouse_click()
+                await asyncio.sleep(random.uniform(2.0, 3.5))
+                h = await tab.get_content()
             field = await tab.select('input[name="rep"]', timeout=5)
             await field.mouse_click()
             await asyncio.sleep(random.uniform(0.4, 0.9))
@@ -206,13 +216,13 @@ class Browser:
             await (await tab.select('button[data-testid="submit"]', timeout=5)).mouse_click()
             await asyncio.sleep(5)
             passed = "AdvancedCaptcha" not in await tab.get_content()
-            # An answer Yandex took is a picture read right: kept, where a folder is named, to train on.
+            # An answer Yandex took is a picture read right: kept in ARBAY_TEXT_PUZZLES to train on.
             keep = os.environ.get("ARBAY_TEXT_PUZZLES")
             if keep:
                 os.makedirs(keep, exist_ok=True)
                 name = f"{keep}/{int(time.time() * 1000)}_{'ok' if passed else 'no'}"
                 open(name + ".png", "wb").write(picture)
-                open(name + ".txt", "w").write(answer)
+                open(name + ".txt", "w").write(f"{answer}\t{score:.2f}")
             return passed
         pic = re.search(r'AdvancedCaptcha-ImageWrapper.*?<img[^>]*src="([^"]+)"', h, re.S)
         strip = re.search(r'class="TaskImage-Img"[^>]*src="([^"]+)"|src="([^"]+)"[^>]*class="TaskImage-Img"', h)
