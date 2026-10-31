@@ -271,8 +271,10 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         private val TRANSLATE_PROXY = Regex("""^(https?://)([a-z0-9-]+)\.translate\.goog(.*)$""", RegexOption.IGNORE_CASE)
 
         /** What an engine or an ad adds to an address to count the visit, which makes the same
-         *  offer a new one for every engine that listed it. */
-        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type|msockid|_x_tr_[a-z_]+|zenid|oscsid|phpsessid)=[^&#]*&?""", RegexOption.IGNORE_CASE)
+         *  offer a new one for every engine that listed it. AliExpress's search writes a new
+         *  set into each item's link on every page it serves (`algo_pvid`, `pdp_npi`…), and one
+         *  RAM board stood twice in one search. */
+        private val TRACKING_PARAM = Regex("""(?<=[?&])(utm_[a-z]+|gclid|gbraid|wbraid|fbclid|msclkid|gad_source|gad_campaignid|srsltid|lnid|campaign_type|msockid|_x_tr_[a-z_]+|zenid|oscsid|phpsessid|algo_[a-z_]+|pdp_[a-z_]+|aem_p4p_[a-z_]+|search_p4p_id|curPageLogUid|utparam-url|spm|scm)=[^&#]*&?""", RegexOption.IGNORE_CASE)
 
         private val SESSION_IN_PATH = Regex(""";(jsessionid|sid|phpsessid)=[^?#/]*""", RegexOption.IGNORE_CASE)
 

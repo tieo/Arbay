@@ -518,6 +518,8 @@ class WebMarketTest {
         assertEquals("https://www.dielen-schleifen.de/miete?x=1",
             WebCrawler.unproxied("https://www-dielen--schleifen-de.translate.goog/miete?_x_tr_sl=de&x=1"))
         assertEquals("https://www.e-hoi.de/", WebCrawler.withoutSession("https://www.e-hoi.de/?msockid=063548ec2ade6dcd3b695f112b266c95"))
+        assertEquals("https://de.aliexpress.com/item/1005012926471402.html", WebCrawler.withoutSession(
+            "https://de.aliexpress.com/item/1005012926471402.html?algo_pvid=0d81ff47&algo_exp_id=0d81ff47-0&pdp_ext_f=%7B%7D&pdp_npi=6%40dis%21EUR&curPageLogUid=SSjsVqxstBt1&utparam-url=scene%3Asearch"))
     }
 
     @Test
