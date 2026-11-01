@@ -64,6 +64,12 @@ open class WarmBrowser(
      * leaves the caller its other ways in.
      */
     suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), tick: List<String> = emptyList(), solve: String? = null): Page? {
+        // Neuland recognises a page's checks and puzzles itself, so it needs no [tick] or [solve].
+        if (Neuland.enabled) {
+            val page = inTab { Neuland.read(neulandName, url, markers, errors, refusals, timeoutS) } ?: return null
+            kotlin.coroutines.coroutineContext[CrawlClock]?.answered()
+            return page
+        }
         val request = mapOf(
             "op" to JsonPrimitive("get"), "url" to JsonPrimitive(url), "timeout" to JsonPrimitive(timeoutS),
             "markers" to JsonArray(markers.map(::JsonPrimitive)),
@@ -99,6 +105,7 @@ open class WarmBrowser(
      */
     suspend fun resolve(urls: List<String>, leaving: String, timeoutS: Int = 10): Map<String, String> {
         if (urls.isEmpty()) return emptyMap()
+        if (Neuland.enabled) return inTab { Neuland.resolve(neulandName, urls, leaving, timeoutS) }
         val request = mapOf(
             "op" to JsonPrimitive("resolve"), "urls" to JsonArray(urls.map(::JsonPrimitive)),
             "leaving" to JsonPrimitive(leaving), "timeout" to JsonPrimitive(timeoutS),
@@ -150,8 +157,23 @@ open class WarmBrowser(
         }
     }
 
+    /** The browser of Neuland's that stands for this one: Arbay's render browsers are one of Neuland's tabs each. */
+    private val neulandName = name.lowercase().trimEnd { it.isDigit() }
+
+    /** Runs [work] once one of this browser's tabs is free, a crawl waiting its turn not counted as its market failing. */
+    private suspend fun <T> inTab(work: suspend () -> T): T {
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        if (clock != null) clock.waitingOnOthers { free.acquire() } else free.acquire()
+        try {
+            return work()
+        } finally {
+            free.release()
+        }
+    }
+
     /** Starts the browser ahead of its first page, so that page waits for no start. */
     suspend fun warm() {
+        if (Neuland.enabled) return
         withContext(Dispatchers.IO) { starting.withLock { ensureRunning() } }
     }
 
