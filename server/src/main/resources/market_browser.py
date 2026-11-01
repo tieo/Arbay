@@ -184,11 +184,12 @@ class MarketBrowser:
                                    # last --disable-features is the one Chrome reads, so zendriver's
                                    # own are repeated here.
                                    "--disable-features=IsolateOrigins,site-per-process,DisableLoadExtensionCommandLineSwitch,BackForwardCache",
-                                   # Ad frames each took a process of their own while only
-                                   # site isolation's feature was off; this switch keeps them in
-                                   # their page's. No cap on renderers: under one, tabs share a
-                                   # process and a busy page held Google's tab past its deadline.
-                                   "--disable-site-isolation-trials"]}
+                                   # Site isolation stays as a person's Chrome has it: with
+                                   # --disable-site-isolation-trials Cloudflare's Turnstile refused
+                                   # the browser, ticked or not. No cap on renderers: under one,
+                                   # tabs share a process and a busy page held Google's tab past
+                                   # its deadline.
+                                   ]}
         if os.path.exists(CHROME):
             kwargs["browser_executable_path"] = CHROME
         self.browser = await zd.start(**kwargs)
