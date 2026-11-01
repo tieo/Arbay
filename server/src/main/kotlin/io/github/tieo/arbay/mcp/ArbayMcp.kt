@@ -396,6 +396,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // all empty and only buries the description, so it is left out.
             val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()
                 ?: return@tool head + "\n" + detail.bodyAsText()
+            // The page states the delivery charge a search card often leaves out, so the head line
+            // gives the landed price from it.
+            val pageShipping = (body["shipping"] as? JsonObject)?.let {
+                runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.Shipping.serializer(), it) }.getOrNull()
+            }
+            val pageHead = (if (pageShipping != null) l.copy(shipping = pageShipping) else l).line() + l.fitLine()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
             // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
@@ -406,7 +412,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val seller = (body["seller"] as? JsonObject)?.let {
                 runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.SellerProfile.serializer(), it) }.getOrNull()
             }?.let { "Seller: ${it.fact}.\n" }.orEmpty()
-            head + "\n" + state + seller + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
+            pageHead + "\n" + state + seller + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
@@ -972,11 +978,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private fun why(reason: DropReason, detail: String?): String = reason.label + (detail?.let { ": $it" } ?: "")
 
     private fun Listing.line(foundAt: Instant? = null): String = listOfNotNull(
-        id, title.tidyTitle(), "${effectivePrice.amount / 100.0} ${effectivePrice.currency}",
+        id, title.tidyTitle(), priceWords(),
         coupon?.let { c -> listOfNotNull(c.code?.let { "with code $it" } ?: "with a coupon", oldPrice?.let { "${it.amount / 100.0} without" }).joinToString(", ") },
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
-        shipping?.let { s -> s.cost?.let { "shipping ${it.amount / 100.0}" } ?: if (s.available) "ships" else if (s.pickup) "pickup" else "not sent to Germany" },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         foundAt?.let { "found ${(Clock.System.now() - it).inWholeHours} h ago" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
@@ -984,6 +989,26 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
         url,
     ).joinToString(" | ")
+
+    /**
+     * The price as what it is: landed where the delivery charge is known, with the item and the
+     * charge it adds up from, and the item alone where the market stated no charge. A bare number
+     * left a reader unsure whether an eBay 11.99 already held its 5.99 shipping (it did not).
+     */
+    private fun Listing.priceWords(): String {
+        val item = "${price.amount / 100.0} ${price.currency}"
+        val s = shipping
+        val cost = s?.cost?.takeIf { it.currency == price.currency }
+        return when {
+            s == null -> "$item item, shipping not stated"
+            cost != null && cost.amount > 0 -> "${effectivePrice.amount / 100.0} ${price.currency} landed ($item item + ${cost.amount / 100.0} shipping)"
+            s.free || cost != null -> "$item landed (free shipping)"
+            !s.available && s.pickup -> "$item, pickup only"
+            !s.available -> "$item item, not sent to Germany"
+            s.cost != null -> "$item item + ${s.cost!!.amount / 100.0} ${s.cost!!.currency} shipping"
+            else -> "$item item, ships, shipping not stated"
+        }
+    }
 
     /** What the SMART screenshots among a drive ad's photos say, one line each, as the offer screen shows it. */
     private suspend fun driveHealthLine(l: Listing, page: JsonObject): String {
