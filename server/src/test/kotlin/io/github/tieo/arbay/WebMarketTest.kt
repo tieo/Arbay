@@ -138,6 +138,21 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a tile is read at the price to pay, its addresses below the page's base`() {
+        // libertyshop.de's recommended products: the former price inside the price element, pictures below <base href>.
+        val html = """<html><head><base href="https://shop.example/"></head><body><form class="product-tile">
+            <a class="product-url" href="https://shop.example/Filter/4C.html"><img src="images/thumbnail_images/4C.jpg"></a><div class="title">Everpure 4C</div>
+            <span class="current-price-container"><span class="productOldPrice">Normalpreis 67,84 €</span><br>Ihr Preis 50,88 €</span></form>
+            <form class="product-tile"><a class="product-url" href="Filter/QL3.html"></a><div class="title">Everpure QL3 Filterkopf</div>
+            <span class="current-price-container">67,90 €</span></form></body></html>"""
+        val recipe = SiteRecipe(domain = "shop.example", item = "form.product-tile", title = ".title", price = ".current-price-container", link = "a.product-url@href", image = "img@src")
+        val offers = SiteRecipes.read(recipe, html, "https://shop.example/Filter/Tafelwasser/S-100.html")
+        assertEquals(listOf(5088L, 6790L), offers.map { it.price.amount })
+        assertEquals("https://shop.example/images/thumbnail_images/4C.jpg", offers.first().image)
+        assertEquals("https://shop.example/Filter/QL3.html", offers.last().url)
+    }
+
+    @Test
     fun `a results page gives the pages it links to, not the engine's own`() {
         val html = """<div id="rso"><a href="https://shop.example/p/1"><h3>One</h3></a>
             <a href="/url?q=https://other.example/p/2&sa=U">Two</a>

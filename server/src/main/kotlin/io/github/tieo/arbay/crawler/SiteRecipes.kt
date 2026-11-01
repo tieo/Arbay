@@ -198,6 +198,9 @@ object SiteRecipes {
         if (recipe.items != null) return readJson(recipe, recipe.items, html, pageUrl)
         if (recipe.title.isBlank() || recipe.price.isBlank()) return emptyList()
         val doc = Jsoup.parse(html, pageUrl)
+        // Addresses resolve against the page's <base href> where it names one: libertyshop.de's
+        // product pages write their pictures as "images/…" below a base of the shop's root.
+        val base = doc.baseUri().ifBlank { pageUrl }
         // A page that is one product is read whole, its head included: its picture is often only
         // in og:image there.
         val boxes: List<Element> = if (recipe.item == null) listOf(doc) else doc.select(recipe.item)
@@ -215,11 +218,11 @@ object SiteRecipes {
             PageOffer(
                 title = title,
                 price = price,
-                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(decodedLink(it), pageUrl) }
-                    ?: listed[title.lowercase()]?.let { ProductPages.absolute(it, pageUrl) } ?: pageUrl,
+                url = recipe.link?.let { pick(box, it) }?.let { ProductPages.absolute(decodedLink(it), base) }
+                    ?: listed[title.lowercase()]?.let { ProductPages.absolute(it, base) } ?: pageUrl,
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
-                image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, pageUrl) },
+                image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, base) },
                 rentPer = recipe.rentPer,
                 vatStated = true,
                 coupon = recipe.coupon?.let { spec -> couponIn(box, spec, currency, price) },
@@ -311,9 +314,22 @@ object SiteRecipes {
      */
     private fun amountAt(box: Element, spec: String): String? {
         val nth = Regex("""#(\d+)$""").find(spec)
-        val text = pick(box, if (nth != null) spec.substring(0, nth.range.first) else spec)?.replace(Regex(""",-+"""), ",00") ?: return null
+        val text = pick(withoutFormerPrices(box), if (nth != null) spec.substring(0, nth.range.first) else spec)?.replace(Regex(""",-+"""), ",00") ?: return null
         if (nth != null) return AMOUNT.findAll(text).elementAtOrNull(nth.groupValues[1].toInt() - 1)?.value
         return WITH_CURRENCY.find(text)?.value ?: text
+    }
+
+    /**
+     * The box without the former prices it shows struck out beside the one to pay: libertyshop.de's
+     * tile reads "Normalpreis 67,84 € Ihr Preis 50,88 €" in one element, the former price in a
+     * `span.productOldPrice` inside it.
+     */
+    private fun withoutFormerPrices(box: Element): Element {
+        val copy = box.clone()
+        copy.select("del, s, strike, [class], [id]").filter { e ->
+            e.tagName() in setOf("del", "s", "strike") || ProductPages.OLD_PRICE.any { it in (e.className() + " " + e.id()).lowercase() }
+        }.filter { it !== copy }.forEach { it.remove() }
+        return copy
     }
 
     /** The code a line names and the price it gives, where that is below the [listed] one. */

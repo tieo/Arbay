@@ -227,7 +227,7 @@ object ProductPages {
         return found.firstOrNull { el -> found.none { it !== el && it.parents().contains(el) } }
     }
 
-    private val OLD_PRICE = listOf("old", "uvp", "strike", "was-", "regular", "crossed", "streich", "statt", "unit", "grund", "base")
+    internal val OLD_PRICE = listOf("old", "uvp", "strike", "was-", "regular", "crossed", "streich", "statt", "unit", "grund", "base")
 
     // ── The page's own app state ──
 
