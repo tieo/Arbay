@@ -364,6 +364,17 @@ class WebMarketTest {
     }
 
     @Test
+    fun `running costs and estimates are no price`() {
+        // co2-adapter.de's product finder: what a refill costs and saves, and a maker's budget guess (grohe.com).
+        assertFalse(ProductPages.sellsSomething("""<body><header><a>Warenkorb</a><a>Kasse</a></header><h1>Navigator</h1>
+            <p>Laufkosten ab 1,25 € pro Füllung</p><p>Preis 1,25 € pro Selbstfüllung</p><p>Kosten im Handel bei ~8,50€ pro Zylinder
+            170€ Kosten mit Adapter</p><p>Bei 20 Füllungen pro Jahr zahlst du im Handel 170€ – mit dem Adapter nur 25€ . Das spart
+            dir 145€ im Jahr.</p><p>Im Handel zahle ich inzwischen fast 9 € pro Tauschzylinder</p>
+            <p>wenn Ihr Budget bei etwa 1.500 € liegt</p></body>"""))
+        assertTrue(ProductPages.sellsSomething("<body><h1>CO2 Adapter Quick Connect</h1><span>34,90 €</span><a>In den Warenkorb</a><p>Laufkosten ab 1,25 € pro Füllung</p></body>"))
+    }
+
+    @Test
     fun `a rental page is a page that offers something`() {
         assertTrue(ProductPages.sellsSomething("<body><h1>Parkettschleifmaschine mieten</h1><p>45,00 € pro Tag</p><a>Jetzt mieten</a></body>"))
     }

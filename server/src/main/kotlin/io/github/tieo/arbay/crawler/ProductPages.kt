@@ -91,7 +91,7 @@ object ProductPages {
             val after = text.substring(end, minOf(text.length, end + 45))
             val reach = if (ALTERNATIVE_AMOUNT.containsMatchIn(after)) 45 else 15
             val before = text.substring(maxOf(0, m.range.first - 30), m.range.first)
-            m.value.any { it in '1'..'9' } && !RECOMMENDED_BEFORE.containsMatchIn(before) && !UNAVAILABLE_BEFORE.containsMatchIn(before) && !RECOMMENDED_AFTER.containsMatchIn(after) && !NOT_A_PRICE.containsMatchIn(
+            m.value.any { it in '1'..'9' } && !RECOMMENDED_BEFORE.containsMatchIn(before) && !UNAVAILABLE_BEFORE.containsMatchIn(before) && !ESTIMATE_BEFORE.containsMatchIn(before) && !RECOMMENDED_AFTER.containsMatchIn(after) && !NOT_A_PRICE.containsMatchIn(
                 before + " " + after.take(reach))
         } && BUY_WORDS.containsMatchIn(text)
     }
@@ -146,7 +146,13 @@ object ProductPages {
     // A shop's financing terms are no price either: mediamarkt.de's footer under a product it
     // cannot deliver named "ab € 100.- Finanzierungssumme", "auf volle 100 € gerundeten Sollsaldos"
     // and "(mind. 9,10 €)", and the page was reported as one Arbay could not read.
-    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese|finanzierung|darlehen|sollsaldo|jahreszins|bonitätsabhängig|gerundet|\bmind\.|gesamtbetrag|gesamtsumme|zwischensumme""")
+    private val NOT_A_PRICE = Regex("""versand|shipping|lieferung|porto|livraison|spedizione|gutschein|mindest|einkaufswert|bestellwert|bestellung|warenwert|wert von|gesamtwert|coupon|voucher|rabatt|ersparnis|käuferschutz|buyer protection|anruf|/\s?min\b|pro minute|im monat|pro monat|/\s?monat|monatlich|per month|/\s?month|par mois|al mese|finanzierung|darlehen|sollsaldo|jahreszins|bonitätsabhängig|gerundet|\bmind\.|gesamtbetrag|gesamtsumme|zwischensumme|""" +
+        // Nor what something costs to run, a year's sum or a saving: co2-adapter.de's product finder
+        // reckoned "Laufkosten ab 1,25 € pro Füllung", "im Handel 170€" and "spart dir 145€ im Jahr".
+        """im jahr|pro jahr|/\s?jahr|jährlich|per year|/\s?year|\bspar|im handel|laufkosten|\bkosten\b|pro [a-zäöüß]*füll|/\s?füll""")
+
+    // An estimate is no price on offer: a shop asks "19,99 €", never "~1,09 €" or "fast 9 €".
+    private val ESTIMATE_BEFORE = Regex("""(~|\bca\.|\bcirca|\betwa|\brund|\bfast|\bknapp)\s?$""")
 
     private val DEALER_FINDER = Regex("""(fach)?händler finden|händlersuche|find a (dealer|retailer)|where to buy""")
 
