@@ -39,6 +39,7 @@ import io.github.tieo.arbay.results.ago
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
@@ -228,6 +229,89 @@ fun AccountSection(app: WebApp) {
                 }
             }
         }
+    }
+}
+
+/** The name a person knows a site's account by. */
+private fun siteName(site: String) = when (site) {
+    "google.com" -> "Google"
+    "paypal.com" -> "PayPal"
+    else -> site
+}
+
+/**
+ * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops): signed in
+ * from here with the account's own password, which is sealed in the browser to Neuland's key, and
+ * the second factor confirmed on the phone or typed here.
+ */
+@Composable
+fun SiteAccountSection(app: WebApp) {
+    val chat = app.chat
+    val sites by chat.sites.collectAsState()
+    val steps = sites?.steps ?: return
+    var open by remember { mutableStateOf<String?>(null) }
+    steps.entries.sortedBy { it.key }.forEach { (site, step) ->
+        val name = siteName(site)
+        Div({ classes("account") }) {
+            when {
+                step.state == "signing-in" -> {
+                    SiteHead(name, null) { QuietButton("Cancel") { chat.cancelSite(site) } }
+                    Div({ classes("waiting") }) { Busy(); Span({ classes("muted") }) { Text("Signing in") } }
+                }
+                step.state == "phone" -> {
+                    SiteHead(name, null) { QuietButton("Cancel") { chat.cancelSite(site) } }
+                    Div({ classes("waiting") }) { Busy(); Span({ classes("muted") }) { Text("Waiting for your phone") } }
+                    step.number?.let { number ->
+                        Div({ classes("prompt-number") }) { Span({ classes("muted", "small") }) { Text("Number on the prompt") }; B { Text(number) } }
+                    }
+                }
+                step.state == "code" -> {
+                    SiteHead(name, null) { QuietButton("Cancel") { chat.cancelSite(site) } }
+                    var code by remember(site) { mutableStateOf("") }
+                    Label(attrs = { classes("field") }) {
+                        Span({ classes("field-label") }) { Text(step.hint ?: "Code") }
+                        Span({ classes("sealed") }) {
+                            Input(InputType.Text) { classes("control"); attr("inputmode", "numeric"); attr("autocomplete", "one-time-code"); value(code); onInput { code = it.value.trim() } }
+                            Icon(Glyph.Lock)
+                        }
+                    }
+                    Div({ classes("actions") }) { PrimaryButton("Confirm", enabled = code.isNotBlank()) { chat.siteCode(site, code) } }
+                }
+                open == site -> {
+                    SiteHead(name, null) {}
+                    var account by remember(site) { mutableStateOf("") }
+                    var password by remember(site) { mutableStateOf("") }
+                    Label(attrs = { classes("field") }) {
+                        Span({ classes("field-label") }) { Text("E-mail") }
+                        Input(InputType.Email) { classes("control"); attr("autocomplete", "username"); value(account); onInput { account = it.value } }
+                    }
+                    Label(attrs = { classes("field") }) {
+                        Span({ classes("field-label") }) { Text("Password") }
+                        Span({ classes("sealed") }) {
+                            Input(InputType.Password) { classes("control"); attr("autocomplete", "current-password"); value(password); onInput { password = it.value } }
+                            Icon(Glyph.Lock)
+                        }
+                    }
+                    Div({ classes("actions") }) {
+                        PrimaryButton("Sign in", enabled = account.isNotBlank() && password.isNotEmpty()) { chat.signInSite(site, account, password); open = null }
+                        QuietButton("Cancel") { open = null }
+                    }
+                }
+                step.state == "signed-in" -> SiteHead(name, step.who) { QuietButton("Sign in again") { open = site } }
+                step.state == "failed" -> SiteHead(name, step.reason, failed = true) { QuietButton("Sign in") { open = site } }
+                else -> SiteHead(name, "not signed in") { QuietButton("Sign in") { open = site } }
+            }
+        }
+    }
+}
+
+/** A site's line: its name, what stands about it, and the one action it offers. */
+@Composable
+private fun SiteHead(name: String, status: String?, failed: Boolean = false, action: @Composable () -> Unit) {
+    Div({ classes("account-head") }) {
+        H3 { Text(name) }
+        status?.let { Span({ classes(*listOfNotNull("who", "failed".takeIf { failed }).toTypedArray()) }) { Text(it) } }
+        action()
     }
 }
 

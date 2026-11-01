@@ -492,6 +492,20 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .strip-item.on { border-color: var(--accent); }
 .price-block { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* The shop and payment accounts in Settings: one block per account, its line on top. */
+.account { display: flex; flex-direction: column; gap: 8px; }
+.account + .account { border-top: 1px solid var(--line); padding-top: var(--gap); }
+.account-head { display: flex; align-items: center; gap: 8px; }
+.account-head h3 { flex: 1; font-size: 14px; font-weight: 650; }
+.account-head .who { color: var(--muted); font-size: 13px; }
+.account-head .who.failed { color: var(--danger); }
+/* A field whose value is sealed before it leaves: the lock sits inside it. */
+.sealed { position: relative; display: block; }
+.sealed .control { width: 100%; padding-right: 34px; }
+.sealed .icon-glyph { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted); }
+.waiting { display: flex; align-items: center; gap: 10px; }
+.prompt-number { display: flex; align-items: baseline; gap: 10px; }
+.prompt-number b { font-size: 28px; }
 /* A quiet button beside the primary one stands as tall as it. */
 .actions > .quiet { height: 36px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px; }

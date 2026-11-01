@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -296,6 +297,97 @@ fun AccountPanel(session: Session) {
                 }
             }
         } } }
+    }
+}
+
+/** The name a person knows a site's account by. */
+private fun siteName(site: String) = when (site) {
+    "google.com" -> "Google"
+    "paypal.com" -> "PayPal"
+    else -> site
+}
+
+/**
+ * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops): signed in
+ * from here with the account's own password, which is sealed in the app to Neuland's key, and the
+ * second factor confirmed on the phone or typed here.
+ */
+@Composable
+fun SiteAccountPanel(session: Session) {
+    val chat = session.chat
+    val sites by chat.sites.collectAsState()
+    val steps = sites?.steps ?: return
+    // The site whose form is open, before its sign-in has started.
+    var open by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { chat.watch() }
+    Panel { Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) {
+        SectionTitle("Shop and payment accounts")
+        steps.entries.sortedBy { it.key }.forEach { (site, step) ->
+            Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
+                val name = siteName(site)
+                when {
+                    step.state == "signing-in" -> {
+                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Busy(); Muted("Signing in") }
+                    }
+                    step.state == "phone" -> {
+                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Busy(); Muted("Waiting for your phone") }
+                        step.number?.let { number ->
+                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Muted("Number on the prompt")
+                                Text(number, style = MaterialTheme.typography.headlineMedium)
+                            }
+                        }
+                    }
+                    step.state == "code" -> {
+                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
+                        var code by remember(site) { mutableStateOf("") }
+                        OutlinedTextField(
+                            code, { code = it.trim() }, Modifier.fillMaxWidth(), singleLine = true,
+                            label = { Text(step.hint ?: "Code") },
+                            trailingIcon = { Icon(Icons.Outlined.Lock, null) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        Button(onClick = { chat.siteCode(site, code) }, enabled = code.isNotBlank()) { Text("Confirm") }
+                    }
+                    open == site -> {
+                        SiteHead(name, null) {}
+                        var account by remember(site) { mutableStateOf("") }
+                        var password by remember(site) { mutableStateOf("") }
+                        OutlinedTextField(account, { account = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-mail") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                        OutlinedTextField(
+                            password, { password = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Password") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            trailingIcon = { Icon(Icons.Outlined.Lock, null) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(onClick = { chat.signInSite(site, account, password); open = null }, enabled = account.isNotBlank() && password.isNotEmpty()) { Text("Sign in") }
+                            OutlinedButton(onClick = { open = null }) { Text("Cancel") }
+                        }
+                    }
+                    step.state == "signed-in" -> SiteHead(name, step.who) { OutlinedButton(onClick = { open = site }) { Text("Sign in again") } }
+                    step.state == "failed" -> SiteHead(name, step.reason, failed = true) { OutlinedButton(onClick = { open = site }) { Text("Sign in") } }
+                    else -> SiteHead(name, "not signed in") { OutlinedButton(onClick = { open = site }) { Text("Sign in") } }
+                }
+            }
+        }
+    }
+}
+}
+
+/** A site's line: its name, what stands about it, and the one action it offers. */
+@Composable
+private fun SiteHead(name: String, status: String?, failed: Boolean = false, action: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        status?.let {
+            if (failed) Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            else Muted(it, maxLines = 1)
+        }
+        action()
     }
 }
 

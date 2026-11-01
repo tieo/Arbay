@@ -44,6 +44,8 @@ kotlin {
             api(libs.ktor.clientCore)
             implementation(libs.ktor.clientContentNegotiation)
             implementation(libs.ktor.clientSerialization)
+            implementation(libs.cryptography.core)
+            implementation(libs.cryptography.provider.optimal)
             api(libs.kotlinx.serialization.json)
             api(libs.kotlinx.datetime)
         }

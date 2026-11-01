@@ -2,9 +2,11 @@ package io.github.tieo.arbay.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.tieo.arbay.api.Sealing
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
+import io.github.tieo.arbay.model.SiteSignIns
 import io.github.tieo.arbay.model.ChatCosts
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.Conversation
@@ -138,7 +140,54 @@ class ChatViewModel(
                 _outbox.value = client.outbox()
                 if (account.signedIn) _conversations.value = client.conversations()
             }
+            // Neuland's sign-ins answer apart: an Arbay without Neuland still shows its markets.
+            runCatching { _sites.value = client.siteSignIns() }
+            if (_sites.value?.steps?.values?.any { it.running } == true) followSites()
             _loading.value = false
+        }
+    }
+
+    private val _sites = MutableStateFlow<SiteSignIns?>(null)
+
+    /** Neuland's key and where signing its account browser in to each of the user's accounts stands. */
+    val sites: StateFlow<SiteSignIns?> = _sites.asStateFlow()
+
+    private var siteFollower: Job? = null
+
+    /** Looks at the sign-ins every two seconds while one is under way, so each step shows as it comes. */
+    private fun followSites() {
+        if (siteFollower?.isActive == true) return
+        siteFollower = viewModelScope.launch {
+            do {
+                delay(2_000)
+                runCatching { _sites.value = client.siteSignIns() }
+            } while (_sites.value?.steps?.values?.any { it.running } == true)
+        }
+    }
+
+    /** Signs Neuland's account browser in to [site]: the password is sealed here, to Neuland's key. */
+    fun signInSite(site: String, account: String, password: String) = viewModelScope.launch {
+        attempt {
+            val key = (_sites.value ?: client.siteSignIns()).key
+            client.signInSite(site, account.trim(), Sealing.seal(key, password))
+            _sites.value = client.siteSignIns()
+            followSites()
+        }
+    }
+
+    /** Gives [site]'s sign-in the code it asked for, sealed as the password was. */
+    fun siteCode(site: String, code: String) = viewModelScope.launch {
+        attempt {
+            val key = (_sites.value ?: client.siteSignIns()).key
+            client.siteSignInCode(site, Sealing.seal(key, code.trim()))
+            followSites()
+        }
+    }
+
+    fun cancelSite(site: String) = viewModelScope.launch {
+        attempt {
+            client.cancelSiteSignIn(site)
+            _sites.value = client.siteSignIns()
         }
     }
 

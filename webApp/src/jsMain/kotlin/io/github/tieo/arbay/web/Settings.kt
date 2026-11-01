@@ -56,6 +56,7 @@ fun SettingsScreen(app: WebApp) {
             CurrencySection()
             H2({ classes("group-title") }) { Text("The server, for every device") }
             Setting("Market accounts") { AccountSection(app) }
+            Setting("Shop and payment accounts") { SiteAccountSection(app) }
             Setting("Your texts for sellers") { TextsSection(app) }
             ServerSections(app)
         }

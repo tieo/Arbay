@@ -260,6 +260,30 @@ class ArbayClient(
     /** The user's account on every market Arbay can sign in to. */
     suspend fun chatAccounts(): List<ChatAccount> = client.get("$baseUrl/api/chat/accounts").body()
 
+    /** Neuland's key and where each site's sign-in of its account browser stands. */
+    suspend fun siteSignIns(): io.github.tieo.arbay.model.SiteSignIns = client.get("$baseUrl/api/accounts").body()
+
+    /** Starts signing Neuland's account browser in to [site]; the password is sealed with [Sealing]. */
+    suspend fun signInSite(site: String, account: String, sealedPassword: String) {
+        client.post("$baseUrl/api/accounts/$site/sign-in") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.SiteSignInRequest(account, sealedPassword))
+        }
+    }
+
+    /** Gives a sign-in the code its site asked for, sealed with [Sealing]. */
+    suspend fun siteSignInCode(site: String, sealedCode: String) {
+        client.post("$baseUrl/api/accounts/$site/code") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.SiteSignInCode(sealedCode))
+        }
+    }
+
+    /** Stops a site's sign-in that waits for the phone or a code. */
+    suspend fun cancelSiteSignIn(site: String) {
+        client.post("$baseUrl/api/accounts/$site/cancel")
+    }
+
     suspend fun beginChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false): SignInStep =
         client.post("$baseUrl/api/chat/signin?market=${market.name}" + if (payment) "&payment=true" else "").body()
     suspend fun chatSignInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =

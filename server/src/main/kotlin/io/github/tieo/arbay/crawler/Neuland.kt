@@ -7,6 +7,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -106,6 +107,23 @@ object Neuland {
             },
             statusCode = status,
         )
+    }
+
+    /**
+     * A request passed on to Neuland as it came, its answer handed back as it went: the account
+     * sign-ins, whose passwords and codes are sealed to Neuland's key and stay sealed here.
+     * Null where Neuland is not set up or did not answer.
+     */
+    suspend fun passOn(method: io.ktor.http.HttpMethod, path: String, body: String?): Pair<Int, String>? {
+        val base = base ?: return null
+        return runCatching {
+            val response = client.request("$base/$path") {
+                this.method = method
+                if (body != null) { contentType(ContentType.Application.Json); setBody(body) }
+                timeout { requestTimeoutMillis = 30_000 }
+            }
+            response.status.value to response.bodyAsText()
+        }.onFailure { log.warn("Neuland {}: {}", path, it.message) }.getOrNull()
     }
 
     private suspend fun call(path: String, body: JsonObject, limitS: Long): JsonObject? = runCatching {
