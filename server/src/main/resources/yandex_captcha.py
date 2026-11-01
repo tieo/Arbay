@@ -21,8 +21,43 @@ import os
 import cv2
 import numpy as np
 
+# Every constant from picture to clicks is named below, so the path can be reproduced outside
+# Python. Conventions: pictures decode with OpenCV, colours in BGR order all the way into the
+# networks; a transparent strip is laid on white; network inputs are channels first and scaled to
+# 0..1 by dividing by 255, no mean or deviation taken off; network outputs are logits, put through
+# the logistic function where a probability is wanted. OpenCV operations whose definition matters:
+# MORPH_ELLIPSE structuring elements (MORPH_CROSS in thin()), distanceTransform(DIST_L2, 3) (the 3x3 mask approximation
+# of Euclidean distance), getRotationMatrix2D (degrees counter-clockwise, y pointing down) with
+# warpAffine's bilinear sampling and BORDER_REFLECT (fedcba|abcdef, the edge pixel repeated),
+# resize with INTER_AREA for the matcher's icons, and connectedComponents with 8-connectivity.
 MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_symbols.onnx")
+# The side of the square a shape is drawn on for the outline fit, and of the matcher's inputs; a
+# drawn shape keeps this margin to the canvas edge.
 SIDE = 64
+CANVAS_MARGIN = 4
+# The matcher's icon: the outline scaled into a square this wide, centred in SIDE.
+ICON_INNER = 56
+# Stroke probability above which a pixel is marked, the smallest part kept in pixels, the closing
+# kernel that fills gaps in a stroke, and the dilation kernel that joins a symbol's separate strokes.
+STROKE_THRESHOLD = 0.5
+MIN_PART = 40
+CLOSE_KERNEL = 3
+JOIN_KERNEL = 7
+# Strip ink is grey below this level; the opening kernel that wipes out the thin hatching; columns
+# this close are one run; a run narrower than NARROW_RUN outlines joins a neighbour while both fit
+# in JOINED_RUN outlines; touching outlines are split at the emptiest column within SPLIT_SEARCH
+# of the even split, their count rounded up from a remainder of 1 - SPLIT_ROUND.
+INK_BELOW = 128
+HATCH_KERNEL = 5
+RUN_GAP = 4
+NARROW_RUN = 0.55
+JOINED_RUN = 1.3
+SPLIT_ROUND = 0.25
+SPLIT_SEARCH = 12
+# A shape's points are scaled by this many times their root mean square distance from the centre,
+# and the outline fit tries every turn this many degrees apart.
+SPREAD = 1.6
+TURN_STEP = 3
 # Pixels of a blob left of the hatching at most, of an outline at least, and the width of one outline.
 MIN_PIECE = 80
 MIN_OUTLINE = 300
@@ -38,6 +73,10 @@ MATCHER = [os.path.join(os.path.dirname(os.path.abspath(__file__)), f"yandex_mat
 # trained on the other.
 MATCH_WEIGHT = 0.5
 TURNS = 8
+# A peak takes the stroke group whose centre lies within this many pixels.
+ON_GROUP = 16
+# The assignment search looks at each outline's this many best candidates.
+CHOOSE_TOP = 10
 CENTRES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_centres.onnx")
 # The detector's strongest peaks taken as candidates, how far apart two peaks must be, and the
 # outline fit given a peak on no stroke group, all measured on the real puzzles.
@@ -47,6 +86,7 @@ UNGROUPED = -8.0
 # The grid the matcher scans when the stroke network finds fewer parts than outlines: its step and
 # turns, each outline's best spots kept, and how far apart two spots must be to be two symbols.
 SCAN_STEP = 12
+SCAN_EDGE = 14
 SCAN_TURNS = 4
 SCAN_PEAKS = 3
 SCAN_APART = 22
@@ -74,12 +114,12 @@ def strokes(picture):
     return 1 / (1 + np.exp(-y))
 
 
-def parts(prob, threshold=0.5, min_area=40):
+def parts(prob, threshold=STROKE_THRESHOLD, min_area=MIN_PART):
     """The symbols the network marked, each a mask over the whole picture; a symbol's separate
     strokes (a face's eyes) join it when they are a few pixels apart."""
     m = (prob > threshold).astype(np.uint8)
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
-    joined = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (CLOSE_KERNEL, CLOSE_KERNEL)))
+    joined = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (JOIN_KERNEL, JOIN_KERNEL)))
     n, lab = cv2.connectedComponents(joined)
     out = []
     for c in range(1, n):
@@ -118,8 +158,8 @@ def outlines(strip):
     goes with the opening, but for small blobs where its lines cross; the outlines stand apart by a
     few empty columns, not on an even grid, and two that touch make a run of ink too wide for one."""
     g = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
-    ink = (g < 128).astype(np.uint8)
-    ink = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    ink = (g < INK_BELOW).astype(np.uint8)
+    ink = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (HATCH_KERNEL, HATCH_KERNEL)))
     count, lab, st, _ = cv2.connectedComponentsWithStats(ink)
     for c in range(1, count):
         if st[c][4] < MIN_PIECE:
@@ -127,7 +167,7 @@ def outlines(strip):
     columns = ink.sum(0)
     runs = []
     for x in np.nonzero(columns)[0]:
-        if runs and x - runs[-1][1] <= 4:
+        if runs and x - runs[-1][1] <= RUN_GAP:
             runs[-1][1] = x
         else:
             runs.append([x, x])
@@ -137,10 +177,10 @@ def outlines(strip):
     while merged:
         merged = False
         for i, (a, b) in enumerate(runs):
-            if b - a >= ONE_WIDE * 0.55:
+            if b - a >= ONE_WIDE * NARROW_RUN:
                 continue
             near = [j for j in (i - 1, i + 1) if 0 <= j < len(runs)
-                    and max(b, runs[j][1]) - min(a, runs[j][0]) <= ONE_WIDE * 1.3]
+                    and max(b, runs[j][1]) - min(a, runs[j][0]) <= ONE_WIDE * JOINED_RUN]
             if near:
                 j = min(near, key=lambda j: runs[j][0] - b if j > i else a - runs[j][1])
                 lo, hi = min(i, j), max(i, j)
@@ -150,12 +190,12 @@ def outlines(strip):
     runs = [(a, b + 1) for a, b in runs if columns[a:b + 1].sum() >= MIN_OUTLINE]
     cut = []
     for a, b in runs:
-        k = max(1, int((b - a) / ONE_WIDE + 0.25))
+        k = max(1, int((b - a) / ONE_WIDE + SPLIT_ROUND))
         edges = [a]
         for i in range(1, k):
             # where touching outlines meet: the emptiest column near the even split
             mid = a + (b - a) * i // k
-            lo, hi = max(a + 1, mid - 12), min(b - 1, mid + 12)
+            lo, hi = max(a + 1, mid - SPLIT_SEARCH), min(b - 1, mid + SPLIT_SEARCH)
             edges.append(lo + int(np.argmin(columns[lo:hi])))
         edges.append(b)
         cut += list(zip(edges[:-1], edges[1:]))
@@ -189,7 +229,7 @@ def points(mask):
     mo = cv2.moments(mask.astype(np.uint8))
     cx, cy = (mo["m10"] / mo["m00"], mo["m01"] / mo["m00"]) if mo["m00"] else (xs.mean(), ys.mean())
     p = np.stack([xs - cx, ys - cy], 1).astype(np.float32)
-    spread = float(np.sqrt(((p ** 2).sum(1)).mean())) * 1.6
+    spread = float(np.sqrt(((p ** 2).sum(1)).mean())) * SPREAD
     return p / max(spread, 1e-6)
 
 
@@ -197,7 +237,7 @@ def drawn(p, angle=0.0):
     """Shape p turned by [angle] on a canvas: the canvas (its line at 0, the rest 1) and the points."""
     a = np.deg2rad(angle)
     rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]], np.float32)
-    q = np.clip(((p @ rot.T) * (SIDE / 2 - 4) + SIDE / 2).astype(int), 0, SIDE - 1)
+    q = np.clip(((p @ rot.T) * (SIDE / 2 - CANVAS_MARGIN) + SIDE / 2).astype(int), 0, SIDE - 1)
     c = np.ones((SIDE, SIDE), np.uint8)
     c[q[:, 1], q[:, 0]] = 0
     return c, q
@@ -210,14 +250,14 @@ def similarity(a, b):
     ca, qa = drawn(a)
     da = cv2.distanceTransform(ca, cv2.DIST_L2, 3)
     best = float("inf")
-    for angle in range(0, 360, 3):
+    for angle in range(0, 360, TURN_STEP):
         cb, qb = drawn(b, angle)
         db = cv2.distanceTransform(cb, cv2.DIST_L2, 3)
         best = min(best, float(da[qb[:, 1], qb[:, 0]].mean() + db[qa[:, 1], qa[:, 0]].mean()))
     return -best
 
 
-def choose(score, members, top=10):
+def choose(score, members, top=CHOOSE_TOP):
     """For each outline (row) a group (column) so that no part serves two outlines and the summed
     fit is greatest: a search over each outline's best groups, cut off where even the best of the
     rest could no longer beat the best choice found."""
@@ -245,13 +285,14 @@ def choose(score, members, top=10):
 
 
 def _icon(mask):
-    """An outline as the matcher takes it: square, 56 pixels across inside 64."""
+    """An outline as the matcher takes it: squared, ICON_INNER pixels across, centred in SIDE."""
     h, w = mask.shape
     side = max(h, w)
     sq = np.zeros((side, side), np.float32)
     sq[(side - h) // 2:(side - h) // 2 + h, (side - w) // 2:(side - w) // 2 + w] = mask > 0
     out = np.zeros((SIDE, SIDE), np.float32)
-    out[4:60, 4:60] = cv2.resize(sq, (56, 56), interpolation=cv2.INTER_AREA)
+    m = (SIDE - ICON_INNER) // 2
+    out[m:m + ICON_INNER, m:m + ICON_INNER] = cv2.resize(sq, (ICON_INNER, ICON_INNER), interpolation=cv2.INTER_AREA)
     return out
 
 
@@ -294,7 +335,7 @@ def scanned(picture, outlines_):
     kept, spots on the same symbol counted once."""
     icon, crop = _sessions_matcher()
     h, w = picture.shape[:2]
-    spots = [(x, y) for y in range(14, h - 13, SCAN_STEP) for x in range(14, w - 13, SCAN_STEP)]
+    spots = [(x, y) for y in range(SCAN_EDGE, h - SCAN_EDGE + 1, SCAN_STEP) for x in range(SCAN_EDGE, w - SCAN_EDGE + 1, SCAN_STEP)]
     a = icon.run(None, {"x": np.stack([_icon(o) for o in outlines_])[:, None]})[0]
     best = None
     for k in range(SCAN_TURNS):
@@ -345,10 +386,10 @@ def solve(picture_png, strip_png):
     shapes = [points(c[0]) for c in cut]
     fit = np.array([[similarity(s, a) - EXTRA_PART * (len(g) - 1) if a is not None and s is not None else -1e9
                      for s, (g, _) in zip(shapes, candidates)] for a in asked]).reshape(len(asked), len(cut))
-    # Each peak on the stroke group whose centre lies within 16 px takes that group's fit and parts.
+    # Each peak on the stroke group whose centre lies within ON_GROUP pixels takes that group's fit and parts.
     on = []
     for x, y in spots:
-        near = [j for j, c in enumerate(cut) if (c[1][0] - x) ** 2 + (c[1][1] - y) ** 2 < 16 ** 2]
+        near = [j for j, c in enumerate(cut) if (c[1][0] - x) ** 2 + (c[1][1] - y) ** 2 < ON_GROUP ** 2]
         on.append(min(near, key=lambda j: (cut[j][1][0] - x) ** 2 + (cut[j][1][1] - y) ** 2) if near else None)
     score = np.array([[fit[i, j] if j is not None else UNGROUPED for j in on] for i in range(len(asked))])
     score = score + MATCH_WEIGHT * matched(picture, shown, spots)

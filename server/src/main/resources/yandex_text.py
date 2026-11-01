@@ -20,6 +20,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CH = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 SPACE, BOS, EOS = 1, len(CH) + 1, len(CH) + 2
 LOWER = range(2, 28)
+# The reader's input, for reproducing it outside Python: the picture decoded by OpenCV as grey,
+# resized to W x H with bilinear interpolation (INTER_LINEAR), scaled to 0..1 by dividing by 255,
+# no mean or deviation taken off, shape (1, 1, H, W). Tokens: 0 padding, 1..len(CH) the letters of
+# CH in order (1 the space), then BOS and EOS; the step network's outputs are logits over them.
 W, H = 248, 80
 BEAM = 12
 # How much likelier, in log probability, a free reading must be before it beats the dictionary.
@@ -100,7 +104,7 @@ def read(png_bytes):
     """What to type, the two words as read, and the reading's log probability."""
     enc, _ = _sessions()
     img = cv2.imdecode(np.frombuffer(png_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
-    x = cv2.resize(img, (W, H)).astype(np.float32)[None, None] / 255
+    x = cv2.resize(img, (W, H), interpolation=cv2.INTER_LINEAR).astype(np.float32)[None, None] / 255
     mem = enc.run(None, {"x": x})[0]
     held, free = _beam(mem, True), _beam(mem, False)
     best = held if held[0] >= free[0] - MARGIN or not free[1] else free
