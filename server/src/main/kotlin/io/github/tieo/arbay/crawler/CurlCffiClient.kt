@@ -5,7 +5,7 @@ import java.io.File
 
 /**
  * Calls cffi_fetch.py via subprocess to make HTTP requests with a real Chrome 131 TLS/HTTP2 fingerprint.
- * This bypasses Cloudflare Bot Management (Back Market) and Akamai (Idealo) which block headless Chromium.
+ * This bypasses Cloudflare Bot Management (Back Market), which blocks headless Chromium.
  *
  * Requires Python 3 + curl_cffi installed: pip3 install curl_cffi
  */
@@ -31,14 +31,6 @@ object CurlCffiClient {
         val args = mutableListOf("python3", scriptPath, "fetch", url)
         if (!primeUrl.isNullOrBlank()) args.add(primeUrl)
         return run(args, url)
-    }
-
-    /**
-     * Search Idealo via /suggest API + concurrent product page title scraping.
-     * @return JSON string: array of {title, url, id, price_text}
-     */
-    suspend fun idealoSearch(query: String): String {
-        return run(listOf("python3", scriptPath, "idealo", query), "idealo:$query")
     }
 
     /**

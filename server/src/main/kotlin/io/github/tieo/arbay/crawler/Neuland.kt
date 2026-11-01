@@ -24,8 +24,9 @@ import org.slf4j.LoggerFactory
 /**
  * Neuland, the service every website is read through once Arbay is its client: its named browsers
  * read a page past whatever stands before it (consent screens, bot checks, captchas), which it
- * recognises on the page itself. Used where NEULAND_URL names the service; until then Arbay's own
- * browser helpers read the pages.
+ * recognises on the page itself, and its shop readers read markets and price comparisons into
+ * offers. Its browsers are used where NEULAND_URL names the service, Arbay's own browser helpers
+ * otherwise; the markets moved to its shop readers need it.
  */
 object Neuland {
     private val log = LoggerFactory.getLogger(Neuland::class.java)
@@ -77,6 +78,34 @@ object Neuland {
         val cookies = (answer["cookies"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
         cookies to (answer["userAgent"]?.jsonPrimitive?.contentOrNull ?: "")
     }.onFailure { log.warn("Neuland cookies of {}: {}", browser, it.message) }.getOrNull()
+
+    /**
+     * What Neuland's shop reader [shop] answers at [path]: a search ("shops/idealo?q=") or one
+     * product's shops. A site that refused Neuland is a [CrawlerBlockedException] of the status it
+     * answered; Neuland not answering at all is a network error.
+     */
+    suspend fun shop(path: String, limitS: Long = 120): String {
+        val base = base ?: throw CrawlerBlockedException("Neuland is not set up (NEULAND_URL)", ErrorType.NETWORK_ERROR)
+        val response = runCatching { client.get("$base/$path") { timeout { requestTimeoutMillis = limitS * 1000 } } }
+            .getOrElse { throw CrawlerBlockedException("Neuland did not answer: ${it.message}", ErrorType.NETWORK_ERROR) }
+        val body = response.bodyAsText()
+        if (response.status.isSuccess()) return body
+        val answer = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
+        val status = answer?.get("status")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+        val error = answer?.get("error")?.jsonPrimitive?.contentOrNull ?: response.status.toString()
+        throw CrawlerBlockedException(
+            "Neuland: $error",
+            when (status) {
+                403 -> ErrorType.BLOCKED_403
+                429 -> ErrorType.RATE_LIMITED_429
+                503 -> ErrorType.SERVICE_UNAVAILABLE_503
+                404, 410 -> ErrorType.NOT_FOUND_404
+                null -> ErrorType.PARSE_ERROR
+                else -> ErrorType.NETWORK_ERROR
+            },
+            statusCode = status,
+        )
+    }
 
     private suspend fun call(path: String, body: JsonObject, limitS: Long): JsonObject? = runCatching {
         val response = client.post("$base/$path") {
