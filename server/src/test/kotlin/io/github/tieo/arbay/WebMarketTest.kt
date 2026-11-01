@@ -153,6 +153,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a magento tile's regular price is the price to pay`() {
+        // werkzeugprofis.de's search: Magento labels the day rate it asks span.regular-price.
+        val html = """<ul><li class="item"><h2 class="product-name"><a href="https://shop.example/tauchpumpe.html" title="Tauchpumpe">Tauchpumpe</a></h2>
+            <div class="price-box"><span class="regular-price" id="product-price-75">Tagesmietpreis: <span class="price">15,00 €</span></span></div></li></ul>"""
+        val recipe = SiteRecipe(domain = "shop.example", item = "li.item", title = "h2.product-name a@title", price = "span.regular-price:matchesOwn(Tagesmietpreis) span.price", link = "h2.product-name a@href")
+        assertEquals(listOf(1500L), SiteRecipes.read(recipe, html, "https://shop.example/catalogsearch/result/?q=Tauchpumpe").map { it.price.amount })
+    }
+
+    @Test
     fun `a results page gives the pages it links to, not the engine's own`() {
         val html = """<div id="rso"><a href="https://shop.example/p/1"><h3>One</h3></a>
             <a href="/url?q=https://other.example/p/2&sa=U">Two</a>

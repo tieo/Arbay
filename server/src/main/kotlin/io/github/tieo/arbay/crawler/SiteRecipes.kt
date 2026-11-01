@@ -327,10 +327,14 @@ object SiteRecipes {
     private fun withoutFormerPrices(box: Element): Element {
         val copy = box.clone()
         copy.select("del, s, strike, [class], [id]").filter { e ->
-            e.tagName() in setOf("del", "s", "strike") || ProductPages.OLD_PRICE.any { it in (e.className() + " " + e.id()).lowercase() }
+            e.tagName() in setOf("del", "s", "strike") || FORMER_PRICE.any { it in (e.className() + " " + e.id()).lowercase() }
         }.filter { it !== copy }.forEach { it.remove() }
         return copy
     }
+
+    // Only marks that always name a former price: Magento writes the price to pay as
+    // `span.regular-price` (werkzeugprofis.de's day rates), and a unit or base price is no former one.
+    private val FORMER_PRICE = listOf("old", "uvp", "strike", "was-", "crossed", "streich", "statt")
 
     /** The code a line names and the price it gives, where that is below the [listed] one. */
     private fun couponIn(box: Element, spec: String, currency: Currency, listed: io.github.tieo.arbay.model.Money): io.github.tieo.arbay.model.Coupon? {
