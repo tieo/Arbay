@@ -205,7 +205,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     state.open.bookmark?.let { session.products.checkModel(it, listing.id, model) }
                 }
                 DriveHealthSection(health, readingDrive)
-                ShopsSection(page.shops, ::openBrowser)
+                SellersSection(page.sellers, ::openBrowser)
 
                 page.vehicle?.let { v ->
                     val specs = detailSpecs(v)
@@ -285,26 +285,26 @@ private fun FitBreakdown(listing: Listing, wishes: io.github.tieo.arbay.model.Pr
 }
 
 /**
- * Every shop a price comparison lists the thing at, cheapest delivered first: what each costs
- * delivered, and what that adds up from. A row opens the shop's own page. The first is marked as the
- * lowest, the price the offer itself shows.
+ * Every seller offering the thing at this address, cheapest delivered first: what each costs
+ * delivered, and what that adds up from. A row opens the seller's own offer. The first is marked as
+ * the lowest, the price the offer itself shows.
  */
 @Composable
-private fun ShopsSection(shops: List<io.github.tieo.arbay.model.ShopOffer>, open: (String) -> Unit) {
-    if (shops.isEmpty()) return
+private fun SellersSection(sellers: List<io.github.tieo.arbay.model.SellerOffer>, open: (String) -> Unit) {
+    if (sellers.isEmpty()) return
     Gap(4.dp)
-    SectionTitle("Shops")
-    shops.forEachIndexed { i, shop ->
+    SectionTitle("Sellers")
+    sellers.forEachIndexed { i, seller ->
         Row(
-            Modifier.fillMaxWidth().clickable(enabled = shop.url != null) { shop.url?.let(open) }.padding(vertical = 6.dp),
+            Modifier.fillMaxWidth().clickable(enabled = seller.url != null) { seller.url?.let(open) }.padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(shop.shop, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            Text(seller.seller, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             Column(horizontalAlignment = Alignment.End) {
-                PriceText(shop.landed ?: shop.price, lowest = i == 0 && shop.landed != null, style = MaterialTheme.typography.bodyMedium)
+                PriceText(seller.landed ?: seller.price, lowest = i == 0 && seller.landed != null, style = MaterialTheme.typography.bodyMedium)
                 Muted(
-                    shop.shipping?.let { if (it.amount == 0L) "free delivery" else "${shop.price.format()} + ${it.format()} delivery" } ?: "delivery not stated",
+                    seller.shipping?.let { if (it.amount == 0L) "free delivery" else "${seller.price.format()} + ${it.format()} delivery" } ?: "delivery not stated",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

@@ -24,8 +24,8 @@ import org.slf4j.LoggerFactory
 /**
  * Neuland, the service every website is read through once Arbay is its client: its named browsers
  * read a page past whatever stands before it (consent screens, bot checks, captchas), which it
- * recognises on the page itself, and its shop readers read markets and price comparisons into
- * offers. Its browsers are used where NEULAND_URL names the service, Arbay's own browser helpers
+ * recognises on the page itself, and its offers readers read shops, markets and price comparisons
+ * into offers. Its browsers are used where NEULAND_URL names the service, Arbay's own browser helpers
  * otherwise; the markets moved to its shop readers need it.
  */
 object Neuland {
@@ -80,11 +80,12 @@ object Neuland {
     }.onFailure { log.warn("Neuland cookies of {}: {}", browser, it.message) }.getOrNull()
 
     /**
-     * What Neuland's shop reader [shop] answers at [path]: a search ("shops/idealo?q=") or one
-     * product's shops. A site that refused Neuland is a [CrawlerBlockedException] of the status it
-     * answered; Neuland not answering at all is a network error.
+     * What Neuland's offers readers answer at [path]: a site's search ("offers/search?site=&q=") or
+     * an offer's sellers ("offers/sellers?url="). A site that refused Neuland is a
+     * [CrawlerBlockedException] of the status it answered; Neuland not answering at all is a network
+     * error.
      */
-    suspend fun shop(path: String, limitS: Long = 120): String {
+    suspend fun offers(path: String, limitS: Long = 120): String {
         val base = base ?: throw CrawlerBlockedException("Neuland is not set up (NEULAND_URL)", ErrorType.NETWORK_ERROR)
         val response = runCatching { client.get("$base/$path") { timeout { requestTimeoutMillis = limitS * 1000 } } }
             .getOrElse { throw CrawlerBlockedException("Neuland did not answer: ${it.message}", ErrorType.NETWORK_ERROR) }

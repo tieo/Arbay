@@ -626,17 +626,17 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         }
         DriveHealthSection(health, readingDrive)
 
-        // Every shop a price comparison lists it at, cheapest delivered first, each a link to its shop.
-        if (page.shops.isNotEmpty()) {
-            H3 { Text("Shops") }
-            Div({ classes("shops") }) {
-                page.shops.forEachIndexed { i, shop ->
-                    A(href = shop.url, attrs = { classes("shop"); attr("target", "_blank"); attr("rel", "noopener noreferrer") }) {
-                        Span({ classes("shop-name") }) { Text(shop.shop) }
-                        Span({ classes("shop-price") }) {
-                            Price(shop.landed ?: shop.price, lowest = i == 0 && shop.landed != null)
+        // Every seller offering it at this address, cheapest delivered first, each a link to its offer.
+        if (page.sellers.isNotEmpty()) {
+            H3 { Text("Sellers") }
+            Div({ classes("sellers") }) {
+                page.sellers.forEachIndexed { i, seller ->
+                    A(href = seller.url, attrs = { classes("seller"); attr("target", "_blank"); attr("rel", "noopener noreferrer") }) {
+                        Span({ classes("seller-name") }) { Text(seller.seller) }
+                        Span({ classes("seller-price") }) {
+                            Price(seller.landed ?: seller.price, lowest = i == 0 && seller.landed != null)
                             Span({ classes("muted", "small") }) {
-                                Text(shop.shipping?.let { if (it.amount == 0L) "free delivery" else "${shop.price.format()} + ${it.format()} delivery" } ?: "delivery not stated")
+                                Text(seller.shipping?.let { if (it.amount == 0L) "free delivery" else "${seller.price.format()} + ${it.format()} delivery" } ?: "delivery not stated")
                             }
                         }
                     }

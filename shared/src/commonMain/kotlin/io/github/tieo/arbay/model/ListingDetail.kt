@@ -47,22 +47,22 @@ data class ListingDetail(
     /** Whether the seller's text says it is sold broken ("läuft nicht an", "als defekt verkauft"),
      *  which a card without the text cannot show. */
     val soldBroken: Boolean = false,
-    /** Every shop a price comparison lists the thing at, cheapest delivered first: Idealo's shop
+    /** Every seller offering the thing at this address, cheapest delivered first: Idealo's shop
      *  list of a product, where the shop with the lowest item price is often not the cheapest to
      *  have delivered (alza.de 11,49 € + 4,99 € beside Amazon's 17,90 € with free delivery). */
-    val shops: List<ShopOffer> = emptyList(),
+    val sellers: List<SellerOffer> = emptyList(),
 )
 
-/** One shop's offer of a thing on a price comparison: its item price, its delivery charge where it
- *  states one, and the link to the shop's own page. */
+/** One seller's offer of a thing listed at one address: its item price, its delivery charge where
+ *  it states one, and the link to the seller's own offer. */
 @Serializable
-data class ShopOffer(
-    val shop: String,
+data class SellerOffer(
+    val seller: String,
     val price: Money,
     val shipping: Money? = null,
     val url: String? = null,
 ) {
-    /** Item and delivery together, where the shop states its delivery charge. */
+    /** Item and delivery together, where the seller states its delivery charge. */
     val landed: Money? get() = shipping?.takeIf { it.currency == price.currency }?.let { Money(price.amount + it.amount, price.currency) }
 }
 

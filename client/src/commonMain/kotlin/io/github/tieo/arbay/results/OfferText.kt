@@ -38,8 +38,8 @@ data class OfferReading(
     val conditionNote: String? = null,
     /** A code the page offers a lower price for. */
     val coupon: Coupon? = null,
-    /** Every shop a price comparison lists it at, cheapest delivered first. */
-    val shops: List<io.github.tieo.arbay.model.ShopOffer> = emptyList(),
+    /** Every seller offering it at this address, cheapest delivered first. */
+    val sellers: List<io.github.tieo.arbay.model.SellerOffer> = emptyList(),
 )
 
 fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
@@ -52,7 +52,7 @@ fun readOffer(listing: Listing, fromItsPage: ListingDetail?): OfferReading {
     return OfferReading(
         vehicle, description, listing.location ?: fromItsPage?.location, stock, fromItsPage?.soldBroken == true, fromItsPage?.seller,
         shipping = shipping, conditionNote = fromItsPage?.conditionNote, coupon = fromItsPage?.coupon ?: listing.coupon,
-        shops = fromItsPage?.shops.orEmpty(),
+        sellers = fromItsPage?.sellers.orEmpty(),
     )
 }
 
