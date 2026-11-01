@@ -1,7 +1,7 @@
 """
-Reads Yandex's silhouette challenge: a picture with line symbols drawn over a painting, a few faint
-ones among them that are not asked for, and a strip of the asked symbols' outlines in the order to
-click them. Returns where to click.
+Reads Yandex's silhouette challenge: a picture with line symbols drawn over a painting, some of
+them not asked for (faint ones, and others drawn just like the asked ones), and a strip of the
+asked symbols' outlines in the order to click them. Returns where to click.
 
 Where the symbols are comes from a detector (yandex_centres.onnx, trained on generated pictures
 and real puzzles checked by eye) whose heatmap peaks at each symbol's centre; its strongest peaks
@@ -10,9 +10,10 @@ strokes; each marked part, and each group of two or three parts close together (
 separate strokes, three bars or two chevrons, comes out of it in pieces), is compared with each
 outline of the strip over every turn, and a peak on such a group carries that fit. A matcher
 (yandex_match_icon.onnx and yandex_match_crop.onnx, trained on real puzzles against the detector's
-peaks) looks at the picture around each peak, turned eight ways, and says how well it shows each
-outline; both judgements together decide, and the outlines get the peaks that fit them best, no
-stroke part twice. Should the detector find fewer peaks than outlines, the matcher alone scans the
+peaks and on generated pictures whose unasked symbols are drawn like the asked ones) looks at the
+picture around each peak, turned eight ways, and says how well it shows each outline. Both
+judgements and the peak's height together decide, and the outlines get the peaks that fit them
+best, no stroke part twice. Should the detector find fewer peaks than outlines, the matcher alone scans the
 picture on a grid instead.
 """
 import itertools
@@ -78,11 +79,15 @@ ON_GROUP = 16
 # The assignment search looks at each outline's this many best candidates.
 CHOOSE_TOP = 10
 CENTRES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_centres.onnx")
-# The detector's strongest peaks taken as candidates, how far apart two peaks must be, and the
-# outline fit given a peak on no stroke group, all measured on the real puzzles.
+# The detector's strongest peaks taken as candidates, how far apart two peaks must be, the outline
+# fit given a peak on no stroke group, and how much the log of a peak's height counts (the detector
+# learnt from real puzzles to mark the asked symbols above the unasked ones), all measured on the
+# real puzzles; PEAK_FLOOR keeps the log finite.
 PEAKS = 10
 PEAK_APART = 12
 UNGROUPED = -8.0
+HEAT_WEIGHT = 0.5
+PEAK_FLOOR = 1e-3
 # The grid the matcher scans when the stroke network finds fewer parts than outlines: its step and
 # turns, each outline's best spots kept, and how far apart two spots must be to be two symbols.
 SCAN_STEP = 12
@@ -304,21 +309,23 @@ def _crop(picture, cx, cy, angle):
 
 
 def peaks(picture):
-    """The detector's strongest peaks, (x, y), strongest first, at least PEAK_APART apart."""
+    """The detector's strongest peaks, strongest first, at least PEAK_APART apart: their (x, y) and
+    their heights (0..1)."""
     global _centres
     if _centres is None:
         import onnxruntime
         _centres = onnxruntime.InferenceSession(CENTRES, providers=["CPUExecutionProvider"])
     x = picture.transpose(2, 0, 1)[None].astype(np.float32) / 255
     heat = 1 / (1 + np.exp(-_centres.run(None, {"x": x})[0][0, 0]))
-    found = []
+    found, heights = [], []
     for _ in range(PEAKS):
         y, x = np.unravel_index(np.argmax(heat), heat.shape)
         if heat[y, x] <= 0:
             break
         found.append((float(x), float(y)))
+        heights.append(float(heat[y, x]))
         cv2.circle(heat, (int(x), int(y)), PEAK_APART, 0, -1)
-    return found
+    return found, heights
 
 
 def _sessions_matcher():
@@ -374,7 +381,7 @@ def solve(picture_png, strip_png):
     picture, strip = flat(picture_png), flat(strip_png)
     shown = outlines(strip)
     asked = [points(o) for o in shown]
-    spots = peaks(picture)
+    spots, heights = peaks(picture)
     if len(spots) < len(asked):
         spots = scanned(picture, shown)
         if len(spots) < len(asked):
@@ -392,7 +399,7 @@ def solve(picture_png, strip_png):
         near = [j for j, c in enumerate(cut) if (c[1][0] - x) ** 2 + (c[1][1] - y) ** 2 < ON_GROUP ** 2]
         on.append(min(near, key=lambda j: (cut[j][1][0] - x) ** 2 + (cut[j][1][1] - y) ** 2) if near else None)
     score = np.array([[fit[i, j] if j is not None else UNGROUPED for j in on] for i in range(len(asked))])
-    score = score + MATCH_WEIGHT * matched(picture, shown, spots)
+    score = score + MATCH_WEIGHT * matched(picture, shown, spots) + HEAT_WEIGHT * np.log(np.array(heights) + PEAK_FLOOR)[None]
     members = [candidates[j][0] if j is not None else [("peak", k)] for k, j in enumerate(on)]
     pick = choose(score, members)
     return [spots[pick[i]] for i in range(len(asked))] if pick else []
