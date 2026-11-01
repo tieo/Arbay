@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -204,6 +205,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     state.open.bookmark?.let { session.products.checkModel(it, listing.id, model) }
                 }
                 DriveHealthSection(health, readingDrive)
+                ShopsSection(page.shops, ::openBrowser)
 
                 page.vehicle?.let { v ->
                     val specs = detailSpecs(v)
@@ -278,6 +280,34 @@ private fun FitBreakdown(listing: Listing, wishes: io.github.tieo.arbay.model.Pr
                 "${row.points}/${row.of}", Modifier.weight(0.18f), style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.End, color = if (row.points < row.of) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * Every shop a price comparison lists the thing at, cheapest delivered first: what each costs
+ * delivered, and what that adds up from. A row opens the shop's own page. The first is marked as the
+ * lowest, the price the offer itself shows.
+ */
+@Composable
+private fun ShopsSection(shops: List<io.github.tieo.arbay.model.ShopOffer>, open: (String) -> Unit) {
+    if (shops.isEmpty()) return
+    Gap(4.dp)
+    SectionTitle("Shops")
+    shops.forEachIndexed { i, shop ->
+        Row(
+            Modifier.fillMaxWidth().clickable(enabled = shop.url != null) { shop.url?.let(open) }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(shop.shop, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            Column(horizontalAlignment = Alignment.End) {
+                PriceText(shop.landed ?: shop.price, lowest = i == 0 && shop.landed != null, style = MaterialTheme.typography.bodyMedium)
+                Muted(
+                    shop.shipping?.let { if (it.amount == 0L) "free delivery" else "${shop.price.format()} + ${it.format()} delivery" } ?: "delivery not stated",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
