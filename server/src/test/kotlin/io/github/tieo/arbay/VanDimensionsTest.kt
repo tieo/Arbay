@@ -225,4 +225,18 @@ class VanDimensionsTest {
         assertNull(d.length)
         assertEquals(VanSize.SUPER_HIGH_ROOF, VanDimensions.read("VW Crafter L4H4").height)
     }
+
+    @Test
+    fun `VW's order data in a dealer feed names the roof exactly`() {
+        // Kleinanzeigen 3532977896: titled "35 L2H3", the common scale's length with VW's roof, and
+        // read as a super-high roof, while the feed below it states VW's Hochdach on 3640 mm.
+        val d = VanDimensions.read(
+            "Volkswagen Crafter Kasten 2.0 TDI 35 L2H3 FWD EcoProfi Karosserie/Aufbau: Kasten Hochraum Standard, " +
+                "Karosserievariante: Hochdach in Wagenfarbe, Kraftstofftank: 75 Ltr.",
+            wheelbaseMm = 3640,
+        )
+        assertEquals(VanSize.HIGH_ROOF, d.height)
+        assertTrue(d.heightSure)
+        assertEquals(VanSize.MEDIUM, d.length)
+    }
 }

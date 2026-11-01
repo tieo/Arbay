@@ -380,5 +380,15 @@ class VehicleTextParserTest {
         )
         assertNull(oil?.firstRegYear)
     }
-}
 
+    @Test
+    fun `a labeled month with a two digit year is the first registration`() {
+        // Kleinanzeigen, live: a private Crafter whose ad states its age only as "Erstzulassung 8/20".
+        val v = VehicleTextParser.parse(
+            "Privatverkauf ohne Gewährleistung und ohne ausgewiesene MwSt.\nKm: 52.000 km\nErstzulassung 8/20\nTÜV bis 11/27",
+        )
+        assertEquals(2020, v?.firstRegYear)
+        assertEquals(1998, VehicleTextParser.parse("Sprinter 312, EZ 05/98, 2.9 TD")?.firstRegYear)
+        assertNull(VehicleTextParser.parse("VW Crafter Kasten, abholbereit ab Dezember 12/20 Uhr, TÜV bis 11/27")?.firstRegYear)
+    }
+}

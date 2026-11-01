@@ -44,6 +44,10 @@ object VehicleTextParser {
     // The label may introduce a whole date ("EZ. 10.07.2014"), whose day and month come before
     // the year.
     private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:(?:0?[1-9]|[12]\d|3[01])[/.\-])?(?:0?[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
+    // A private seller's short form after the same labels, month and two-digit year
+    // ("Erstzulassung 8/20", "EZ 03/19"). The label is what makes "8/20" a date at all, so it
+    // must start a word: inside "Dezember 12/20" it names nothing.
+    private val shortYearRegex = Regex("""\b(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr)\D{0,6}(?:0?[1-9]|1[0-2])[/.\-](\d{2})(?!\d|[/.,\-]\d)""", RegexOption.IGNORE_CASE)
     // A whole date with its day ("Service am 20.01.2026") marks something that happened to the
     // van, a service, an inspection, a sale; unlabeled, it never names the first registration.
     private val fullDateYearRegex = Regex("""\b(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.((?:19|20)\d{2})\b""")
@@ -304,7 +308,14 @@ object VehicleTextParser {
     }
 
     private fun parseYear(text: String): Int? {
-        yearRegex.find(text)?.groupValues?.get(2)?.toIntOrNull()?.let { return it }
+        // Whichever labeled form the text writes first names the registration.
+        val long = yearRegex.find(text)
+        val short = shortYearRegex.find(text)
+        if (short != null && (long == null || short.range.first < long.range.first)) {
+            val yy = short.groupValues[1].toInt()
+            return if (yy <= java.time.Year.now().value % 100 + 1) 2000 + yy else 1900 + yy
+        }
+        long?.groupValues?.get(2)?.toIntOrNull()?.let { return it }
         // Positions of inspection years, dated events and euro prices; those digits never count as a
         // registration year in the unlabeled fallback.
         val excludedStarts = buildSet {

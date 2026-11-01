@@ -127,9 +127,12 @@ object VanDimensions {
     // mittellang Hochdach FWD", on AutoScout24 and Kleinanzeigen as the title itself ("Volkswagen
     // Crafter 35 mittellang Hochdach FWD"). There Hochdach is exactly the high roof, Superhochdach
     // its own trim, and it outweighs a code beside it: that van's seller wrote "L3H2" in the text,
-    // VW's length with the common roof, and its photos show the high roof.
+    // VW's length with the common roof, and its photos show the high roof. Dealer feeds copy VW's
+    // order data too, "Karosserievariante: Hochdach in Wagenfarbe" and "Karosserie/Aufbau: Kasten
+    // Hochraum Standard"; every cached page carrying the latter stated a high roof's 2,500 to 2,590 mm.
     private val catalogueHighRoof = Regex(
-        """ausstattungslinie:[^\n]*\bhochdach\b|\b(?:30|35|50)\s+(?:mittellang|lang)\s+hochdach\s+(?:fwd|rwd|4motion)\b""",
+        """ausstattungslinie:[^\n]*\bhochdach\b|karosserievariante:\s*hochdach\b|\bhochraum standard\b|""" +
+            """\b(?:30|35|50)\s+(?:mittellang|lang)\s+hochdach\s+(?:fwd|rwd|4motion)\b""",
         RegexOption.IGNORE_CASE,
     )
     // "lang" and the 4490 mm wheelbase fit both of VW's long vans, L4 and L5.
