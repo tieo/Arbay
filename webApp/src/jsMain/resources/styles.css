@@ -492,6 +492,8 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .strip-item.on { border-color: var(--accent); }
 .price-block { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* A quiet button beside the primary one stands as tall as it. */
+.actions > .quiet { height: 36px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px; }
 .fact { padding: 3px 9px; border-radius: 999px; background: var(--raised); font-size: 12.5px; }
 .specs { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
