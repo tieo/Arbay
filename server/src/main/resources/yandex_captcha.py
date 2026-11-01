@@ -3,16 +3,17 @@ Reads Yandex's silhouette challenge: a picture with line symbols drawn over a pa
 ones among them that are not asked for, and a strip of the asked symbols' outlines in the order to
 click them. Returns where to click.
 
-A small network (yandex_symbols.onnx, trained on paintings with symbols drawn on them) marks the
-symbols' strokes and leaves the painting and the faint symbols out. Each marked part, and each
-group of two or three parts close together (a symbol of separate strokes, three bars or two
-chevrons, comes out of the network in pieces), is compared with each outline of the strip over
-every turn. A second network (yandex_match_icon.onnx and yandex_match_crop.onnx, trained on such
-pictures and on real puzzles checked by eye) looks at the picture itself around each group, turned
-eight ways, and says how well it shows each outline; both judgements together decide, and the
-outlines get the groups that fit them best, no part twice. Where the first network misses symbols
-(warm colours over a warm painting), the second one alone scans the picture on a grid and its best
-spots for each outline become the candidates.
+Where the symbols are comes from a detector (yandex_centres.onnx, trained on generated pictures
+and real puzzles checked by eye) whose heatmap peaks at each symbol's centre; its strongest peaks
+are the candidates, decoys among them. A stroke network (yandex_symbols.onnx) marks the symbols'
+strokes; each marked part, and each group of two or three parts close together (a symbol of
+separate strokes, three bars or two chevrons, comes out of it in pieces), is compared with each
+outline of the strip over every turn, and a peak on such a group carries that fit. A matcher
+(yandex_match_icon.onnx and yandex_match_crop.onnx, trained on real puzzles against the detector's
+peaks) looks at the picture around each peak, turned eight ways, and says how well it shows each
+outline; both judgements together decide, and the outlines get the peaks that fit them best, no
+stroke part twice. Should the detector find fewer peaks than outlines, the matcher alone scans the
+picture on a grid instead.
 """
 import itertools
 import os
@@ -37,6 +38,12 @@ MATCHER = [os.path.join(os.path.dirname(os.path.abspath(__file__)), f"yandex_mat
 # trained on the other.
 MATCH_WEIGHT = 0.5
 TURNS = 8
+CENTRES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_centres.onnx")
+# The detector's strongest peaks taken as candidates, how far apart two peaks must be, and the
+# outline fit given a peak on no stroke group, all measured on the real puzzles.
+PEAKS = 10
+PEAK_APART = 12
+UNGROUPED = -8.0
 # The grid the matcher scans when the stroke network finds fewer parts than outlines: its step and
 # turns, each outline's best spots kept, and how far apart two spots must be to be two symbols.
 SCAN_STEP = 12
@@ -45,6 +52,7 @@ SCAN_PEAKS = 3
 SCAN_APART = 22
 _session = None
 _matcher = None
+_centres = None
 
 
 def flat(png_bytes):
@@ -254,6 +262,24 @@ def _crop(picture, cx, cy, angle):
     return cv2.warpAffine(picture, m, (SIDE, SIDE), borderMode=cv2.BORDER_REFLECT)
 
 
+def peaks(picture):
+    """The detector's strongest peaks, (x, y), strongest first, at least PEAK_APART apart."""
+    global _centres
+    if _centres is None:
+        import onnxruntime
+        _centres = onnxruntime.InferenceSession(CENTRES, providers=["CPUExecutionProvider"])
+    x = picture.transpose(2, 0, 1)[None].astype(np.float32) / 255
+    heat = 1 / (1 + np.exp(-_centres.run(None, {"x": x})[0][0, 0]))
+    found = []
+    for _ in range(PEAKS):
+        y, x = np.unravel_index(np.argmax(heat), heat.shape)
+        if heat[y, x] <= 0:
+            break
+        found.append((float(x), float(y)))
+        cv2.circle(heat, (int(x), int(y)), PEAK_APART, 0, -1)
+    return found
+
+
 def _sessions_matcher():
     global _matcher
     if _matcher is None:
@@ -305,20 +331,27 @@ def solve(picture_png, strip_png):
     """Click points in the picture's pixels, in the strip's order; empty where not even the
     matcher's scan finds as many symbols as the strip asks for."""
     picture, strip = flat(picture_png), flat(strip_png)
-    found = parts(strokes(picture))
     shown = outlines(strip)
     asked = [points(o) for o in shown]
-    if len(found) < len(asked):
+    spots = peaks(picture)
+    if len(spots) < len(asked):
         spots = scanned(picture, shown)
         if len(spots) < len(asked):
             return []
         pick = choose(matched(picture, shown, spots), [[k] for k in range(len(spots))])
         return [spots[pick[i]] for i in range(len(asked))] if pick else []
-    candidates = groups(found)
+    candidates = groups(parts(strokes(picture)))
     cut = [shape(m) for _, m in candidates]
     shapes = [points(c[0]) for c in cut]
-    score = np.array([[similarity(s, a) - EXTRA_PART * (len(g) - 1) if a is not None and s is not None else -1e9
-                       for s, (g, _) in zip(shapes, candidates)] for a in asked])
-    score = score + MATCH_WEIGHT * matched(picture, shown, [c[1] for c in cut])
-    pick = choose(score, [g for g, _ in candidates])
-    return [cut[pick[i]][1] for i in range(len(asked))] if pick else []
+    fit = np.array([[similarity(s, a) - EXTRA_PART * (len(g) - 1) if a is not None and s is not None else -1e9
+                     for s, (g, _) in zip(shapes, candidates)] for a in asked]).reshape(len(asked), len(cut))
+    # Each peak on the stroke group whose centre lies within 16 px takes that group's fit and parts.
+    on = []
+    for x, y in spots:
+        near = [j for j, c in enumerate(cut) if (c[1][0] - x) ** 2 + (c[1][1] - y) ** 2 < 16 ** 2]
+        on.append(min(near, key=lambda j: (cut[j][1][0] - x) ** 2 + (cut[j][1][1] - y) ** 2) if near else None)
+    score = np.array([[fit[i, j] if j is not None else UNGROUPED for j in on] for i in range(len(asked))])
+    score = score + MATCH_WEIGHT * matched(picture, shown, spots)
+    members = [candidates[j][0] if j is not None else [("peak", k)] for k, j in enumerate(on)]
+    pick = choose(score, members)
+    return [spots[pick[i]] for i in range(len(asked))] if pick else []
