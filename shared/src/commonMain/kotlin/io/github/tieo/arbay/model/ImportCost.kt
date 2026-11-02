@@ -21,6 +21,9 @@ data class ImportSettings(
     val importVatPercent: Int = 19,
     /** Off leaves every price exactly as the market quoted it. */
     val enabled: Boolean = true,
+    /** What an hour behind the wheel costs the buyer: an offer that is only collected costs the
+     *  drive there and back on top of its price. */
+    val driveEurPerHour: Int = 15,
 )
 
 /** The EU VAT area, as far as a purchase from outside it is concerned. */

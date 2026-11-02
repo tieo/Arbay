@@ -240,6 +240,20 @@ private fun ServerSections(app: WebApp) {
         SaveNote(notes.value["import"])
     }
 
+    Setting("Collecting an offer", "An offer that is only collected costs the drive there and back on top of its price, at this rate") {
+        Div({ classes("field-row") }) {
+            Label(attrs = { classes("field", "narrow") }) {
+                Span({ classes("field-label") }) { Text("Driving, € per hour") }
+                Input(InputType.Number) {
+                    classes("control"); value(rules.driveEurPerHour.toString())
+                    onInput { rules = rules.copy(driveEurPerHour = it.value?.toInt() ?: 0) }
+                    onChange { val next = rules; save("drive") { ImportRules.current = client.updateImportSettings(next) } }
+                }
+            }
+        }
+        SaveNote(notes.value["drive"])
+    }
+
     Setting("Search depth", "Each market is read until it has given this many offers; deeper is slower") {
         Div({ classes("chips") }) {
             (listOf(30, 60, 120, 250) + listOfNotNull(depth)).distinct().sorted().forEach { n ->

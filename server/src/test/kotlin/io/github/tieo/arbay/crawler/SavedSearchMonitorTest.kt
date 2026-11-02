@@ -60,6 +60,13 @@ class SavedSearchMonitorTest {
     }
 
     @Test
+    fun `the drive to collect an offer counts against the limit`() {
+        val filter = sf(minPriceEur = 60, maxPriceEur = 130)
+        assertTrue(SavedSearchMonitor.matchesSubfilter(listing("SSD 2TB", 125), filter, extraCents = 500))
+        assertFalse(SavedSearchMonitor.matchesSubfilter(listing("SSD 2TB", 125), filter, extraCents = 6000))
+    }
+
+    @Test
     fun `min price excludes anything under it`() {
         val filter = sf(minPriceEur = 5000)
         assertFalse(SavedSearchMonitor.matchesSubfilter(listing("Sprinter 314", 4999), filter))

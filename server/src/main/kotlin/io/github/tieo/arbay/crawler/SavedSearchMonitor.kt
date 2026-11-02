@@ -21,6 +21,7 @@ import io.github.tieo.arbay.model.SubfilterMatch
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.displayName
 import io.github.tieo.arbay.model.landedPrice
+import io.github.tieo.arbay.model.asTheTextSays
 import io.github.tieo.arbay.repo.ImportSettingsStore
 import io.github.tieo.arbay.repo.ListingArchive
 import io.github.tieo.arbay.repo.ListingRepo
@@ -350,6 +351,7 @@ class SavedSearchMonitor(
         // match more than one, and each match is worth its own notification since each names a
         // different reason the person cared enough to ask for it.
         val now = Clock.System.now()
+        val drives = HashMap<String, Long>()
         val subfilterMatches = learned.notificationSubfilters
             .filter { it.enabled && !it.learning(now) }
             .flatMap { sf ->
@@ -371,6 +373,13 @@ class SavedSearchMonitor(
             // The card rarely says a thing is broken, or that the seller takes buyers off the
             // market, and the ad's text often does; the few offers worth a push are read first.
             .filterNot { (_, l) -> soldBroken(l) || offMarket(l) || noWayHere(l) }
+            // An offer that is only collected costs the drive there and back as well, at the
+            // user's own rate: an SSD for 125 € two hours away is 185 € under a 130 € rule.
+            .filter { (sf, l) ->
+                val drive = driveCents(l, drives)
+                drive == 0L || (matchesSubfilter(l, sf, extraCents = drive) && beatsTheBestSeen(l, sf, extraCents = drive))
+                    .also { if (!it) log.info("not alerting {}: collected only, {} € with the drive", l.url, (eurCents(l.landedPrice(ImportSettingsStore.current)) ?: 0) / 100 + drive / 100) }
+            }
         if (subfilterMatches.isNotEmpty()) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
@@ -382,8 +391,7 @@ class SavedSearchMonitor(
                         url = l.url,
                         // The number the subfilter decided on, so the notification cannot announce
                         // €145 for a listing it let through at €149 landed.
-                        priceText = eurCents(l.landedPrice(ImportSettingsStore.current))
-                            ?.let { "€${it / 100}" },
+                        priceText = alertPrice(l, drives)?.let { "€${it / 100}" + driveNote(l, drives) },
                         locationText = l.location?.let { it.city ?: it.country },
                         saleType = l.saleType,
                         auctionEndsAt = l.auctionEndsAt,
@@ -397,7 +405,7 @@ class SavedSearchMonitor(
             FoundAlert(
                 seq = 0, savedSearchId = product.id, searchName = product.name, rule = sf.displayName,
                 listingId = l.id, title = l.title, url = l.url,
-                priceEur = eurCents(l.landedPrice(ImportSettingsStore.current))?.let { it / 100 }, at = Clock.System.now(),
+                priceEur = alertPrice(l, drives)?.let { it / 100 }, at = Clock.System.now(),
             )
         })
 
@@ -413,7 +421,7 @@ class SavedSearchMonitor(
                 "  alert: {} · {} — {} · {} · {}",
                 sf.displayName,
                 product.name,
-                eurCents(l.landedPrice(ImportSettingsStore.current))?.let { "€${it / 100}" } ?: "no price",
+                alertPrice(l, drives)?.let { "€${it / 100}" + driveNote(l, drives) } ?: "no price",
                 l.title.take(70),
                 l.url,
             )
@@ -725,6 +733,34 @@ class SavedSearchMonitor(
         return true
     }
 
+    /** What collecting the offer costs, in cents: the drive there and back at the user's rate per
+     *  hour where the market or the seller's text says it is only collected; 0 where it is sent, or
+     *  where its place or the user's home is unknown. Kept in [drives], by listing id, for the
+     *  alert's own texts. */
+    private suspend fun driveCents(listing: Listing, drives: MutableMap<String, Long>): Long {
+        drives[listing.id]?.let { return it }
+        val page = adPage(listing)
+        val shipping = (page?.shipping ?: listing.shipping).asTheTextSays(page?.description)
+        val cents = if (shipping == null || shipping.available || !shipping.pickup) 0L else {
+            val loc = page?.location ?: listing.location
+            val there = loc?.let { l -> if (l.latitude != null && l.longitude != null) l.latitude!! to l.longitude!! else Geocoder.resolve(l.country, l.zip, l.city) }
+            val home = Geocoder.home()
+            val hours = if (there == null || home == null) null
+                else FitScore.driveHours(Geocoder.haversine(home.first, home.second, there.first, there.second))
+            hours?.let { (2 * it * ImportSettingsStore.current.driveEurPerHour * 100).toLong() } ?: 0L
+        }
+        drives[listing.id] = cents
+        return cents
+    }
+
+    /** The price an alert decided on: the landed price, and the drive where it is only collected. */
+    private fun alertPrice(l: Listing, drives: Map<String, Long>): Long? =
+        eurCents(l.landedPrice(ImportSettingsStore.current))?.let { it + (drives[l.id] ?: 0L) }
+
+    /** " incl. €60 drive" where the price an alert names holds a drive. */
+    private fun driveNote(l: Listing, drives: Map<String, Long>): String =
+        drives[l.id]?.takeIf { it > 0 }?.let { " incl. €${it / 100} drive" } ?: ""
+
     /** Whether the ad sends its buyer off the market ([io.github.tieo.arbay.model.OffMarket]). */
     private suspend fun offMarket(listing: Listing): Boolean =
         io.github.tieo.arbay.model.OffMarket.sign(adText(listing))
@@ -816,11 +852,13 @@ class SavedSearchMonitor(
             listing: Listing,
             sf: NotificationSubfilter,
             importSettings: ImportSettings = ImportSettingsStore.current,
+            /** What having it costs beyond the landed price, in cents: the drive to collect it. */
+            extraCents: Long = 0,
         ): Boolean {
             // What it costs to have, not what the market quotes: shipping and the import VAT on a
             // listing from outside the buyer's VAT area are part of the price a limit is about.
             // Otherwise a notification for "under €149" arrives about something that lands at €154.
-            val cents = eurCents(listing.landedPrice(importSettings))
+            val cents = eurCents(listing.landedPrice(importSettings))?.plus(extraCents)
             val minEur = sf.minPriceEur
             val maxEur = sf.maxPriceEur
             if (minEur != null && (cents == null || cents < minEur * 100L)) return false
@@ -863,11 +901,13 @@ class SavedSearchMonitor(
             listing: Listing,
             sf: NotificationSubfilter,
             importSettings: ImportSettings = ImportSettingsStore.current,
+            /** What having it costs beyond the landed price, in cents: the drive to collect it. */
+            extraCents: Long = 0,
         ): Boolean {
             if (sf.learnUntil == null) return true
             if (!pricesTheThing(listing)) return false
             val best = sf.bestSeenEur ?: return true
-            val cents = eurCents(listing.landedPrice(importSettings)) ?: return false
+            val cents = eurCents(listing.landedPrice(importSettings))?.plus(extraCents) ?: return false
             return cents < best * 100L
         }
 

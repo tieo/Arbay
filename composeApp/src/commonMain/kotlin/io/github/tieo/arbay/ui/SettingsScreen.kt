@@ -214,6 +214,14 @@ private fun ServerSettings(session: Session) {
         notes["import"]?.let { Muted(it) }
     }
 
+    Setting("Collecting an offer", "An offer that is only collected costs the drive there and back on top of its price, at this rate") {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(rules.driveEurPerHour.toString(), { rules = rules.copy(driveEurPerHour = it.filter(Char::isDigit).take(3).toIntOrNull() ?: 0) }, Modifier.weight(1f), label = { Text("Driving, € per hour") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            TextButton(onClick = { val next = rules; save("drive") { ImportRules.current = client.updateImportSettings(next) } }) { Text("Save") }
+        }
+        notes["drive"]?.let { Muted(it) }
+    }
+
     Setting("Search depth", "Each market is read until it has given this many offers; deeper is slower") {
         Choices {
             (listOf(30, 60, 120, 250) + listOfNotNull(depth)).distinct().sorted().forEach { n ->
