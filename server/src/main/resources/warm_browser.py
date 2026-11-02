@@ -100,14 +100,16 @@ def keep_rejected(state: dict, thing: str, n: int, chosen: list) -> None:
 
 
 def keep_puzzle(env, passed, files):
-    """Keeps a Yandex puzzle answered, its files under one name ending in _ok or _no for Yandex's
-    verdict, in the folder [env] names: answers Yandex took are labelled real puzzles to train on."""
+    """Keeps a Yandex puzzle, its files under one name ending in _ok or _no for Yandex's verdict on
+    the answer sent, or _skip for a picture swapped unanswered, in the folder [env] names: answers
+    Yandex took are labelled real puzzles to train on, skipped ones the hard pictures to read by eye."""
     folder = os.environ.get(env)
     if not folder:
         return
     try:
         os.makedirs(folder, exist_ok=True)
-        name = os.path.join(folder, f"{int(time.time() * 1000)}_{'ok' if passed else 'no'}")
+        verdict = "skip" if passed is None else "ok" if passed else "no"
+        name = os.path.join(folder, f"{int(time.time() * 1000)}_{verdict}")
         for suffix, data in files.items():
             with open(name + suffix, "wb") as f:
                 f.write(data)
@@ -220,6 +222,7 @@ class Browser:
                 answer, score = await loop.run_in_executor(None, yandex_text.read, picture)
                 if yandex_text.sure(score) or attempt == TEXT_PICTURES - 1:
                     break
+                keep_puzzle("ARBAY_TEXT_PUZZLES", None, {".png": picture, ".txt": f"{answer}\t{score:.2f}".encode()})
                 await (await tab.select('button[data-testid="refresh"]', timeout=5)).mouse_click()
                 await asyncio.sleep(random.uniform(2.0, 3.5))
                 h = await tab.get_content()
