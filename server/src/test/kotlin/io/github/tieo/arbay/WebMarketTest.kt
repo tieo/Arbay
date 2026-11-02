@@ -762,6 +762,17 @@ class WebMarketTest {
     }
 
     @Test
+    fun aDeliveryLineNamingSeveralRatesGivesTheOneTheSelectorCounts() {
+        // Crowd Supply's product box: one line for the US rate and the rate abroad.
+        val html = """<div class="product"><h3>WiCAN Pro</h3><div class="product-price-row"><span class="product-price"><sup>${'$'}</sup>
+            <span class="product-price-number">89</span></span><span class="product-shipping"> ${'$'}8 US Shipping / ${'$'}18 Worldwide </span></div></div>"""
+        val recipe = SiteRecipe(domain = "crowdsupply.com", item = ".product", title = "h3", price = ".product-price", currency = "USD", shipping = ".product-shipping#2")
+        val offer = SiteRecipes.read(recipe, html, "https://www.crowdsupply.com/meatpi-electronics/wican-pro").single()
+        assertEquals(Money(8900, Currency.USD), offer.price)
+        assertEquals(Money(1800, Currency.USD), offer.shipping)
+    }
+
+    @Test
     fun aFormerPriceIsNamedByAWordOfItsClassNotByLettersInsideOne() {
         assertTrue(SiteRecipes.namesFormerPrice("price old-price"))
         assertTrue(SiteRecipes.namesFormerPrice("productOldPrice"))

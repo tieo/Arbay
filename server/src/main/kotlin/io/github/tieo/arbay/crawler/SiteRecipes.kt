@@ -230,7 +230,7 @@ object SiteRecipes {
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, base) },
-                shipping = recipe.shipping?.let { pick(box, it, spaced = true) }?.let { shippingIn(it, currency) },
+                shipping = recipe.shipping?.let { shippingAt(box, it, currency) },
                 seller = recipe.seller?.let { pick(box, it, spaced = true)?.trim() }?.takeIf { it.isNotEmpty() },
                 rentPer = recipe.rentPer,
                 vatStated = true,
@@ -241,6 +241,12 @@ object SiteRecipes {
             )
         }.distinctBy { it.url to it.title }
     }
+
+    /** What the box's delivery line costs, the n-th amount of it where the selector ends in `#n`:
+     *  Crowd Supply writes "$8 US Shipping / $18 Worldwide", and abroad is the second. */
+    private fun shippingAt(box: Element, spec: String, currency: Currency): io.github.tieo.arbay.model.Money? =
+        if (Regex("""#\d+$""").containsMatchIn(spec)) amountAt(box, spec)?.let { ProductPages.amount(it, currency) }
+        else pick(box, spec, spaced = true)?.let { shippingIn(it, currency) }
 
     /** What a box's delivery line costs: zero where it says delivery is free, else its amount. */
     internal fun shippingIn(text: String, currency: Currency): io.github.tieo.arbay.model.Money? =
