@@ -9,12 +9,12 @@ are the candidates, decoys among them. A stroke network (yandex_symbols.onnx) ma
 strokes; each marked part, and each group of two or three parts close together (a symbol of
 separate strokes, three bars or two chevrons, comes out of it in pieces), is compared with each
 outline of the strip over every turn, and a peak on such a group carries that fit. A matcher
-(yandex_match_icon.onnx and yandex_match_crop.onnx, trained on real puzzles against the detector's
-peaks and on generated pictures whose unasked symbols are drawn like the asked ones) looks at the
-picture around each peak, turned eight ways, and says how well it shows each outline. Both
-judgements and the peak's height together decide, and the outlines get the peaks that fit them
-best, no stroke part twice. Should the detector find fewer peaks than outlines, the matcher alone scans the
-picture on a grid instead.
+(yandex_match_icon.onnx and yandex_match_crop.onnx, two ImageNet ResNet-18 encoders trained on
+generated pictures whose unasked symbols are drawn like the asked ones, then on real puzzles
+against the detector's peaks) looks at the picture around each peak, turned eight ways, and says
+how well it shows each outline. Both judgements and the peak's height together decide, and the
+outlines get the peaks that fit them best, no stroke part twice. Should the detector find fewer
+peaks than outlines, the matcher alone scans the picture on a grid instead.
 """
 import itertools
 import os
@@ -25,10 +25,11 @@ import numpy as np
 # Every constant from picture to clicks is named below, so the path can be reproduced outside
 # Python. Conventions: pictures decode with OpenCV, colours in BGR order all the way into the
 # networks; a transparent strip is laid on white; network inputs are channels first and scaled to
-# 0..1 by dividing by 255, no mean or deviation taken off; network outputs are logits, put through
-# the logistic function where a probability is wanted. OpenCV operations whose definition matters:
-# MORPH_ELLIPSE structuring elements (MORPH_CROSS in thin()), distanceTransform(DIST_L2, 3) (the 3x3 mask approximation
-# of Euclidean distance), getRotationMatrix2D (degrees counter-clockwise, y pointing down) with
+# 0..1 by dividing by 255, nothing else taken off (the matcher's encoders take ImageNet's mean and
+# deviation off inside the model); network outputs are logits, put through the logistic function
+# where a probability is wanted. OpenCV operations whose definition matters: MORPH_ELLIPSE
+# structuring elements (MORPH_CROSS in thin()), distanceTransform(DIST_L2, 3) (the 3x3 mask
+# approximation of Euclidean distance), getRotationMatrix2D (degrees counter-clockwise, y pointing down) with
 # warpAffine's bilinear sampling and BORDER_REFLECT (fedcba|abcdef, the edge pixel repeated),
 # resize with INTER_AREA for the matcher's icons, and connectedComponents with 8-connectivity.
 MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_symbols.onnx")
@@ -69,10 +70,11 @@ GROUP_NEAR = 42
 GROUP_BOX = 62
 EXTRA_PART = 0.5
 MATCHER = [os.path.join(os.path.dirname(os.path.abspath(__file__)), f"yandex_match_{half}.onnx") for half in ("icon", "crop")]
-# How much the matcher's judgement (log probability of a group among the picture's groups) counts
-# against the outline fit: measured on real puzzles checked by eye, each half scored by a matcher
-# trained on the other.
-MATCH_WEIGHT = 0.5
+# How much the matcher's judgement (log probability of a peak among the picture's peaks) and the
+# outline fit count, tuned together with UNGROUPED and HEAT_WEIGHT on 250 real puzzles checked by
+# eye, each read by models that never saw it.
+MATCH_WEIGHT = 2.0
+OUTLINE_WEIGHT = 0.5
 TURNS = 8
 # A peak takes the stroke group whose centre lies within this many pixels.
 ON_GROUP = 16
@@ -85,7 +87,7 @@ CENTRES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yandex_centr
 # real puzzles; PEAK_FLOOR keeps the log finite.
 PEAKS = 10
 PEAK_APART = 12
-UNGROUPED = -8.0
+UNGROUPED = -6.0
 HEAT_WEIGHT = 0.5
 PEAK_FLOOR = 1e-3
 # The grid the matcher scans when the stroke network finds fewer parts than outlines: its step and
@@ -398,7 +400,7 @@ def solve(picture_png, strip_png):
     for x, y in spots:
         near = [j for j, c in enumerate(cut) if (c[1][0] - x) ** 2 + (c[1][1] - y) ** 2 < ON_GROUP ** 2]
         on.append(min(near, key=lambda j: (cut[j][1][0] - x) ** 2 + (cut[j][1][1] - y) ** 2) if near else None)
-    score = np.array([[fit[i, j] if j is not None else UNGROUPED for j in on] for i in range(len(asked))])
+    score = np.array([[OUTLINE_WEIGHT * fit[i, j] if j is not None else UNGROUPED for j in on] for i in range(len(asked))])
     score = score + MATCH_WEIGHT * matched(picture, shown, spots) + HEAT_WEIGHT * np.log(np.array(heights) + PEAK_FLOOR)[None]
     members = [candidates[j][0] if j is not None else [("peak", k)] for k, j in enumerate(on)]
     pick = choose(score, members)
