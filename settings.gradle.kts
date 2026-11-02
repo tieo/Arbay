@@ -56,9 +56,10 @@ run {
 // is fetched by the next instead of built again. Pushing needs the cache's password; without the
 // variables the build runs on its local cache alone, so no host is named here.
 buildCache {
-    remote<HttpBuildCache> {
-        val url = System.getenv("GRADLE_CACHE_URL") ?: return@remote
-        this.url = uri(url)
+    // Declared only where the machine names it: a remote cache with no address fails every build.
+    val cacheUrl = System.getenv("GRADLE_CACHE_URL")
+    if (cacheUrl != null) remote<HttpBuildCache> {
+        this.url = uri(cacheUrl)
         isEnabled = true
         isAllowInsecureProtocol = true
         isPush = System.getenv("GRADLE_CACHE_PASSWORD") != null
