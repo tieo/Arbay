@@ -247,7 +247,9 @@ object SiteRecipes {
         if (FREE_DELIVERY.containsMatchIn(text)) io.github.tieo.arbay.model.Money(0, currency)
         else ProductPages.amount(text, currency)
 
-    private val FREE_DELIVERY = Regex("""\b(free|kostenlos|gratis|versandkostenfrei|frei)\b""", RegexOption.IGNORE_CASE)
+    /** The words a delivery line uses for free in the languages of the shops searched: German, English,
+     *  French ("Livraison gratuite", "offerte"), Italian and Spanish ("gratuita", "gratuito"), Dutch. */
+    private val FREE_DELIVERY = Regex("""\b(free|kostenlos|gratis|versandkostenfrei|frei|gratuite?|offerte?|gratuit[ao]s?|gratuitamente|gratuïte?|kosteloos)\b""", RegexOption.IGNORE_CASE)
 
     private fun readPattern(recipe: SiteRecipe, pattern: String, html: String, pageUrl: String): List<PageOffer> {
         val currency = recipe.currency?.let(ProductPages::currencyOf) ?: Currency.EUR

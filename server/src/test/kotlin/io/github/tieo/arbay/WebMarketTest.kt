@@ -745,4 +745,19 @@ class WebMarketTest {
         assertEquals(listOf(Money(0), Money(599)), offers.map { it.shipping })
         assertEquals(listOf(Money(36900), Money(40519)), offers.map { it.price })
     }
+
+    @Test
+    fun aFrenchShopsProductPageReadsItsPriceAndFreeDelivery() {
+        // obd2diy.fr: its microdata holds the price in priceSpecification ("23.00EUR"), and its
+        // delivery line says "Livraison gratuite" beside a premium option priced apart.
+        val html = """<html><h1>GODIAG GT109 DOIP-ENET Câble</h1><div itemscope itemtype="http://schema.org/Product">
+            <div itemprop="offers" itemscope itemtype="http://schema.org/Offer"><meta itemprop="priceSpecification" content="23.00EUR"></div></div>
+            <div id="xri_ProDt_EstimatedShippingCost_113610"><span class="d-block"><strong class="xr-text-green">Livraison gratuite</strong>
+            <label>Livraison Premium</label> € 12.00</span></div></html>"""
+        val recipe = SiteRecipe(domain = "obd2diy.fr", title = "h1", price = "meta[itemprop=priceSpecification]@content",
+            currency = "EUR", shipping = "strong.xr-text-green")
+        val offer = SiteRecipes.read(recipe, html, "https://www.obd2diy.fr/wholesale/godiag-gt109.html").single()
+        assertEquals(Money(2300), offer.price)
+        assertEquals(Money(0), offer.shipping)
+    }
 }
