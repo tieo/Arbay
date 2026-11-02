@@ -123,8 +123,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         instructions = """
             Arbay searches second-hand markets (Kleinanzeigen, eBay, Vinted, willhaben and more) for the user,
             keeps saved searches, and talks to Kleinanzeigen sellers through the user's own account.
-            Prices are landed prices in EUR. Messages to sellers are always the user's own texts; fill their
-            fill-ins ({preis}, {titel}, {versand}) and never write wording of your own unless the user dictates it.
+            Prices are landed prices in EUR. Messages to sellers start from the user's own texts (list_texts) with
+            their fill-ins ({preis}, {titel}, {versand}) filled; where none fits, adapt one or write a new one in
+            the same short, casual wording. Send only what the user approved or a standing mandate covers.
         """.trimIndent(),
     ).apply { registerTools() }
 
