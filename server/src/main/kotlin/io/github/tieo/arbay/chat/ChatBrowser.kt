@@ -63,7 +63,8 @@ open class MarketSidecar(
     private var input: BufferedWriter? = null
     private var output: BufferedReader? = null
 
-    /** When a request last finished, for [idleClose]. */
+    /** When a request other than a status check last finished, for [idleClose]: every open app asks
+     *  each account's status every minute, which kept browsers nobody used open all day. */
     @Volatile private var lastUsed = System.currentTimeMillis()
 
     /** The last status the browser answered, given for a closed browser rather than opening it to ask. */
@@ -90,7 +91,7 @@ open class MarketSidecar(
      *  server for a minute at a time; the sidecar is ended instead. */
     suspend fun call(op: String, timeoutMs: Long = 60_000, vararg args: Pair<String, Any?>): JsonObject = lock.withLock {
         if (op == "status" && idleClose != null && process?.isAlive != true) lastStatus?.let { return@withLock it }
-        try { exchangeOp(op, timeoutMs, *args) } finally { lastUsed = System.currentTimeMillis() }
+        try { exchangeOp(op, timeoutMs, *args) } finally { if (op != "status") lastUsed = System.currentTimeMillis() }
     }
 
     private suspend fun exchangeOp(op: String, timeoutMs: Long, vararg args: Pair<String, Any?>): JsonObject {
