@@ -212,18 +212,17 @@ class EbayDeCrawler(
                         validateHtml(h, "eBay"); h
                     } catch (e: CancellationException) { throw e } catch (_: Exception) {
                         // eBay refuses a later page to this tier while serving the first, so the
-                        // rest are read in a browser, for a search that asked for more offers than
-                        // usual: a browser session costs one of two workers for every search.
+                        // rest are read in the Chrome eBay lets through, for a search that asked
+                        // for more offers than usual.
                         if (query.maxResults == null) break
-                        emitter?.emit("Chromium")
-                        runCatching {
-                            withContext(Dispatchers.IO) {
-                                HeadlessBrowser.withSession(
-                                    engine = BrowserEngine.CHROMIUM, primeUrl = "https://www.$domain",
-                                    waitSelector = "li.s-card, li.s-item", extraWaitMs = 1000,
-                                ) { fetchPage -> browserPages(query, page, fetchPage, allResults, seenIds) }
-                            }
-                        }.onFailure { if (it is CancellationException) throw it }
+                        emitter?.emit("Chrome")
+                        for (later in page..query.pageLimit()) {
+                            if (allResults.size >= cap) break
+                            val more = ebayPage(buildSearchUrl(query, later), SEARCH_MARKERS)?.let(::parseSearchResults) ?: break
+                            val fresh = more.filter { seenIds.add(it.externalId) }
+                            allResults.addAll(fresh)
+                            if (more.size < 20 || fresh.isEmpty()) break
+                        }
                         break
                     }
                     val results = parseSearchResults(html).filter { seenIds.add(it.externalId) }
@@ -250,109 +249,9 @@ class EbayDeCrawler(
             return allResults
         }
 
-        // Step 3: Chromium — prime once, fetch 1 active + 1 sold page (semaphore held briefly)
-        emitter?.emit("Chromium")
-        // eBay's edge answers one browser request in several with its "Something went wrong on our
-        // end" page, and the next one goes through: of eight searches in a row, the first got it on
-        // both engines and the seven after it did not. One more session is that next request.
-        for (attempt in 1..2) try {
-            chromiumSearch(query, allResults, seenIds)
-            break
-        } catch (e: CrawlerBlockedException) {
-            if (!e.isEdgeErrorPage) throw e
-            // The same page twice in a row is no passing hiccup: on 2026-10-17 eBay served it to
-            // every client from this address, its home page included, and searches kept asking.
-            // As a refusal it starts the cooldown and the watches leave eBay alone for a while.
-            if (attempt == 2) throw CrawlerBlockedException(
-                "eBay: error page twice in a row, taken as a block", ErrorType.BLOCKED_403, url = e.url, html = e.html,
-            )
-            allResults.clear()
-            seenIds.clear()
-        }
-        return allResults
-    }
-
-    /**
-     * Pages [from] onwards of a search, read in a browser session, until the search has as many
-     * offers as it wants, a page comes back short or holds nothing new, or eBay refuses one. The
-     * browser is the tier eBay lets through when it refuses plain requests, which it does for
-     * every page past the first; a search reading only page one never saw the offers past it.
-     */
-    private fun browserPages(
-        query: SearchQuery,
-        from: Int,
-        fetchPage: (url: String) -> FetchResult,
-        allResults: MutableList<Listing>,
-        seenIds: MutableSet<String>,
-    ) {
-        val cap = query.resultCap()
-        for (page in from..query.pageLimit()) {
-            if (allResults.size >= cap) break
-            val pageUrl = buildSearchUrl(query, page)
-            var pageHtml: String? = null
-            // eBay's edge answers one request in several with its error page and the next one
-            // goes through, so a page is asked for twice before it is believed refused.
-            fun read() = parseSearchResults(validateBrowserResult(fetchPage(pageUrl), "eBay").also { pageHtml = it })
-            val more = try {
-                try { read() } catch (e: CrawlerBlockedException) { if (e.isEdgeErrorPage) read() else throw e }
-            } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                // What eBay served instead of a later page, kept to look at: a search that stops
-                // paging otherwise just reads as one with fewer offers.
-                ErrorSnapshotStore.capture(
-                    platform = platformId.name, query = query.text, error = e,
-                    errorType = (e as? CrawlerBlockedException)?.errorType ?: ErrorType.UNKNOWN,
-                    url = pageUrl, fetchStage = "chromium page $page",
-                    html = (e as? CrawlerBlockedException)?.html,
-                )
-                break
-            }
-            val fresh = more.filter { seenIds.add(it.externalId) }
-            allResults.addAll(fresh)
-            if (fresh.isEmpty()) ErrorSnapshotStore.capture(
-                platform = platformId.name, query = query.text,
-                error = RuntimeException("$domain: page $page held ${more.size} offers, none new"),
-                errorType = ErrorType.EMPTY_RESULTS, url = pageUrl, fetchStage = "chromium page $page", html = pageHtml,
-            )
-            if (more.size < 20 || fresh.isEmpty()) break
-        }
-    }
-
-    private suspend fun chromiumSearch(query: SearchQuery, allResults: MutableList<Listing>, seenIds: MutableSet<String>) {
-        withContext(Dispatchers.IO) {
-            HeadlessBrowser.withSession(
-                engine = BrowserEngine.CHROMIUM,
-                primeUrl = "https://www.$domain",
-                waitSelector = "li.s-card, li.s-item",
-                extraWaitMs = 1000,
-            ) { fetchPage ->
-                val searchUrl = buildSearchUrl(query, 1)
-                val result = fetchPage(searchUrl)
-                val html = validateBrowserResult(result, "eBay")
-                val pageResults = parseSearchResults(html)
-                // The last tier coming back empty ends the crawl with nothing to show and no error,
-                // so the page eBay actually served is kept to look at.
-                if (pageResults.isEmpty()) {
-                    ErrorSnapshotStore.capture(
-                        platform = platformId.name, query = query.text,
-                        error = RuntimeException("$domain: the browser page parsed to no listings"),
-                        errorType = ErrorType.EMPTY_RESULTS, url = searchUrl, fetchStage = "chromium",
-                        html = html, finalUrl = result.finalUrl, statusCode = result.statusCode,
-                    )
-                }
-                allResults.addAll(pageResults.filter { seenIds.add(it.externalId) })
-
-                if (pageResults.size >= 20) browserPages(query, 2, fetchPage, allResults, seenIds)
-
-                if (query.soldOnly) {
-                    try {
-                        val soldResult = fetchPage(buildSearchUrl(query.copy(soldOnly = true), 1))
-                        val soldHtml = validateBrowserResult(soldResult, "eBay")
-                        val soldResults = parseSearchResults(soldHtml).map { it.copy(sold = true) }
-                        allResults.addAll(soldResults.filter { seenIds.add(it.externalId) })
-                    } catch (_: Exception) {}
-                }
-            }
-        }
+        // The Chrome eBay lets through was asked first, at the top: a refusal there and from both
+        // plain tiers leaves nothing else to ask.
+        throw CrawlerBlockedException("eBay: refused to the Chrome and to both plain tiers", ErrorType.BLOCKED_403, url = firstUrl)
     }
 
     private suspend fun fetchActiveAndSoldHttp(

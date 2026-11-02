@@ -36,7 +36,6 @@ dependencies {
     // Jsoup marks its API with these but leaves them out of its own dependencies; without them
     // Kotlin cannot read which of its returns may be null.
     compileOnly(libs.jspecify)
-    implementation(libs.playwright)
     implementation(libs.onnxruntime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)
@@ -116,4 +115,10 @@ val compressWebApp by tasks.registering {
 tasks.named<Jar>("shadowJar") {
     dependsOn(compressWebApp)
     from(layout.buildDirectory.dir("webapp"))
+    // The server runs on Linux x64 only (its container on the home server): ONNX Runtime's natives
+    // for every other platform, with their debug symbols, are left out of the jar.
+    exclude(
+        "ai/onnxruntime/native/linux-aarch64/**", "ai/onnxruntime/native/osx-aarch64/**",
+        "ai/onnxruntime/native/osx-x64/**", "ai/onnxruntime/native/win-x64/**",
+    )
 }

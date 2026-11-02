@@ -9,7 +9,7 @@ import java.io.File
 /**
  * Fetches Akamai-protected pages by shelling out to mobilede_fetch.py, which drives real
  * Google Chrome via zendriver (undetected CDP) under Xvfb. This passes mobile.de's Akamai
- * Bot Manager where TLS impersonation and Playwright/patchright are detected: real Chrome
+ * Bot Manager where TLS impersonation and automation drivers are detected: real Chrome
  * gives a clean fingerprint, zendriver hides the automation leak, and a headed window
  * (even virtual) avoids the headless signal.
  *

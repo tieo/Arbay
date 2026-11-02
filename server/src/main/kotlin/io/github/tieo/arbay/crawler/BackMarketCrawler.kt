@@ -10,8 +10,8 @@ class BackMarketCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.backmarket.de/de-de/search?q=${query.positiveText.encodeUrl()}"
-        // Cloudflare serves a challenge to curl_cffi and to Playwright Chromium; the zendriver
-        // real-Chrome stealth tier passes it. The product grid is client-rendered after the
+        // Cloudflare serves a challenge to curl_cffi; the zendriver real-Chrome stealth tier passes
+        // it. The product grid is client-rendered after the
         // challenge clears, so wait for the productCard marker rather than the bare shell.
         // Require several card matches so a lone preload reference to the selector does not satisfy
         // the wait before the grid paints.

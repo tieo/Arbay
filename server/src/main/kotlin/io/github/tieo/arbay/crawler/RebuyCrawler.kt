@@ -13,15 +13,9 @@ class RebuyCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.rebuy.de/kaufen/suchen?q=${query.positiveText.encodeUrl()}"
-        // HTTP always 429; go headless-first. Rebuy uses a VDF (proof-of-work) running in a Web Worker
-        // before injecting product data as script#ry-inject. Use a 60s timeout for the VDF computation.
-        val html = fetchWithBrowser(
-            url, "reBuy",
-            waitSelector = "script#ry-inject",
-            waitTimeoutMs = 60_000.0,
-            primeUrl = "https://www.rebuy.de",
-            extraWaitMs = 500,
-        )
+        // HTTP always 429, so a browser reads it. Rebuy computes a proof of work (VDF) in a Web
+        // Worker before it injects the product data as script#ry-inject, which can take a minute.
+        val html = readInBrowser(url, "reBuy", markers = listOf("id=\"ry-inject\""), timeoutS = 60)
         return parseSearchResults(html)
     }
 

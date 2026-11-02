@@ -487,43 +487,17 @@ internal suspend fun fetchWithFallback(
         }
     }
 
-    // === Step 3: Chromium non-headless via Xvfb ===
-    emitter?.let { it.emit("Chromium") }
+    // === Step 3: a browser, Neuland's, which gets past the site's checks itself ===
+    emitter?.let { it.emit("Browser") }
     try {
-        // Playwright blocks its thread for the whole page load, so it runs on the IO pool
-        // rather than on a thread the request's other coroutines share.
-        val result = withContext(Dispatchers.IO) {
-            HeadlessBrowser.fetch(
-                url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
-                waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
-                engine = BrowserEngine.CHROMIUM,
-            )
-        }
-        return validateBrowserResult(result, platformName).proven().also { RequestMonitor.recordTier(platformName, "Browser") }
+        return readInBrowser(url, platformName, listOfNotNull(stealthMarker)).proven()
+            .also { RequestMonitor.recordTier(platformName, "Browser") }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        errors.add("Chromium: ${e.message?.take(60)}")
-        fetchLog.debug("[{}] Chromium failed: {}", platformName, e.message?.take(80))
+        errors.add("Browser: ${e.message?.take(60)}")
+        fetchLog.debug("[{}] Browser failed: {}", platformName, e.message?.take(80))
     }
 
-    // === Step 4: Firefox headless ===
-    emitter?.let { it.emit("Firefox") }
-    try {
-        // Playwright blocks its thread for the whole page load, so it runs on the IO pool
-        // rather than on a thread the request's other coroutines share.
-        val result = withContext(Dispatchers.IO) {
-            HeadlessBrowser.fetch(
-                url = url, waitSelector = waitSelector, extraWaitMs = extraWaitMs,
-                waitNetworkIdle = waitNetworkIdle, primeUrl = primeUrl,
-                engine = BrowserEngine.FIREFOX,
-            )
-        }
-        return validateBrowserResult(result, platformName).proven().also { RequestMonitor.recordTier(platformName, "Browser") }
-    } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        errors.add("Firefox: ${e.message?.take(60)}")
-        fetchLog.debug("[{}] Firefox failed: {}", platformName, e.message?.take(80))
-    }
-
-    // === Step 5: real Chrome that ticks Cloudflare's box ===
+    // === Step 4: real Chrome that ticks Cloudflare's box ===
     // Where a site's challenge stops every engine above, a real Chrome passes it by ticking the
     // "Verify you are human" box; it is the slowest tier, so only sites that name what their page
     // shows once through ([stealthMarker]) reach it.
@@ -548,37 +522,23 @@ internal suspend fun fetchWithFallback(
     )
 }
 
-/** Convenience: fetch with browser only (skip HTTP/CurlCffi steps).
- *  Retries once on TargetClosedError (browser process died mid-session). */
-internal suspend fun fetchWithBrowser(
-    url: String,
-    platformName: String,
-    waitSelector: String? = null,
-    extraWaitMs: Long = 2000,
-    waitNetworkIdle: Boolean = false,
-    primeUrl: String? = null,
-    waitTimeoutMs: Double = 15_000.0,
-    engine: BrowserEngine = BrowserEngine.CHROMIUM,
-): String {
-    fun doFetch() = HeadlessBrowser.fetch(
-        url = url, waitSelector = waitSelector, waitTimeoutMs = waitTimeoutMs,
-        extraWaitMs = extraWaitMs, waitNetworkIdle = waitNetworkIdle,
-        primeUrl = primeUrl, engine = engine,
-    )
-    // Playwright blocks its thread for the whole page load, so it runs on the IO pool.
-    val result = withContext(Dispatchers.IO) { try { doFetch() } catch (e: Exception) {
-        val msg = e.message ?: ""
-        if (msg.contains("Object doesn't exist") || msg.contains("TargetClosedError") ||
-            msg.contains("has been closed") || msg.contains("call_adopt") ||
-            msg.contains("ERR_ABORTED") || msg.contains("frame was detached")) {
-            // Browser already invalidated by fetch()'s catch — just retry with fresh instance
-            val log = org.slf4j.LoggerFactory.getLogger("fetchWithBrowser")
-            log.warn("Playwright stale for {}, retrying: {}", platformName, msg.take(60))
-            doFetch()
-        } else throw e
-    } }
-    return validateBrowserResult(result, platformName)
+/**
+ * [url] read in one of Neuland's browsers, which gets past the site's checks itself, once one of
+ * [markers] (markup only the page asked for carries) shows, or, with none, once it has loaded.
+ */
+internal suspend fun readInBrowser(url: String, platformName: String, markers: List<String> = emptyList(), timeoutS: Int = 40): String {
+    val page = RenderBrowsers.get(url, markers, timeoutS)
+        ?: throw CrawlerBlockedException("$platformName: the browser did not answer", ErrorType.TIMEOUT, url = url)
+    if (page.page == "refused") throw CrawlerBlockedException("$platformName: the site refused the browser", ErrorType.BLOCKED_403, url = page.url, html = page.html)
+    return validateBrowserResult(FetchResult(page.html, 200, page.url), platformName)
 }
+
+/** A page as a browser read it: its markup, status and the address it ended on. */
+data class FetchResult(
+    val html: String,
+    val statusCode: Int,
+    val finalUrl: String = "",
+)
 
 internal suspend fun fetchHttp(client: HttpClient, url: String, platformName: String): String {
     val response = client.get(url) {

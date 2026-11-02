@@ -227,8 +227,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
         /**
          * A shop page as a person's Chrome shows it once its scripts ran: [RenderBrowsers], warm and on
          * a display of its own, waiting until the page carries the marks shops put on their product
-         * data, or [RENDER_TIMEOUT_S] passed. A headless Playwright waiting for the network to go
-         * idle timed out on every MediaMarkt and Saturn page, whose trackers never stop.
+         * data, or [RENDER_TIMEOUT_S] passed. Waiting for the network to go idle times out on every
+         * MediaMarkt and Saturn page, whose trackers never stop.
          */
         internal suspend fun rendered(url: String): String? =
             RenderBrowsers.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }

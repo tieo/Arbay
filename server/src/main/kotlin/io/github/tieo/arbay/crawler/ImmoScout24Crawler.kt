@@ -10,11 +10,11 @@ class ImmoScout24Crawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.immobilienscout24.de/Suche/de/wohnung-mieten?enteredFrom=result_list&searchQuery=${query.positiveText.encodeUrl()}"
-        // The generic HTTP/curl_cffi/Playwright-Chromium/Firefox tiers all get detected here
+        // The generic HTTP and curl_cffi tiers get detected here
         // (401s and timeouts across the board) — the page itself is not actually behind a hard
         // block, since the zendriver real-Chrome stealth tier loads it cleanly (verified live: real
         // title, real listing cards, no captcha/access-denied text). Go straight to it rather than
-        // burning through four tiers known to fail first. "headline" is the card title's own
+        // burning through tiers known to fail first. "headline" is the card title's own
         // data-testid — unlike "/expose/" (also a substring of a CSS background-image path,
         // matching before any real card has rendered), it appears only inside an actual card.
         val html = StealthBrowserClient.fetchRendered(url, waitMarker = "data-testid=\"headline\"", waitSeconds = 25, minMatches = 3)
