@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SiteSignIn(
-    /** signed-out, signing-in, phone, code, signed-in or failed. */
+    /** asked, signing-in, phone, code, signed-in, failed, called-off or signed-out. */
     val state: String,
     /** The number the phone's prompt shows, to tap there. */
     val number: String? = null,
@@ -19,23 +19,36 @@ data class SiteSignIn(
     /** Why the site refused, in its words. */
     val reason: String? = null,
 ) {
-    /** Whether the sign-in is under way: the browser working, or waiting for the phone or a code. */
-    val running: Boolean get() = state in setOf("signing-in", "phone", "code")
+    /** Whether the sign-in is open: waiting for the password on Neuland Sign's page, the browser
+     *  working, or waiting for the phone or a code. */
+    val running: Boolean get() = state in setOf("asked", "signing-in", "phone", "code")
+
+    /** What stands, in words: a state Neuland names that is not listed here shows by that name. */
+    val status: String
+        get() = when (state) {
+            "asked" -> "waiting for the password"
+            "signing-in" -> "signing in"
+            "phone" -> number?.let { "waiting for your phone, tap $it" } ?: "waiting for your phone"
+            "code" -> "waiting for the code"
+            "signed-in" -> who ?: "signed in"
+            "failed" -> reason ?: "failed"
+            "called-off" -> "called off"
+            "signed-out" -> "signed out"
+            else -> state
+        }
 }
 
-/** Neuland's key a password is sealed to, every site's sign-in, and the account each was last
- *  signed in to with, so the next sign-in asks only the password. */
+/** Every site Neuland signs its account browser in to, where the latest sign-in of each stands (a
+ *  site without one has none on record), that sign-in's Neuland Sign page, and the account each was
+ *  last signed in to with. */
 @Serializable
 data class SiteSignIns(
-    val key: String,
+    val sites: List<String> = emptyList(),
     val steps: Map<String, SiteSignIn> = emptyMap(),
+    val pages: Map<String, String> = emptyMap(),
     val accounts: Map<String, String> = emptyMap(),
 )
 
-/** What signing in to a site is sent with: the account, and the password sealed to Neuland's key. */
+/** A sign-in Neuland Sign holds open: its id, and its page where the password is given. */
 @Serializable
-data class SiteSignInRequest(val account: String, val password: String)
-
-/** A code a site asked for, sealed to Neuland's key. */
-@Serializable
-data class SiteSignInCode(val code: String)
+data class AskedSignIn(val id: String, val page: String)

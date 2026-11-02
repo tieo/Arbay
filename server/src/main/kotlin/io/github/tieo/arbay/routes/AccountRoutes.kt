@@ -4,7 +4,6 @@ import io.github.tieo.arbay.crawler.Neuland
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
@@ -17,21 +16,17 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Signing Neuland's account browser in to the user's accounts (Google, PayPal, shops) from the app.
- * The app seals the password and any code to Neuland's key; these routes pass the sealed text on
- * and never hold anything they could open. Nothing of a request body is logged.
+ * Signing Neuland's account browser in to the user's accounts (Google, PayPal, shops): Neuland Sign
+ * holds each sign-in and its page, where the password is given and sealed, so no secret passes
+ * through Arbay.
  */
 fun Route.accountRoutes() {
     route("/api/accounts") {
-        // Neuland's public key and where each site's sign-in stands.
+        // Every site, where the account browser stands with each, and each latest sign-in's page.
         get { call.passOn(HttpMethod.Get, "accounts", null) }
-        // {"account", "password"}, the password sealed: starts signing in.
-        post("/{site}/sign-in") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/sign-in", call.receiveText()) }
-        // {"code"}, sealed: the code the site asked for.
-        post("/{site}/code") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/code", call.receiveText()) }
-        // A sign-in through Neuland Sign: Neuland pushes its page to the user's phone, where the
-        // password is given and sealed. The account is the one asked, or the one the site was last
-        // signed in to with; `asker` says who wants it.
+        // A sign-in through Neuland Sign, answering its id and page. Neuland pushes the page to the
+        // user's phone unless `push=false` (the app opens it itself). The account is the one asked,
+        // or the one the site was last signed in to with; `asker` says who wants it.
         post("/{site}/ask") {
             val site = call.site()
             val account = call.request.queryParameters["account"]
@@ -45,11 +40,10 @@ fun Route.accountRoutes() {
                 put("site", JsonPrimitive(site))
                 put("account", JsonPrimitive(account))
                 call.request.queryParameters["asker"]?.let { put("asker", JsonPrimitive(it)) }
+                call.request.queryParameters["push"]?.toBooleanStrictOrNull()?.let { put("push", JsonPrimitive(it)) }
             }
             call.passOn(HttpMethod.Post, "sign-ins", body.toString())
         }
-        // Stops a sign-in waiting for the phone or a code.
-        post("/{site}/cancel") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/cancel", null) }
     }
 }
 

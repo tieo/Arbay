@@ -1,7 +1,6 @@
 package io.github.tieo.arbay.ui
 
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -309,79 +308,46 @@ fun siteName(site: String) = when (site) {
 }
 
 /**
- * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops): signed in
- * from here with the account's own password, which is sealed in the app to Neuland's key, and the
- * second factor confirmed on the phone or typed here.
+ * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops), each with
+ * where its latest sign-in stands. A sign-in is asked of Neuland Sign, whose page opens here: the
+ * password is given and sealed there, and the second factor shows there.
  */
 @Composable
 fun SiteAccountPanel(session: Session, only: String? = null, account: String? = null) {
     val chat = session.chat
     val sites by chat.sites.collectAsState()
+    val uri = LocalUriHandler.current
     LaunchedEffect(Unit) { chat.watch() }
-    val steps = sites?.steps ?: return Busy()
-    // The site whose form is open, before its sign-in has started; a sign-in link opens its own.
-    var open by remember { mutableStateOf(only) }
+    val all = sites ?: return Busy()
+    // The site asking for the account to sign in as, where none is known yet.
+    var open by remember { mutableStateOf<String?>(null) }
     Panel { Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) {
         if (only == null) SectionTitle("Shop and payment accounts")
-        steps.entries.filter { only == null || it.key == only }.sortedBy { it.key }.forEach { (site, step) ->
+        all.sites.filter { only == null || it == only }.sorted().forEach { site ->
             Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
                 val name = siteName(site)
+                val step = all.steps[site]
+                val known = (if (site == only) account else null) ?: all.accounts[site]
+                val ask = { as_: String -> chat.signInSite(site, as_) { uri.openUri(it) }; open = null }
                 when {
-                    step.state == "signing-in" -> {
-                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Busy(); Muted("Signing in") }
-                    }
-                    step.state == "phone" -> {
-                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Busy(); Muted("Waiting for your phone") }
-                        step.number?.let { number ->
-                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Muted("Number on the prompt")
-                                Text(number, style = MaterialTheme.typography.headlineMedium)
-                            }
-                        }
-                    }
-                    step.state == "code" -> {
-                        SiteHead(name, null) { TextButton(onClick = { chat.cancelSite(site) }) { Text("Cancel") } }
-                        var code by remember(site) { mutableStateOf("") }
-                        OutlinedTextField(
-                            code, { code = it.trim() }, Modifier.fillMaxWidth(), singleLine = true,
-                            label = { Text(step.hint ?: "Code") },
-                            trailingIcon = { Icon(Icons.Outlined.Lock, null) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        Button(onClick = { chat.siteCode(site, code) }, enabled = code.isNotBlank()) { Text("Confirm") }
+                    step?.running == true -> SiteHead(name, step.status) {
+                        all.pages[site]?.let { page -> OutlinedButton(onClick = { uri.openUri(page) }) { Text("Open") } }
                     }
                     open == site -> {
-                        // The account the link names or the site was last signed in to with: shown,
-                        // not asked, so the form is the password alone.
-                        val known = (if (site == only) account else null) ?: sites?.accounts?.get(site)
-                        var other by remember(site) { mutableStateOf(known == null) }
                         var typed by remember(site) { mutableStateOf("") }
-                        var password by remember(site) { mutableStateOf("") }
-                        val signInAs = if (other) typed else known.orEmpty()
-                        val ready = signInAs.isNotBlank() && password.isNotEmpty()
-                        val go = { if (ready) { chat.signInSite(site, signInAs, password); open = null } }
-                        val focus = remember { FocusRequester() }
-                        SiteHead(name, if (other) null else known) { if (!other) TextButton(onClick = { other = true }) { Text("Other account") } }
-                        if (other) OutlinedTextField(typed, { typed = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-mail") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
+                        SiteHead(name, null) { TextButton(onClick = { open = null }) { Text("Cancel") } }
                         OutlinedTextField(
-                            password, { password = it }, Modifier.fillMaxWidth().focusRequester(focus), singleLine = true, label = { Text("Password") },
-                            visualTransformation = PasswordVisualTransformation(),
-                            trailingIcon = { Icon(Icons.Outlined.Lock, null) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { go() }),
+                            typed, { typed = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-mail") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { if (typed.isNotBlank()) ask(typed) }),
                         )
-                        if (!other) LaunchedEffect(site) { focus.requestFocus() }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Button(onClick = go, enabled = ready) { Text("Sign in") }
-                            if (only == null) OutlinedButton(onClick = { open = null }) { Text("Cancel") }
+                        Button(onClick = { ask(typed) }, enabled = typed.isNotBlank()) { Text("Sign in") }
+                    }
+                    else -> SiteHead(name, step?.status ?: "no sign-in yet", failed = step?.state == "failed") {
+                        OutlinedButton(onClick = { if (known != null) ask(known) else open = site }) {
+                            Text(if (step?.state == "signed-in") "Sign in again" else "Sign in")
                         }
                     }
-                    step.state == "signed-in" -> SiteHead(name, step.who) { OutlinedButton(onClick = { open = site }) { Text("Sign in again") } }
-                    step.state == "failed" -> SiteHead(name, step.reason, failed = true) { OutlinedButton(onClick = { open = site }) { Text("Sign in") } }
-                    else -> SiteHead(name, "not signed in") { OutlinedButton(onClick = { open = site }) { Text("Sign in") } }
                 }
             }
         }

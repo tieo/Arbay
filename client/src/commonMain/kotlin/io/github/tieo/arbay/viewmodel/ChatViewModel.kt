@@ -2,7 +2,6 @@ package io.github.tieo.arbay.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.tieo.arbay.api.Sealing
 import io.github.tieo.arbay.api.ArbayClient
 import io.github.tieo.arbay.model.BlockReview
 import io.github.tieo.arbay.model.ChatAccount
@@ -165,29 +164,14 @@ class ChatViewModel(
         }
     }
 
-    /** Signs Neuland's account browser in to [site]: the password is sealed here, to Neuland's key. */
-    fun signInSite(site: String, account: String, password: String) = viewModelScope.launch {
+    /** Asks Neuland Sign for a sign-in to [site] as [account] and hands its page to [open], where
+     *  the password is given and every later step shows. */
+    fun signInSite(site: String, account: String, open: (String) -> Unit) = viewModelScope.launch {
         attempt {
-            val key = (_sites.value ?: client.siteSignIns()).key
-            client.signInSite(site, account.trim(), Sealing.seal(key, password))
+            val asked = client.askSiteSignIn(site, account.trim())
+            open(asked.page)
             _sites.value = client.siteSignIns()
             followSites()
-        }
-    }
-
-    /** Gives [site]'s sign-in the code it asked for, sealed as the password was. */
-    fun siteCode(site: String, code: String) = viewModelScope.launch {
-        attempt {
-            val key = (_sites.value ?: client.siteSignIns()).key
-            client.siteSignInCode(site, Sealing.seal(key, code.trim()))
-            followSites()
-        }
-    }
-
-    fun cancelSite(site: String) = viewModelScope.launch {
-        attempt {
-            client.cancelSiteSignIn(site)
-            _sites.value = client.siteSignIns()
         }
     }
 
