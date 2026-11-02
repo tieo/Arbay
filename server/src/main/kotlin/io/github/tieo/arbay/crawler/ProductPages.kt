@@ -73,6 +73,9 @@ object ProductPages {
         // A popup's amounts are not the page's own: delicious-aqua.de sells on request only, and
         // its closed savings calculator dialog named "Anlagenpreis (einmalig) 2.499 €".
         doc.select("dialog, [aria-modal=true]").remove()
+        // Nor is what the page hides from every visitor: samsung.com/at keeps its UK shop's buying
+        // panel ("£3,299.00 £2,399.00") in a section styled display:none on a drive it no longer sells.
+        doc.select("[hidden], template, [style~=display\\s*:\\s*none]").remove()
         val text = doc.body()?.text()?.lowercase() ?: return false
         // A maker's page names its price a recommended one and sends the buyer to a dealer: every
         // amount on it is a list price, its variant table's "ab 237,60 €" beside the others too

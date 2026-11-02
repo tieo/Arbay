@@ -388,6 +388,15 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a hidden section's amounts are no price of the page`() {
+        // samsung.com/at's page of a drive it no longer sells: no dealer has it, and the only amounts
+        // stand in a buying panel of the UK shop that the page hides.
+        val page = javaClass.getResource("/fixtures/web/samsung-at-970-evo-plus.html")!!.readText()
+        assertFalse(ProductPages.sellsSomething(page))
+        assertTrue(ProductPages.sellsSomething("""<body><h1>990 PRO 2TB</h1><span>179,99 €</span><a>In den Warenkorb</a><section style="display: none">£2,399.00</section></body>"""))
+    }
+
+    @Test
     fun `running costs and estimates are no price`() {
         // co2-adapter.de's product finder: what a refill costs and saves, and a maker's budget guess (grohe.com).
         assertFalse(ProductPages.sellsSomething("""<body><header><a>Warenkorb</a><a>Kasse</a></header><h1>Navigator</h1>
