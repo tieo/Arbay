@@ -391,4 +391,16 @@ class VehicleTextParserTest {
         assertEquals(1998, VehicleTextParser.parse("Sprinter 312, EZ 05/98, 2.9 TD")?.firstRegYear)
         assertNull(VehicleTextParser.parse("VW Crafter Kasten, abholbereit ab Dezember 12/20 Uhr, TÜV bis 11/27")?.firstRegYear)
     }
+
+    @Test
+    fun powerWrittenAsKwSlashPs() {
+        // Kleinanzeigen 3559611205: a dealer's own text, "103/140 KW/PS", read as a 140 kW engine.
+        val v = VehicleTextParser.parse("VW Crafter Kasten L3H3 Nr.44 MWST ausweisbar Erstzul.02.2022 103/140 KW/PS 87800 km Getriebe 6-Gang")!!
+        assertEquals(103, v.powerKw)
+        assertEquals(Transmission.MANUAL, v.gearbox)
+        assertEquals(130, VehicleTextParser.parse("Crafter 177/130 PS/kW Automatik")!!.powerKw)
+        assertEquals(130, VehicleTextParser.parse("Crafter 130 kW / 177 PS Automatik")!!.powerKw)
+        // Kleinanzeigen 3559628238, same dealer: one label for registration and inspection.
+        assertEquals(2020, VehicleTextParser.parse("Nr.54 Preis incl. MWSt. Erstzulassung / HU: 01.06.2020 Laufleistung: 107.500 km")!!.firstRegYear)
+    }
 }

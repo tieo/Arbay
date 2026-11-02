@@ -43,7 +43,9 @@ object VehicleTextParser {
     private val labeledPsRegex = Regex("""\bps\b[ \u00a0]*:?[ \u00a0]*([0-9]{2,3})(?!\d|[.,]\d)""", RegexOption.IGNORE_CASE)
     // The label may introduce a whole date ("EZ. 10.07.2014"), whose day and month come before
     // the year.
-    private val yearRegex = Regex("""(?:ez|erstzulassung|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:(?:0?[1-9]|[12]\d|3[01])[/.\-])?(?:0?[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
+    // "Erstzulassung / HU: 01.06.2020" names the registration under a label shared with the
+    // inspection; read as the inspection alone, a Kleinanzeigen dealer's 2020 Crafter had no year.
+    private val yearRegex = Regex("""(?:ez|erstzulassung(?:\s*/\s*hu)?|first reg\w*|bj\.?|baujahr|reg\.?)\D{0,6}((?:(?:0?[1-9]|[12]\d|3[01])[/.\-])?(?:0?[1-9]|1[0-2])[/.\-])?((?:19|20)\d{2})""", RegexOption.IGNORE_CASE)
     // A private seller's short form after the same labels, month and two-digit year
     // ("Erstzulassung 8/20", "EZ 03/19"). The label is what makes "8/20" a date at all, so it
     // must start a word: inside "Dezember 12/20" it names nothing.
@@ -295,7 +297,19 @@ object VehicleTextParser {
             .maxOrNull()
     }
 
+    // Both figures before both units, in the units' order: "103/140 KW/PS", "177/130 PS/kW". The
+    // unit regexes saw only the figure right before "KW" and read the 103 kW engine as a 140 kW one.
+    private val powerPairRegex = Regex(
+        """(?<![\d.,])([0-9]{2,3})\s?/\s?([0-9]{2,3})\s?(kw|ps)\s?/\s?(?:kw|ps)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun parsePowerKw(text: String): Int? {
+        powerPairRegex.find(text)?.let { m ->
+            val (first, second, unit) = m.destructured
+            val kw = if (unit.equals("kw", ignoreCase = true)) first.toInt() else second.toInt()
+            if (kw in 20..1000) return kw
+        }
         kwRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let { if (it in 20..1000) return it }
         // PS/HP fallback → kW (1 PS = 0.7355 kW)
         psRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
