@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SiteSignIn(
-    /** asked, signing-in, phone, code, shows, signed-in, failed or called-off. */
+    /** asked, signing-in, phone, code, choose, shows, signed-in, failed or called-off. */
     val state: String,
     /** The number the phone's prompt shows, to tap there. */
     val number: String? = null,
@@ -23,7 +23,7 @@ data class SiteSignIn(
 ) {
     /** Whether the sign-in is open: waiting for the password on Neuland Sign's page, the browser
      *  working, or waiting for the phone or a code. */
-    val running: Boolean get() = state in setOf("asked", "signing-in", "phone", "code", "shows")
+    val running: Boolean get() = state in setOf("asked", "signing-in", "phone", "code", "choose", "shows")
 
     /** What stands, in words: a state Neuland names that is not listed here shows by that name. */
     val status: String
@@ -32,6 +32,7 @@ data class SiteSignIn(
             "signing-in" -> "signing in"
             "phone" -> number?.let { "waiting for your phone, tap $it" } ?: "waiting for your phone"
             "code" -> "waiting for the code"
+            "choose" -> "waiting for your choice of how to confirm"
             "shows" -> text?.let { "the site shows: $it" } ?: state
             "signed-in" -> who ?: "signed in"
             "failed" -> reason ?: "failed"
