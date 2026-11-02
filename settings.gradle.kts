@@ -51,3 +51,20 @@ run {
         providers.exec { commandLine("git", "config", "core.hooksPath", ".githooks") }.result.get()
     }
 }
+
+// A shared build cache where the machine names one (GRADLE_CACHE_URL), so a task one machine built
+// is fetched by the next instead of built again. Pushing needs the cache's password; without the
+// variables the build runs on its local cache alone, so no host is named here.
+buildCache {
+    remote<HttpBuildCache> {
+        val url = System.getenv("GRADLE_CACHE_URL") ?: return@remote
+        this.url = uri(url)
+        isEnabled = true
+        isAllowInsecureProtocol = true
+        isPush = System.getenv("GRADLE_CACHE_PASSWORD") != null
+        credentials {
+            username = System.getenv("GRADLE_CACHE_USER")
+            password = System.getenv("GRADLE_CACHE_PASSWORD")
+        }
+    }
+}
