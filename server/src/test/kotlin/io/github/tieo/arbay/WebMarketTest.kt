@@ -760,4 +760,20 @@ class WebMarketTest {
         assertEquals(Money(2300), offer.price)
         assertEquals(Money(0), offer.shipping)
     }
+
+    @Test
+    fun aFormerPriceIsNamedByAWordOfItsClassNotByLettersInsideOne() {
+        assertTrue(SiteRecipes.namesFormerPrice("price old-price"))
+        assertTrue(SiteRecipes.namesFormerPrice("productOldPrice"))
+        assertTrue(SiteRecipes.namesFormerPrice("xr-text-line-through"))
+        assertTrue(SiteRecipes.namesFormerPrice("price was-price"))
+        assertFalse(SiteRecipes.namesFormerPrice("xr-text-gold xr-font-weight-600"))
+        assertFalse(SiteRecipes.namesFormerPrice("bold-price"))
+        // obd2diy.fr's result: the price to pay in gold, the former one struck through beside it.
+        val html = """<div class="row xr-box-list"><h2><a href="/wholesale/topdon.html">TOPDON TopScan Master</a></h2>
+            <span class="xr-text-line-through" name="xrn-Curr-EUR"><strong><span>€</span>219</strong></span>
+            <span class="xr-text-gold float-left" name="xrn-Curr-EUR"><span>€</span>189</span></div>"""
+        val recipe = SiteRecipe(domain = "obd2diy.fr", item = "div.xr-box-list", title = "h2 a", price = "span[name=xrn-Curr-EUR]", link = "h2 a@href")
+        assertEquals(Money(18900), SiteRecipes.read(recipe, html, "https://www.obd2diy.fr/search/?q=x").single().price)
+    }
 }

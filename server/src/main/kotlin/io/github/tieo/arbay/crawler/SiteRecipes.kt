@@ -345,14 +345,22 @@ object SiteRecipes {
     private fun withoutFormerPrices(box: Element): Element {
         val copy = box.clone()
         copy.select("del, s, strike, [class], [id]").filter { e ->
-            e.tagName() in setOf("del", "s", "strike") || FORMER_PRICE.any { it in (e.className() + " " + e.id()).lowercase() }
+            e.tagName() in setOf("del", "s", "strike") || namesFormerPrice(e.className() + " " + e.id())
         }.filter { it !== copy }.forEach { it.remove() }
         return copy
     }
 
     // Only marks that always name a former price: Magento writes the price to pay as
     // `span.regular-price` (werkzeugprofis.de's day rates), and a unit or base price is no former one.
-    private val FORMER_PRICE = listOf("old", "uvp", "strike", "was-", "crossed", "streich", "statt")
+    private val FORMER_PRICE = listOf("old", "uvp", "strike", "was-", "crossed", "streich", "statt", "line-through", "linethrough")
+
+    /** Whether class names or an id carry a former-price mark as a word of their own: "old-price",
+     *  "price_old", "productOldPrice", but never the "old" inside obd2diy.fr's `xr-text-gold`, the
+     *  class of the price to pay, beside its struck-out `xr-text-line-through`. */
+    internal fun namesFormerPrice(names: String): Boolean = FORMER_PRICE.any { mark ->
+        val capital = mark.replaceFirstChar { it.uppercase() }
+        capital in names || Regex("(?<![a-z])" + Regex.escape(mark)).containsMatchIn(names.lowercase())
+    }
 
     /** The code a line names and the price it gives, where that is below the [listed] one. */
     private fun couponIn(box: Element, spec: String, currency: Currency, listed: io.github.tieo.arbay.model.Money): io.github.tieo.arbay.model.Coupon? {
