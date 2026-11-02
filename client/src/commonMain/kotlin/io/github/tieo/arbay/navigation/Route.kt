@@ -41,6 +41,10 @@ sealed interface Route {
      *  address handed to the user when a sign-in is needed, naming the [account] where it is known. */
     data class SignIn(val site: String, val account: String? = null) : Route
 
+    /** Whether a person on this place stays there when an assistant shows something else: a
+     *  sign-in form holds a password half typed, which a jump to another page would throw away. */
+    val keepsTheScreen: Boolean get() = this is SignIn
+
     fun path(): String = when (this) {
         Home -> "/"
         is Results -> {

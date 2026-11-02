@@ -70,7 +70,7 @@ fun ArbayWeb() {
                 LiveKind.SELLING -> app.sell.load()
                 LiveKind.SHOW -> event.path?.let { path ->
                     val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
-                    if (route != Router.route) Router.go(route)
+                    if (route != Router.route && !Router.route.keepsTheScreen) Router.go(route)
                 }
                 LiveKind.KEEPALIVE -> Unit
             }

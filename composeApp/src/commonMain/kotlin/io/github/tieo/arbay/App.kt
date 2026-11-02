@@ -68,7 +68,7 @@ fun App() {
                     LiveKind.SELLING -> session.sell.load()
                     LiveKind.SHOW -> event.path?.let { path ->
                         val route = Route.parse(path.substringBefore('?'), path.substringAfter("panel=", "").ifEmpty { null })
-                        if (route != navigator.current) navigator.go(route)
+                        if (route != navigator.current && !navigator.current.keepsTheScreen) navigator.go(route)
                     }
                     LiveKind.KEEPALIVE -> Unit
                 }
