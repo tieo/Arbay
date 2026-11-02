@@ -20,7 +20,7 @@ to reach that machine.
 | `GET /api/web/gaps?after=<seq>` | The reported sites after a number |
 | `GET /api/web/gaps/<domain>/page` | The page as Arbay fetched it when it reported the site |
 | `GET /api/web/recipes` | Every recipe |
-| `POST /api/web/try` `{"url": ..., "recipe": {...}, "kept": true}` | Reads a page by a recipe (or the stored one, or structured data only) and answers the offers found, what read them and whether the page sells something. `kept` reads the kept page instead of fetching it again. |
+| `POST /api/web/try` `{"url": ..., "recipe": {...}, "kept": true}` | Reads a page by a recipe (or the stored one, or structured data only) and answers the offers found, what read them, whether the page sells something and whether the recipe's `nothingFound` marks it empty. `kept` reads the kept page instead of fetching it again. |
 | `PUT /api/web/recipes` (a recipe) | Keeps a recipe and reads the site again for every search that met it; answers how many offers each of those searches gained. A search still open on a screen shows them at once. |
 | `POST /api/web/gaps/<domain>/given-up` | Says a site cannot be taught, so the searches waiting on it stop waiting |
 | `DELETE /api/web/recipes/<domain>` | Drops a site's recipes |

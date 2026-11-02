@@ -37,6 +37,8 @@ data class WebTried(
     val offers: List<PageOffer>,
     val readBy: String,
     val sellsSomething: Boolean,
+    /** Whether the recipe's `nothingFound` marks the page as the site's own empty answer, which a search counts as selling nothing. */
+    val foundNothing: Boolean = false,
     val pageLength: Int,
     /** Whether the page passes itself off as another shop, which a search leaves out. */
     val impersonates: Boolean = false,
@@ -128,6 +130,8 @@ fun Route.webRoutes() {
                     else -> "nothing"
                 },
                 sellsSomething = ProductPages.sellsSomething(html),
+                foundNothing = asked.recipe?.let { r -> r.nothingFound?.let { mark -> runCatching { org.jsoup.Jsoup.parse(html).selectFirst(mark) != null }.getOrDefault(false) } ?: false }
+                    ?: SiteRecipes.foundNothing(asked.url, html),
                 pageLength = html.length,
                 impersonates = ProductPages.impersonates(html, asked.url),
             ))
