@@ -77,6 +77,12 @@ data class SiteRecipe(
     val condition: String? = null,
     /** An element present only on an offer that cannot be bought now. */
     val soldOut: String? = null,
+    /** Who sells the offer, inside its box, where that is not the site: a price comparison's row
+     *  names the shop it leads to (pangoly.com's logo `img@alt`, "Galaxus"). */
+    val seller: String? = null,
+    /** What delivery costs, inside the offer's box: an amount, or words saying it is free
+     *  ("+Free shipping", "versandkostenfrei"). */
+    val shipping: String? = null,
     /** For a site that hires things out rather than selling them, the stretch of time [price]
      *  reads the cost of: its day rate wherever it states one, so rentals compare. */
     val rentPer: RentPeriod? = null,
@@ -209,7 +215,8 @@ object SiteRecipes {
         val listed by lazy { listedAddresses(doc) }
         return boxes.mapNotNull { box ->
             val maker = recipe.brand?.let { pick(box, it, spaced = true)?.trim() }?.takeIf { it.isNotEmpty() }
-            val title = pick(box, recipe.title, spaced = true)?.trim()?.takeIf { it.isNotEmpty() }
+            // A comparison's rows are one product at many shops: its name stands once, above them.
+            val title = (pick(box, recipe.title, spaced = true) ?: if (recipe.item != null) pick(doc, recipe.title, spaced = true) else null)?.trim()?.takeIf { it.isNotEmpty() }
                 ?.let { t -> if (maker != null && !t.contains(maker, ignoreCase = true)) "$maker $t" else t }
                 ?.let { t -> if (context != null && !t.contains(context, ignoreCase = true)) "$t · $context" else t } ?: return@mapNotNull null
             val priceText = amountAt(box, recipe.price) ?: return@mapNotNull null
@@ -223,6 +230,8 @@ object SiteRecipes {
                 condition = recipe.condition?.let { pick(box, it) }?.let(ProductPages::conditionOf),
                 inStock = recipe.soldOut?.let { box.selectFirst(it) == null } ?: true,
                 image = recipe.image?.let { pick(box, it) }?.let { ProductPages.absolute(it, base) },
+                shipping = recipe.shipping?.let { pick(box, it, spaced = true) }?.let { shippingIn(it, currency) },
+                seller = recipe.seller?.let { pick(box, it, spaced = true)?.trim() }?.takeIf { it.isNotEmpty() },
                 rentPer = recipe.rentPer,
                 vatStated = true,
                 coupon = recipe.coupon?.let { spec -> couponIn(box, spec, currency, price) },
@@ -232,6 +241,13 @@ object SiteRecipes {
             )
         }.distinctBy { it.url to it.title }
     }
+
+    /** What a box's delivery line costs: zero where it says delivery is free, else its amount. */
+    internal fun shippingIn(text: String, currency: Currency): io.github.tieo.arbay.model.Money? =
+        if (FREE_DELIVERY.containsMatchIn(text)) io.github.tieo.arbay.model.Money(0, currency)
+        else ProductPages.amount(text, currency)
+
+    private val FREE_DELIVERY = Regex("""\b(free|kostenlos|gratis|versandkostenfrei|frei)\b""", RegexOption.IGNORE_CASE)
 
     private fun readPattern(recipe: SiteRecipe, pattern: String, html: String, pageUrl: String): List<PageOffer> {
         val currency = recipe.currency?.let(ProductPages::currencyOf) ?: Currency.EUR

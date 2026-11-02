@@ -727,4 +727,22 @@ class WebMarketTest {
         val offers = SiteRecipes.read(recipe, html, "https://www.kuechentechnik-mueller.de/Shop/Index/index.php?searchq=Andano")
         assertEquals("https://www.kuechentechnik-mueller.de/Shop/Artikel/Blanco-ANDANO-525247-343354.html", offers.single().url)
     }
+
+    @Test
+    fun aComparisonRowNamesTheShopItLeadsToAndItsDelivery() {
+        // pangoly.com's price table: a row per shop, its logo naming it, its delivery line beside.
+        val row = { shop: String, price: String, delivery: String -> """
+            <tr><td><a class="detail-purchase" href="https://pdt.tradedoubler.com/click?url=$shop"><img alt="$shop" class="am-logo"></a></td>
+            <td class="hidden-xs"><span class="label label-success">In Stock</span></td>
+            <td><a class="detail-purchase" href="https://pdt.tradedoubler.com/click?url=$shop"><strong>$price</strong></a></td>
+            <td class="hidden-xs"><small><em>$delivery</em></small></td></tr>""" }
+        val html = """<html><h1 class="product-title">Western Digital BLACK SN850X 2TB</h1><table class="table table-prices">
+            ${row("Galaxus", "€369.00", "+Free")}${row("Amazon", "€405.19", "+ €5.99")}</table></html>"""
+        val recipe = SiteRecipe(domain = "pangoly.com", item = "table.table-prices tr", title = "h1.product-title", price = "td strong",
+            link = "a.detail-purchase@href", seller = "img.am-logo@alt", shipping = "td.hidden-xs em")
+        val offers = SiteRecipes.read(recipe, html, "https://pangoly.com/en/product/western-digital-black-sn850x-2tb")
+        assertEquals(listOf("Galaxus", "Amazon"), offers.map { it.seller })
+        assertEquals(listOf(Money(0), Money(599)), offers.map { it.shipping })
+        assertEquals(listOf(Money(36900), Money(40519)), offers.map { it.price })
+    }
 }
