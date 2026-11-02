@@ -29,12 +29,12 @@ BEAM = 12
 # What each token adds to a line's rank in the beam on top of its log probability, so a word is
 # not cut short where a prefix of it is a listed word ("tele" for "telephones"); confidence
 # (SURE) stays the plain log probability. Measured on 88 real puzzles read by eye: 60 right
-# against 56 without it, 1.5 alike, 2 worse.
+# against 56 without it, 1.5 alike, 2 worse (with the reader of that time).
 LENGTH_BONUS = 1.0
 # How much likelier, in log probability, a free reading must be before it beats the dictionary.
 MARGIN = 8.0
 # The log probability a reading needs before it is typed (see sure()).
-SURE = -2.0
+SURE = -1.4
 _enc = _step = None
 _words = None
 
@@ -124,7 +124,7 @@ def solve(png_bytes):
 
 
 def sure(score):
-    """Whether a reading this likely is worth typing rather than asking for another picture: on
-    real puzzles read by eye, about one reading in three clears it, and those are right nine times
-    in ten, against half of those below it."""
+    """Whether a reading this likely is worth typing rather than asking for another picture: on 88
+    real puzzles read by eye, each by a reader that never trained on it, 32 clear it and 30 of those
+    are right, against 33 of the 56 below it."""
     return score >= SURE
