@@ -37,6 +37,9 @@ sealed interface Route {
     data class Conversation(val id: String) : Route
     /** An ad for sale, as a draft until the user posts it. */
     data class Sell(val draftId: String) : Route
+    /** One account's sign-in for Neuland's account browser ("google.com"), its form open: the
+     *  address handed to the user when a sign-in is needed, naming the [account] where it is known. */
+    data class SignIn(val site: String, val account: String? = null) : Route
 
     fun path(): String = when (this) {
         Home -> "/"
@@ -54,6 +57,7 @@ sealed interface Route {
         Inbox -> "/inbox"
         is Conversation -> "/inbox/${id.encodeURLPathPart()}"
         is Sell -> "/sell/${draftId.encodeURLPathPart()}"
+        is SignIn -> "/sign-in/${site.encodeURLPathPart()}" + (account?.let { "/${it.encodeURLPathPart()}" } ?: "")
     }
 
     companion object {
@@ -70,6 +74,7 @@ sealed interface Route {
                 "settings" -> Settings
                 "inbox" -> parts.getOrNull(1)?.let { Conversation(it) } ?: Inbox
                 "sell" -> parts.getOrNull(1)?.let { Sell(it) } ?: Inbox
+                "sign-in" -> parts.getOrNull(1)?.let { SignIn(it, parts.getOrNull(2)) } ?: Settings
                 else -> Home
             }
         }

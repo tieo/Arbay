@@ -25,6 +25,18 @@ fun Route.accountRoutes() {
         post("/{site}/sign-in") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/sign-in", call.receiveText()) }
         // {"code"}, sealed: the code the site asked for.
         post("/{site}/code") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/code", call.receiveText()) }
+        // A push to the user's phone that opens the app on this site's sign-in, its form open.
+        post("/{site}/ask") {
+            val site = call.site()
+            val name = when (site) { "google.com" -> "Google"; "paypal.com" -> "PayPal"; else -> site }
+            val sent = io.github.tieo.arbay.crawler.Ntfy.send(
+                title = "Sign in to $name",
+                message = "Arbay's account browser needs your $name sign-in.",
+                click = "${io.github.tieo.arbay.model.SignInLink.APP_SCHEME}://open/sign-in/$site",
+                tags = listOf("key"),
+            )
+            call.respondText("""{"sent":$sent}""", ContentType.Application.Json)
+        }
         // Stops a sign-in waiting for the phone or a code.
         post("/{site}/cancel") { call.passOn(HttpMethod.Post, "accounts/${call.site()}/cancel", null) }
     }

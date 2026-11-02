@@ -59,6 +59,17 @@ import kotlinx.coroutines.launch
  * beside it whether the server took it.
  */
 @Composable
+fun SignInScreen(session: Session, site: String, account: String? = null) {
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = arbay.pad, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(arbay.gap),
+    ) {
+        Text("Sign in to ${siteName(site)}", style = MaterialTheme.typography.headlineSmall)
+        SiteAccountPanel(session, only = site, account = account)
+    }
+}
+
+@Composable
 fun SettingsScreen(session: Session) {
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = arbay.pad, vertical = 12.dp),

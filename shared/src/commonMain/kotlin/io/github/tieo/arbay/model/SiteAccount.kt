@@ -23,11 +23,13 @@ data class SiteSignIn(
     val running: Boolean get() = state in setOf("signing-in", "phone", "code")
 }
 
-/** Neuland's key a password is sealed to, and every site's sign-in. */
+/** Neuland's key a password is sealed to, every site's sign-in, and the account each was last
+ *  signed in to with, so the next sign-in asks only the password. */
 @Serializable
 data class SiteSignIns(
     val key: String,
     val steps: Map<String, SiteSignIn> = emptyMap(),
+    val accounts: Map<String, String> = emptyMap(),
 )
 
 /** What signing in to a site is sent with: the account, and the password sealed to Neuland's key. */

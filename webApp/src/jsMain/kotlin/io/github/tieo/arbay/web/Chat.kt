@@ -233,7 +233,7 @@ fun AccountSection(app: WebApp) {
 }
 
 /** The name a person knows a site's account by. */
-private fun siteName(site: String) = when (site) {
+fun siteName(site: String) = when (site) {
     "google.com" -> "Google"
     "paypal.com" -> "PayPal"
     else -> site
@@ -245,12 +245,14 @@ private fun siteName(site: String) = when (site) {
  * the second factor confirmed on the phone or typed here.
  */
 @Composable
-fun SiteAccountSection(app: WebApp) {
+fun SiteAccountSection(app: WebApp, only: String? = null, account: String? = null) {
     val chat = app.chat
     val sites by chat.sites.collectAsState()
-    val steps = sites?.steps ?: return
-    var open by remember { mutableStateOf<String?>(null) }
-    steps.entries.sortedBy { it.key }.forEach { (site, step) ->
+    LaunchedEffect(Unit) { chat.watch() }
+    val steps = sites?.steps ?: return Busy()
+    // A sign-in link opens its site's form at once; Settings opens none.
+    var open by remember { mutableStateOf(only) }
+    steps.entries.filter { only == null || it.key == only }.sortedBy { it.key }.forEach { (site, step) ->
         val name = siteName(site)
         Div({ classes("account") }) {
             when {
@@ -278,23 +280,35 @@ fun SiteAccountSection(app: WebApp) {
                     Div({ classes("actions") }) { PrimaryButton("Confirm", enabled = code.isNotBlank()) { chat.siteCode(site, code) } }
                 }
                 open == site -> {
-                    SiteHead(name, null) {}
-                    var account by remember(site) { mutableStateOf("") }
+                    // The account the link names or the site was last signed in to with: shown, not
+                    // asked, so the form is the password alone.
+                    val known = (if (site == only) account else null) ?: sites?.accounts?.get(site)
+                    var other by remember(site) { mutableStateOf(known == null) }
+                    var typed by remember(site) { mutableStateOf("") }
                     var password by remember(site) { mutableStateOf("") }
-                    Label(attrs = { classes("field") }) {
-                        Span({ classes("field-label") }) { Text("E-mail") }
-                        Input(InputType.Email) { classes("control"); attr("autocomplete", "username"); value(account); onInput { account = it.value } }
-                    }
-                    Label(attrs = { classes("field") }) {
-                        Span({ classes("field-label") }) { Text("Password") }
-                        Span({ classes("sealed") }) {
-                            Input(InputType.Password) { classes("control"); attr("autocomplete", "current-password"); value(password); onInput { password = it.value } }
-                            Icon(Glyph.Lock)
+                    val signInAs = if (other) typed else known.orEmpty()
+                    val go = { if (signInAs.isNotBlank() && password.isNotEmpty()) { chat.signInSite(site, signInAs, password); open = null } }
+                    SiteHead(name, if (other) null else known) { if (!other) QuietButton("Other account") { other = true } }
+                    Form(attrs = { addEventListener("submit") { event -> event.preventDefault(); go() } }) {
+                        if (other) Label(attrs = { classes("field") }) {
+                            Span({ classes("field-label") }) { Text("E-mail") }
+                            Input(InputType.Email) { classes("control"); attr("autocomplete", "username"); attr("autofocus", ""); value(typed); onInput { typed = it.value } }
                         }
-                    }
-                    Div({ classes("actions") }) {
-                        PrimaryButton("Sign in", enabled = account.isNotBlank() && password.isNotEmpty()) { chat.signInSite(site, account, password); open = null }
-                        QuietButton("Cancel") { open = null }
+                        Label(attrs = { classes("field") }) {
+                            Span({ classes("field-label") }) { Text("Password") }
+                            Span({ classes("sealed") }) {
+                                Input(InputType.Password) {
+                                    classes("control"); attr("autocomplete", "current-password"); if (!other) attr("autofocus", "")
+                                    value(password); onInput { password = it.value }
+                                }
+                                Icon(Glyph.Lock)
+                            }
+                        }
+                        Div({ classes("actions") }) {
+                            // A form's button submits it; Enter and a click both go through onSubmit.
+                            PrimaryButton("Sign in", enabled = signInAs.isNotBlank() && password.isNotEmpty()) {}
+                            if (only == null) QuietButton("Cancel") { open = null }
+                        }
                     }
                 }
                 step.state == "signed-in" -> SiteHead(name, step.who) { QuietButton("Sign in again") { open = site } }

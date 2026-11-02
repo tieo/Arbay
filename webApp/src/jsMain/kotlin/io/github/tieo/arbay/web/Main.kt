@@ -93,6 +93,7 @@ fun ArbayWeb() {
             Route.VehicleForm -> VehicleScreen(app)
             Route.FreeItems -> FreeItemsScreen(app)
             Route.Settings -> SettingsScreen(app)
+            is Route.SignIn -> SignInScreen(app, route.site, route.account)
             Route.Inbox, is Route.Conversation, is Route.Sell -> InboxScreen(app, route)
         }
     }

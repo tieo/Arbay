@@ -644,12 +644,20 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         tool(
             "ask_sign_in",
             "Push a request to the user's phone that opens the Arbay app on a market's sign-in page, or with payment on the " +
-                "sign-in page of the payment service the market's checkout uses (Vinted's PayPal), for the user to sign in themselves.",
+                "sign-in page of the payment service the market's checkout uses (Vinted's PayPal), for the user to sign in themselves. " +
+                "With site instead (google.com, paypal.com), on the sign-in of Neuland's account browser for buying at shops, its " +
+                "form open; the same page is at /sign-in/<site> of Arbay's web app.",
             props = {
-                string("market", "The market, as KLEINANZEIGEN, EBAY_DE, WILLHABEN or VINTED_DE", required = true)
+                string("market", "The market, as KLEINANZEIGEN, EBAY_DE, WILLHABEN or VINTED_DE")
                 boolean("payment", "The payment service's sign-in rather than the market's")
+                string("site", "An account of Neuland's account browser instead of a market: google.com or paypal.com")
             },
         ) { args ->
+            args.str("site")?.let { site ->
+                val r = http.post("$base/api/accounts/$site/ask")
+                return@tool if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else if ("true" in r.bodyAsText()) "Sent to the phone." else "Not sent: no push topic is set."
+            }
+            if (args.str("market") == null) return@tool "Name a market or a site."
             val r = http.post("$base/api/chat/signin/ask") {
                 parameter("market", args.str("market")!!)
                 if (args.bool("payment") == true) parameter("payment", "true")

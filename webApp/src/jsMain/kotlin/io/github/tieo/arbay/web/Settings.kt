@@ -47,6 +47,14 @@ import org.w3c.notifications.NotificationPermission
  * the server does for every device that uses it. Each server setting saves as it is changed.
  */
 @Composable
+fun SignInScreen(app: WebApp, site: String, account: String?) {
+    Main({ classes("results", "settings") }) {
+        Header({ classes("results-head") }) { H1 { Text("Sign in") } }
+        Div({ classes("form-scroll") }) { Setting(siteName(site)) { SiteAccountSection(app, only = site, account = account) } }
+    }
+}
+
+@Composable
 fun SettingsScreen(app: WebApp) {
     Main({ classes("results", "settings") }) {
         Header({ classes("results-head") }) { H1 { Text("Settings") } }
