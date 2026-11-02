@@ -646,17 +646,23 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "ask_sign_in",
             "Push a request to the user's phone that opens the Arbay app on a market's sign-in page, or with payment on the " +
                 "sign-in page of the payment service the market's checkout uses (Vinted's PayPal), for the user to sign in themselves. " +
-                "With site instead (google.com, paypal.com), on the sign-in of Neuland's account browser for buying at shops, its " +
-                "form open; the same page is at /sign-in/<site> of Arbay's web app.",
+                "With site instead (google.com, paypal.com), a sign-in of Neuland's account browser for buying at shops through " +
+                "Neuland Sign: its page goes to the phone, where the user gives the password; account is the one to sign in " +
+                "(the one last used where left out), asker who wants it, in words the user knows.",
             props = {
                 string("market", "The market, as KLEINANZEIGEN, EBAY_DE, WILLHABEN or VINTED_DE")
                 boolean("payment", "The payment service's sign-in rather than the market's")
                 string("site", "An account of Neuland's account browser instead of a market: google.com or paypal.com")
+                string("account", "With site: the account to sign in, as nanea.biznes@gmail.com")
+                string("asker", "With site: who wants the sign-in, shown to the user")
             },
         ) { args ->
             args.str("site")?.let { site ->
-                val r = http.post("$base/api/accounts/$site/ask")
-                return@tool if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else if ("true" in r.bodyAsText()) "Sent to the phone." else "Not sent: no push topic is set."
+                val r = http.post("$base/api/accounts/$site/ask") {
+                    args.str("account")?.let { parameter("account", it) }
+                    args.str("asker")?.let { parameter("asker", it) }
+                }
+                return@tool if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else "Sent to the phone through Neuland Sign: ${r.bodyAsText()}"
             }
             if (args.str("market") == null) return@tool "Name a market or a site."
             val r = http.post("$base/api/chat/signin/ask") {
