@@ -2,8 +2,8 @@ name: Crawler live scan
 
 # Boots the built server image and runs a real search against every platform,
 # reporting which crawlers still return results. Runtime deps (curl_cffi, Xvfb,
-# Playwright browsers) live in the image, so this exercises the full fetch chain
-# the way production does. Individual platform blocks are expected and do not fail
+# Chrome) live in the image, so this exercises the fetch chain the way production
+# does. Individual platform blocks are expected and do not fail
 # the job; a totally dead server (no platform returns anything) does.
 
 on:

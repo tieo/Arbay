@@ -1,8 +1,7 @@
-FROM mcr.microsoft.com/playwright/java:v1.51.0-noble
+FROM eclipse-temurin:21-jre-noble
 
-# Fetch fallback chain dependencies:
-#  - CurlCffiClient / RnetClient shell out to python3 (curl_cffi, rnet TLS tiers)
-#  - HeadlessBrowser launches non-headless Chromium under Xvfb on DISPLAY :99
+# Pages are read through Neuland (NEULAND_URL); what the server still runs itself:
+#  - CurlCffiClient shells out to python3 (curl_cffi, Chrome's TLS fingerprint)
 #  - StealthBrowserClient runs real Google Chrome via zendriver under xvfb-run to
 #    pass mobile.de's Akamai Bot Manager (real Chrome + undetected CDP + headed display)
 #  - The chat browser signs in with real X input (xdotool), which the login host requires
@@ -21,7 +20,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip xvfb x11vnc websockify novnc xdotool tesseract-ocr tesseract-ocr-deu libgl1 libglib2.0-0 \
     && apt-get install -y --no-install-recommends /tmp/chrome.deb \
     && rm /tmp/chrome.deb \
-    && pip3 install --break-system-packages --ignore-installed curl_cffi rnet zendriver "huggingface_hub[hf_xet]" \
+    && pip3 install --break-system-packages --ignore-installed curl_cffi zendriver "huggingface_hub[hf_xet]" \
     && pip3 install --break-system-packages --ignore-installed rapidocr_onnxruntime==1.4.4 \
     && rm -rf /var/lib/apt/lists/*
 

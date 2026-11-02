@@ -88,7 +88,7 @@ class SearchEngines(private val client: HttpClient) {
         val url = engine.pageUrl(words, pageNo)
         return try {
             if (engine.browser) {
-                val page = SearchBrowser.get(url, engine.markers, timeoutS = engine.waitS, refusals = engine.refusals, tick = engine.tick, solve = engine.solve)
+                val page = SearchBrowser.get(url, engine.markers, timeoutS = engine.waitS, refusals = engine.refusals)
                     ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
                 // An engine that put a bot check before its results rests a while: asked again at
                 // once it checks again, and each check held every search up for the browser's wait.
@@ -268,14 +268,14 @@ class SearchEngines(private val client: HttpClient) {
     /** When each engine last put a bot check before its results. */
     private val refused = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    /** Whether [engine] checked the server for a bot recently, and is left out until it is likely
-     *  to answer again. */
     /** The engine to ask in place of [engine]: itself, its fallback while it rests, or none. */
     private fun usable(engine: Engine): Engine? =
         if (!resting(engine)) engine else engine.fallback?.takeIf { !resting(it) }
 
+    /** Whether [engine] checked the server for a bot recently, and is left out until it is likely
+     *  to answer again. */
     private fun resting(engine: Engine): Boolean =
-        refused[engine.url("")]?.let { System.currentTimeMillis() - it < if (engine.solve != null) REST_AFTER_PUZZLES_MS else REST_AFTER_A_CHECK_MS } == true
+        refused[engine.url("")]?.let { System.currentTimeMillis() - it < if (engine.passes) REST_AFTER_PUZZLES_MS else REST_AFTER_A_CHECK_MS } == true
 
     /** A search engine: its results page for some words, whether only a browser gets it, and what
      *  shows that page arrived. */
@@ -288,8 +288,6 @@ class SearchEngines(private val client: HttpClient) {
         val redirects: List<String> = emptyList(),
         /** Text of the bot check the engine puts before its results instead of answering. */
         val refusals: List<String> = emptyList(),
-        /** The "I'm not a robot" box of a check that passes on a click, by CSS selector. */
-        val tick: List<String> = emptyList(),
         /** A result ([item]) and the mark the engine puts on the searched words it matched in it
          *  ([matched]): a result without one is not for the words, and is left out. */
         val item: String? = null,
@@ -298,8 +296,9 @@ class SearchEngines(private val client: HttpClient) {
          *  element's `data-tr`) and go on by a link of its own ([goOn]). */
         val goOn: String? = null,
         val waitSeconds: String? = null,
-        /** The picture puzzle the browser answers when the engine puts one before its results. */
-        val solve: String? = null,
+        /** Whether Neuland gets past the check the engine puts before its results (a picture
+         *  puzzle, a slider), so a refusal rests it only briefly. */
+        val passes: Boolean = false,
         /** How long the browser waits for the results page. */
         val waitS: Int = 25,
         /** The engine asked instead when this one gives no results. */
@@ -323,10 +322,10 @@ class SearchEngines(private val client: HttpClient) {
                 "https://www.bing.com/search?q=${q.encodeUrl()}&setlang=de&cc=DE"
             },
             Engine("DuckDuckGo", "duckduckgo.", false, listOf("result__a")) { q -> "https://html.duckduckgo.com/html/?q=${q.encodeUrl()}&kl=de-de" },
-            // Its "unusual traffic" page is a reCAPTCHA, answered with the picture grid it puts up;
-            // once passed, Google lets the browser's profile search again for a good while.
+            // Its "unusual traffic" page is a reCAPTCHA, which Neuland answers; once passed, Google
+            // lets the browser's profile search again for a good while.
             Engine("Google", "google.", true, listOf("id=\"rso\"", "id=\"search\""), redirects = listOf("/goto?url=", "/aclk?"),
-                solve = "recaptcha", waitS = 90) { q ->
+                passes = true, waitS = 90) { q ->
                 "https://www.google.com/search?q=${q.encodeUrl()}&hl=de&gl=de&num=20"
             },
             Engine("Qwant", "qwant.", true, listOf("data-testid=\"webResult\"", "data-testid=\"serTitle\"")) { q ->
@@ -334,9 +333,8 @@ class SearchEngines(private val client: HttpClient) {
             },
             Engine("Brave", "brave.", true, listOf("id=\"results\"", "data-type=\"web\""), refusals = listOf("Verifying you're not a bot", "decided to schedule a captcha"),
                 // Its check offers a proof of work, on which 142 of the server's searches ended in two
-                // weeks, and a slider beside it, which passed seven of seven tries: the browser
-                // switches to the slider and drags it.
-                solve = "brave") { q ->
+                // weeks, and a slider beside it, which Neuland switches to and drags.
+                passes = true) { q ->
                 "https://search.brave.com/search?q=${q.encodeUrl()}&source=web"
             },
             // Its "language" keeps only pages in that language, one result of eleven for English
@@ -346,23 +344,22 @@ class SearchEngines(private val client: HttpClient) {
                 "https://www.startpage.com/do/search?q=${q.encodeUrl()}&lui=deutsch&language=all"
             },
             // Three indexes of their own, beside the ones built on Bing's and Google's. Mojeek puts an
-            // ALTCHA before the server's requests, plain or in a browser: the browser ticks its box,
+            // ALTCHA before the server's requests, plain or in a browser: Neuland ticks its box,
             // and an engine that asks more after it rests like Brave on its check.
-            // Yandex puts its picture puzzle before the server's searches, which the browser answers
-            // (yandex_captcha.py); once answered, Yandex lets the browser through for a while. Until
+            // Yandex puts its picture puzzle before the server's searches, which Neuland answers;
+            // once answered, Yandex lets the browser through for a while. Until
             // it is, Yandex's search for a site's own pages stands in: given no site ("web=1") it
             // searches the whole index over plain HTTP with no puzzle, but for many rare words it
             // pads the page with the same popular pages (Roblox's sign-in, 1C, Husqvarna), none
             // with a searched word in bold as its results have, which are left out.
             Engine("Yandex", "yandex.", true, listOf("serp-item", "id=\"search-result\""),
-                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha"), tick = listOf("#js-button"),
-                solve = "yandex", waitS = 60,
+                refusals = listOf("Are you not a robot", "Вы не робот", "SmartCaptcha"), passes = true, waitS = 60,
                 fallback = Engine("Yandex", "yandex.", false, listOf("b-serp-item__title-link"), item = ".b-serp-item", matched = "b:not([class])") { q ->
                     "https://yandex.ru/search/site/?searchid=2313451&web=1&lr=177&text=${q.encodeUrl()}"
                 }) { q ->
                 "https://yandex.com/search/?text=${q.encodeUrl()}&lr=177"
             },
-            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color"), tick = listOf("altcha-widget input[type=checkbox]", "#altcha-widget input")) { q ->
+            Engine("Mojeek", "mojeek.", true, listOf("class=\"results-standard\"", "class=\"title\""), refusals = listOf("--altcha-border-color")) { q ->
                 "https://www.mojeek.com/search?q=${q.encodeUrl()}"
             },
             // Marginalia indexes the small, old and non-commercial web and ranks shops down by

@@ -127,8 +127,8 @@ class WillhabenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPag
             (query.minPrice?.let { "&PRICE_FROM=${it.amount / 100}" } ?: "") +
             (query.maxPrice?.let { "&PRICE_TO=${it.amount / 100}" } ?: "") +
             (if (page > 1) "&page=$page" else "")
-        // A current Chrome TLS fingerprint (rnet, step 2 of the chain) is served the full
-        // __NEXT_DATA__ page; the browser tiers remain as a fallback.
+        // A client with Chrome's TLS fingerprint is served the full __NEXT_DATA__ page; Neuland's
+        // browser reads it where the plain tiers are refused.
         val html = fetchWithFallback(client, url, "willhaben", primeUrl = "https://www.willhaben.at", extraWaitMs = 1500)
         return parseSearchResults(html)
     }

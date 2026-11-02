@@ -397,16 +397,15 @@ internal fun validateBrowserResult(result: FetchResult, platformName: String): S
  * General-purpose fetch with a full fallback chain. All crawlers should use this.
  *
  * Fallback order:
- * 1. HTTP GET (fast, no JS — works for most platforms)
- * 2. CurlCffi (Chrome TLS fingerprint — bypasses Cloudflare/Akamai)
- * 3. Chromium non-headless via Xvfb (PoW/JS challenge solving)
- * 4. Firefox headless (different fingerprint, evades Chromium-specific detection)
+ * 1. HTTP GET (fast, no JS: works for most platforms)
+ * 2. CurlCffi (Chrome's TLS fingerprint)
+ * 3. Neuland's render browser, which gets past a site's checks itself
+ * 4. The real-Chrome stealth sidecar, for sites that name a [stealthMarker]
  *
  * Each step is tried only if the previous step failed with a retryable error.
  *
- * With browserOnly the HTTP and CurlCffi steps are skipped and the chain starts at
- * Chromium, for platforms whose bot protection (Akamai on mobile.de) blocks every
- * non-browser engine and the first two steps only waste time.
+ * With browserOnly the HTTP and CurlCffi steps are skipped and the chain starts at the browser,
+ * for platforms whose bot protection blocks every non-browser client.
  */
 internal suspend fun fetchWithFallback(
     client: HttpClient,
@@ -458,21 +457,7 @@ internal suspend fun fetchWithFallback(
             if (!isRetryable(e)) throw e
         }
 
-        // === Step 2: rnet (current Chrome TLS + post-quantum key share) ===
-        emitter?.let { it.emit("Rnet") }
-        try {
-            val html = RnetClient.fetch(url, primeUrl = primeUrl)
-            validateHtml(html, platformName)
-            html.proven()
-            RequestMonitor.recordTier(platformName, "Rnet")
-            return html
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            if (isPageMissing(e)) throw e
-            errors.add("Rnet: ${e.message?.take(60)}")
-            fetchLog.debug("[{}] Rnet failed: {}", platformName, e.message?.take(80))
-        }
-
-        // === Step 3: CurlCffi (Chrome TLS fingerprint) ===
+        // === Step 2: CurlCffi (Chrome TLS fingerprint) ===
         emitter?.let { it.emit("CurlCffi") }
         try {
             val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)

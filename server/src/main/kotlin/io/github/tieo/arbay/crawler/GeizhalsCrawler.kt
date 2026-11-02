@@ -12,9 +12,8 @@ class GeizhalsCrawler(private val client: HttpClient) : Crawler {
         // Cheapest first: in its own order Geizhals answers "20TB HDD" with whole NAS systems that
         // come with drives, and the drives themselves never reach the page read.
         val url = "https://geizhals.de/?fs=${query.positiveText.encodeUrl()}&sort=p"
-        // A current Chrome TLS fingerprint (rnet, step 2 of the chain) clears the Cloudflare
-        // TLS check that older curl profiles and the plain HTTP client fail; the browser tiers
-        // remain as a fallback.
+        // Cloudflare checks the TLS fingerprint, which the plain HTTP client fails; Neuland's
+        // browser reads the page where the plain tiers are refused.
         val html = fetchWithFallback(
             client, url, "Geizhals",
             primeUrl = "https://geizhals.de",

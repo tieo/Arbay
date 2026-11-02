@@ -26,8 +26,7 @@ import org.slf4j.LoggerFactory
  * Neuland, the service every website is read through once Arbay is its client: its named browsers
  * read a page past whatever stands before it (consent screens, bot checks, captchas), which it
  * recognises on the page itself, and its offers readers read shops, markets and price comparisons
- * into offers. Its browsers are used where NEULAND_URL names the service, Arbay's own browser helpers
- * otherwise; the markets moved to its shop readers need it.
+ * into offers. NEULAND_URL names the service.
  */
 object Neuland {
     private val log = LoggerFactory.getLogger(Neuland::class.java)
@@ -35,13 +34,11 @@ object Neuland {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = HttpClient(CIO) { install(HttpTimeout) }
 
-    val enabled: Boolean get() = base != null
-
     /**
      * Reads [url] in Neuland's browser [browser] until one of [content] shows, the site's error page
      * ([errors]) does, a refusal stands, or [timeoutS] passes. Null where Neuland did not answer.
      */
-    suspend fun read(browser: String, url: String, content: List<String>, errors: List<String>, refused: List<String>, timeoutS: Int): WarmBrowser.Page? {
+    suspend fun read(browser: String, url: String, content: List<String>, errors: List<String>, refused: List<String>, timeoutS: Int): NeulandBrowser.Page? {
         val body = JsonObject(mapOf(
             "url" to JsonPrimitive(url),
             "content" to JsonArray(content.map(::JsonPrimitive)),
@@ -50,7 +47,7 @@ object Neuland {
             "timeoutS" to JsonPrimitive(timeoutS),
         ))
         val answer = call("browsers/$browser/read", body, timeoutS + 30L) ?: return null
-        return WarmBrowser.Page(
+        return NeulandBrowser.Page(
             html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
             page = answer["state"]?.jsonPrimitive?.contentOrNull ?: "unknown",
@@ -67,18 +64,6 @@ object Neuland {
         val answer = call("browsers/$browser/resolve", body, timeoutS.toLong() * urls.size + 30) ?: return emptyMap()
         return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
     }
-
-    /** The cookies of Neuland's browser [browser] for [domain], and its user agent. */
-    suspend fun cookies(browser: String, domain: String): Pair<Map<String, String>, String>? = runCatching {
-        val response = client.get("$base/browsers/$browser/cookies") {
-            parameter("domain", domain)
-            timeout { requestTimeoutMillis = 30_000 }
-        }
-        if (!response.status.isSuccess()) return null
-        val answer = json.parseToJsonElement(response.bodyAsText()).jsonObject
-        val cookies = (answer["cookies"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
-        cookies to (answer["userAgent"]?.jsonPrimitive?.contentOrNull ?: "")
-    }.onFailure { log.warn("Neuland cookies of {}: {}", browser, it.message) }.getOrNull()
 
     /**
      * What Neuland's offers readers answer at [path]: a site's search ("offers/search?site=&q=") or

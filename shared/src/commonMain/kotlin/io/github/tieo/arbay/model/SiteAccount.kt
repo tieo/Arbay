@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SiteSignIn(
-    /** asked, signing-in, phone, code, shows, signed-in, failed, called-off or signed-out. */
+    /** asked, signing-in, phone, code, shows, signed-in, failed or called-off. */
     val state: String,
     /** The number the phone's prompt shows, to tap there. */
     val number: String? = null,
@@ -36,7 +36,6 @@ data class SiteSignIn(
             "signed-in" -> who ?: "signed in"
             "failed" -> reason ?: "failed"
             "called-off" -> "called off"
-            "signed-out" -> "signed out"
             else -> state
         }
 }

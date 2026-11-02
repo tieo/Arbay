@@ -24,12 +24,12 @@ object StealthBrowserClient {
     /** Prefix of the sidecars' stderr control lines (captcha interactive/solved/timeout). */
     const val CTRL_PREFIX = "ARBAY_CTRL:"
 
-    /** All sidecar scripts extracted together into one directory so they can import each other —
-     *  mobilede_fetch.py, stealth_fetch.py and kleinanzeigen_chat.py all import captcha_gate.py to
-     *  show their browser over noVNC. */
+    /** The sidecar scripts, extracted together into one directory so they can import each other:
+     *  mobilede_fetch.py imports captcha_gate.py to show its browser over noVNC, and the market
+     *  account sidecars import market_browser.py. */
     internal val scriptDir: File by lazy {
         val dir = File(System.getProperty("java.io.tmpdir"), "arbay-stealth").apply { mkdirs() }
-        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "kleinanzeigen_chat.py", "warm_browser.py", "yandex_captcha.py", "yandex_symbols.onnx", "yandex_match_icon.onnx", "yandex_match_crop.onnx", "yandex_centres.onnx", "yandex_text.py", "yandex_text_enc.onnx", "yandex_text_step.onnx", "yandex_words.tsv", "brave_captcha.py", "recaptcha_tiles.py", "recaptcha_words.json", "recaptcha_probe.json", "market_browser.py", "ebay_chat.py", "willhaben_chat.py", "vinted_chat.py")) {
+        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "kleinanzeigen_chat.py", "market_browser.py", "ebay_chat.py", "willhaben_chat.py", "vinted_chat.py")) {
             val res = StealthBrowserClient::class.java.getResourceAsStream("/$name")
                 ?: error("$name not found in classpath")
             File(dir, name).outputStream().use { res.copyTo(it) }
