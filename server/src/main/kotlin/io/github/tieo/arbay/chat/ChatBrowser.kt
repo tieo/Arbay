@@ -191,9 +191,6 @@ open class MarketSidecar(
     }
 }
 
-/** The user's Kleinanzeigen session, kept by kleinanzeigen_chat.py. */
-object ChatBrowser : MarketSidecar(PlatformId.KLEINANZEIGEN, "kleinanzeigen_chat.py", 97, "ARBAY_CHAT_PROFILE", "chat-profile", "chat-browser.log", 5901)
-
 /** The user's eBay session, for every eBay site, kept by ebay_chat.py; apart from the crawler's Chrome. */
 object EbayChatBrowser : MarketSidecar(PlatformId.EBAY_DE, "ebay_chat.py", 93, "ARBAY_EBAY_CHAT_PROFILE", "ebay-chat-profile", "ebay-chat-browser.log", 5902, idleClose = 15.minutes)
 

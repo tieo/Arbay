@@ -1,7 +1,8 @@
 package io.github.tieo.arbay.selling
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.chat.ChatBrowser
+import io.github.tieo.arbay.chat.Kleinanzeigen
+import io.github.tieo.arbay.neuland.MarketAccount
 import io.github.tieo.arbay.chat.ChatFailure
 import io.github.tieo.arbay.crawler.CopiesAds
 import io.github.tieo.arbay.crawler.CrawlerRegistry
@@ -154,17 +155,15 @@ object Selling {
         next.problem()?.let { throw SellingFailure(it) }
         if (next == old) return old to null
         val answer = try {
-            ChatBrowser.call(
-                "edit_ad", 180_000,
-                "adId" to adId,
-                "title" to next.title.takeIf { it != old.title },
-                "description" to next.description.takeIf { it != old.description },
-                "priceType" to next.priceType.label,
-                "price" to next.priceEur,
-                "shipping" to next.shipping.takeIf { it != old.shipping },
-                "buyNow" to next.buyNow.takeIf { it != old.buyNow },
-                "send" to send,
+            val changes = MarketAccount.Changes(
+                title = next.title.takeIf { it != old.title },
+                description = next.description.takeIf { it != old.description },
+                price = next.priceEur?.let { MarketAccount.Money(it.toLong() * 100) },
+                priceKind = next.priceType.kind(),
+                shipping = next.shipping.takeIf { it != old.shipping },
+                buyNow = next.buyNow.takeIf { it != old.buyNow },
             )
+            Kleinanzeigen.on { edit(adId, changes, send) }.toJson()
         } catch (e: ChatFailure) {
             e.detail?.let { keepFailedPage(old, it, e) }
             throw SellingFailure(e.message ?: "The ad could not be changed")
@@ -198,36 +197,46 @@ object Selling {
         } catch (e: ChatFailure) {
             return PostAdResult(draft, e.message) to e.detail
         }
-        if (!send) return PostAdResult(draft) to answer
-        val adId = answer["adId"]?.jsonPrimitive?.contentOrNull ?: return PostAdResult(draft, "The market took the ad but named no ad id") to answer
+        if (!send) return PostAdResult(draft) to answer.toJson()
+        val adId = answer.listing ?: return PostAdResult(draft, "The market took the ad but named no ad id") to answer.toJson()
         val posted = synchronized(drafts) {
             val current = drafts.first { it.id == id }
             current.copy(postedAdId = adId, postedAt = Clock.System.now()).also { drafts[drafts.indexOf(current)] = it }
         }
         persist()
-        return PostAdResult(posted) to answer
+        return PostAdResult(posted) to answer.toJson()
     }
 
-    /** The draft through the market's post form, posted where [send]; the post form it failed on is
-     *  kept as an error snapshot. */
-    private suspend fun postForm(draft: AdDraft, send: Boolean): JsonObject = try {
-        ChatBrowser.call(
-            "post_ad", 300_000,
-            "categoryId" to draft.categoryId,
-            "title" to draft.title,
-            "description" to draft.description,
-            "attributes" to JsonObject(draft.attributes.mapValues { JsonPrimitive(it.value) }),
-            "priceType" to draft.priceType.label,
-            "price" to draft.priceEur,
-            "shipping" to draft.shipping,
-            "buyNow" to draft.buyNow,
-            "photos" to JsonArray(draft.photos.map { JsonPrimitive(DataDir.file("selling/${draft.id}/$it.jpg").absolutePath) }),
-            "send" to send,
+    /** The draft through the market's post form, posted where [send]; what the form held when it
+     *  did not take the draft is kept as an error snapshot. */
+    private suspend fun postForm(draft: AdDraft, send: Boolean): MarketAccount.Filled = try {
+        val asked = MarketAccount.Draft(
+            category = draft.categoryId,
+            title = draft.title,
+            description = draft.description,
+            details = draft.attributes.map { (label, value) -> listOf(label, value) },
+            price = draft.priceEur?.let { MarketAccount.Money(it.toLong() * 100) },
+            priceKind = draft.priceType.kind(),
+            shipping = draft.shipping,
+            buyNow = draft.buyNow,
         )
+        val photos = draft.photos.map { DataDir.file("selling/${draft.id}/$it.jpg").readBytes() }
+        Kleinanzeigen.on { post(asked, photos, send) }
     } catch (e: ChatFailure) {
         e.detail?.let { keepFailedPage(draft, it, e) }
         throw e
     }
+
+    /** The kind of price Neuland's listing records name for [AdPriceType]. */
+    private fun AdPriceType.kind() = when (this) {
+        AdPriceType.FIXED -> "fixed"
+        AdPriceType.NEGOTIABLE -> "negotiable"
+        AdPriceType.GIVE_AWAY -> "free"
+    }
+
+    private val filledJson = Json { encodeDefaults = true }
+
+    private fun MarketAccount.Filled.toJson(): JsonObject = filledJson.encodeToJsonElement(MarketAccount.Filled.serializer(), this) as JsonObject
 
     /** Whether and how often the ad is put up again; null leaves it as posted. */
     fun setRepost(id: String, everyDays: Int?): AdDraft {
@@ -266,7 +275,7 @@ object Selling {
                 keep(draft.id) { it.copy(repostProblem = "Not put up again: ${e.message}") }
                 continue
             }
-            val newId = answer["adId"]?.jsonPrimitive?.contentOrNull
+            val newId = answer.listing
             if (newId == null) {
                 keep(draft.id) { it.copy(repostProblem = "Put up again, but the market named no ad id; the old ad is still up") }
                 continue
@@ -288,8 +297,12 @@ object Selling {
         fun attempt(block: suspend () -> JsonObject): suspend () -> JsonObject = {
             try { block() } catch (e: ChatFailure) { JsonObject(mapOf("error" to JsonPrimitive(e.message))) }
         }
-        val form = attempt { postForm(draft, send = false) }()
-        val takeDown = attempt { ChatBrowser.call("delete_ad", 120_000, "adId" to adId, "send" to false) }()
+        val form = attempt { postForm(draft, send = false).toJson() }()
+        // What taking it down would meet: whether the account's own listings hold the ad.
+        val takeDown = attempt {
+            val listed = Kleinanzeigen.on { listings() }.any { it.id == adId }
+            JsonObject(mapOf("listed" to JsonPrimitive(listed)))
+        }()
         return JsonObject(mapOf("post" to JsonObject(form - "picture"), "takeDown" to takeDown))
     }
 
@@ -297,7 +310,7 @@ object Selling {
     private suspend fun takeDownEarlier() {
         val pending = synchronized(drafts) { drafts.flatMap { d -> d.adIdsToTakeDown.map { d.id to it } } }
         for ((id, adId) in pending) {
-            val failure = runCatching { ChatBrowser.call("delete_ad", 120_000, "adId" to adId, "send" to true) }.exceptionOrNull()
+            val failure = runCatching { Kleinanzeigen.on { delete(adId) } }.exceptionOrNull()
             if (failure == null) {
                 keep(id) { it.copy(adIdsToTakeDown = it.adIdsToTakeDown - adId) }
             } else {
@@ -320,11 +333,11 @@ object Selling {
         io.github.tieo.arbay.crawler.ErrorSnapshotStore.capture(
             platform = "KLEINANZEIGEN_SELLING",
             query = draft.id,
-            error = RuntimeException("${error.message}; the page sent: ${detail["requests"] ?: ""}"),
+            error = RuntimeException("${error.message}; the form held: ${detail["form"] ?: ""}"),
             errorType = io.github.tieo.arbay.crawler.ErrorType.PARSE_ERROR,
-            url = detail["url"]?.jsonPrimitive?.contentOrNull,
+            url = null,
             fetchStage = "post_ad",
-            html = detail["html"]?.jsonPrimitive?.contentOrNull,
+            html = null,
         )
     }
 

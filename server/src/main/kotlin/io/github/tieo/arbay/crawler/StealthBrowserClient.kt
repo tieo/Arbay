@@ -29,7 +29,7 @@ object StealthBrowserClient {
      *  account sidecars import market_browser.py. */
     internal val scriptDir: File by lazy {
         val dir = File(System.getProperty("java.io.tmpdir"), "arbay-stealth").apply { mkdirs() }
-        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "kleinanzeigen_chat.py", "market_browser.py", "ebay_chat.py", "willhaben_chat.py", "vinted_chat.py")) {
+        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "market_browser.py", "ebay_chat.py", "willhaben_chat.py", "vinted_chat.py")) {
             val res = StealthBrowserClient::class.java.getResourceAsStream("/$name")
                 ?: error("$name not found in classpath")
             File(dir, name).outputStream().use { res.copyTo(it) }

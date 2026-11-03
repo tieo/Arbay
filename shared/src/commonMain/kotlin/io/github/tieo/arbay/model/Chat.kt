@@ -20,8 +20,9 @@ data class ChatAccount(
     val signingIn: Boolean = false,
     /** Why the account can't be reached right now, when it can't. */
     val problem: String? = null,
-    /** While a sign-in goes on through Arbay's proxy: the address of the site's sign-in page for the browser to show. */
-    val proxySignIn: String? = null,
+    /** The site Neuland Sign signs this market's account in to ("kleinanzeigen.de"), where it does:
+     *  its sign-in is asked and shown as the shop accounts' are. */
+    val signInSite: String? = null,
     /** The payment service the market's checkout hands over to, signed in to in the same browser (Vinted's PayPal). */
     val payment: String? = null,
 )

@@ -275,7 +275,18 @@ fun AccountPanel(session: Session) {
     Panel {
         if (accounts.isEmpty()) Busy()
         // One group per market, the groups a full gap apart, whatever each one ends with.
+        val sites by chat.sites.collectAsState()
+        LaunchedEffect(Unit) { chat.watch() }
         Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) { accounts.forEach { a -> Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
+            // A market Neuland Sign signs in: where its account stands, as the market answers now.
+            a.signInSite?.let { site ->
+                SiteSignIn(
+                    session, site, a.market.accountName, sites?.accounts?.get(site),
+                    idle = if (a.signedIn) "Signed in" + (a.name?.let { " as $it" } ?: "") else a.problem ?: "Not signed in",
+                    failedIdle = a.problem != null,
+                )
+                return@Column
+            }
             Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
             val step = signIn?.takeIf { signInMarket == a.market }
             when {
@@ -303,6 +314,7 @@ fun AccountPanel(session: Session) {
 /** The name a person knows a site's account by. */
 fun siteName(site: String) = when (site) {
     "google.com" -> "Google"
+    "kleinanzeigen.de" -> "Kleinanzeigen"
     "paypal.com" -> "PayPal"
     else -> site
 }
@@ -310,49 +322,65 @@ fun siteName(site: String) = when (site) {
 /**
  * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops), each with
  * where its latest sign-in stands. A sign-in is asked of Neuland Sign, whose page opens here: the
- * password is given and sealed there, and the second factor shows there.
+ * password is given and sealed there, and the second factor shows there. A market account Neuland
+ * Sign signs in (Kleinanzeigen) shows with the market accounts instead.
  */
 @Composable
 fun SiteAccountPanel(session: Session, only: String? = null, account: String? = null) {
     val chat = session.chat
     val sites by chat.sites.collectAsState()
-    val uri = LocalUriHandler.current
+    val markets by chat.accounts.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     val all = sites ?: return Busy()
-    // The site asking for the account to sign in as, where none is known yet.
-    var open by remember { mutableStateOf<String?>(null) }
+    val marketSites = markets.mapNotNull { it.signInSite }.toSet()
     Panel { Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) {
         if (only == null) SectionTitle("Shop and payment accounts")
-        all.sites.filter { only == null || it == only }.sorted().forEach { site ->
-            Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
-                val name = siteName(site)
-                val step = all.steps[site]
-                val known = (if (site == only) account else null) ?: all.accounts[site]
-                val ask = { as_: String -> chat.signInSite(site, as_) { uri.openUri(it) }; open = null }
-                when {
-                    step?.running == true -> SiteHead(name, step.status) {
-                        all.pages[site]?.let { page -> OutlinedButton(onClick = { uri.openUri(page) }) { Text("Open") } }
-                    }
-                    open == site -> {
-                        var typed by remember(site) { mutableStateOf("") }
-                        SiteHead(name, null) { TextButton(onClick = { open = null }) { Text("Cancel") } }
-                        OutlinedTextField(
-                            typed, { typed = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-mail") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { if (typed.isNotBlank()) ask(typed) }),
-                        )
-                        Button(onClick = { ask(typed) }, enabled = typed.isNotBlank()) { Text("Sign in") }
-                    }
-                    else -> SiteHead(name, step?.status ?: "no sign-in yet", failed = step?.state == "failed") {
-                        OutlinedButton(onClick = { if (known != null) ask(known) else open = site }) {
-                            Text(if (step?.state == "signed-in") "Sign in again" else "Sign in")
-                        }
+        all.sites.filter { if (only == null) it !in marketSites else it == only }.sorted().forEach { site ->
+            SiteSignIn(session, site, siteName(site), (if (site == only) account else null) ?: all.accounts[site], idle = null)
+        }
+    }
+}
+}
+
+/**
+ * One account Neuland Sign signs in: its name, where its latest sign-in stands (or [idle], what is
+ * known of the account otherwise), and signing in, which opens Neuland Sign's page. Where no account
+ * is [known] for the site, the e-mail is asked first.
+ */
+@Composable
+fun SiteSignIn(session: Session, site: String, title: String, known: String?, idle: String?, failedIdle: Boolean = false) {
+    val chat = session.chat
+    val sites by chat.sites.collectAsState()
+    val uri = LocalUriHandler.current
+    val step = sites?.steps?.get(site)
+    var asking by remember(site) { mutableStateOf(false) }
+    val ask = { as_: String -> chat.signInSite(site, as_) { uri.openUri(it) }; asking = false }
+    Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
+        when {
+            step?.running == true -> SiteHead(title, step.status) {
+                sites?.pages?.get(site)?.let { page -> OutlinedButton(onClick = { uri.openUri(page) }) { Text("Open") } }
+            }
+            asking -> {
+                var typed by remember(site) { mutableStateOf("") }
+                SiteHead(title, null) { TextButton(onClick = { asking = false }) { Text("Cancel") } }
+                OutlinedTextField(
+                    typed, { typed = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-mail") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (typed.isNotBlank()) ask(typed) }),
+                )
+                Button(onClick = { ask(typed) }, enabled = typed.isNotBlank()) { Text("Sign in") }
+            }
+            else -> {
+                val status = idle ?: step?.status ?: "no sign-in yet"
+                val signedIn = idle?.startsWith("Signed in") == true || (idle == null && step?.state == "signed-in")
+                SiteHead(title, status, failed = failedIdle || (idle == null && step?.state == "failed")) {
+                    OutlinedButton(onClick = { if (known != null) ask(known) else asking = true }) {
+                        Text(if (signedIn) "Sign in again" else "Sign in")
                     }
                 }
             }
         }
     }
-}
 }
 
 /** A site's line: its name, what stands about it, and the one action it offers. */

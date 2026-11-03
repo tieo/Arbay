@@ -1,4 +1,8 @@
-package io.github.tieo.arbay.crawler
+package io.github.tieo.arbay.neuland
+
+import io.github.tieo.arbay.crawler.CrawlerBlockedException
+import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.crawler.NeulandBrowser
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -109,6 +113,33 @@ object Neuland {
             }
             response.status.value to response.bodyAsText()
         }.onFailure { log.warn("Neuland {}: {}", path, it.message) }.getOrNull()
+    }
+
+    /**
+     * A call to one of Neuland's account routes (`browsers/{name}/account/{site}/…`): the status it
+     * answered and its JSON. A Neuland that is not set up or did not answer is a [Refusal] of status 0.
+     */
+    suspend fun account(method: io.ktor.http.HttpMethod, path: String, body: kotlinx.serialization.json.JsonElement? = null, limitS: Long = 120): kotlinx.serialization.json.JsonElement {
+        val base = base ?: throw Refusal(0, "Neuland is not set up (NEULAND_URL)", JsonObject(emptyMap()))
+        val response = runCatching {
+            client.request("$base/$path") {
+                this.method = method
+                if (body != null) { contentType(ContentType.Application.Json); setBody(body.toString()) }
+                timeout { requestTimeoutMillis = limitS * 1000 }
+            }
+        }.getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message}", JsonObject(emptyMap())) }
+        val text = response.bodyAsText()
+        val answer = runCatching { json.parseToJsonElement(text) }.getOrElse { JsonObject(mapOf("error" to JsonPrimitive(text.take(200)))) }
+        if (response.status.isSuccess()) return answer
+        val o = answer as? JsonObject ?: JsonObject(emptyMap())
+        throw Refusal(response.status.value, o["error"]?.jsonPrimitive?.contentOrNull ?: response.status.toString(), o)
+    }
+
+    /** Neuland answering an account route with an error: its status, its words, and the whole answer
+     *  (`signedOut`, `declined`, `form`). */
+    class Refusal(val status: Int, message: String, val answer: JsonObject) : Exception(message) {
+        val signedOut: Boolean get() = answer["signedOut"]?.jsonPrimitive?.contentOrNull == "true"
+        val declined: Boolean get() = answer["declined"]?.jsonPrimitive?.contentOrNull == "true"
     }
 
     private suspend fun call(path: String, body: JsonObject, limitS: Long): JsonObject? = runCatching {

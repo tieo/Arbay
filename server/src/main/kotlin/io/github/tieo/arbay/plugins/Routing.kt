@@ -11,7 +11,6 @@ import io.github.tieo.arbay.routes.auctionReminderRoutes
 import io.github.tieo.arbay.routes.accountRoutes
 import io.github.tieo.arbay.routes.chatRoutes
 import io.github.tieo.arbay.routes.sellingRoutes
-import io.github.tieo.arbay.routes.signInProxyRoutes
 import io.github.tieo.arbay.routes.userStateRoutes
 import io.github.tieo.arbay.routes.liveRoutes
 import io.github.tieo.arbay.routes.mcpRoutes
@@ -52,7 +51,6 @@ fun Application.configureRouting() {
         chatRoutes()
         accountRoutes()
         sellingRoutes()
-        signInProxyRoutes(Chat.signInProxy)
         userStateRoutes()
         liveRoutes()
         mcpRoutes("http://127.0.0.1:$SERVER_PORT")

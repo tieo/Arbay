@@ -130,7 +130,7 @@ class ChatViewModel(
                 val account = accounts.firstOrNull { it.market == PlatformId.KLEINANZEIGEN } ?: client.chatAccount()
                 _account.value = account
                 // A sign-in going on in Arbay's browser shows here too, at the step it has reached.
-                accounts.firstOrNull { it.signingIn && it.proxySignIn == null }?.let { signing ->
+                accounts.firstOrNull { it.signingIn }?.let { signing ->
                     if (_signIn.value == null) {
                         _signInMarket.value = signing.market
                         followSignIn()
@@ -270,12 +270,6 @@ class ChatViewModel(
         _signIn.value = null
         _signInMarket.value = market
         signInStep { client.beginChatSignIn(market, payment) }
-    }
-
-    /** Starts the sign-in on the site's own pages; the account then carries the page to show, until it is signed in. */
-    fun beginProxySignIn() {
-        if (rendersASample) return
-        viewModelScope.launch { attempt { _account.value = client.beginChatProxySignIn() } }
     }
 
     /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */

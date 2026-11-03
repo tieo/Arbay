@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.Neuland
+import io.github.tieo.arbay.neuland.Neuland
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode

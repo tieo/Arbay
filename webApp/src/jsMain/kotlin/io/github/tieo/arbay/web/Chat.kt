@@ -46,7 +46,6 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
-import org.jetbrains.compose.web.dom.Iframe
 import org.jetbrains.compose.web.dom.Header
 import org.jetbrains.compose.web.dom.Img
 import org.jetbrains.compose.web.dom.Input
@@ -206,27 +205,33 @@ fun AccountSection(app: WebApp) {
     val busy by chat.signInBusy.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     if (accounts.isEmpty()) Busy()
+    val sites by chat.sites.collectAsState()
     accounts.forEach { a ->
+        // A market Neuland Sign signs in: where its account stands, as the market answers now.
+        a.signInSite?.let { site ->
+            SiteSignIn(
+                app, site, a.market.accountName, sites?.accounts?.get(site),
+                idle = if (a.signedIn) "Signed in" + (a.name?.let { " as $it" } ?: "") else a.problem ?: "Not signed in",
+                failedIdle = a.problem != null,
+            )
+            return@forEach
+        }
         H3 { Text(a.market.accountName) }
-        val proxy = a.proxySignIn?.takeIf { !a.signedIn }
         val step = signIn?.takeIf { signInMarket == a.market }
         when {
-            proxy != null -> SignInFrame(app, proxy)
             step != null -> PictureSignIn(app, step, a.market)
             busy && signInMarket == a.market -> Busy()
             // A market can ask its password again before a message (eBay does), so a signed-in
             // account can be signed in afresh too.
             a.signedIn -> Div({ classes("inline-form") }) {
                 Span({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
-                QuietButton("Sign in again") { if (a.market == PlatformId.KLEINANZEIGEN) chat.beginProxySignIn() else chat.beginSignIn(a.market) }
+                QuietButton("Sign in again") { chat.beginSignIn(a.market) }
                 a.payment?.let { payment -> QuietButton("Sign in to $payment") { chat.beginSignIn(a.market, payment = true) } }
             }
             else -> {
                 a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
-                // Kleinanzeigen's own pages show through the proxy; every other market's as a picture of Arbay's browser.
-                Div({ classes("actions") }) {
-                    PrimaryButton("Sign in") { if (a.market == PlatformId.KLEINANZEIGEN) chat.beginProxySignIn() else chat.beginSignIn(a.market) }
-                }
+                // The market's sign-in shows as a picture of Arbay's browser, which takes taps and keys.
+                Div({ classes("actions") }) { PrimaryButton("Sign in") { chat.beginSignIn(a.market) } }
             }
         }
     }
@@ -235,6 +240,7 @@ fun AccountSection(app: WebApp) {
 /** The name a person knows a site's account by. */
 fun siteName(site: String) = when (site) {
     "google.com" -> "Google"
+    "kleinanzeigen.de" -> "Kleinanzeigen"
     "paypal.com" -> "PayPal"
     else -> site
 }
@@ -242,45 +248,60 @@ fun siteName(site: String) = when (site) {
 /**
  * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops), each with
  * where its latest sign-in stands. A sign-in is asked of Neuland Sign, whose page opens in a new
- * tab: the password is given and sealed there, and the second factor shows there.
+ * tab: the password is given and sealed there, and the second factor shows there. A market account
+ * Neuland Sign signs in (Kleinanzeigen) shows with the market accounts instead.
  */
 @Composable
 fun SiteAccountSection(app: WebApp, only: String? = null, account: String? = null) {
     val chat = app.chat
     val sites by chat.sites.collectAsState()
+    val markets by chat.accounts.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     val all = sites ?: return Busy()
+    val marketSites = markets.mapNotNull { it.signInSite }.toSet()
+    all.sites.filter { if (only == null) it !in marketSites else it == only }.sorted().forEach { site ->
+        SiteSignIn(app, site, siteName(site), (if (site == only) account else null) ?: all.accounts[site], idle = null)
+    }
+}
+
+/**
+ * One account Neuland Sign signs in: its name, where its latest sign-in stands (or [idle], what is
+ * known of the account otherwise), and signing in, which opens Neuland Sign's page in a new tab.
+ * Where no account is [known] for the site, the e-mail is asked first.
+ */
+@Composable
+fun SiteSignIn(app: WebApp, site: String, title: String, known: String?, idle: String?, failedIdle: Boolean = false) {
+    val chat = app.chat
+    val sites by chat.sites.collectAsState()
+    val step = sites?.steps?.get(site)
     val openPage = { page: String -> kotlinx.browser.window.open(page, "_blank"); Unit }
-    // The site asking for the account to sign in as, where none is known yet.
-    var open by remember { mutableStateOf<String?>(null) }
-    all.sites.filter { only == null || it == only }.sorted().forEach { site ->
-        val name = siteName(site)
-        val step = all.steps[site]
-        val known = (if (site == only) account else null) ?: all.accounts[site]
-        // The tab opens on the click itself, which a browser lets through, and gets the page's
-        // address once Neuland answers.
-        val ask = { as_: String ->
-            val tab = kotlinx.browser.window.open("", "_blank")
-            chat.signInSite(site, as_) { page -> if (tab != null) tab.location.href = page else openPage(page) }
-            open = null
-        }
-        Div({ classes("account") }) {
-            when {
-                step?.running == true -> SiteHead(name, step.status) { all.pages[site]?.let { page -> QuietButton("Open") { openPage(page) } } }
-                open == site -> {
-                    var typed by remember(site) { mutableStateOf("") }
-                    SiteHead(name, null) { QuietButton("Cancel") { open = null } }
-                    Form(attrs = { addEventListener("submit") { event -> event.preventDefault(); if (typed.isNotBlank()) ask(typed) } }) {
-                        Label(attrs = { classes("field") }) {
-                            Span({ classes("field-label") }) { Text("E-mail") }
-                            Input(InputType.Email) { classes("control"); attr("autocomplete", "username"); attr("autofocus", ""); value(typed); onInput { typed = it.value } }
-                        }
-                        // A form's button submits it; Enter and a click both go through onSubmit.
-                        Div({ classes("actions") }) { PrimaryButton("Sign in", enabled = typed.isNotBlank()) {} }
+    var asking by remember(site) { mutableStateOf(false) }
+    // The tab opens on the click itself, which a browser lets through, and gets the page's address
+    // once Neuland answers.
+    val ask = { as_: String ->
+        val tab = kotlinx.browser.window.open("", "_blank")
+        chat.signInSite(site, as_) { page -> if (tab != null) tab.location.href = page else openPage(page) }
+        asking = false
+    }
+    Div({ classes("account") }) {
+        when {
+            step?.running == true -> SiteHead(title, step.status) { sites?.pages?.get(site)?.let { page -> QuietButton("Open") { openPage(page) } } }
+            asking -> {
+                var typed by remember(site) { mutableStateOf("") }
+                SiteHead(title, null) { QuietButton("Cancel") { asking = false } }
+                Form(attrs = { addEventListener("submit") { event -> event.preventDefault(); if (typed.isNotBlank()) ask(typed) } }) {
+                    Label(attrs = { classes("field") }) {
+                        Span({ classes("field-label") }) { Text("E-mail") }
+                        Input(InputType.Email) { classes("control"); attr("autocomplete", "username"); attr("autofocus", ""); value(typed); onInput { typed = it.value } }
                     }
+                    // A form's button submits it; Enter and a click both go through onSubmit.
+                    Div({ classes("actions") }) { PrimaryButton("Sign in", enabled = typed.isNotBlank()) {} }
                 }
-                else -> SiteHead(name, step?.status ?: "no sign-in yet", failed = step?.state == "failed") {
-                    QuietButton(if (step?.state == "signed-in") "Sign in again" else "Sign in") { if (known != null) ask(known) else open = site }
+            }
+            else -> {
+                val signedIn = idle?.startsWith("Signed in") == true || (idle == null && step?.state == "signed-in")
+                SiteHead(title, idle ?: step?.status ?: "no sign-in yet", failed = failedIdle || (idle == null && step?.state == "failed")) {
+                    QuietButton(if (signedIn) "Sign in again" else "Sign in") { if (known != null) ask(known) else asking = true }
                 }
             }
         }
@@ -340,22 +361,6 @@ private fun PictureSignIn(app: WebApp, step: SignInStep, market: PlatformId) {
             }
         }
     }
-}
-
-/**
- * The market's own sign-in page, shown inside Arbay. Its requests go through the server, which keeps
- * the site's cookies, so the account never reaches this browser; the frame goes once the account is signed in.
- */
-@Composable
-private fun SignInFrame(app: WebApp, src: String) {
-    Div({ classes("inline-form") }) {
-        QuietButton("Cancel") { app.chat.cancelSignIn() }
-    }
-    Iframe(attrs = {
-        classes("sign-in-frame")
-        attr("src", src)
-        attr("title", "The Kleinanzeigen sign-in page")
-    })
 }
 
 /** The tick that picks an offer to write to; shown on hover, and always once anything is picked. */

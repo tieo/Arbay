@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.Neuland
 import kotlinx.coroutines.sync.Semaphore
 
 /**

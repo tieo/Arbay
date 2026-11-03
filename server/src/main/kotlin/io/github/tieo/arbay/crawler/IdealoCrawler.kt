@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.Neuland
 import io.github.tieo.arbay.model.*
 import io.ktor.http.encodeURLParameter
 import kotlin.time.Clock
