@@ -175,6 +175,8 @@ object NeulandOffers {
         val location: io.github.tieo.arbay.model.Location? = null,
         /** Whether the ad is still up: false where the page says it is sold or gone, null where it says neither. */
         val available: Boolean? = null,
+        /** Promised to a buyer or taken off by its seller for now, and may come back. */
+        val paused: Boolean = false,
         /** When the ad went up, where the page says. */
         val listedAt: kotlin.time.Instant? = null,
         /** How many reviews the seller's rating rests on, where the page says more than the card. */
@@ -201,6 +203,7 @@ object NeulandOffers {
                 )
             },
             available = read.available,
+            paused = read.paused,
             listedAt = read.listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
             sellerReviews = read.sellerAccount?.reviews,
             photos = read.photos,
@@ -291,7 +294,7 @@ object NeulandOffers {
     }
     @Serializable private data class NeulandDetail(
         val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
-        val place: NeulandPlace? = null, val available: Boolean? = null, val listed: String? = null,
+        val place: NeulandPlace? = null, val available: Boolean? = null, val paused: Boolean = false, val listed: String? = null,
         @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
         val photos: List<String> = emptyList(),
     )
