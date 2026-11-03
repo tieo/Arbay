@@ -98,6 +98,7 @@ object NeulandOffers {
                 priceUpTo = o.priceUpTo?.money(),
                 sold = o.sold,
                 soldToOffer = o.offerAccepted,
+                delivery = o.delivery,
                 soldDate = o.ended?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
                 oldPrice = o.asking?.money(),
                 negotiable = o.negotiable,
@@ -261,7 +262,7 @@ object NeulandOffers {
     /** Every seller of the offer at [url], cheapest delivered first; none where the site lists none. */
     suspend fun sellers(url: String): List<SellerOffer> =
         json.decodeFromString(ListSerializer(NeulandSeller.serializer()), Neuland.offers("offers/sellers?url=${url.encodeURLParameter()}"))
-            .map { SellerOffer(it.seller, it.price.money(), it.shipping?.money(), it.url) }
+            .map { SellerOffer(it.seller, it.price.money(), it.shipping?.money(), it.url, it.delivery) }
 
     /** A delivery charge as Arbay's shipping, free where it is nothing. */
     fun delivery(cost: Money) = if (cost.amount == 0L) Shipping(cost = cost, free = true) else Shipping(cost = cost)
@@ -269,7 +270,7 @@ object NeulandOffers {
     @Serializable private data class NeulandMoney(val cents: Long, val currency: String) {
         fun money() = Money(cents, Currency.entries.firstOrNull { it.name == currency } ?: Currency.EUR)
     }
-    @Serializable private data class NeulandSeller(val seller: String, val price: NeulandMoney, val shipping: NeulandMoney? = null, val url: String? = null)
+    @Serializable private data class NeulandSeller(val seller: String, val price: NeulandMoney, val shipping: NeulandMoney? = null, val url: String? = null, val delivery: io.github.tieo.arbay.model.Delivery? = null)
     @Serializable private data class NeulandOffer(
         val id: String, val title: String, val url: String, val image: String? = null,
         val price: NeulandMoney, val shipping: NeulandMoney? = null, val seller: String? = null,
@@ -290,6 +291,7 @@ object NeulandOffers {
         val sold: Boolean = false,
         val ended: String? = null,
         @kotlinx.serialization.SerialName("offer_accepted") val offerAccepted: Boolean = false,
+        val delivery: io.github.tieo.arbay.model.Delivery? = null,
     ) {
         /** The seller's account on the market; a private person's name is not kept. */
         fun account() = sellerAccount?.let {

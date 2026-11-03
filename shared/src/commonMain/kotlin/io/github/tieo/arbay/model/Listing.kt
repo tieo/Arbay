@@ -43,6 +43,8 @@ data class Listing(
     val description: String? = null,
     val seller: Seller? = null,
     val shipping: Shipping? = null,
+    /** When it arrives, where the market states it. */
+    val delivery: Delivery? = null,
     val listingDate: Instant? = null,
     val soldDate: Instant? = null,
     val sold: Boolean = false,

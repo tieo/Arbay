@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
@@ -111,6 +112,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     /** How long a search call waits for markets before answering with what has arrived: inside
      *  the tool call's own time limit, which a search on a busy server outlasted. */
     private val ANSWER_WITHIN = 40.seconds
+    /** How long a search asked to be complete waits for its slowest market, the web's search
+     *  engines and shop pages, before answering with what it has. */
+    private val COMPLETE_WITHIN = 5.minutes
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
@@ -353,9 +357,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         tool(
             "search",
             "Search the markets now and list the offers, vehicles best fit first and everything else cheapest first, each " +
-                "with an id for other tools. Answers with what " +
-                "has arrived within about half a minute and names the markets still searching; call again with the search_id " +
-                "it gives to get the rest.",
+                "with an id for other tools, its price with shipping and when it arrives where the market states them. Answers " +
+                "with what has arrived within about half a minute and names the markets still searching; call again with the " +
+                "search_id it gives to get the rest, or ask complete to wait for every market.",
             props = {
                 string("words", "What to search for, as the user would type it")
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
@@ -366,6 +370,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
                 integer("per_market", "How many offers to read from each market (default 60, up to 1000): more finds the cheapest of a thing sold by the hundred, and takes longer")
                 boolean("dropped", "Also list the offers the search removed, per market with the reason for each, to check a filter took out only what it should")
+                boolean("complete", "Wait for every market, the web's shops included, before answering (a few minutes), so the answer is the whole market")
                 boolean("ask_cooling_down", "Ask a market that is cooling down after a block now instead of waiting the cooldown out, as the app's \"Ask now\"; a market that blocks again starts a new cooldown")
             },
         ) { args ->
@@ -375,7 +380,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // A tool call has a time limit of its own, and a search on a busy server can take
             // minutes: waiting for every market lost the whole answer to that limit. What has
             // arrived goes back, the rest keeps coming in, and the next call picks it up.
-            withTimeoutOrNull(ANSWER_WITHIN) { run.job.join() }
+            withTimeoutOrNull(if (args.bool("complete") == true) COMPLETE_WITHIN else ANSWER_WITHIN) { run.job.join() }
             run.describe(args)
         }
 
@@ -1029,7 +1034,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private fun why(reason: DropReason, detail: String?): String = reason.label + (detail?.let { ": $it" } ?: "")
 
     private fun Listing.line(foundAt: Instant? = null): String = listOfNotNull(
-        id, title.tidyTitle(), priceWords(),
+        id, title.tidyTitle(), priceWords(), delivery?.let { "arrives ${it.describe()}" },
         coupon?.let { c -> listOfNotNull(c.code?.let { "with code $it" } ?: "with a coupon", oldPrice?.let { "${it.amount / 100.0} without" }).joinToString(", ") },
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { "sold by $it" },
@@ -1201,6 +1206,23 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 }
 
 /** A Vinted checkout in words: what it adds up to, and whether it was paid or why not. */
+/** When a thing arrives, in a reader's words: the days the market names ("by Fri 6 Nov", "Tue 10 –
+ *  Thu 12 Nov"), or its span of days ("in 2–3 days"), else the market's own words. */
+internal fun io.github.tieo.arbay.model.Delivery.describe(): String {
+    val day = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.ENGLISH)
+    fun d(s: String?) = s?.let { runCatching { java.time.LocalDate.parse(it).format(day) }.getOrNull() }
+    val from = d(earliest)
+    val to = d(latest)
+    val span = days
+    return when {
+        from != null && to != null && from != to -> "$from – $to"
+        to != null -> if (from == null) "by $to" else "on $to"
+        from != null -> "from $from"
+        span != null && span.size == 2 -> if (span[0] == span[1]) "in ${span[0]} days" else "in ${span[0]}–${span[1]} days"
+        else -> words
+    }
+}
+
 internal fun io.github.tieo.arbay.model.AuctionBid.describe(): String =
     "$state · $title · up to $maxEur € + $shippingEur € shipping = $allInEur € all in · ends $endsAt · $url" +
         (problem?.let { " · $it" } ?: "") + (outcome?.let { " · eBay: ${it.replace(Regex("\\s+"), " ").take(300)}" } ?: "")

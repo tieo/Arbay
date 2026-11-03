@@ -53,14 +53,25 @@ data class ListingDetail(
     val sellers: List<SellerOffer> = emptyList(),
 )
 
+/** When a thing arrives, as its market states it: the market's own [words], the first and last
+ *  day they name (YYYY-MM-DD), or the span of [days] from ordering where they name days instead. */
+@Serializable
+data class Delivery(
+    val words: String,
+    val earliest: String? = null,
+    val latest: String? = null,
+    val days: List<Int>? = null,
+)
+
 /** One seller's offer of a thing listed at one address: its item price, its delivery charge where
- *  it states one, and the link to the seller's own offer. */
+ *  it states one, when it arrives, and the link to the seller's own offer. */
 @Serializable
 data class SellerOffer(
     val seller: String,
     val price: Money,
     val shipping: Money? = null,
     val url: String? = null,
+    val delivery: Delivery? = null,
 ) {
     /** Item and delivery together, where the seller states its delivery charge. */
     val landed: Money? get() = shipping?.takeIf { it.currency == price.currency }?.let { Money(price.amount + it.amount, price.currency) }
