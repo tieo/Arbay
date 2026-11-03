@@ -7,6 +7,7 @@ import io.github.tieo.arbay.model.ListingDetail
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -89,5 +90,27 @@ class DetailEnricherTest {
         }
         assertEquals(40, watch.read.size)
         assertEquals(List(40) { io.github.tieo.arbay.model.Transmission.MANUAL }, enriched?.map { it.vehicle?.gearbox })
+    }
+
+    @Test
+    fun `a search whose page reads wait behind another search's is not given up on`() = runBlocking {
+        val stamp = System.nanoTime()
+        val gearbox = CarFilters(transmission = io.github.tieo.arbay.model.Transmission.AUTOMATIC)
+        val slow = Pages()
+        val slowReads = object : Crawler by slow {
+            override suspend fun fetchDetail(listing: Listing): ListingDetail? { kotlinx.coroutines.delay(1_500); return slow.fetchDetail(listing) }
+        }
+        // Three other searches hold every shared read turn, each read longer than this search's limit.
+        val others = (1..3).map { n ->
+            launch { DetailEnricher.enrich((1..2).map { van("o$n-$it-$stamp") }, gearbox, slowReads, unattended = true) }
+        }
+        kotlinx.coroutines.delay(100)
+        val mine = Pages()
+        val enriched = withCrawlLimitOrNull(1_000) {
+            DetailEnricher.enrich(listOf(van("m-$stamp")), gearbox, mine)
+        }
+        others.forEach { it.join() }
+        assertEquals(listOf("KLEINANZEIGEN:m-$stamp"), mine.read)
+        assertEquals(io.github.tieo.arbay.model.Transmission.MANUAL, enriched?.single()?.vehicle?.gearbox)
     }
 }

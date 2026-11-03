@@ -817,6 +817,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // on the map after the crawl slot and the crawl's budget are let go.
                           var finished: CrawlerSearchEvent? = null
                           var finishedBy: Crawler? = null
+                          // How many offers this market streamed before its report, so a market given
+                          // up on after sending some is not reported as having given nothing.
+                          val streamed = java.util.concurrent.atomic.AtomicInteger(0)
                           // The shops the web market met and could not read, which this search
                           // then stays open for while they are learned.
                           val unreadable = io.github.tieo.arbay.crawler.UnreadableSites()
@@ -969,6 +972,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // is named from the first answer on.
                                 val fresh = withFit(withPhotoCopies(asDelivered(card.filter { emittedIds.add(it.id) }, pq)), pq, isCarQuery)
                                 if (fresh.isNotEmpty()) {
+                                    streamed.addAndGet(fresh.size)
                                     fresh.forEach { listingRepo.upsert(it) }
                                     resultChannel.send(CrawlerSearchEvent(
                                         type = CrawlerEventType.PLATFORM_PROGRESS,
@@ -1114,7 +1118,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                   type = CrawlerEventType.PLATFORM_ERROR,
                                   platform = platformId.name,
                                   platformName = platformId.displayName,
-                                  error = "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on",
+                                  error = streamed.get().let { n ->
+                                      if (n == 0) "gave nothing within ${PLATFORM_BUDGET_MS / 1000}s and was given up on"
+                                      else "stopped answering for ${PLATFORM_BUDGET_MS / 1000}s and was given up on after $n offer${if (n == 1) "" else "s"}, which are kept"
+                                  },
                                   errorType = "TIMEOUT",
                               ))
                           }

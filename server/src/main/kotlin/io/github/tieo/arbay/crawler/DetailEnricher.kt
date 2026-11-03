@@ -4,7 +4,6 @@ import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.VehicleField
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 
 /**
  * Promotes a platform's listings from inferred to verified specs by fetching detail pages,
@@ -33,6 +32,20 @@ object DetailEnricher {
     // so the wait never costs the market its whole answer.
     private const val MAX_WAIT_FOR_BUDGET_MS = 90_000L
     private val gate = Semaphore(3)
+
+    /** Runs [read] once one of the three page reads every search shares is free. The turn waited
+     *  for is spent by other searches' reads, so it stands the crawl's clock still as the shared
+     *  browser and request window do: a market whose pages queue behind another search's is not
+     *  that market failing to answer. */
+    private suspend fun <T> readingTurn(read: suspend () -> T): T {
+        val clock = kotlin.coroutines.coroutineContext[CrawlClock]
+        if (clock != null) clock.waitingOnOthers { gate.acquire() } else gate.acquire()
+        try {
+            return read()
+        } finally {
+            gate.release()
+        }
+    }
 
     /** Fields the given filters constrain and that a detail page could verify. */
     private fun neededFields(filters: CarFilters): Set<VehicleField> = buildSet {
@@ -94,7 +107,7 @@ object DetailEnricher {
             // A page read is the market answering, so the crawl's clock starts over: a watch run
             // reading a hundred pages one after another outlasts the market's time limit otherwise.
             val detail = if (fetch)
-                gate.withPermit { crawler.fetchDetail(listing) }
+                readingTurn { crawler.fetchDetail(listing) }
                     ?.also { DetailCache.put(listing.id, it); kotlin.coroutines.coroutineContext[CrawlClock]?.answered() }
                     ?: DetailCache.get(listing.id)
             else DetailCache.get(listing.id)
