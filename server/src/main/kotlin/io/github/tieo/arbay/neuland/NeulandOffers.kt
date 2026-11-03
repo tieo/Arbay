@@ -300,6 +300,20 @@ object NeulandOffers {
         fun location() = place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) }
         fun listedAt() = listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() }
     }
+    /**
+     * A vehicle the site calls new, as its mileage bears out. The condition is the seller's pick,
+     * and a dealer feed on Marktplaats ticks "Nieuw" on every van it lists: Crafters of 2019 to
+     * 2024 with 130,000 to 208,000 km went out of a search for used vans as new. Driven past a demo
+     * car's mileage it is used; past a delivery run, whether it is new or a demonstrator is not known.
+     */
+    internal fun drivenOrNew(mileageKm: Int?): io.github.tieo.arbay.model.VehicleCondition? = when {
+        mileageKm == null || mileageKm <= NEW_MAX_KM -> io.github.tieo.arbay.model.VehicleCondition.NEW
+        mileageKm > DEMO_MAX_KM -> io.github.tieo.arbay.model.VehicleCondition.USED
+        else -> null
+    }
+    private const val NEW_MAX_KM = 1_000
+    private const val DEMO_MAX_KM = 20_000
+
     @Serializable private data class NeulandVehicle(
         @kotlinx.serialization.SerialName("registered_year") val registeredYear: Int? = null,
         @kotlinx.serialization.SerialName("registered_month") val registeredMonth: Int? = null,
@@ -338,7 +352,7 @@ object NeulandOffers {
             doors = doors,
             wheelbaseMm = wheelbaseMm,
             condition = when (condition) {
-                "new" -> io.github.tieo.arbay.model.VehicleCondition.NEW
+                "new" -> drivenOrNew(mileageKm)
                 "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
                 "pre-registered" -> io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
                 "damaged" -> io.github.tieo.arbay.model.VehicleCondition.DAMAGED
