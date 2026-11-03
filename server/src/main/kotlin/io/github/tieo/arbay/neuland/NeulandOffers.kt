@@ -91,8 +91,11 @@ object NeulandOffers {
                 location = o.place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) },
                 description = o.description,
                 scrapedAt = now,
-                vehicle = o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence)
-                    ?: o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
+                // What the site states wins and counts as verified; the card's words fill the rest.
+                vehicle = io.github.tieo.arbay.crawler.VehicleTextParser.merge(
+                    o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
+                    o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
+                ),
             )
         }
     }
