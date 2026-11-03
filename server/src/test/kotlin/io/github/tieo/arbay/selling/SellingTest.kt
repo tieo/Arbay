@@ -1,6 +1,5 @@
 package io.github.tieo.arbay.selling
 
-import io.github.tieo.arbay.crawler.KleinanzeigenDetailParser
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
@@ -11,25 +10,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class SellingTest {
-
-    private val html = javaClass.getResource("/fixtures/kleinanzeigen_ad_copy.html")!!.readText()
-
-    @Test
-    fun copiesAnAdWithItsCategoryDetailsAndGalleryPhotosOnly() {
-        val copy = KleinanzeigenDetailParser.adCopy(html)!!
-        assertEquals("Testgerät 256 GB – guter Zustand", copy.title)
-        assertEquals("173", copy.categoryId)
-        assertEquals(mapOf("Marke" to "Google", "Speicher (GB)" to "256 GB", "Zustand" to "Gut"), copy.attributes)
-        // The similar ads below the ad carry photos of their own, which are not the ad's.
-        assertEquals(
-            listOf(
-                "https://img.kleinanzeigen.de/api/v1/prod-ads/images/aa/aaaaaaaa-1111-4111-8111-111111111111",
-                "https://img.kleinanzeigen.de/api/v1/prod-ads/images/bb/bbbbbbbb-2222-4222-8222-222222222222",
-            ),
-            copy.photos,
-        )
-        assertEquals("Erste Zeile.\n\nZweiter Absatz mit Details.", copy.description)
-    }
 
     @Test
     fun cropsBetweenFiveAndNinePercentOffEachSide() {

@@ -23,65 +23,30 @@ import kotlinx.serialization.json.Json
 object NeulandOffers {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /**
-     * What [site] (a domain) offers for [words], as listings of [platform], at a fixed price: page
-     * [page] of the answer, inside the price band [min]..[max] where the site's search takes one.
-     * Their condition is the site's words where it states one, otherwise [otherwise].
-     */
-    suspend fun search(
-        site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
-        otherwise: Condition? = Condition.NEW, kinds: Set<String>? = null,
-    ): List<Listing> {
-        val band = listOfNotNull(min?.let { "&min_cents=${it.amount}" }, max?.let { "&max_cents=${it.amount}" }).joinToString("")
-        val body = Neuland.offers("offers/search?site=$site&q=${words.encodeURLParameter()}&page=$page$band")
-        val list = runCatching { json.decodeFromString(OfferList.serializer(), body) }
-            .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", body, it as? Exception) }
-        val now = Clock.System.now()
-        // Only the kinds asked for, where the site files its offers by kind; one it files nowhere stays.
-        return list.offers.filter { o -> kinds == null || o.kind == null || o.kind in kinds }.map { o ->
-            val auctionOnly = o.auction?.let { !it.buyNow } == true
-            Listing(
-                id = "${platform.name}:${o.id}",
-                platformId = platform,
-                externalId = o.id,
-                url = o.url,
-                title = o.title,
-                price = o.price.money(),
-                oldPrice = o.asking?.money(),
-                saleType = if (auctionOnly) SaleType.AUCTION else SaleType.FIXED_PRICE,
-                auctionEndsAt = o.auction?.ends?.takeIf { auctionOnly }?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
-                bidCount = o.auction?.bids,
-                condition = o.condition?.let(Condition::parse) ?: otherwise,
-                imageUrls = listOfNotNull(o.image),
-                seller = o.account() ?: o.seller?.let { Seller(name = it) },
-                shipping = o.shipping?.money()?.let(::delivery),
-                location = o.location(),
-                listingDate = o.listedAt(),
-                description = o.description,
-                vehicle = o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
-                scrapedAt = now,
-            )
-        }
-    }
+    /** One page of a site's answer as Arbay keeps it: its listings, the searches the site lists as
+     *  related, and the conditions its own search was asked. */
+    data class Answer(val listings: List<Listing>, val related: List<String>, val asked: List<String>)
 
     /**
-     * The cars or vans [site] (a domain) offers for [words] and [vehicle]'s conditions, as listings
-     * of [platform]: page [page], inside the price band [min]..[max] where the site's search takes
-     * one, each with its place, the seller's words, and the vehicle: as the site states it in fields
-     * of its own (verified), or else read off its card's words by [VehicleTextParser].
+     * What [site] (a domain) offers for [words], as listings of [platform]: page [page] of the
+     * answer, inside the price band [min]..[max] where the site's search takes one, a car or van's
+     * [vehicle] conditions and the place [near] where given, in [countries] for a site serving
+     * several. Their condition is the site's words where it states one, otherwise [otherwise]; only
+     * the [kinds] asked for, where the site files its offers by kind. A vehicle is as the site states
+     * it in fields of its own (verified), its card's words read by [VehicleTextParser] for the rest.
      */
-    suspend fun searchVehicles(
-        site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
-        page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null,
-        otherwise: Condition? = null, countries: List<String> = emptyList(),
-    ): List<Listing> {
+    suspend fun ask(
+        site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
+        vehicle: VehicleQuery? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null, countries: List<String> = emptyList(),
+        otherwise: Condition? = null, kinds: Set<String>? = null,
+    ): Answer {
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
             put("words", kotlinx.serialization.json.JsonPrimitive(words))
             put("page", kotlinx.serialization.json.JsonPrimitive(page))
             min?.let { put("minCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             max?.let { put("maxCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
-            put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), vehicle))
+            vehicle?.let { put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), it)) }
             if (countries.isNotEmpty()) put("countries", kotlinx.serialization.json.JsonArray(countries.map { kotlinx.serialization.json.JsonPrimitive(it) }))
             near?.let { area ->
                 put("near", kotlinx.serialization.json.buildJsonObject {
@@ -102,7 +67,8 @@ object NeulandOffers {
         val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", answer.toString(), it as? Exception) }
         val now = Clock.System.now()
-        return list.offers.map { o ->
+        val listings = list.offers.filter { o -> kinds == null || o.kind == null || o.kind in kinds }.map { o ->
+            val auctionOnly = o.auction?.let { !it.buyNow } == true
             Listing(
                 id = "${platform.name}:${o.id}",
                 platformId = platform,
@@ -110,21 +76,45 @@ object NeulandOffers {
                 url = o.url,
                 title = o.title,
                 price = o.price.money(),
+                oldPrice = o.asking?.money(),
+                negotiable = o.negotiable,
+                saleType = if (auctionOnly) SaleType.AUCTION else SaleType.FIXED_PRICE,
+                auctionEndsAt = o.auction?.ends?.takeIf { auctionOnly }?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
+                bidCount = o.auction?.bids,
+                condition = o.condition?.let(Condition::parse) ?: otherwise,
                 imageUrls = listOfNotNull(o.image),
+                seller = o.account() ?: o.seller?.let { Seller(name = it) },
+                shipping = o.shipping?.money()?.let(::delivery) ?: when (o.ships) {
+                    true -> Shipping(available = true)
+                    false -> Shipping(pickup = true)
+                    null -> null
+                },
                 location = o.location(),
-                description = o.description,
-                condition = otherwise,
                 listingDate = o.listedAt(),
-                seller = o.account(),
+                description = o.description,
                 scrapedAt = now,
-                // What the site states wins and counts as verified; the card's words fill the rest.
-                vehicle = io.github.tieo.arbay.crawler.VehicleTextParser.merge(
+                vehicle = if (vehicle == null) o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence)
+                else io.github.tieo.arbay.crawler.VehicleTextParser.merge(
                     o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
                     o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
                 ),
             )
         }
+        return Answer(listings, list.related, list.asked)
     }
+
+    /** What [site] offers for [words] (see [ask]), its condition [otherwise] where it states none. */
+    suspend fun search(
+        site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
+        otherwise: Condition? = Condition.NEW, kinds: Set<String>? = null,
+    ): List<Listing> = ask(site, words, platform, siteName, page, min, max, otherwise = otherwise, kinds = kinds).listings
+
+    /** The cars or vans [site] offers for [words] and [vehicle]'s conditions (see [ask]). */
+    suspend fun searchVehicles(
+        site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
+        page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null,
+        otherwise: Condition? = null, countries: List<String> = emptyList(),
+    ): List<Listing> = ask(site, words, platform, siteName, page, min, max, vehicle, near, countries, otherwise).listings
 
     private val vehicleJson = Json { encodeDefaults = false; explicitNulls = false }
 
@@ -153,6 +143,8 @@ object NeulandOffers {
         val bodies: List<String> = emptyList(),
         /** The least Euro emission class. */
         @kotlinx.serialization.SerialName("emission_min") val emissionMin: Int? = null,
+        /** Among vans rather than cars, where a site files them apart. */
+        val vans: Boolean = false,
     ) {
         companion object {
             /** A fuel by Neuland's name for it. */
@@ -185,6 +177,13 @@ object NeulandOffers {
         val photos: List<String> = emptyList(),
         /** Who sells it, where the page names them. */
         val seller: io.github.tieo.arbay.model.SellerProfile? = null,
+        val title: String? = null,
+        /** The price asked on the page now. */
+        val price: Money? = null,
+        /** The shipping the page offers: its cheapest cost, or only that it ships, or pickup only. */
+        val shipping: Shipping? = null,
+        /** What the site files it as, in its own key. */
+        val kind: String? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -211,8 +210,18 @@ object NeulandOffers {
                 io.github.tieo.arbay.model.SellerProfile(
                     name = a.name,
                     type = if (a.dealer) io.github.tieo.arbay.model.SellerType.BUSINESS else io.github.tieo.arbay.model.SellerType.PRIVATE,
+                    since = a.since?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() },
+                    badges = a.badges,
                 )
             },
+            title = read.title,
+            price = read.price?.money(),
+            shipping = read.shipping?.money()?.let { Shipping(cost = it, available = true) } ?: when (read.ships) {
+                true -> Shipping(available = true)
+                false -> Shipping(available = false, pickup = true)
+                null -> null
+            },
+            kind = read.kind,
         )
     }
 
@@ -241,6 +250,9 @@ object NeulandOffers {
         val auction: NeulandAuction? = null,
         /** What the site files it as, in its own key. */
         val kind: String? = null,
+        val negotiable: Boolean = false,
+        /** Ships at a cost the card leaves open (true), or is collected only (false). */
+        val ships: Boolean? = null,
     ) {
         /** The seller's account on the market; a private person's name is not kept. */
         fun account() = sellerAccount?.let {
@@ -268,6 +280,9 @@ object NeulandOffers {
         val condition: String? = null,
         val doors: Int? = null,
         @kotlinx.serialization.SerialName("wheelbase_mm") val wheelbaseMm: Int? = null,
+        @kotlinx.serialization.SerialName("emission_sticker") val emissionSticker: Int? = null,
+        val upholstery: String? = null,
+        @kotlinx.serialization.SerialName("inspection_until") val inspectionUntil: String? = null,
     ) {
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
             firstRegYear = registeredYear,
@@ -280,6 +295,9 @@ object NeulandOffers {
             seats = seats,
             color = color,
             emissionClassEuro = emissionClass,
+            emissionSticker = emissionSticker,
+            upholstery = upholstery,
+            inspectionUntil = inspectionUntil,
             doors = doors,
             wheelbaseMm = wheelbaseMm,
             condition = when (condition) {
@@ -296,7 +314,8 @@ object NeulandOffers {
         val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
         val place: NeulandPlace? = null, val available: Boolean? = null, val paused: Boolean = false, val listed: String? = null,
         @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
-        val photos: List<String> = emptyList(),
+        val photos: List<String> = emptyList(), val title: String? = null, val price: NeulandMoney? = null,
+        val shipping: NeulandMoney? = null, val ships: Boolean? = null, val kind: String? = null,
     )
     @Serializable private data class NeulandAuction(
         @kotlinx.serialization.SerialName("buy_now") val buyNow: Boolean = false,
@@ -304,8 +323,8 @@ object NeulandOffers {
     )
     @Serializable private data class NeulandAccount(
         val id: String, val dealer: Boolean = false, val name: String? = null, val url: String? = null,
-        val stars: Double? = null, val reviews: Int? = null,
+        val stars: Double? = null, val reviews: Int? = null, val since: String? = null, val badges: List<String> = emptyList(),
     )
     @Serializable private data class NeulandPlace(val town: String? = null, val postcode: String? = null, val country: String? = null)
-    @Serializable private data class OfferList(val offers: List<NeulandOffer>)
+    @Serializable private data class OfferList(val offers: List<NeulandOffer>, val related: List<String> = emptyList(), val asked: List<String> = emptyList())
 }

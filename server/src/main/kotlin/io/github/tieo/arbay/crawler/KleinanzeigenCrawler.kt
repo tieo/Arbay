@@ -6,16 +6,20 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.CancellationException
-import kotlin.time.Clock
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import org.jsoup.Jsoup
+import io.github.tieo.arbay.neuland.NeulandOffers
 import org.slf4j.LoggerFactory
 
-class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState, CopiesAds, ReadsGalleries {
+class KleinanzeigenCrawler(
+    private val client: HttpClient,
+    /** One page of the site's answer, as a car or van with the vehicle's conditions or by the
+     *  search's words, under a price floor and ceiling; Neuland's reader of it. */
+    private val page: suspend (SearchQuery, NeulandOffers.VehicleQuery?, Int, Money?, Money?) -> NeulandOffers.Answer = { query, vehicle, page, floor, max ->
+        NeulandOffers.ask(
+            "kleinanzeigen.de", query.positiveText, PlatformId.KLEINANZEIGEN, "Kleinanzeigen", page, floor, max,
+            vehicle = vehicle, near = query.area("DE"), otherwise = null,
+        )
+    },
+) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, SuggestsRelatedSearches, KnowsListingAge, KnowsLocation, HasDetailSpecs, KnowsAdState, CopiesAds, ReadsGalleries {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.FUEL,
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
@@ -26,201 +30,52 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
 
     private val log = LoggerFactory.getLogger(KleinanzeigenCrawler::class.java)
 
-    /**
-     * Resolves a city name to a Kleinanzeigen location ID and slug via their autocomplete API.
-     * Returns (locationId, citySlug) or null if lookup fails.
-     * Example: "Frankfurt (Oder)" → ("1234", "frankfurt-%28oder%29")
-     */
-    private suspend fun resolveLocation(location: String): Pair<String, String>? {
-        return try {
-            val url = "https://www.kleinanzeigen.de/s-ort-empfehlungen.json?query=${location.encodeUrl()}"
-            val response = client.get(url) {
-                headers {
-                    append("User-Agent", USER_AGENT)
-                    append("Accept", "application/json")
-                    append("Accept-Language", "de-DE,de;q=0.9")
-                    append("Referer", "https://www.kleinanzeigen.de/")
-                }
-            }
-            if (response.status.value != 200) return null
-            val body = response.bodyAsText()
-            val json = body.trim()
-            val regex = Regex(""""_(\d+)"\s*:""")
-            val locationId = regex.findAll(json)
-                .map { it.groupValues[1] }
-                .firstOrNull { it != "0" }
-                ?: return null
-            val citySlug = KleinanzeigenUrlBuilder.citySlug(location)
-            locationId to citySlug
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            log.debug("Location lookup failed for '{}': {}", location, e.message)
-            null
-        }
-    }
-
     override suspend fun search(query: SearchQuery): List<Listing> {
-        if (query.freeOnly) return searchFreeItems(query)
-        return searchRegular(query)
+        if (query.freeOnly) {
+            val all = mutableListOf<Listing>()
+            searchFreeItemsStreaming(query) { _, results, _ -> all.addAll(results) }
+            return all
+        }
+        val car = CarQueryResolver.resolve(query.positiveText)
+        // A car is searched in Autos with its make and model, and among the commercial vehicles with
+        // its model's word, where van sellers file most of them: 1,390 Crafters between 10,000 and
+        // 30,990 € there against 28 in Autos. Each reads its price band cheapest first, up to the
+        // band's cap.
+        val passes = if (car == null) listOf(Pass(null, byPrice = false))
+        else listOfNotNull(Pass(vehicleQuery(query, car), byPrice = true), car.modelSlug?.let { Pass(NeulandOffers.VehicleQuery(make = car.makeSlug, model = it, vans = true), byPrice = true) })
+        val band = if (car != null) query.wholePriceBand() else query
+        val all = mutableListOf<Listing>()
+        val seen = mutableSetOf<String>()
+        for ((index, pass) in passes.withIndex()) readPages(band, pass, all, seen, firstPass = index == 0)
+        return all
     }
 
     /**
-     * Streaming free-item search — emits results per page via [onPageResults].
-     * Returns total result count and whether there are more pages.
+     * What Kleinanzeigen's own search is asked of a car: its make and model, and the fuel, year,
+     * mileage and gearbox [atTheSource] leaves to the site, whose car ads all state them. The site
+     * takes one fuel only, so several are judged here. The power is stated by 1364 of 1503 car ads,
+     * and the site's filter drops the other 139 rather than leaving them unjudged, so it is asked
+     * for only when the search excludes unstated specs anyway.
      */
-    suspend fun searchFreeItemsStreaming(
-        query: SearchQuery,
-        onPageResults: suspend (page: Int, results: List<Listing>, totalSoFar: Int) -> Unit,
-    ): Pair<Int, Boolean> {
-        val seenIds = mutableSetOf<String>()
-        val maxPages = query.maxPages ?: CrawlerConfig.current.maxPages
-        var total = 0
-        var hasMore = false
-
-        val locationStr = query.location
-        val resolved = if (locationStr != null) resolveLocation(locationStr) else null
-        val locationId = resolved?.first
-        val citySlug = resolved?.second
-        val radiusKm = query.radiusKm
-
-        val endPage = query.startPage + maxPages - 1
-        for (page in query.startPage..endPage) {
-            val url = KleinanzeigenUrlBuilder.freeItems(
-                locationId = locationId,
-                citySlug = citySlug,
-                radiusKm = if (locationId != null) radiusKm else null,
-                page = page,
-            )
-
-            val html = try {
-                fetchWithFallback(client, url, "Kleinanzeigen", waitSelector = "article[data-adid]")
-            } catch (e: CrawlerBlockedException) {
-                if (page == query.startPage) throw e
-                break
-            }
-
-            val doc = Jsoup.parse(html)
-            val rawItemCount = doc.select("article[data-adid]").size
-            if (rawItemCount == 0) break
-
-            val pageResults = parseSearchResults(html, freeOnly = true)
-            val newResults = pageResults.filter { seenIds.add(it.externalId) }
-            total += newResults.size
-
-            log.info("Free items page {}: {} raw, {} free, {} new, total={}",
-                page, rawItemCount, pageResults.size, newResults.size, total)
-
-            if (newResults.isNotEmpty()) {
-                onPageResults(page, newResults, total)
-            }
-
-            if (pageResults.size < 3) break
-            hasMore = page < endPage
-        }
-
-        return total to hasMore
-    }
-
-    /**
-     * Free-item search using Kleinanzeigen's preis::0 filter for guaranteed free-only results.
-     * This filter works across all pages, so we can paginate normally.
-     */
-    private suspend fun searchFreeItems(query: SearchQuery): List<Listing> {
-        val allResults = mutableListOf<Listing>()
-        searchFreeItemsStreaming(query) { _, results, _ ->
-            allResults.addAll(results)
-        }
-        return allResults
-    }
-
-    /** Our Fuel enum -> Kleinanzeigen's autos.fuel_s value, or null where it has no equivalent. */
-    private fun kleinanzeigenFuel(f: Fuel): String? = when (f) {
-        Fuel.PETROL -> "benzin"
-        Fuel.DIESEL -> "diesel"
-        Fuel.ELECTRIC -> "elektro"
-        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "hybrid"
-        Fuel.LPG -> "lpg"
-        Fuel.CNG -> "cng"
-        Fuel.HYDROGEN, Fuel.ETHANOL, Fuel.OTHER -> null
-    }
-
-    private suspend fun searchRegular(query: SearchQuery): List<Listing> {
-        val allResults = mutableListOf<Listing>()
-        val seenIds = mutableSetOf<String>()
-
-        val locationStr = query.location
-        val resolved = if (locationStr != null) resolveLocation(locationStr) else null
-        val locationId = resolved?.first
-
-        // Car queries go to the Autos category (c216) with a make/model slug,
-        // which surfaces real car ads instead of accessories and parts.
-        val carQuery = CarQueryResolver.resolve(query.positiveText)
-
-        // The fuel, year and mileage are asked of the site itself ([atTheSource]): its car ads all
-        // state them. fuel_s is single-select, so only one chosen fuel maps natively; several fall
-        // back to the filter here.
-        val cf = query.carFilters
+    internal fun vehicleQuery(query: SearchQuery, car: CarQueryResolver.CarQuery): NeulandOffers.VehicleQuery {
         val criteria = query.carCriteria.atTheSource()
-        val attrFilters = KleinanzeigenUrlBuilder.carAttrFilters(
-            fuel = cf?.fuels?.singleOrNull()?.let { kleinanzeigenFuel(it) },
-            gearbox = criteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatik" else "manuell" },
-            minYear = criteria.firstRegFromYear,
-            maxYear = criteria.firstRegToYear,
-            minMileageKm = criteria.minMileageKm,
-            maxMileageKm = criteria.maxMileageKm,
-            minPowerKw = criteria.minPowerKw,
-            maxPowerKw = criteria.maxPowerKw,
-            strictUnknown = criteria.strictUnknown,
+        return NeulandOffers.VehicleQuery(
+            make = car.makeSlug,
+            model = car.modelSlug,
+            fuels = listOfNotNull(query.carFilters?.fuels?.singleOrNull()?.let(NeulandOffers.VehicleQuery::fuel)),
+            gearbox = criteria.transmission?.let { if (it == Transmission.AUTOMATIC) "automatic" else "manual" },
+            registeredFrom = criteria.firstRegFromYear,
+            registeredTo = criteria.firstRegToYear,
+            mileageMinKm = criteria.minMileageKm,
+            mileageMaxKm = criteria.maxMileageKm,
+            powerMinKw = criteria.minPowerKw.takeIf { criteria.strictUnknown },
+            powerMaxKw = criteria.maxPowerKw.takeIf { criteria.strictUnknown },
         )
-
-        // A car is searched in Autos with its make and model, and in Nutzfahrzeuge with its model's
-        // word, where van sellers file most of them: 1,390 Crafters between 10,000 and 30,990 €
-        // there against 28 in Autos. Each reads its price band cheapest first, up to the band's cap.
-        val passes: List<Pass> = if (carQuery != null) listOfNotNull(
-            Pass(byPrice = true) { page, floorCents ->
-                KleinanzeigenUrlBuilder.carSearch(
-                    query = listOfNotNull(carQuery.makeSlug, carQuery.modelSlug).joinToString(" "),
-                    page = page,
-                    locationId = locationId,
-                    radiusKm = if (locationId != null) query.radiusKm else null,
-                    minPriceCents = floorCents,
-                    maxPriceCents = query.maxPrice?.amount,
-                    attrFilters = attrFilters,
-                )
-            },
-            carQuery.modelSlug?.let { model ->
-                Pass(byPrice = true) { page, floorCents ->
-                    KleinanzeigenUrlBuilder.vanSearch(
-                        modelWord = model.replace("-", " "),
-                        page = page,
-                        locationId = locationId,
-                        radiusKm = if (locationId != null) query.radiusKm else null,
-                        minPriceCents = floorCents,
-                        maxPriceCents = query.maxPrice?.amount,
-                    )
-                }
-            },
-        ) else listOf(
-            Pass(byPrice = false) { page, floorCents ->
-                KleinanzeigenUrlBuilder.regularSearch(
-                    query = query.positiveText,
-                    page = page,
-                    locationId = locationId,
-                    radiusKm = if (locationId != null) query.radiusKm else null,
-                    minPriceCents = floorCents,
-                    maxPriceCents = query.maxPrice?.amount,
-                )
-            }
-        )
-        val band = if (carQuery != null) query.wholePriceBand() else query
-        for ((index, pass) in passes.withIndex()) {
-            readPages(band, pass, allResults, seenIds, firstPass = index == 0)
-        }
-        return allResults
     }
 
-    /** One way of asking Kleinanzeigen for the search, as the URL of a page under a price floor;
-     *  [byPrice] when its answer comes cheapest first. */
-    private class Pass(val byPrice: Boolean, val urlFor: (page: Int, floorCents: Long?) -> String)
+    /** One way of asking Kleinanzeigen for the search: as a car or van with [vehicle]'s conditions
+     *  or by its words; [byPrice] when its answer comes cheapest first. */
+    private class Pass(val vehicle: NeulandOffers.VehicleQuery?, val byPrice: Boolean)
 
     /** Reads [query]'s pages from [pass] into [allResults], until the pages run out or the offers wanted are in. */
     private suspend fun readPages(
@@ -231,33 +86,24 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
         firstPass: Boolean,
     ) {
         val start = allResults.size
-        var floor = query.minPrice?.amount
+        var floor = query.minPrice
         var firstPage = query.startPage
         var firstFetch = true
         while (true) {
             // The dearest offer on the last page read when the pages ended while still full.
-            var lastFullPageTop: Long? = null
+            var lastFullPageTop: Money? = null
             val endPage = firstPage + query.pageLimit() - 1
             for (page in firstPage..endPage) {
-                val html = try {
-                    fetchWithFallback(client, pass.urlFor(page, floor), "Kleinanzeigen", waitSelector = "article[data-adid]")
+                val answer = try {
+                    page(query, pass.vehicle, page, floor, query.maxPrice)
                 } catch (e: CrawlerBlockedException) {
                     if (firstFetch && firstPass) throw e
                     return
                 }
-
-                val doc = Jsoup.parse(html)
-                val rawItemCount = doc.select("article[data-adid]").size
-                if (rawItemCount == 0) return
-
-                if (firstFetch && firstPass) emitSuggestedTerms(parseSuggestedTerms(doc))
+                val pageResults = answer.listings
+                if (pageResults.isEmpty()) return
+                if (firstFetch && firstPass) emitSuggestedTerms(answer.related)
                 firstFetch = false
-                val pageResults = parseSearchResults(html, freeOnly = false)
-                // Cards on the page and none of them read is the parser no longer fitting the markup,
-                // which would otherwise pass for a search nothing matched.
-                if (pageResults.isEmpty() && rawItemCount >= 5 && allResults.isEmpty()) {
-                    throw unreadablePage("Kleinanzeigen", "$rawItemCount cards on the page, none of them read", html)
-                }
                 val newResults = pageResults.filter { seenIds.add(it.externalId) }
                 allResults.addAll(newResults)
                 if (newResults.isNotEmpty()) emitPartialResults(newResults)
@@ -265,241 +111,96 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
                 // A later page holding nothing the earlier ones did not is the site ignoring the page
                 // number; asking for the next one would fetch the same page again.
                 if (page > firstPage && newResults.isEmpty()) {
-                    lastFullPageTop = pageResults.maxOfOrNull { it.price.amount }
+                    lastFullPageTop = pageResults.maxBy { it.price.amount }.price
                     break
                 }
-                if (rawItemCount < 10) return
+                if (pageResults.size < 10) return
                 if (allResults.size - start >= query.resultCap()) return
-                if (page == endPage) lastFullPageTop = pageResults.maxOfOrNull { it.price.amount }
+                if (page == endPage) lastFullPageTop = pageResults.maxBy { it.price.amount }.price
             }
             // Kleinanzeigen serves 50 pages of one answer and then the 50th again: 1,390 Crafters
             // between 10,000 and 30,990 € in Nutzfahrzeuge ended at 27,999 €. An answer cheapest
             // first goes on as a new answer from the last price read; the offers at that price are
             // read again and counted once.
-            val next = lastFullPageTop?.takeIf { pass.byPrice && (floor == null || it > floor) } ?: return
+            val next = lastFullPageTop?.takeIf { pass.byPrice && (floor == null || it.amount > floor.amount) } ?: return
             floor = next
             firstPage = 1
         }
     }
 
-    /** The related searches Kleinanzeigen prints under its own results ("Ähnliche Suchanfragen"):
-     *  the words its sellers and buyers actually use for the thing, on a page already fetched. */
-    internal fun parseSuggestedTerms(doc: org.jsoup.nodes.Document): List<String> =
-        doc.select("#srchrslt-shngls a, .srchresult-suggested-container a")
-            .map { it.text().trim().lowercase() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-    // The rewritten cards carry no class that names what a line is, so these say what each one
-    // looks like: a price ("46 €", "45 € VB", "Zu verschenken", "VB"), a German postcode and place,
-    // and the date form Kleinanzeigen prints on a card.
-    private val PRICE_LINE = Regex("""^\s*(\d[\d.]*(?:,\d+)?\s*€(\s*VB)?|VB|Zu verschenken|Verschenken)\s*$""", RegexOption.IGNORE_CASE)
-    private val POSTCODE_PLACE = Regex("""^\d{4,5}\s+\p{L}[\p{L} .\-/()]*$""")
-    private val DATE_LINE = Regex("""^(Heute|Gestern|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)(,\s*\d{1,2}:\d{2})?$|^\d{1,2}\.\d{1,2}\.\d{4}$""")
-
-    internal fun parseSearchResults(html: String, freeOnly: Boolean = false): List<Listing> {
-        val doc = Jsoup.parse(html)
-        val now = Clock.System.now()
-
-        // Cards only carry a truncated snippet; the full description sits in per-listing
-        // ld+json (keyed by title). Harvesting it powers find-in-description and gives the
-        // vehicle enricher the whole spec text, at no extra request.
-        val fullDescriptions = parseJsonLdDescriptions(doc)
-
-        // Kleinanzeigen rebuilt its result cards: the class names the old selectors named
-        // ("aditem", "aditem-main--middle--price-shipping--price") are gone, replaced by utility
-        // classes that say nothing about what they hold. What survived the rewrite is the ad's own
-        // identity — every card is still an <article> carrying data-adid — so that is what is
-        // selected, and each field below falls back from the old class to the shape of the thing.
-        // The failure this fixes was silent: every Kleinanzeigen search answered "0 results".
-        val items = doc.select("article[data-adid]")
-        val sellers = sellersByAd(doc)
-
-        return items.mapNotNull { item ->
-            val adId = item.attr("data-adid").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-
-            val titleEl = item.selectFirst("h2.text-module-begin a.ellipsis")
-                ?: item.selectFirst("a.ellipsis")
-                // The card links to the ad twice: once around the photo, once around the title.
-                // The photo's link is not empty either — it holds the little "how many pictures"
-                // badge — so the one without an image in it is the title.
-                ?: item.select("a[href*=/s-anzeige/]")
-                    .firstOrNull { it.selectFirst("img") == null && it.text().isNotBlank() }
-                ?: return@mapNotNull null
-            val title = titleEl.text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            val href = titleEl.attr("href").takeIf { it.isNotBlank() }
-                ?: item.attr("data-href")
-            val url = "https://www.kleinanzeigen.de$href"
-
-            // Skip "Vermisste Tiere" (category 283) — lost pet notices, not items to pick up
-            if (freeOnly) {
-                val catMatch = Regex("""/\d+-(\d+)-\d+$""").find(href)
-                val mainCat = catMatch?.groupValues?.get(1)
-                if (mainCat == "283") return@mapNotNull null
-            }
-
-            val priceText = item.selectFirst("p.aditem-main--middle--price-shipping--price")?.text()
-                // No class names to lean on: the price is the one line that reads like a price.
-                ?: item.select("p, span").map { it.text().trim() }
-                    .firstOrNull { PRICE_LINE.matches(it) }
-            if (priceText == null && !freeOnly) return@mapNotNull null
-            val negotiable = priceText?.contains("VB", ignoreCase = true) ?: false
-            val isFreeItem = priceText.isNullOrBlank() ||
-                priceText.contains("verschenken", ignoreCase = true) ||
-                priceText.contains("kostenlos", ignoreCase = true) ||
-                priceText.trim() == "0 €" || priceText.trim() == "0€" ||
-                priceText.trim() == "Zu verschenken"
-            // When searching free items, drop anything with a price tag
-            if (freeOnly && !isFreeItem) return@mapNotNull null
-            val price = if (isFreeItem) Money.cents(0) else Money.parse(priceText) ?: return@mapNotNull null
-
-            val spanTexts = item.select("span").map { it.text().trim() }
-            val locationText = item.selectFirst("div.aditem-main--top--left")?.text()?.trim()
-                // "24887 Silberstedt" — a postcode and a place.
-                ?: spanTexts.firstOrNull { POSTCODE_PLACE.matches(it) }
-            val location = locationText?.let { Location.parse(it) }
-
-            // Posting date: cards show "Heute, HH:MM" / "Gestern, HH:MM" / "TT.MM.YYYY" top-right.
-            val listingDate = ListingDateParser.parse(
-                item.selectFirst("div.aditem-main--top--right")?.text()
-                    ?: spanTexts.firstOrNull { DATE_LINE.matches(it) },
-            )
-
-            val imageUrl = (item.selectFirst("div.aditem-image img") ?: item.selectFirst("img[src*=kleinanzeigen]"))
-                ?.let {
-                    val src = it.attr("src")
-                    val srcset = it.attr("srcset")
-                    srcset.takeIf { s -> s.isNotBlank() } ?: src.takeIf { s -> s.startsWith("http") }
-                }
-
-            val snippet = item.selectFirst("p.aditem-main--middle--description")?.text()
-                // The other paragraph on the card, the one that is not the price.
-                ?: item.select("p").map { it.text().trim() }
-                    .firstOrNull { it.length > 20 && !PRICE_LINE.matches(it) }
-            val descriptionSnippet = fullDescriptions[title] ?: snippet
-
-            // Car cards carry attribute chips ("228.076 km", "EZ 11/2012") in .simpletag spans.
-            // Mileage and first registration from the chips are structured, so mark them
-            // verified — they may exclude. Fold them into the description too for the enricher.
-            val tags = item.select("span.simpletag").eachText().map { it.trim() }.filter { it.isNotBlank() }
-            val chipVehicle = parseChips(tags)
-            val descriptionWithTags = (listOfNotNull(descriptionSnippet) + tags)
-                .joinToString(" · ").takeIf { it.isNotBlank() }
-
-            val shippingText = item.selectFirst("p.aditem-main--middle--price-shipping--shipping")?.text()
-                ?: item.selectFirst("[class*=shipping]")?.text()
-                ?: spanTexts.firstOrNull { it.contains("Versand", ignoreCase = true) }
-            val shipping = when {
-                shippingText == null -> null
-                shippingText.contains("Versand", true) -> {
-                    val cost = Money.parse(shippingText)
-                    if (cost != null) Shipping(cost = cost) else Shipping(available = true)
-                }
-                else -> null
-            }
-
-            Listing(
-                id = "${platformId.name}:$adId",
-                platformId = platformId,
-                externalId = adId,
-                url = url,
-                title = title,
-                price = price,
-                shipping = shipping,
-                negotiable = negotiable,
-                imageUrls = listOfNotNull(imageUrl),
-                location = location,
-                description = descriptionWithTags,
-                listingDate = listingDate,
-                scrapedAt = now,
-                vehicle = chipVehicle,
-                seller = sellers[adId],
-            )
-        }
-    }
-
     /**
-     * Who placed each ad on the page, by the ad's number.
-     *
-     * The card names nobody. The page's own components are handed their data as JSON in a `props`
-     * attribute, every value wrapped as `[0, value]`, and the one listing the results carries each
-     * ad's `userId` and whether it is a private or a commercial seller (`posterType`). Measured on a
-     * Crafter search: all 26 ads on the page had their entry. No name is anywhere on the page, so
-     * the seller is known by the account number alone.
+     * Things given away ("Zu verschenken") around the place [query] names, page by page into
+     * [onPageResults]; lost pets, filed there too, left out. Answers how many were read and whether
+     * pages are left.
      */
-    internal fun sellersByAd(doc: org.jsoup.nodes.Document): Map<String, Seller> {
-        val found = HashMap<String, Seller>()
-        fun unwrap(value: JsonElement?): JsonPrimitive? =
-            ((value as? JsonArray)?.takeIf { it.size == 2 }?.get(1) ?: value) as? JsonPrimitive
-        fun walk(element: JsonElement) {
-            when (element) {
-                is JsonObject -> {
-                    val adId = unwrap(element["id"])?.content
-                    val userId = unwrap(element["userId"])?.content?.takeIf { it.isNotBlank() && it != "null" }
-                    if (adId != null && userId != null && adId !in found) {
-                        found[adId] = Seller(
-                            id = userId,
-                            type = when (unwrap(element["posterType"])?.content) {
-                                "PRIVATE" -> SellerType.PRIVATE
-                                "COMMERCIAL" -> SellerType.BUSINESS
-                                else -> null
-                            },
-                        )
-                    }
-                    element.values.forEach(::walk)
-                }
-                is JsonArray -> element.forEach(::walk)
-                else -> {}
+    suspend fun searchFreeItemsStreaming(
+        query: SearchQuery,
+        onPageResults: suspend (page: Int, results: List<Listing>, totalSoFar: Int) -> Unit,
+    ): Pair<Int, Boolean> {
+        val seenIds = mutableSetOf<String>()
+        val endPage = query.startPage + (query.maxPages ?: CrawlerConfig.current.maxPages) - 1
+        var total = 0
+        var hasMore = false
+        for (page in query.startPage..endPage) {
+            val pageResults = try {
+                NeulandOffers.ask(
+                    "kleinanzeigen.de", "", platformId, "Kleinanzeigen", page, max = Money.cents(0),
+                    near = query.area("DE"),
+                ).listings.filter { kindOf(it.url) != LOST_PETS }
+            } catch (e: CrawlerBlockedException) {
+                if (page == query.startPage) throw e
+                break
             }
+            if (pageResults.isEmpty()) break
+            val newResults = pageResults.filter { seenIds.add(it.externalId) }
+            total += newResults.size
+            log.info("Free items page {}: {} free, {} new, total={}", page, pageResults.size, newResults.size, total)
+            if (newResults.isNotEmpty()) onPageResults(page, newResults, total)
+            if (pageResults.size < 3) break
+            hasMore = page < endPage
         }
-        doc.select("astro-island[props]").forEach { island ->
-            val props = island.attr("props")
-            if ("userId" !in props) return@forEach
-            runCatching { Json.parseToJsonElement(props) }.getOrNull()?.let(::walk)
-        }
-        return found
+        return total to hasMore
     }
 
-    /** Fetches the listing's detail page and parses its full structured attribute table into
-     *  verified specs (power, gearbox, fuel, doors, emission, colour…) the search card omits. */
-    override suspend fun fetchDetail(listing: Listing): ListingDetail? {
-        return try {
-            val html = fetchWithFallback(client, listing.url, "Kleinanzeigen")
-            // The card carries the first line of the ad; the page carries the seller's whole text,
-            // which is where a van's wheelbase is written when it is written at all.
-            val doc = org.jsoup.Jsoup.parse(html)
-            val description = doc
-                .selectFirst("#viewad-description-text, [id=viewad-description-text]")
-                ?.wholeText()?.trim()?.takeIf { it.isNotBlank() }
-            ListingDetail(
-                vehicle = KleinanzeigenDetailParser.parse(html),
-                description = description,
-                shipping = KleinanzeigenDetailParser.shipping(doc),
-                photos = KleinanzeigenDetailParser.gallery(doc),
-                seller = KleinanzeigenDetailParser.seller(doc),
-            ).takeIf { it.vehicle != null || it.description != null || it.shipping != null || it.photos.isNotEmpty() }
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
-            null
-        }
+    /** The category an ad's address names in its last part ("<ad>-<category>-<place>"). */
+    private fun kindOf(url: String) = url.substringAfterLast('/').split('-').getOrNull(1)
+
+    /** The ad's own page, read by Neuland: the details the card leaves out, the seller's whole text
+     *  (where a van's wheelbase is written when it is written at all), the shipping, the gallery and
+     *  the seller's box. */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        val page = NeulandOffers.detail(listing.url, "Kleinanzeigen")
+        // The wheelbase is never one of the detail rows: where a seller states it, it is a line of
+        // their own prose ("Radstand: 3.250 mm"), so it is read off the text and stays inferred.
+        val wheelbase = page.description?.let { VehicleTextParser.parse(it)?.wheelbaseMm }
+        ListingDetail(
+            vehicle = page.vehicle?.copy(wheelbaseMm = wheelbase) ?: wheelbase?.let { VehicleInfo(wheelbaseMm = it) },
+            description = page.description,
+            shipping = page.shipping,
+            photos = page.photos,
+            seller = page.seller,
+        ).takeIf { it.vehicle != null || it.description != null || it.shipping != null || it.photos.isNotEmpty() }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        log.debug("detail fetch failed for {}: {}", listing.url, e.message?.take(60))
+        null
     }
 
-    override suspend fun adNow(url: String): io.github.tieo.arbay.model.AdNow? = try {
-        val html = fetchWithFallback(client, url, "Kleinanzeigen")
-        io.github.tieo.arbay.model.AdNow(
-            state = KleinanzeigenDetailParser.adState(html),
-            price = KleinanzeigenDetailParser.askingPrice(html),
-            shipping = KleinanzeigenDetailParser.shipping(Jsoup.parse(html)),
-        ).takeIf { it.state != null || it.price != null }
+    override suspend fun adNow(url: String): AdNow? = try {
+        val page = NeulandOffers.detail(url, "Kleinanzeigen")
+        AdNow(state = page.state(), price = page.price, shipping = page.shipping).takeIf { it.state != null || it.price != null }
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         log.debug("ad unreadable for {}: {}", url, e.message?.take(60))
         null
     }
 
+    /** The ad whole, for selling one like it: its title, the seller's text, its category, its
+     *  details and the gallery's photos in their order. */
     override suspend fun adCopy(url: String): AdCopy? = try {
-        KleinanzeigenDetailParser.adCopy(fetchWithFallback(client, url, "Kleinanzeigen"))
+        val page = NeulandOffers.detail(url, "Kleinanzeigen")
+        val title = page.title
+        val category = page.kind
+        if (title == null || category == null) null
+        else AdCopy(title, page.description.orEmpty(), category, page.specs.toMap(), page.photos)
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         log.debug("ad unreadable for {}: {}", url, e.message?.take(60))
         null
@@ -513,50 +214,23 @@ class KleinanzeigenCrawler(private val client: HttpClient) : Crawler, StartsAtAn
     }
 
     override suspend fun adState(url: String): AdState? = try {
-        KleinanzeigenDetailParser.adState(fetchWithFallback(client, url, "Kleinanzeigen"))
+        NeulandOffers.detail(url, "Kleinanzeigen").state()
     } catch (e: CancellationException) { throw e } catch (e: Exception) {
         log.debug("ad state unreadable for {}: {}", url, e.message?.take(60))
         null
     }
 
-    /** Verified mileage/first-registration from the card's attribute chips. */
-    private fun parseChips(tags: List<String>): VehicleInfo? {
-        var mileageKm: Int? = null
-        var year: Int? = null
-        var month: Int? = null
-        for (t in tags) {
-            Regex("""([0-9][0-9.]{2,})\s*km""").find(t)?.let {
-                mileageKm = it.groupValues[1].replace(".", "").toIntOrNull()?.takeIf { km -> km in 1..2_000_000 }
-            }
-            Regex("""EZ\s*(?:(\d{1,2})/)?(\d{4})""").find(t)?.let {
-                month = it.groupValues[1].toIntOrNull()
-                year = it.groupValues[2].toIntOrNull()?.takeIf { y -> y in 1980..2035 }
-            }
-        }
-        if (mileageKm == null && year == null) return null
-        return VehicleTextParser.verifiedByPresence(
-            VehicleInfo(firstRegYear = year, firstRegMonth = month, mileageKm = mileageKm),
-        )
+    /** Deleted, paused or up, as the page's own settings say; a reserved ad is not told apart from
+     *  a live one, the page having no setting of its own for it. */
+    private fun NeulandOffers.Detail.state(): AdState? = when {
+        available == false -> AdState.DELETED
+        paused -> AdState.PAUSED
+        available == true -> AdState.LIVE
+        else -> null
     }
 
-    /** Full descriptions from the page's ld+json image blocks, keyed by listing title. */
-    private fun parseJsonLdDescriptions(doc: org.jsoup.nodes.Document): Map<String, String> {
-        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-        val map = HashMap<String, String>()
-        for (script in doc.select("script[type=application/ld+json]")) {
-            val el = runCatching { json.parseToJsonElement(script.data()) }.getOrNull() ?: continue
-            val objects = when (el) {
-                is kotlinx.serialization.json.JsonArray -> el
-                is kotlinx.serialization.json.JsonObject -> listOf(el)
-                else -> emptyList()
-            }
-            for (o in objects) {
-                val obj = o as? kotlinx.serialization.json.JsonObject ?: continue
-                val title = (obj["title"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
-                val desc = (obj["description"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
-                if (title.isNotBlank() && desc.isNotBlank()) map.putIfAbsent(title.trim(), desc.trim())
-            }
-        }
-        return map
+    private companion object {
+        /** "Vermisste Tiere": lost pet notices, filed among the free things, not things to pick up. */
+        const val LOST_PETS = "283"
     }
 }

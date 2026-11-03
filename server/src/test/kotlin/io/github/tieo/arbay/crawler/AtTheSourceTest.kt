@@ -72,16 +72,7 @@ class AtTheSourceTest {
         assertEquals(NeulandOffers.VehicleQuery(make = ts.make, model = ts.model), ts, "nothing but make and model beside the price")
         val strict = TruckScout24Crawler().vehicleQuery(crafter.copy(carFilters = crafter.carCriteria.copy(strictUnknown = true)))
         assertTrue(strict.gearbox != null && strict.fuels.isNotEmpty(), "$strict")
-        val c = crafter.carCriteria.atTheSource()
-        val ka = KleinanzeigenUrlBuilder.carAttrFilters(gearbox = c.transmission?.name, minYear = c.firstRegFromYear, maxMileageKm = c.maxMileageKm)
-        assertFalse(ka.any { it.startsWith("autos.shift_s") }, "$ka")
-    }
-
-    @Test
-    fun `Kleinanzeigen's commercial vehicles are searched by the model's word and the price`() {
-        assertEquals(
-            "https://www.kleinanzeigen.de/s-nutzfahrzeuge-anhaenger/preis:10000:30990/seite:2/sortierung:preis/crafter/k0c276",
-            KleinanzeigenUrlBuilder.vanSearch("crafter", 2, minPriceCents = 10_000_00, maxPriceCents = 30_990_00),
-        )
+        val ka = KleinanzeigenCrawler(HttpClient(MockEngine { respond("") })).vehicleQuery(crafter, CarQueryResolver.resolve("vw crafter")!!)
+        assertEquals(null, ka.gearbox, "$ka")
     }
 }

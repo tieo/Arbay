@@ -7,9 +7,6 @@ import io.github.tieo.arbay.model.SearchQuery
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,35 +54,31 @@ class PriceBandTest {
 
     @Test
     fun `Kleinanzeigen goes on from the last price read when its pages run out while still full`() = runBlocking {
-        // A market that holds 30 ads at 10,000 € and up in 1,000 € steps, sorted cheapest first,
+        // A market that holds 30 vans at 10,000 € and up in 1,000 € steps, sorted cheapest first,
         // and serves two pages of ten of any answer before repeating the second.
-        val asked = mutableListOf<String>()
-        val client = HttpClient(MockEngine { request ->
-            val url = request.url.toString()
-            asked += url
-            val floor = Regex("""preis:(\d+):""").find(url)!!.groupValues[1].toInt()
-            val page = (Regex("""seite:(\d+)""").find(url)?.groupValues?.get(1)?.toInt() ?: 1).coerceAtMost(2)
-            val prices = (0 until 30).map { 10_000 + it * 1_000 }.filter { it >= floor }.drop((page - 1) * 10).take(10)
-            respond(kaPage(prices), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/html"))
-        })
+        val asked = mutableListOf<Pair<Boolean, Long?>>()
+        val crawler = KleinanzeigenCrawler(HttpClient(MockEngine { respond("") })) { _, vehicle, page, floor, _ ->
+            asked += (vehicle?.vans == true) to floor?.amount
+            val prices = (0 until 30).map { 10_000 + it * 1_000 }.filter { it * 100L >= (floor?.amount ?: 0) }.drop((page.coerceAtMost(2) - 1) * 10).take(10)
+            io.github.tieo.arbay.neuland.NeulandOffers.Answer(
+                prices.map { eur ->
+                    val id = "${3_500_000_000L + eur}"
+                    io.github.tieo.arbay.model.Listing(
+                        id = "KLEINANZEIGEN:$id", platformId = io.github.tieo.arbay.model.PlatformId.KLEINANZEIGEN, externalId = id,
+                        url = "https://www.kleinanzeigen.de/s-anzeige/volkswagen-crafter/$id-276-1", title = "Volkswagen Crafter $eur",
+                        price = Money(eur * 100L, Currency.EUR), scrapedAt = kotlin.time.Instant.fromEpochSeconds(0),
+                    )
+                },
+                related = emptyList(), asked = emptyList(),
+            )
+        }
         val vans = SearchQuery(
             text = "Volkswagen Crafter", category = MarketGroup.VEHICLES, maxPages = 2,
             minPrice = Money(10_000_00, Currency.EUR), maxPrice = Money(30_990_00, Currency.EUR),
         )
-        val found = KleinanzeigenCrawler(client).search(vans)
-        val nutzfahrzeuge = asked.filter { "c276" in it }
+        val found = crawler.search(vans)
         assertEquals((0 until 30).map { 10_000_00L + it * 1_000_00 }.toSet(), found.map { it.price.amount }.toSet())
-        assertTrue(nutzfahrzeuge.any { "preis:29000:30990" in it }, "the last answer starts at the dearest price read: $nutzfahrzeuge")
-    }
-
-    private fun kaPage(prices: List<Int>): String = buildString {
-        append("<html><head><title>Kleinanzeigen</title></head><body>")
-        prices.forEach { eur ->
-            val id = 3_500_000_000L + eur
-            append("""<article data-adid="$id"><a href="/s-anzeige/volkswagen-crafter/$id-276-1">Volkswagen Crafter $eur</a>""")
-            append("""<p>${"%,d".format(java.util.Locale.GERMANY, eur)} €</p><p>10115 Berlin</p></article>""")
-        }
-        append("<p>").append("Nutzfahrzeuge ".repeat(60)).append("</p></body></html>")
+        assertTrue((true to 29_000_00L) in asked, "the last answer among the vans starts at the dearest price read: $asked")
     }
 
     private fun page(offset: Int, count: Int): String = buildString {
