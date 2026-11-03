@@ -31,10 +31,10 @@ class DetailEnricherTest {
     )
 
     @Test
-    fun `a page read before its gallery was is read again, and one whose photos are all gone is forgotten`() = runBlocking {
+    fun `a page read without its gallery a day ago is read again, and one whose photos are all gone is forgotten`() = runBlocking {
         val stamp = System.nanoTime()
         val galleryLess = van("old-$stamp"); val withGallery = van("new-$stamp")
-        DetailCache.put(galleryLess.id, ListingDetail(description = "Crafter"))
+        DetailCache.put(galleryLess.id, ListingDetail(description = "Crafter"), readAtMs = System.currentTimeMillis() - 2 * 24 * 3600_000L)
         DetailCache.put(withGallery.id, ListingDetail(description = "Crafter", photos = listOf("https://example.invalid/a.jpg")))
         val market = Gallery(listOf("https://example.invalid/b.jpg"))
         DetailEnricher.enrich(listOf(galleryLess, withGallery), CarFilters(maxMileageKm = 150_000), market)
@@ -42,6 +42,17 @@ class DetailEnricherTest {
         // Neither gallery's photos can be fetched, as when a seller replaced them: both pages are
         // forgotten, so the next search reads them again.
         assertEquals(null, DetailCache.get(galleryLess.id)); assertEquals(null, DetailCache.get(withGallery.id))
+    }
+
+    @Test
+    fun `a page just read without photos is not read again, so the search reads the pages it never read`() = runBlocking {
+        val stamp = System.nanoTime()
+        // Cheaper than the unread van: read first under the old rule, every search.
+        val justRead = van("read-$stamp").copy(price = Money(10_000_00, Currency.EUR)); val unread = van("unread-$stamp")
+        DetailCache.put(justRead.id, ListingDetail(description = "Crafter"))
+        val market = Gallery(emptyList())
+        DetailEnricher.enrich(listOf(justRead, unread), CarFilters(maxMileageKm = 150_000), market)
+        assertEquals(listOf(unread.id), market.read)
     }
 
     @Test

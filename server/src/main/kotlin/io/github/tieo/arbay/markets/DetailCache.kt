@@ -73,6 +73,21 @@ object DetailCache {
         return e.detail
     }
 
+    /**
+     * Whether [listingId]'s page, read before without a gallery, is due to be read again for one:
+     * a page read before galleries were read, or while the market's reader answered without them.
+     * Once a day at most, since a page answered without photos was otherwise read again by every
+     * search: on 2026-11-03 Kleinanzeigen's pages came back photo-less for hours, the same cheapest
+     * pages took a search's whole page budget each time, and vans listed that day were ranked on
+     * their bare cards ("gearbox not stated") although their pages say Schaltgetriebe and 320,000 km.
+     */
+    fun galleryDue(listingId: String): Boolean {
+        val e = entries[listingId] ?: return false
+        return e.detail.photos.isEmpty() && Clock.System.now().toEpochMilliseconds() - e.storedAtMs > GALLERY_RETRY_MS
+    }
+
+    private const val GALLERY_RETRY_MS = 24L * 60 * 60 * 1000
+
     /** How long ago [listingId]'s page was read, in milliseconds; null where it was not. */
     fun ageMs(listingId: String): Long? =
         entries[listingId]?.let { Clock.System.now().toEpochMilliseconds() - it.storedAtMs }
@@ -81,8 +96,8 @@ object DetailCache {
         if (entries.remove(listingId) != null) schedulePersist()
     }
 
-    fun put(listingId: String, detail: ListingDetail) {
-        entries[listingId] = Entry(detail, Clock.System.now().toEpochMilliseconds())
+    fun put(listingId: String, detail: ListingDetail, readAtMs: Long = Clock.System.now().toEpochMilliseconds()) {
+        entries[listingId] = Entry(detail, readAtMs)
         schedulePersist()
     }
 

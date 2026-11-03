@@ -575,8 +575,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     platform.name.startsWith("EBAY") &&
                         (it.shipping == null || (io.github.tieo.arbay.markets.DetailCache.ageMs(id) ?: 0) > EBAY_PAGE_FRESH_MS)
                 }
-                // So is the page of a market whose gallery is read, where it was read before galleries were.
-                ?.takeUnless { crawler is io.github.tieo.arbay.markets.ReadsGalleries && it.photos.isEmpty() }
+                // So is the page of a market whose gallery is read, where it was read without one a day ago or more.
+                ?.takeUnless { crawler is io.github.tieo.arbay.markets.ReadsGalleries && io.github.tieo.arbay.markets.DetailCache.galleryDue(id) }
                 ?.let { return@get call.respond(it.priced()) }
             // Checked only before a fetch: a page already read is served without resolving its host,
             // so it is still there when the server cannot reach the internet.

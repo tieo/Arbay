@@ -130,9 +130,10 @@ object DetailEnricher {
     fun withCachedDetail(listing: Listing): Listing =
         DetailCache.get(listing.id)?.let { listing.withDetail(it) } ?: listing
 
-    /** A listing whose page holds a gallery that was never read: read before galleries were, or replaced since. */
+    /** A listing whose gallery was never read: its page never read, or read without photos and due
+     *  again ([DetailCache.galleryDue]). One whose gallery was replaced since is forgotten by [printGallery]. */
     private fun galleryUnread(listing: Listing, crawler: Crawler): Boolean =
-        crawler is ReadsGalleries && DetailCache.get(listing.id)?.photos.isNullOrEmpty()
+        crawler is ReadsGalleries && (DetailCache.get(listing.id) == null || DetailCache.galleryDue(listing.id))
 
     /**
      * The whole gallery of an ad whose page has been read, printed so its photos can be found in
