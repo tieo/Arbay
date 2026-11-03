@@ -46,10 +46,12 @@ object NeulandOffers {
                 saleType = SaleType.FIXED_PRICE,
                 condition = o.condition?.let(Condition::parse) ?: otherwise,
                 imageUrls = listOfNotNull(o.image),
-                seller = o.seller?.let { Seller(name = it) },
+                seller = o.account() ?: o.seller?.let { Seller(name = it) },
                 shipping = o.shipping?.money()?.let(::delivery),
                 location = o.location(),
                 listingDate = o.listedAt(),
+                description = o.description,
+                vehicle = o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
                 scrapedAt = now,
             )
         }
@@ -239,6 +241,7 @@ object NeulandOffers {
         val seats: Int? = null,
         val color: String? = null,
         @kotlinx.serialization.SerialName("emission_class") val emissionClass: Int? = null,
+        val condition: String? = null,
     ) {
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
             firstRegYear = registeredYear,
@@ -251,6 +254,13 @@ object NeulandOffers {
             seats = seats,
             color = color,
             emissionClassEuro = emissionClass,
+            condition = when (condition) {
+                "new" -> io.github.tieo.arbay.model.VehicleCondition.NEW
+                "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
+                "pre-registered" -> io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
+                "damaged" -> io.github.tieo.arbay.model.VehicleCondition.DAMAGED
+                else -> null
+            },
             drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
         )
     }

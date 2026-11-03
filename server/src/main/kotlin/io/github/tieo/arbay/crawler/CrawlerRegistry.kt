@@ -45,7 +45,7 @@ object CrawlerRegistry {
         PlatformId.BYTBIL to BytbilCrawler(),
         PlatformId.SAUTO to SautoCrawler(),
         PlatformId.RICARDO to RicardoCrawler(httpClient),
-        PlatformId.SUBITO to SubitoCrawler(httpClient),
+        PlatformId.SUBITO to SubitoCrawler(),
         PlatformId.AUTOPLIUS to AutopliusCrawler(httpClient),
         PlatformId.NETTIAUTO to NettiautoCrawler(),
         PlatformId.FINN to FinnCrawler(),
