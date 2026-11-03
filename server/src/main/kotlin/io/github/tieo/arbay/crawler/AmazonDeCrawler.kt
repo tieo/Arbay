@@ -8,6 +8,9 @@ import kotlin.time.Clock
 import org.jsoup.Jsoup
 
 class AmazonDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
+    /** Markup each result of a search page carries. */
+    private val RESULT_MARKER = "data-component-type=\"s-search-result\""
+
     override val platformId = PlatformId.AMAZON_DE
 
     override suspend fun search(query: SearchQuery): List<Listing> {
@@ -19,7 +22,19 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
             val url = buildSearchUrl(query, page)
             val html = try {
                 NeulandHttp.fetch(url, cameFrom = if (page == query.startPage) "https://www.amazon.de" else null)
-            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: CrawlerBlockedException) {
+                // Amazon answers a client it takes for a robot 503; a browser still gets the page.
+                if (e.errorType != ErrorType.SERVICE_UNAVAILABLE_503 && e.errorType != ErrorType.BLOCKED_403) {
+                    if (page == query.startPage) throw e
+                    break
+                }
+                try {
+                    RenderBrowsers.rendered(url, RESULT_MARKER, timeoutS = 40)
+                } catch (e2: CancellationException) { throw e2 } catch (e2: Exception) {
+                    if (page == query.startPage) throw e
+                    break
+                }
+            } catch (e: Exception) {
                 if (page == query.startPage) throw e
                 break
             }
