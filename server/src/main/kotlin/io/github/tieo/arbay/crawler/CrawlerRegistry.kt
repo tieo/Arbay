@@ -27,7 +27,7 @@ object CrawlerRegistry {
         PlatformId.BACKMARKET_DE to BackMarketCrawler(),
         PlatformId.REBUY to RebuyCrawler(),
         PlatformId.REFURBED to RefurbedCrawler(httpClient),
-        PlatformId.MARKTPLAATS to MarktplaatsCrawler(httpClient),
+        PlatformId.MARKTPLAATS to MarktplaatsCrawler(),
         // Home markets on one chip; the neighbouring countries AutoScout24 also serves are
         // split into their own selectable markets so their coverage is visible, not buried.
         PlatformId.AUTOSCOUT24 to AutoScout24Crawler(listOf("DE", "AT", "LU", "NL")),
@@ -53,11 +53,7 @@ object CrawlerRegistry {
         PlatformId.KUPUJEM to KupujemProdajemCrawler(),
         PlatformId.WEB to WebCrawler(httpClient),
         // 2dehands.be is the Belgian sibling of marktplaats.nl on the same Adevinta stack.
-        PlatformId.TWEEDEHANDS to MarktplaatsCrawler(
-            httpClient,
-            platformId = PlatformId.TWEEDEHANDS,
-            host = "https://www.2dehands.be",
-        ),
+        PlatformId.TWEEDEHANDS to MarktplaatsCrawler(platformId = PlatformId.TWEEDEHANDS, site = "2dehands.be"),
         // Autovit.ro (Romania) runs the same OLX/Otomoto stack; only host, category and currency differ.
         PlatformId.AUTOVIT to OtomotoCrawler(
             platformId = PlatformId.AUTOVIT,

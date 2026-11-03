@@ -105,26 +105,6 @@ class CrawlerParserProbe {
     }
 
     @Test
-    fun testMarktplaatsParser() = runBlocking {
-        val file = File("/tmp/marktplaats.html")
-        if (!file.exists()) {
-            println("SKIP: /tmp/marktplaats.html not found")
-            return@runBlocking
-        }
-        val client = mockClientFrom("/tmp/marktplaats.html")
-        val crawler = MarktplaatsCrawler(client)
-        val results = crawler.search(query)
-        println("Marktplaats parsed: ${results.size} results")
-        assertTrue(results.isNotEmpty(), "Marktplaats parser should find results")
-        results.take(3).forEach {
-            println("  [${it.platformId}] ${it.title} — ${it.price.amount / 100}€ — ${it.url}")
-            assertEquals(PlatformId.MARKTPLAATS, it.platformId)
-            assertTrue(it.title.isNotBlank())
-            assertTrue(it.price.amount > 0)
-        }
-    }
-
-    @Test
     fun testRefurbedParser() = runBlocking {
         val file = File("/tmp/refurbed.html")
         if (!file.exists()) {

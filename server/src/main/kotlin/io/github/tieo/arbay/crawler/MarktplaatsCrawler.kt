@@ -1,348 +1,65 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.model.*
-import io.ktor.client.*
+import io.github.tieo.arbay.neuland.NeulandOffers
 import kotlinx.coroutines.CancellationException
-import kotlin.time.Clock
-import kotlinx.serialization.json.*
-import org.jsoup.Jsoup
 
 /**
- * Crawler for the Adevinta classifieds stack shared by marktplaats.nl (NL) and 2dehands.be (BE):
- * same /q/ search path, same hz-Listing markup, same hz-attributes spec row. Only the host and
- * the country the listings sit in differ.
+ * The Adevinta market shared by marktplaats.nl (NL) and 2dehands.be (BE), read by Neuland through
+ * the search JSON its pages are drawn from: a car search in its cars section (site-wide, "volkswagen
+ * crafter" is thousands of parts), asked the gearbox, a fuel and, where the search excludes
+ * unstated specs, the drive; everything else across the market with its price band.
  */
 class MarktplaatsCrawler(
-    private val client: HttpClient,
     override val platformId: PlatformId = PlatformId.MARKTPLAATS,
-    private val host: String = "https://www.marktplaats.nl",
+    private val site: String = "marktplaats.nl",
 ) : Crawler, StartsAtAnyPage, FetchesEveryPage, KnowsLocation, HasDetailSpecs {
 
-    /** The ad's page: the seller's whole text, who sells it and every photo, and for a vehicle the
-     *  attribute object the card leaves out (power, gearbox, fuel, doors, body type, colour), so a
-     *  filter on those verifies instead of soft-passing. */
+    override suspend fun search(query: SearchQuery): List<Listing> {
+        val car = CarQueryResolver.resolve(query.positiveText)
+        return paginate(query) { page ->
+            if (car != null) {
+                val c = query.carCriteria
+                val vehicle = NeulandOffers.VehicleQuery(
+                    make = car.makeSlug,
+                    model = car.modelSlug,
+                    gearbox = when (c.transmission) {
+                        Transmission.AUTOMATIC -> "automatic"
+                        Transmission.MANUAL -> "manual"
+                        null -> null
+                    },
+                    fuels = c.fuels.map(NeulandOffers.VehicleQuery::fuel),
+                    drivetrain = c.drivetrain?.takeIf { c.strictUnknown }?.let {
+                        when (it) {
+                            Drivetrain.AWD -> "all"
+                            Drivetrain.FWD -> "front"
+                            Drivetrain.RWD -> "rear"
+                        }
+                    },
+                )
+                NeulandOffers.searchVehicles(site, query.positiveText, platformId, platformId.displayName, vehicle, page, query.minPrice, query.maxPrice)
+            } else {
+                // Listed under the number the result pages' links carry ("m2434800158" is 2434800158,
+                // a dealer's "a1524104910" is 1524104910), as offers found before were.
+                NeulandOffers.search(site, query.positiveText, platformId, platformId.displayName, page, query.minPrice, query.maxPrice, otherwise = null)
+                    .map { l -> l.externalId.replace(ITEM_LETTER, "").let { id -> l.copy(id = "${platformId.name}:$id", externalId = id) } }
+            }
+        }
+    }
+
+    /** The ad's page: the seller's whole text, who sells it and every photo, and for a vehicle what
+     *  the card leaves out (power, drive, doors, seats, wheelbase, emission class), so a filter on
+     *  those verifies instead of soft-passing. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        MarktplaatsDetailParser.parseAd(NeulandHttp.fetch(listing.url, cameFrom = host))
+        val page = NeulandOffers.detail(listing.url, platformId.displayName)
+        ListingDetail(vehicle = page.vehicle, description = page.description, seller = page.seller, photos = page.photos)
+            .takeUnless { it == ListingDetail() }
     } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
     }
 
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        // Car queries carry their make+model as the free-text term; everything else searches the
-        // marketplace verbatim. Pagination is a /p/N/ suffix on the base URL. The old `/l/auto-s/q/`
-        // cars-category path returns 0 now (the category-scoped URL rotted); the plain `/q/` search
-        // works, and for a car query the make+model text plus relevance + the part guard keep it
-        // car-focused.
-        val car = CarQueryResolver.resolve(query.positiveText)
-        val text = if (car != null) {
-            listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
-        } else {
-            query.positiveText
-        }
-        // A car search goes to the cars category with the criteria this site filters itself,
-        // rather than to the whole marketplace: "volkswagen crafter" site-wide is 6851 results,
-        // almost all of them parts, and 1059 inside the category. Verified on this site's own
-        // counts: the gearbox is stated by 1040 of those 1059 and the fuel by 1047, so both are
-        // asked for; a drive type by 796, so that one waits for a search that excludes unstated
-        // specs. The filters are names and ids from its own facet links, all in one path segment,
-        // `/f/diesel+automaat/474+534/`, ordered by id: a second `/f/` segment answers 404, and any
-        // other order is redirected to this one.
-        val filterPath = if (car == null || !host.contains("marktplaats")) "" else {
-            val criteria = query.carCriteria
-            val facets = listOfNotNull(
-                when (criteria.transmission) {
-                    Transmission.AUTOMATIC -> "automaat" to 534
-                    Transmission.MANUAL -> "handgeschakeld" to 535
-                    null -> null
-                },
-                when (criteria.fuels.singleOrNull()) {
-                    Fuel.DIESEL -> "diesel" to 474
-                    Fuel.ELECTRIC -> "elektrisch" to 11756
-                    else -> null
-                },
-                if (!criteria.strictUnknown) null else when (criteria.drivetrain) {
-                    Drivetrain.AWD -> "vierwielaandrijving" to 13945
-                    Drivetrain.FWD -> "voorwielaandrijving" to 13943
-                    Drivetrain.RWD -> "achterwielaandrijving" to 13944
-                    null -> null
-                },
-            ).sortedBy { it.second }
-            if (facets.isEmpty()) "" else
-                "f/${facets.joinToString("+") { it.first }}/${facets.joinToString("+") { it.second.toString() }}/"
-        }
-        val base = if (car != null && host.contains("marktplaats"))
-            "$host/l/auto-s/$filterPath" + "q/${text.encodeUrl()}/"
-        else "$host/q/${text.encodeUrl()}/"
-
-        val carsCategory = car != null && host.contains("marktplaats")
-        // A price band is taken only by the site's own search API, which its result pages are
-        // drawn from: the page ignores every price parameter, and "ssd 2tb" is 791 offers there
-        // against 123 up to 216 euro.
-        val band = query.minPrice != null || query.maxPrice != null
-        return paginate(query) { page ->
-            if (band && !carsCategory) {
-                val range = "PriceCents:${query.minPrice?.amount ?: "null"}:${query.maxPrice?.amount ?: "null"}"
-                val api = "$host/lrp/api/search?query=${text.encodeUrl()}&limit=$API_PAGE&offset=${(page - 1) * API_PAGE}" +
-                    "&attributeRanges%5B%5D=${range.encodeUrl()}"
-                return@paginate parseApiAnswer(NeulandHttp.fetch(api, cameFrom = if (page <= 1) host else null))
-            }
-            val url = if (page <= 1) base else "${base}p/$page/"
-            val html = NeulandHttp.fetch(url, cameFrom = if (page <= 1) host else null)
-            if (carsCategory) parseCarsCategory(html)
-            else parseSearchResults(html, requireVehicleSpecs = car != null)
-        }
-    }
-
     private companion object {
-        /** Offers per answer of the search API, the most it gives. */
-        const val API_PAGE = 100
-
         /** The letter before an item's number: m for a private seller, a for a dealer. */
         val ITEM_LETTER = Regex("""^[am](?=\d)""")
-
-        /** A monthly instalment: "€373 p/mnd", "€597 p/m", or a bare "Leaseprijs: € 131". */
-        val LEASE_PRICE = Regex(
-            """(?:€\s?([\d.]{1,7})(?:,\d{2})?[,\-\s]*(?:p\s?/\s?mnd|p\s?/\s?m\b|per\s?maand)""" +
-                """|lease\s?prijs\s*:?\s*€\s?([\d.]{1,7}))""",
-            RegexOption.IGNORE_CASE,
-        )
-
-        /** An advert whose title offers a lease rather than a sale, so its price is an instalment
-         *  and the vehicle is not actually for sale at that figure. */
-        val LEASE_OFFER_TITLE = Regex(
-            """^\s*(zakelijke|financial|private|operational)\s*lease\b|^\s*lease\s*(vanaf|deal)\b""",
-            RegexOption.IGNORE_CASE,
-        )
-
-        /** What the van actually sells for, where a lease advert also states it. */
-        val PURCHASE_PRICE = Regex(
-            """(?:koop\s?(?:direct)?\s?voor|koopprijs|vraagprijs)\s*:?\s*€\s?([\d.]{2,9})""",
-            RegexOption.IGNORE_CASE,
-        )
-
-        /** Dutch amounts group thousands with a dot: "36.250" is 36250 euro. */
-        fun String.euroAmount(): Long? = replace(".", "").toLongOrNull()
-    }
-
-    /**
-     * @param requireVehicleSpecs keep only ads that state a year or an odometer reading in the
-     *  attribute row. On a car query this separates vehicles from the parts trade that dominates
-     *  these classifieds: a vehicle ad always carries the row, a part ("Roetfilter", "ABS Pomp",
-     *  "Expansievat van een Crafter") never does.
-     */
-    /**
-     * The cars category's own listing data, out of the page's data island.
-     *
-     * That page draws a different card from the marketplace-wide search — the HTML parser below
-     * finds nothing in it — and it carries far more than the card ever did: the site's own
-     * `constructionYear`, `mileage`, `fuel` and `transmission` attributes, which are stated values
-     * rather than numbers read out of a title, plus the seller's coordinates.
-     */
-    internal fun parseCarsCategory(html: String): List<Listing> {
-        val island = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = runCatching { Json.parseToJsonElement(island) }
-            .getOrNull() ?: return emptyList()
-        return listingsIn(root, itemIdAsIs = true)
-    }
-
-    /** The site's search API answer, the same listing objects its pages are drawn from. Listed
-     *  under the number the result page's links carry ("m2434800158" is 2434800158, a dealer's
-     *  "a1524104910" is 1524104910), so an offer
-     *  found with a price band is the same offer found without one. */
-    internal fun parseApiAnswer(body: String): List<Listing> {
-        val root = runCatching { Json.parseToJsonElement(body) }.getOrNull() ?: return emptyList()
-        return listingsIn(root, itemIdAsIs = false)
-    }
-
-    private fun listingsIn(root: JsonElement, itemIdAsIs: Boolean): List<Listing> {
-        val listings = mutableListOf<JsonObject>()
-        fun walk(element: JsonElement) {
-            when (element) {
-                is JsonObject -> element.forEach { (key, value) ->
-                    if (key == "listings" && value is JsonArray) {
-                        value.forEach { entry ->
-                            (entry as? JsonObject)?.takeIf { it["itemId"] != null }?.let { listings += it }
-                        }
-                    }
-                    walk(value)
-                }
-                is JsonArray -> element.forEach { walk(it) }
-                else -> {}
-            }
-        }
-        walk(root)
-        val now = Clock.System.now()
-        return listings.distinctBy { it["itemId"]?.jsonPrimitive?.content }.mapNotNull { item ->
-            val id = item["itemId"]?.jsonPrimitive?.contentOrNull
-                ?.let { if (itemIdAsIs) it else it.replace(ITEM_LETTER, "") } ?: return@mapNotNull null
-            val title = item["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val cents = item["priceInfo"]?.jsonObject?.get("priceCents")?.jsonPrimitive?.longOrNull
-                ?: return@mapNotNull null
-            if (cents <= 0L) return@mapNotNull null
-            val path = item["vipUrl"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val attributes = item["attributes"]?.jsonArray.orEmpty().mapNotNull { entry ->
-                val obj = entry as? JsonObject ?: return@mapNotNull null
-                val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val value = obj["value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                key to value
-            }.toMap()
-            val vehicle = VehicleInfo(
-                firstRegYear = attributes["constructionYear"]?.toIntOrNull()?.takeIf { it in 1950..2035 },
-                mileageKm = attributes["mileage"]?.replace(".", "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
-                fuel = Fuel.parse(attributes["fuel"]),
-                gearbox = when {
-                    attributes["transmission"]?.contains("utomaat", true) == true -> Transmission.AUTOMATIC
-                    attributes["transmission"]?.contains("andgeschakeld", true) == true -> Transmission.MANUAL
-                    else -> null
-                },
-            ).let { VehicleTextParser.verifiedByPresence(it) }
-            val place = item["location"]?.jsonObject
-            Listing(
-                id = "${platformId.name}:$id",
-                platformId = platformId,
-                externalId = id,
-                url = if (path.startsWith("http")) path else "$host$path",
-                title = title,
-                description = item["description"]?.jsonPrimitive?.contentOrNull,
-                price = Money(cents, Currency.EUR),
-                imageUrls = item["imageUrls"]?.jsonArray.orEmpty().mapNotNull { image ->
-                    image.jsonPrimitive.contentOrNull?.let { if (it.startsWith("//")) "https:$it" else it }
-                },
-                location = place?.let { where ->
-                    Location(
-                        city = where["cityName"]?.jsonPrimitive?.contentOrNull,
-                        country = where["countryAbbreviation"]?.jsonPrimitive?.contentOrNull,
-                        latitude = where["latitude"]?.jsonPrimitive?.doubleOrNull,
-                        longitude = where["longitude"]?.jsonPrimitive?.doubleOrNull,
-                    )
-                },
-                seller = item["sellerInformation"]?.jsonObject?.get("sellerName")?.jsonPrimitive?.contentOrNull
-                    ?.let { Seller(name = it) },
-                vehicle = vehicle.takeIf { it != VehicleInfo() },
-                scrapedAt = now,
-            )
-        }
-    }
-
-    private fun parseSearchResults(html: String, requireVehicleSpecs: Boolean = false): List<Listing> {
-        val doc = Jsoup.parse(html)
-        val now = Clock.System.now()
-
-        // Marktplaats uses li containers with class hz-Listing--list-item (or hz-Listing--list-item-new).
-        // Class names can vary by query / A-B test, so use attribute-contains selector for robustness.
-        val items = doc.select("li[class*=hz-Listing--list-item]")
-            .ifEmpty { doc.select("div[class*=hz-Listing--list-item]") }
-
-        return items.mapNotNull { item ->
-            // Link: find the first <a> with an href to /v/ (actual listing page)
-            val linkEl = item.selectFirst("a[href^='/v/']") ?: return@mapNotNull null
-            val href = linkEl.attr("href")
-            val url = "$host$href"
-            val externalId = Regex("""[/-]a?(\d{7,})""").find(href)?.groupValues?.get(1)
-                ?: Regex("""/m(\d+)""").find(href)?.groupValues?.get(1)
-                ?: return@mapNotNull null
-
-            // Title: Marktplaats uses CSS Modules so class names get hashed suffixes like
-            // "ListingTitle_hz-Listing-title-new__YIv8B". Use attribute substring match.
-            val titleEl = item.selectFirst("h3.hz-Listing-title")
-                ?: item.selectFirst("[class*=hz-Listing-title]")
-                ?: return@mapNotNull null
-            // The title span is often nested inside the div — get the deepest span text.
-            val title = (titleEl.selectFirst("span") ?: titleEl).text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            // Price: also uses CSS Modules hashed names. The price element may be an h5.
-            val priceEl = item.selectFirst("[class*=hz-Listing-price--desktop]")
-                ?: item.selectFirst("[class*=hz-Listing-price]")
-                ?: return@mapNotNull null
-            // Unwrap nested h5/span if present
-            val priceText = (priceEl.selectFirst("h5, span") ?: priceEl).text().trim()
-            val cardPrice = Money.parse(priceText) ?: return@mapNotNull null
-
-            // A lease advert puts the MONTHLY instalment where a sale puts the asking price, in
-            // several shapes: "Financial lease voor €373 p/mnd", "... €597 p/m of koop direct voor
-            // €36.250,-", and a bare "Leaseprijs: € 131" with no per-month marker at all. Showing
-            // any of them as the price advertises a van at a fraction of what it costs.
-            //
-            // Where the advert also states what the van actually sells for, that price is used;
-            // otherwise the listing is dropped, because its price cannot be trusted. This is a
-            // structural read of the advert, never a threshold on the amount: a genuinely cheap or
-            // broken van has no lease wording and stays.
-            val cardText = item.text()
-            val leaseMatch = LEASE_PRICE.find(cardText)
-            val leasePrice = leaseMatch?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }?.euroAmount()
-            val priceIsInstalment = leasePrice != null && leasePrice == cardPrice.amount / 100
-            val purchasePrice = PURCHASE_PRICE.find(cardText)?.groupValues?.get(1)?.euroAmount()
-
-            val isLeaseOffer = priceIsInstalment || LEASE_OFFER_TITLE.containsMatchIn(title)
-            val price = when {
-                // A stated purchase price above the instalment is what the van actually costs.
-                isLeaseOffer && purchasePrice != null && purchasePrice > cardPrice.amount / 100 ->
-                    Money(purchasePrice * 100, Currency.EUR)
-                isLeaseOffer -> return@mapNotNull null
-                else -> cardPrice
-            }
-
-            // Structured spec row (Bouwjaar / conditie / kilometerstand), rendered as hz-attributes
-            // and distinct from the marketing blurb. Parsing it yields verified mileage + year, so the
-            // km/year filters act on real values instead of APK expiry dates or lease amounts that
-            // pollute the free-text description (a 232.583 km van was leaking a ≤200k filter because
-            // mileage was never read off the card).
-            val attrText = item.selectFirst("[class*=hz-attributes]")?.text()
-            val vehicle = attrText?.let { at ->
-                val km = Regex("""([0-9][0-9.]{2,})\s*km""", RegexOption.IGNORE_CASE)
-                    .find(at)?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 }
-                val year = Regex("""\b(19[89]\d|20[0-3]\d)\b""").find(at)?.value?.toIntOrNull()
-                val condition = VehicleCondition.parse(at)
-                if (km == null && year == null && condition == null) null
-                else VehicleTextParser.verifiedByPresence(
-                    VehicleInfo(mileageKm = km, firstRegYear = year, condition = condition),
-                )
-            }
-
-            if (requireVehicleSpecs && vehicle?.let { it.mileageKm != null || it.firstRegYear != null } != true) {
-                return@mapNotNull null
-            }
-
-            val descriptionText = item.selectFirst("[class*=hz-Listing-description]")?.text()
-
-            val imageUrl = item.selectFirst("[class*=hz-Listing-image-container] img, [class*=hz-Listing-image] img")?.let {
-                it.attr("src").ifBlank { it.attr("data-src") }
-            }?.takeIf { it.startsWith("http") }
-
-            // Shipping: Marktplaats shows "Verzending" (shipping) / "Ophalen" (pickup)
-            val shippingEl = item.select("span").firstOrNull { it.text().let { t ->
-                t.contains("Verzending", true) || t.contains("Ophalen", true) || t.contains("shipping", true)
-            } }?.text()
-            val shipping = when {
-                shippingEl == null -> null
-                shippingEl.contains("Ophalen", true) -> Shipping(pickup = true)
-                else -> {
-                    val cost = Money.parse(shippingEl)
-                    if (cost != null) Shipping(cost = cost) else null
-                }
-            }
-
-            // Seller town (hashed class, so match the stable "sellerLocation" fragment), so the card
-            // shows where the item is, not just on a distance sort.
-            val locationText = item.selectFirst("[class*=sellerLocation], [class*=location]")?.text()?.trim()
-            val location = locationText?.takeIf { it.isNotBlank() }?.let { Location.parse(it) }
-
-            Listing(
-                id = "${platformId.name}:$externalId",
-                platformId = platformId,
-                externalId = externalId,
-                url = url,
-                title = title,
-                price = price,
-                imageUrls = listOfNotNull(imageUrl),
-                description = descriptionText,
-                location = location,
-                shipping = shipping,
-                vehicle = vehicle,
-                scrapedAt = now,
-            )
-        }
     }
 }

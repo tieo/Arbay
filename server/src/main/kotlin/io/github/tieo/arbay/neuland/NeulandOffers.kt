@@ -181,6 +181,8 @@ object NeulandOffers {
         val sellerReviews: Int? = null,
         /** Every photo of the gallery, largest copies. */
         val photos: List<String> = emptyList(),
+        /** Who sells it, where the page names them. */
+        val seller: io.github.tieo.arbay.model.SellerProfile? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -202,6 +204,12 @@ object NeulandOffers {
             listedAt = read.listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
             sellerReviews = read.sellerAccount?.reviews,
             photos = read.photos,
+            seller = read.sellerAccount?.let { a ->
+                io.github.tieo.arbay.model.SellerProfile(
+                    name = a.name,
+                    type = if (a.dealer) io.github.tieo.arbay.model.SellerType.BUSINESS else io.github.tieo.arbay.model.SellerType.PRIVATE,
+                )
+            },
         )
     }
 
@@ -255,6 +263,8 @@ object NeulandOffers {
         val color: String? = null,
         @kotlinx.serialization.SerialName("emission_class") val emissionClass: Int? = null,
         val condition: String? = null,
+        val doors: Int? = null,
+        @kotlinx.serialization.SerialName("wheelbase_mm") val wheelbaseMm: Int? = null,
     ) {
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
             firstRegYear = registeredYear,
@@ -267,6 +277,8 @@ object NeulandOffers {
             seats = seats,
             color = color,
             emissionClassEuro = emissionClass,
+            doors = doors,
+            wheelbaseMm = wheelbaseMm,
             condition = when (condition) {
                 "new" -> io.github.tieo.arbay.model.VehicleCondition.NEW
                 "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
