@@ -47,7 +47,7 @@ object CrawlerRegistry {
         PlatformId.RICARDO to RicardoCrawler(httpClient),
         PlatformId.SUBITO to SubitoCrawler(httpClient),
         PlatformId.AUTOPLIUS to AutopliusCrawler(httpClient),
-        PlatformId.NETTIAUTO to NettiautoCrawler(httpClient),
+        PlatformId.NETTIAUTO to NettiautoCrawler(),
         PlatformId.FINN to FinnCrawler(httpClient),
         PlatformId.OLX_PT to OlxCrawler(httpClient),
         PlatformId.KUPUJEM to KupujemProdajemCrawler(httpClient),

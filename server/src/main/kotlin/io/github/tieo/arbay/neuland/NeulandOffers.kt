@@ -56,8 +56,8 @@ object NeulandOffers {
     /**
      * The cars or vans [site] (a domain) offers for [words] and [vehicle]'s conditions, as listings
      * of [platform]: page [page], inside the price band [min]..[max] where the site's search takes
-     * one, each with its place, the seller's words, and what its card shows about the vehicle, read
-     * by [VehicleTextParser].
+     * one, each with its place, the seller's words, and the vehicle: as the site states it in fields
+     * of its own (verified), or else read off its card's words by [VehicleTextParser].
      */
     suspend fun searchVehicles(
         site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
@@ -91,7 +91,8 @@ object NeulandOffers {
                 location = o.place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) },
                 description = o.description,
                 scrapedAt = now,
-                vehicle = o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
+                vehicle = o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence)
+                    ?: o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
             )
         }
     }
@@ -129,7 +130,25 @@ object NeulandOffers {
         val condition: String? = null, val asking: NeulandMoney? = null,
         val place: NeulandPlace? = null, val description: String? = null,
         @kotlinx.serialization.SerialName("card_text") val cardText: String? = null,
+        val vehicle: NeulandVehicle? = null,
     )
+    @Serializable private data class NeulandVehicle(
+        @kotlinx.serialization.SerialName("registered_year") val registeredYear: Int? = null,
+        @kotlinx.serialization.SerialName("mileage_km") val mileageKm: Int? = null,
+        @kotlinx.serialization.SerialName("power_kw") val powerKw: Int? = null,
+        val fuel: String? = null,
+        val gearbox: String? = null,
+        val drivetrain: String? = null,
+    ) {
+        fun info() = io.github.tieo.arbay.model.VehicleInfo(
+            firstRegYear = registeredYear,
+            mileageKm = mileageKm,
+            powerKw = powerKw,
+            fuel = fuel?.let { f -> io.github.tieo.arbay.model.Fuel.entries.firstOrNull { it.name == f.uppercase().replace('-', '_') } },
+            gearbox = when (gearbox) { "manual" -> io.github.tieo.arbay.model.Transmission.MANUAL; "automatic" -> io.github.tieo.arbay.model.Transmission.AUTOMATIC; else -> null },
+            drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
+        )
+    }
     @Serializable private data class NeulandPlace(val town: String? = null, val postcode: String? = null, val country: String? = null)
     @Serializable private data class OfferList(val offers: List<NeulandOffer>)
 }
