@@ -26,7 +26,7 @@ object CrawlerRegistry {
         PlatformId.VINTED_DE to VintedDeCrawler(httpClient),
         PlatformId.BACKMARKET_DE to BackMarketCrawler(),
         PlatformId.REBUY to RebuyCrawler(),
-        PlatformId.REFURBED to RefurbedCrawler(httpClient),
+        PlatformId.REFURBED to RefurbedCrawler(),
         PlatformId.MARKTPLAATS to MarktplaatsCrawler(),
         // Home markets on one chip; the neighbouring countries AutoScout24 also serves are
         // split into their own selectable markets so their coverage is visible, not buried.
