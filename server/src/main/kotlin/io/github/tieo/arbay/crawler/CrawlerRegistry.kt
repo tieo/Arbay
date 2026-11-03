@@ -49,7 +49,7 @@ object CrawlerRegistry {
         PlatformId.AUTOPLIUS to AutopliusCrawler(httpClient),
         PlatformId.NETTIAUTO to NettiautoCrawler(),
         PlatformId.FINN to FinnCrawler(),
-        PlatformId.OLX_PT to OlxCrawler(httpClient),
+        PlatformId.OLX_PT to OlxCrawler(),
         PlatformId.KUPUJEM to KupujemProdajemCrawler(httpClient),
         PlatformId.WEB to WebCrawler(httpClient),
         // 2dehands.be is the Belgian sibling of marktplaats.nl on the same Adevinta stack.
