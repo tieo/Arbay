@@ -39,7 +39,7 @@ object CrawlerRegistry {
         PlatformId.WILLHABEN to WillhabenCrawler(httpClient),
         PlatformId.IMMOSCOUT24 to ImmoScout24Crawler(httpClient),
         PlatformId.TRUCKSCOUT24 to TruckScout24Crawler(),
-        PlatformId.OTOMOTO to OtomotoCrawler(httpClient),
+        PlatformId.OTOMOTO to OtomotoCrawler(),
         PlatformId.DBA to DbaCrawler(httpClient),
         PlatformId.BILBASEN to BilbasenCrawler(),
         PlatformId.BYTBIL to BytbilCrawler(),
@@ -60,11 +60,8 @@ object CrawlerRegistry {
         ),
         // Autovit.ro (Romania) runs the same OLX/Otomoto stack; only host, category and currency differ.
         PlatformId.AUTOVIT to OtomotoCrawler(
-            httpClient,
             platformId = PlatformId.AUTOVIT,
-            host = "https://www.autovit.ro",
-            categoryPath = "autoturisme",
-            siteCurrency = Currency.EUR,
+            site = "autovit.ro",
             countryCode = "RO",
             siteLabel = "Autovit",
         ),

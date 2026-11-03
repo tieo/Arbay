@@ -61,7 +61,7 @@ object NeulandOffers {
      */
     suspend fun searchVehicles(
         site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
-        page: Int = 1, min: Money? = null, max: Money? = null,
+        page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null,
     ): List<Listing> {
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
@@ -70,6 +70,16 @@ object NeulandOffers {
             min?.let { put("minCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             max?.let { put("maxCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), vehicle))
+            near?.let { area ->
+                put("near", kotlinx.serialization.json.buildJsonObject {
+                    area.placeName?.let { put("town", kotlinx.serialization.json.JsonPrimitive(it)) }
+                    area.zip?.let { put("postcode", kotlinx.serialization.json.JsonPrimitive(it)) }
+                    put("latitude", kotlinx.serialization.json.JsonPrimitive(area.latitude))
+                    put("longitude", kotlinx.serialization.json.JsonPrimitive(area.longitude))
+                    put("country", kotlinx.serialization.json.JsonPrimitive(area.country))
+                    put("radius_km", kotlinx.serialization.json.JsonPrimitive(area.radiusKm))
+                })
+            }
         }
         val answer = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
@@ -115,6 +125,8 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("mileage_max_km") val mileageMaxKm: Int? = null,
         @kotlinx.serialization.SerialName("power_min_kw") val powerMinKw: Int? = null,
         @kotlinx.serialization.SerialName("power_max_kw") val powerMaxKw: Int? = null,
+        /** "front", "rear" or "all". */
+        val drivetrain: String? = null,
         /** Any of these, by Neuland's names ("petrol", "hybrid-diesel"); none is any. */
         val fuels: List<String> = emptyList(),
     ) {
@@ -171,6 +183,7 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("registered_month") val registeredMonth: Int? = null,
         @kotlinx.serialization.SerialName("mileage_km") val mileageKm: Int? = null,
         @kotlinx.serialization.SerialName("power_kw") val powerKw: Int? = null,
+        @kotlinx.serialization.SerialName("displacement_cc") val displacementCc: Int? = null,
         val fuel: String? = null,
         val gearbox: String? = null,
         val drivetrain: String? = null,
@@ -183,6 +196,7 @@ object NeulandOffers {
             firstRegMonth = registeredMonth,
             mileageKm = mileageKm,
             powerKw = powerKw,
+            displacementCc = displacementCc,
             fuel = fuel?.let { f -> io.github.tieo.arbay.model.Fuel.entries.firstOrNull { it.name == f.uppercase().replace('-', '_') } },
             gearbox = when (gearbox) { "manual" -> io.github.tieo.arbay.model.Transmission.MANUAL; "automatic" -> io.github.tieo.arbay.model.Transmission.AUTOMATIC; else -> null },
             seats = seats,
