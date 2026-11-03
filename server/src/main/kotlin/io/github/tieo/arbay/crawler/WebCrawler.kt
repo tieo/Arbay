@@ -6,10 +6,6 @@ import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.Seller
 import io.github.tieo.arbay.model.SellerType
 import io.github.tieo.arbay.model.Shipping
-import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.statement.bodyAsText
 import java.security.MessageDigest
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -24,15 +20,14 @@ import org.slf4j.LoggerFactory
 /**
  * Every shop on the web, beyond the markets Arbay has a crawler of its own for.
  *
- * The words go to the search engines Arbay asks itself ([SearchEngines]) and to the own search
- * of every site Arbay has learned to read. Each
- * page found is read for its offers: the structured data shops publish for search engines first
- * ([ProductPages]), the site's [SiteRecipe] where it has one. A page that sells something and
- * yields nothing is reported to [SiteGaps], whose reader writes the site a recipe, so the next
- * search reads it. What the pages hold beyond the thing searched for is left to the relevance
+ * The words go to the search engines ([SearchEngines]) and to the own search of every site a
+ * recipe has been written for ([SiteRecipes]). Neuland reads each page found for its offers, by the
+ * site's recipe or the structured data shops publish for search engines. A page that sells
+ * something and yields nothing is reported to [SiteGaps], whose reader writes the site a recipe, so
+ * the next search reads it. What the pages hold beyond the thing searched for is left to the relevance
  * filter, as on every other market.
  */
-class WebCrawler(private val client: HttpClient) : Crawler {
+class WebCrawler : Crawler {
     override val platformId = PlatformId.WEB
 
     /** The search engines whose results pages a search reads for shops. */
@@ -102,9 +97,12 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     /** The listings of offers read off pages. A page pointing at an offer on a market Arbay
      *  crawls itself (a comparison site linking an eBay item) is that market's offer, which its
      *  own crawler reads better. */
-    private fun listingsOf(offers: List<PageOffer>, now: kotlin.time.Instant): List<Listing> =
+    private fun listingsOf(offers: List<ShopOffer>, now: kotlin.time.Instant): List<Listing> =
         offers.map { it.copy(url = withoutSession(unproxied(behindAffiliateLink(it.url)))) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
             val domain = SiteRecipes.domainOf(o.url)
+            val price = o.price.money()
+            val coupon = o.coupon?.let { io.github.tieo.arbay.model.Coupon(it.price.money(), it.code, it.terms) }
+            val rentPer = o.rentPer?.let(::rentPeriod)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
                 platformId = platformId,
@@ -112,22 +110,25 @@ class WebCrawler(private val client: HttpClient) : Crawler {
                 url = o.url,
                 title = o.title,
                 // The code price is what the offer costs; the price without the code stays beside it.
-                price = o.coupon?.price ?: o.price,
-                oldPrice = o.price.takeIf { o.coupon != null },
-                coupon = o.coupon,
-                saleType = if (o.rentPer != null || hiredOut(o)) io.github.tieo.arbay.model.SaleType.RENT else null,
-                rentPer = o.rentPer,
-                rentRates = o.rentRates,
-                condition = o.condition,
+                price = coupon?.price ?: price,
+                oldPrice = price.takeIf { coupon != null },
+                coupon = coupon,
+                saleType = if (rentPer != null || hiredOut(o)) io.github.tieo.arbay.model.SaleType.RENT else null,
+                rentPer = rentPer,
+                rentRates = o.rentRates.mapNotNull { r -> rentPeriod(r.period)?.let { io.github.tieo.arbay.model.RentRate(it, r.price.money()) } },
+                condition = o.condition?.let(::condition),
                 imageUrls = listOfNotNull(o.image),
                 seller = Seller(name = o.seller ?: domain, type = SellerType.BUSINESS, url = "https://$domain"),
-                shipping = o.shipping?.let { Shipping(cost = it, free = it.amount == 0L) },
+                shipping = o.shipping?.money()?.let { Shipping(cost = it, free = it.amount == 0L) },
                 gtin = o.gtin,
-                mpn = o.mpn ?: ProductPages.modelInAddress(o.url, o.title),
+                mpn = o.mpn,
                 scrapedAt = now,
             )
         }.distinctBy { it.id }.let(::oneShopOnce)
 
+    private fun rentPeriod(kebab: String) = io.github.tieo.arbay.model.RentPeriod.entries.firstOrNull { it.name == kebab.uppercase().replace('-', '_') }
+    private fun condition(kebab: String) =
+        if (kebab == "parts") io.github.tieo.arbay.model.Condition.PARTS_ONLY else io.github.tieo.arbay.model.Condition.entries.firstOrNull { it.name == kebab.uppercase().replace('-', '_') }
 
     /** The shop's own address where a page links its offer through an affiliate network, which
      *  carries it as a parameter (awin's `ued`, others' `url` or `murl`). */
@@ -142,76 +143,79 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     /** Whether an offer read off structured data says it is hired out, in its own address or
      *  title (maschinen-humpert.de/vermietung/…-mieten/, "Parkett Eckenschleifer zur Miete"), or
      *  comes from a site named for hiring out: its price is a rate, whatever period it is for. */
-    private fun hiredOut(o: PageOffer): Boolean =
+    private fun hiredOut(o: ShopOffer): Boolean =
         Rentals.rentalSite(siteName(SiteRecipes.domainOf(o.url))) || Rentals.hiredOut(o.url.substringBefore('?') + " " + o.title)
 
 
-    private fun siteSearches(words: String): List<String> =
+    private suspend fun siteSearches(words: String): List<String> =
         SiteRecipes.all().mapNotNull { r -> r.searchUrl?.replace("{q}", words.encodeUrl()) }.distinct()
 
     private enum class Outcome { OFFERS, GUESSED, NOTHING_SOLD, UNREADABLE, BLOCKED, TIMED_OUT }
-    private class Page(val outcome: Outcome, val offers: List<PageOffer> = emptyList())
+    private class Page(val outcome: Outcome, val offers: List<ShopOffer> = emptyList())
 
-    /** The offers on one page; a page that sells something and yields none is reported. */
+    /**
+     * The offers on one page, read by Neuland; a page that sells something and yields none is
+     * reported. A few pages per search may be read once more in a browser, which is slow, for shops
+     * whose scripts write the offers; a site given up on is not.
+     */
     private suspend fun read(url: String, words: String, renders: java.util.concurrent.atomic.AtomicInteger? = null): Page {
         val domain = SiteRecipes.domainOf(url)
-        val recipe = SiteRecipes.forUrl(url)
-        val rendered = recipe?.render == true || RenderedSites.has(domain)
-        var html = try {
-            if (recipe?.items != null) apiAnswer(client, url)
-            else if (rendered) rendered(url) ?: throw CrawlerBlockedException("browser did not answer", ErrorType.TIMEOUT)
-            else fetchWithFallback(client, url, "Web $domain")
+        val givenUp = SiteGaps.isGivenUp(domain)
+        val render = !givenUp && (renders == null || renders.get() > 0)
+        val page = try {
+            json.decodeFromJsonElement(ShopPage.serializer(), io.github.tieo.arbay.neuland.Neuland.request(
+                io.ktor.http.HttpMethod.Get, "shops/page?url=${url.encodeUrl()}&render=$render", limitS = PAGE_TIMEOUT_MS / 1000,
+            ))
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            log.debug("Web: {} not fetched: {}", url, e.message?.take(80))
+            log.debug("Web: {} not read: {}", url, e.message?.take(80))
             return Page(Outcome.BLOCKED)
         }
-        var offers = offersOn(recipe, html, url)
-        // A shop passing itself off as another sells nothing it sends; its offers are bait.
-        if (ProductPages.impersonates(html, url)) {
-            log.warn("Web: {} passes itself off as another shop, left out", domain)
-            return Page(Outcome.NOTHING_SOLD)
-        }
-        // A product's address that lands on the shop's front page is a product it no longer has.
-        if (ProductPages.landedOnFrontPage(html, url)) return Page(Outcome.NOTHING_SOLD)
-        if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
-        // A site's own search API answering no offer its recipe reads has nothing priced for the
-        // words: Boels lists its toilet containers for "Dusch-WC" with no rate and a banner by the
-        // week only. Its answer is data, never a page a browser would show more of.
-        if (recipe?.items != null) return Page(Outcome.NOTHING_SOLD)
-        // A site's own search that says it found nothing for the words sells nothing for them.
-        if (SiteRecipes.foundNothing(url, html)) return Page(Outcome.NOTHING_SOLD)
-        // A shop's front page shows what it pushes today, not what was searched for; where the
-        // site's own search is known, that search answers the words. grills.de's front page, listed
-        // for "Weber Grill", holds no product tile.
-        if (isFrontPage(url) && SiteRecipes.all().any { it.domain == domain && it.searchUrl != null }) return Page(Outcome.NOTHING_SOLD)
-        if (SiteGaps.isGivenUp(domain) || !ProductPages.sellsSomething(html)) return Page(Outcome.NOTHING_SOLD)
-        // A shop whose offers its own scripts put on the page shows them only to a browser. Read
-        // once more in one, a few pages per search since a browser is slow; a site that gives its
-        // offers that way is remembered and opened in a browser from then on.
-        if (!rendered && (renders == null || renders.getAndDecrement() > 0)) {
-            rendered(url)?.let { page ->
-                html = page
-                offers = offersOn(recipe, page, url)
-                if (offers.isNotEmpty()) {
-                    RenderedSites.add(domain)
-                    return Page(Outcome.OFFERS, offers)
-                }
+        if (page.readAgain) renders?.decrementAndGet()
+        return when (page.outcome) {
+            "offers" -> Page(Outcome.OFFERS, page.offers)
+            "nothing-sold" -> Page(Outcome.NOTHING_SOLD)
+            "blocked" -> Page(Outcome.BLOCKED)
+            else -> {
+                if (givenUp) return Page(Outcome.NOTHING_SOLD)
+                // Reported either way, so the site gets its exact recipe; the guess only keeps this
+                // search from missing the offer until then.
+                page.html?.let { SiteGaps.record(domain, url, words, it, recipeBroken = page.recipeBroken) }
+                coroutineContext[UnreadableSites]?.sites?.add(domain)
+                if (page.outcome == "guessed" && page.offers.isNotEmpty()) Page(Outcome.GUESSED, page.offers) else Page(Outcome.UNREADABLE)
             }
         }
-        // Reported either way, so the site gets its exact recipe; the guess only keeps this
-        // search from missing the offer until then.
-        SiteGaps.record(domain, url, words, html, recipeBroken = recipe != null)
-        coroutineContext[UnreadableSites]?.sites?.add(domain)
-        val guessed = runCatching { ProductPages.guess(html, url) }.getOrNull()
-        return if (guessed != null) Page(Outcome.GUESSED, listOf(guessed)) else Page(Outcome.UNREADABLE)
     }
 
-    private fun offersOn(recipe: SiteRecipe?, html: String, url: String): List<PageOffer> = try {
-        SiteRecipes.asTheSiteDeals(url, html, (if (recipe == null) emptyList() else SiteRecipes.readAt(url, html)).ifEmpty { SiteRecipes.withoutOffersReadElsewhere(url, ProductPages.offers(html, url)) })
-    } catch (e: Exception) {
-        log.warn("Web: {} unreadable: {}", url, e.message?.take(80))
-        emptyList()
+    @kotlinx.serialization.Serializable
+    private data class ShopPage(
+        val outcome: String, val offers: List<ShopOffer> = emptyList(), val recipeBroken: Boolean = false,
+        val readAgain: Boolean = false, val html: String? = null,
+    )
+
+    @kotlinx.serialization.Serializable
+    internal data class Amount(val cents: Long, val currency: String) {
+        fun money() = io.github.tieo.arbay.model.Money(cents, io.github.tieo.arbay.model.Currency.entries.firstOrNull { it.name == currency } ?: io.github.tieo.arbay.model.Currency.EUR)
     }
+
+    @kotlinx.serialization.Serializable
+    internal data class Rate(val period: String, val price: Amount)
+
+    @kotlinx.serialization.Serializable
+    internal data class Offered(val price: Amount, val code: String? = null, val terms: String? = null)
+
+    /** One offer as Neuland read it off a shop's page. */
+    @kotlinx.serialization.Serializable
+    internal data class ShopOffer(
+        val title: String, val price: Amount, val url: String, val condition: String? = null,
+        @kotlinx.serialization.SerialName("in_stock") val inStock: Boolean = true,
+        val image: String? = null, val shipping: Amount? = null, val gtin: String? = null, val mpn: String? = null,
+        val seller: String? = null,
+        @kotlinx.serialization.SerialName("rent_per") val rentPer: String? = null,
+        @kotlinx.serialization.SerialName("rent_rates") val rentRates: List<Rate> = emptyList(),
+        val coupon: Offered? = null,
+    )
+
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     /** Whether the page belongs to a market Arbay crawls by its own crawler, which reads it better. */
     private fun coveredElsewhere(url: String): Boolean {
@@ -225,31 +229,6 @@ class WebCrawler(private val client: HttpClient) : Crawler {
 
 
     companion object {
-
-        /**
-         * A shop page as a person's Chrome shows it once its scripts ran: [RenderBrowsers], warm and on
-         * a display of its own, waiting until the page carries the marks shops put on their product
-         * data, or [RENDER_TIMEOUT_S] passed. Waiting for the network to go idle times out on every
-         * MediaMarkt and Saturn page, whose trackers never stop.
-         */
-        internal suspend fun rendered(url: String): String? =
-            RenderBrowsers.get(url, SHOP_MARKERS, timeoutS = RENDER_TIMEOUT_S)?.html?.takeIf { it.isNotBlank() }
-
-        /** A site's own API, asked for JSON: SAP Commerce's answers a browser's Accept header in XML. */
-        internal suspend fun apiAnswer(client: HttpClient, url: String): String {
-            val response = client.get(url) {
-                headers {
-                    append("User-Agent", USER_AGENT)
-                    append("Accept", "application/json")
-                    append("Accept-Language", "de-DE,de;q=0.9")
-                }
-            }
-            if (response.status.value >= 400) throw CrawlerBlockedException("API answered ${response.status}", ErrorType.SERVICE_UNAVAILABLE_503)
-            return response.bodyAsText()
-        }
-
-        private val SHOP_MARKERS = listOf("\"offers\"", "itemprop=\"price\"", "product:price:amount", "__NEXT_DATA__")
-        private const val RENDER_TIMEOUT_S = 20
 
         /** An address without the session a shop writes into it (`;jsessionid=…`), which changes on
          *  every visit and would make the same offer a new one each time it is read. The tracking
@@ -339,23 +318,6 @@ class UnreadableSites : kotlin.coroutines.CoroutineContext.Element {
     val sites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     companion object Key : kotlin.coroutines.CoroutineContext.Key<UnreadableSites>
     override val key: kotlin.coroutines.CoroutineContext.Key<*> = Key
-}
-
-/** The sites whose offers only a browser sees, found by reading them in one; opened in a browser
- *  from the first page on after that. Kept in the data directory. */
-object RenderedSites {
-    private val file = io.github.tieo.arbay.DataDir.file("web_rendered.json")
-    private val sites: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().apply {
-        runCatching { addAll(kotlinx.serialization.json.Json.decodeFromString<List<String>>(file.readText())) }
-    }
-
-    fun has(domain: String) = domain in sites
-
-    fun add(domain: String) {
-        if (sites.add(domain)) runCatching {
-            file.writeText(kotlinx.serialization.json.Json.encodeToString(sites.sorted()))
-        }
-    }
 }
 
 /** One search's record of the shop offers already taken, by shop name, title and price, with the

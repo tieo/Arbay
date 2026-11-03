@@ -1,12 +1,8 @@
 package io.github.tieo.arbay.routes
 
 import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.PageOffer
-import io.github.tieo.arbay.crawler.ProductPages
 import io.github.tieo.arbay.crawler.SiteGaps
-import io.github.tieo.arbay.crawler.SiteRecipe
 import io.github.tieo.arbay.crawler.SiteRecipes
-import io.github.tieo.arbay.crawler.fetchWithFallback
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.ktor.http.ContentType
@@ -20,29 +16,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.serialization.Serializable
-
-/** A page to read, with the recipe to read it by; the site's stored one, or none, where absent. */
-@Serializable
-data class WebTry(
-    val url: String,
-    val recipe: SiteRecipe? = null,
-    /** Read the page as it was kept when the site was reported, instead of fetching it again. */
-    val kept: Boolean = false,
-)
-
-/** What a page gave: its offers, what read them, and whether the page sells something at all. */
-@Serializable
-data class WebTried(
-    val offers: List<PageOffer>,
-    val readBy: String,
-    val sellsSomething: Boolean,
-    /** Whether the recipe's `nothingFound` marks the page as the site's own empty answer, which a search counts as selling nothing. */
-    val foundNothing: Boolean = false,
-    val pageLength: Int,
-    /** Whether the page passes itself off as another shop, which a search leaves out. */
-    val impersonates: Boolean = false,
-)
 
 /**
  * The web market's sites: the ones it could not read, the recipes it reads others by, and a way to
@@ -69,7 +42,7 @@ fun Route.webRoutes() {
             SiteGaps.learned.emit(SiteGaps.Learned(domain, emptyMap()))
             call.respond(HttpStatusCode.NoContent)
         }
-        get("/recipes") { call.respond(SiteRecipes.all()) }
+        get("/recipes") { call.respondText(SiteRecipes.recipes().toString(), ContentType.Application.Json) }
         // What the search engines list for any words, not only shops: each engine's results with
         // title, address and snippet, and all merged by address. `engine` may repeat to pick some.
         get("/serp") {
@@ -88,53 +61,33 @@ fun Route.webRoutes() {
             call.respond(web.engines.images(q, pages))
         }
         put("/recipes") {
-            val recipe = call.receive<SiteRecipe>()
-            if (recipe.domain.isBlank()) throw BadRequestException("A recipe needs its domain")
-            // A recipe of a search alone is a site whose structured data reads it, searched directly.
-            if (recipe.pattern == null && recipe.searchUrl == null && (recipe.title.isBlank() || recipe.price.isBlank()))
-                throw BadRequestException("A recipe needs its title and price, a pattern, or a searchUrl")
-            recipe.urlPattern?.let { runCatching { Regex(it) }.getOrElse { throw BadRequestException("urlPattern is not a regex: ${it.message}") } }
-            recipe.pattern?.let { p ->
-                runCatching { Regex(p) }.getOrElse { throw BadRequestException("pattern is not a regex: ${it.message}") }
-                if ("(?<title>" !in p || "(?<price>" !in p) throw BadRequestException("pattern needs the groups (?<title>...) and (?<price>...)")
+            val recipe = call.receive<kotlinx.serialization.json.JsonObject>()
+            val domain = (recipe["domain"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+                ?: throw BadRequestException("A recipe needs its domain")
+            try {
+                SiteRecipes.put(recipe)
+            } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
+                throw BadRequestException(e.message ?: "not a recipe")
             }
-            SiteRecipes.put(recipe)
-            SiteGaps.takeBack(SiteRecipes.domainOf("https://${recipe.domain}/"))
+            SiteGaps.takeBack(SiteRecipes.domainOf("https://$domain/"))
             // What the searches that met the site before it was learned missed, read now and added
             // to them, the ones still open on a screen included.
             val learned = (CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler)
-                ?.learned(SiteRecipes.domainOf("https://${recipe.domain}/")).orEmpty()
+                ?.learned(SiteRecipes.domainOf("https://$domain/")).orEmpty()
             call.respond(learned.mapValues { it.value.size })
         }
         delete("/recipes/{domain}") {
             SiteRecipes.remove(call.parameters["domain"] ?: throw BadRequestException("Missing domain"))
             call.respond(HttpStatusCode.NoContent)
         }
+        // A recipe tried on a real page before it is kept: in the request, else the site's own; on the
+        // page as it was kept when the site was reported (`kept`), else fetched now.
         post("/try") {
-            val asked = call.receive<WebTry>()
-            val domain = SiteRecipes.domainOf(asked.url)
-            val recipe = asked.recipe ?: SiteRecipes.forUrl(asked.url)
-            val html = if (asked.kept) SiteGaps.page(domain) ?: throw NotFoundException("No page kept for $domain")
-            else if (recipe?.items != null) io.github.tieo.arbay.crawler.WebCrawler.apiAnswer(CrawlerRegistry.httpClient, asked.url)
-            else if (recipe?.render == true || io.github.tieo.arbay.crawler.RenderedSites.has(domain))
-                io.github.tieo.arbay.crawler.WebCrawler.rendered(asked.url) ?: throw NotFoundException("The browser did not answer for ${asked.url}")
-            else fetchWithFallback(CrawlerRegistry.httpClient, asked.url, "Web $domain")
-            // A recipe in the request is tried alone; without one, the site's recipes as a search reads them.
-            val byRecipe = asked.recipe?.let { SiteRecipes.read(it, html, asked.url) } ?: SiteRecipes.readAt(asked.url, html)
-            val offers = SiteRecipes.asTheSiteDeals(asked.url, html, byRecipe.ifEmpty { SiteRecipes.withoutOffersReadElsewhere(asked.url, ProductPages.offers(html, asked.url)) })
-            call.respond(WebTried(
-                offers = offers,
-                readBy = when {
-                    byRecipe.isNotEmpty() -> "recipe"
-                    offers.isNotEmpty() -> "structured data"
-                    else -> "nothing"
-                },
-                sellsSomething = ProductPages.sellsSomething(html),
-                foundNothing = asked.recipe?.let { r -> r.nothingFound?.let { mark -> runCatching { org.jsoup.Jsoup.parse(html).selectFirst(mark) != null }.getOrDefault(false) } ?: false }
-                    ?: SiteRecipes.foundNothing(asked.url, html),
-                pageLength = html.length,
-                impersonates = ProductPages.impersonates(html, asked.url),
-            ))
+            val asked = call.receive<kotlinx.serialization.json.JsonObject>()
+            val url = (asked["url"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: throw BadRequestException("Missing url")
+            val kept = (asked["kept"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+            val html = if (kept) SiteGaps.page(SiteRecipes.domainOf(url)) ?: throw NotFoundException("No page kept for ${SiteRecipes.domainOf(url)}") else null
+            call.respondText(SiteRecipes.tryOn(url, asked["recipe"], html).toString(), ContentType.Application.Json)
         }
     }
 }
