@@ -1,6 +1,5 @@
 package io.github.tieo.arbay.crawler
 
-import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SuggestedTerm
@@ -19,32 +18,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * The browser Arbay's plain fetches say they are: Chrome on Windows, at the version of the Chrome
- * installed beside the server, so the claim ages with the browser that is updated rather than with
- * the code. A version a year old reads as a bot to some shops: grills.de answers Chrome 131 its
- * search with 404 and Chrome 141 with the results.
- */
-internal val USER_AGENT: String by lazy {
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${installedChromeMajor() ?: KNOWN_CHROME_MAJOR}.0.0.0 Safari/537.36"
-}
-
-/** The Chrome major version where none is installed to ask, as on a developer's machine. */
-private const val KNOWN_CHROME_MAJOR = 156
-
-private fun installedChromeMajor(): Int? = runCatching {
-    val chrome = System.getenv("STEALTH_CHROME")?.takeIf { java.io.File(it).canExecute() } ?: "google-chrome-stable"
-    val process = ProcessBuilder(chrome, "--version").redirectErrorStream(true).start()
-    if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) { process.destroyForcibly(); return@runCatching null }
-    Regex("""(\d+)\.\d+\.\d+""").find(process.inputStream.bufferedReader().readText())?.groupValues?.get(1)?.toInt()
-}.getOrNull()
-
 internal fun String.encodeUrl(): String = java.net.URLEncoder.encode(this, "UTF-8")
-
-private val fetchLog = org.slf4j.LoggerFactory.getLogger("FetchChain")
 
 /** Randomized inter-page delay (150-600 ms) so paged fetches don't leave a fixed-interval trail. */
 private fun fetchJitterMs(): Long = Random.nextLong(150, 600)
+
+
 
 /** CoroutineContext element for emitting fetch-engine progress to the SSE stream */
 class FetchProgressEmitter(val emit: suspend (stage: String) -> Unit) : CoroutineContext.Element {
@@ -313,253 +292,6 @@ internal suspend fun paginate(
     return seen.values.toList()
 }
 
-/** Validate HTML — throws if it's a block/captcha page */
-internal fun validateHtml(html: String, platformName: String) {
-    // A short answer is a refusal when it is a page, and an answer when it is an API's JSON: Sauto
-    // says "no more ads" in 117 bytes ({"pagination":…,"results":[]}), and read as a block that
-    // threw away the vans of the pages before it and put the market on a block cooldown.
-    val apiAnswer = isJsonDocument(html)
-    if (html.length < 500 && !apiAnswer)
-        throw CrawlerBlockedException("$platformName: empty response", ErrorType.BLOCKED_403, html = html)
-    if (detectCaptcha(html))
-        throw CrawlerBlockedException("$platformName captcha", ErrorType.CAPTCHA, html = html)
-    if (html.length < 1000 && !apiAnswer && (html.contains("bot") || html.contains("challenge") || html.contains("blocked")))
-        throw CrawlerBlockedException("$platformName likely blocked (small response)", ErrorType.BLOCKED_403, html = html)
-    detectBlockPage(html, platformName)?.let { throw it.withEvidence(html = html) }
-}
-
-/** Whether the body is one whole JSON object or array, as an API answers. */
-internal fun isJsonDocument(body: String): Boolean {
-    val trimmed = body.trim()
-    if (!(trimmed.startsWith("{") && trimmed.endsWith("}")) && !(trimmed.startsWith("[") && trimmed.endsWith("]"))) return false
-    return runCatching { kotlinx.serialization.json.Json.parseToJsonElement(trimmed) }.isSuccess
-}
-
-internal const val EDGE_ERROR_PAGE = "error page in place of results"
-
-/** eBay's passing "Something went wrong on our end", which the next request does not get. */
-internal val CrawlerBlockedException.isEdgeErrorPage: Boolean
-    get() = message?.endsWith(EDGE_ERROR_PAGE) == true
-
-/** The same refusal, carrying the page that showed it. */
-internal fun CrawlerBlockedException.withEvidence(
-    url: String? = null,
-    html: String? = null,
-    statusCode: Int? = null,
-): CrawlerBlockedException = CrawlerBlockedException(
-    message = message ?: "blocked",
-    errorType = errorType,
-    url = url ?: this.url,
-    html = html ?: this.html,
-    statusCode = statusCode ?: this.statusCode,
-)
-
-/** Validate browser result — checks both final URL and HTML */
-internal fun validateBrowserResult(result: FetchResult, platformName: String): String {
-    val html = result.html
-    val finalUrl = result.finalUrl
-    if (finalUrl.contains("/splashui/") || finalUrl.contains("/challenge?") || finalUrl.contains("challenge=1"))
-        throw CrawlerBlockedException(
-            "$platformName: challenge redirect ($finalUrl)", ErrorType.CAPTCHA, url = finalUrl, html = html,
-        )
-    if (detectCaptcha(html))
-        throw CrawlerBlockedException(
-            "$platformName: captcha in browser response", ErrorType.CAPTCHA, url = finalUrl, html = html,
-        )
-    detectBlockPage(html, platformName)?.let { throw it.withEvidence(url = finalUrl, html = html) }
-    if (html.length < 500)
-        throw CrawlerBlockedException(
-            "$platformName: browser returned empty page", ErrorType.BLOCKED_403, url = finalUrl, html = html,
-        )
-    return html
-}
-
-/**
- * General-purpose fetch with a full fallback chain. All crawlers should use this.
- *
- * Fallback order:
- * 1. HTTP GET (fast, no JS: works for most platforms)
- * 2. Neuland's client with Chrome's TLS fingerprint
- * 3. Neuland's render browser, which gets past a site's checks itself
- * 4. The real-Chrome stealth sidecar, for sites that name a [stealthMarker]
- *
- * Each step is tried only if the previous step failed with a retryable error.
- *
- * With browserOnly the HTTP and Chrome-fingerprint steps are skipped and the chain starts at the browser,
- * for platforms whose bot protection blocks every non-browser client.
- */
-internal suspend fun fetchWithFallback(
-    client: HttpClient,
-    url: String,
-    platformName: String,
-    waitSelector: String? = null,
-    extraWaitMs: Long = 2000,
-    primeUrl: String? = null,
-    waitNetworkIdle: Boolean = false,
-    browserOnly: Boolean = false,
-    stealthMarker: String? = null,
-    stealthMinMatches: Int = 1,
-    pageMarker: String? = null,
-): String {
-    val errors = mutableListOf<String>()
-    val emitter = coroutineContext[FetchProgressEmitter.Key]
-
-    // Where every real page holds [pageMarker], a tier's answer without it is not that page: a
-    // rate-limited site serves its own error page, which no block check knows, and taking it would
-    // end the chain before the tier that gets through.
-    fun String.proven(): String {
-        if (pageMarker != null && pageMarker !in this)
-            throw CrawlerBlockedException("$platformName: page without ${pageMarker.take(40)}", ErrorType.BLOCKED_403)
-        return this
-    }
-
-    // Paced to the platform's per-window request ceiling, so neither a runaway nor a whole price
-    // band can hammer a site into flagging our IP; refused only when the window stays spent.
-    val windowDeadline = kotlin.time.Clock.System.now().toEpochMilliseconds() + RequestMonitor.MAX_WAIT_FOR_WINDOW_MS
-    if (!RequestMonitor.acquire(platformName, windowDeadline))
-        throw CrawlerBlockedException("$platformName: request cutoff reached, skipping", ErrorType.RATE_LIMITED_429)
-
-    // Randomized pause before each page fetch. A fixed cadence across 11 platforms is itself
-    // a bot signature; the jitter spreads the burst and varies the inter-request gap.
-    delay(fetchJitterMs())
-
-    if (!browserOnly) {
-        // === Step 1: Plain HTTP ===
-        emitter?.let { it.emit("HTTP") }
-        try {
-            val html = fetchHttp(client, url, platformName)
-            validateHtml(html, platformName)
-            html.proven()
-            RequestMonitor.recordTier(platformName, "HTTP")
-            return html
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            errors.add("HTTP: ${e.message?.take(60)}")
-            fetchLog.debug("[{}] HTTP failed: {}", platformName, e.message?.take(80))
-            if (!isRetryable(e)) throw e
-        }
-
-        // === Step 2: Neuland's client with Chrome's TLS fingerprint ===
-        emitter?.let { it.emit("ChromeHttp") }
-        try {
-            val html = NeulandHttp.fetch(url, cameFrom = primeUrl)
-            validateHtml(html, platformName)
-            html.proven()
-            RequestMonitor.recordTier(platformName, "ChromeHttp")
-            return html
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            if (isPageMissing(e)) throw e
-            errors.add("ChromeHttp: ${e.message?.take(60)}")
-            fetchLog.debug("[{}] ChromeHttp failed: {}", platformName, e.message?.take(80))
-        }
-    }
-
-    // === Step 3: a browser, Neuland's, which gets past the site's checks itself ===
-    emitter?.let { it.emit("Browser") }
-    try {
-        return readInBrowser(url, platformName, listOfNotNull(stealthMarker)).proven()
-            .also { RequestMonitor.recordTier(platformName, "Browser") }
-    } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        errors.add("Browser: ${e.message?.take(60)}")
-        fetchLog.debug("[{}] Browser failed: {}", platformName, e.message?.take(80))
-    }
-
-    // === Step 4: real Chrome that ticks Cloudflare's box ===
-    // Where a site's challenge stops every engine above, a real Chrome passes it by ticking the
-    // "Verify you are human" box; it is the slowest tier, so only sites that name what their page
-    // shows once through ([stealthMarker]) reach it.
-    if (stealthMarker != null) {
-        emitter?.let { it.emit("Stealth") }
-        try {
-            // The marker showing is what proves the page; a challenge script left in it is not a block.
-            val html = RenderBrowsers.rendered(url, stealthMarker, timeoutS = 40, times = stealthMinMatches)
-            RequestMonitor.recordTier(platformName, "Stealth")
-            return html
-        } catch (e: CancellationException) { throw e } catch (e: Exception) {
-            errors.add("Stealth: ${e.message?.take(60)}")
-            fetchLog.debug("[{}] Stealth failed: {}", platformName, e.message?.take(80))
-        }
-    }
-
-    // All engines failed
-    RequestMonitor.recordBlock(platformName)
-    throw CrawlerBlockedException(
-        "$platformName blocked by all engines: ${errors.joinToString(" → ")}",
-        ErrorType.CAPTCHA,
-    )
-}
-
-/**
- * [url] read in one of Neuland's browsers, which gets past the site's checks itself, once one of
- * [markers] (markup only the page asked for carries) shows, or, with none, once it has loaded.
- */
-internal suspend fun readInBrowser(url: String, platformName: String, markers: List<String> = emptyList(), timeoutS: Int = 40): String {
-    val page = RenderBrowsers.get(url, markers, timeoutS)
-        ?: throw CrawlerBlockedException("$platformName: the browser did not answer", ErrorType.TIMEOUT, url = url)
-    if (page.page == "refused") throw CrawlerBlockedException("$platformName: the site refused the browser", ErrorType.BLOCKED_403, url = page.url, html = page.html)
-    return validateBrowserResult(FetchResult(page.html, 200, page.url), platformName)
-}
-
-/** A page as a browser read it: its markup, status and the address it ended on. */
-data class FetchResult(
-    val html: String,
-    val statusCode: Int,
-    val finalUrl: String = "",
-)
-
-internal suspend fun fetchHttp(client: HttpClient, url: String, platformName: String): String {
-    val response = client.get(url) {
-        headers {
-            append("User-Agent", USER_AGENT)
-            append("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            append("Accept-Language", "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7")
-            append("Upgrade-Insecure-Requests", "1")
-            append("Sec-Fetch-Dest", "document")
-            append("Sec-Fetch-Mode", "navigate")
-            append("Sec-Fetch-Site", "none")
-            append("Sec-Fetch-User", "?1")
-            append("Cache-Control", "max-age=0")
-        }
-    }
-    if (response.status.value == 429) {
-        delay(3_000L)
-        val retry = client.get(url) {
-            headers { append("User-Agent", USER_AGENT) }
-        }
-        if (retry.status.value != 200)
-            throw CrawlerBlockedException("$platformName HTTP ${retry.status.value}", classifyHttpError(retry))
-        return retry.bodyAsText()
-    }
-    if (response.status.value != 200) {
-        throw CrawlerBlockedException("$platformName HTTP ${response.status.value}", classifyHttpError(response))
-    }
-    return response.bodyAsText()
-}
-
-private fun isRetryable(e: Exception): Boolean {
-    val msg = e.message?.lowercase() ?: ""
-    if (isPageMissing(e)) return false
-    return e is CrawlerBlockedException ||
-        e is io.ktor.client.plugins.HttpRequestTimeoutException ||
-        e is io.ktor.client.network.sockets.ConnectTimeoutException ||
-        msg.contains("timeout") || msg.contains("prematurely closed") ||
-        msg.contains("connection reset") || msg.contains("connection refused") || msg.contains("eof") ||
-        // A redirect loop ("Max send count 20 exceeded") means the site bounces this client over a
-        // cookie or consent hop it cannot satisfy. Another engine carrying a browser's cookie jar
-        // usually loads the same URL fine, so the chain must continue rather than abort here.
-        msg.contains("max send count")
-}
-
-internal fun classifyHttpError(response: HttpResponse): ErrorType {
-    return when (response.status.value) {
-        401 -> ErrorType.AUTH_REQUIRED_401
-        403 -> ErrorType.BLOCKED_403
-        404, 410 -> ErrorType.NOT_FOUND_404
-        429 -> ErrorType.RATE_LIMITED_429
-        503 -> ErrorType.SERVICE_UNAVAILABLE_503
-        else -> ErrorType.UNKNOWN
-    }
-}
-
 /**
  * The page arrived but not in the shape its parser reads, which is what a market redesign looks
  * like. Reported as a parse error with the page attached for the snapshot: returning no listings
@@ -572,10 +304,7 @@ internal fun unreadablePage(platformName: String, what: String, page: String, ca
         html = page.take(500_000),
     )
 
-/** A page the site says does not exist. Every engine would be told the same, so the fetch chain
- *  stops at it instead of starting a browser to hear it again. */
-internal fun isPageMissing(e: Exception): Boolean =
-    e is CrawlerBlockedException && e.errorType == ErrorType.NOT_FOUND_404
+
 
 internal fun classifyException(e: Exception): ErrorType {
     val msg = e.message?.lowercase() ?: ""
@@ -588,68 +317,3 @@ internal fun classifyException(e: Exception): ErrorType {
     }
 }
 
-/**
- * Detect various block pages that aren't captchas (IP blocks, access denied, Cloudflare challenges).
- */
-internal fun detectBlockPage(html: String, platformName: String): CrawlerBlockedException? {
-    val lower = html.lowercase()
-    if (html.length > 50_000) return null // Real content pages are large
-    return when {
-        lower.contains("zugriff verweigert") || lower.contains("access denied") ->
-            CrawlerBlockedException("$platformName: access denied", ErrorType.BLOCKED_403)
-        lower.contains("ip-adresse wurde blockiert") || lower.contains("ip address is blocked") ->
-            CrawlerBlockedException("$platformName: IP blocked", ErrorType.BLOCKED_403)
-        lower.contains("ich bin kein roboter") && lower.contains("immobilienscout") ->
-            CrawlerBlockedException("$platformName: robot check", ErrorType.CAPTCHA)
-        // Akamai Bot Manager challenge — JS-only page with "sec-if-cpt" / "sec-bc" markers.
-        // mobile.de, and other Akamai-protected sites return this when fingerprint fails.
-        lower.contains("sec-if-cpt-container") || lower.contains("sec-bc-tile") ->
-            CrawlerBlockedException("$platformName: Akamai challenge", ErrorType.CAPTCHA)
-        lower.contains("__cf_chl") ||
-            lower.contains("sicherheitsüberprüfung wird durchgeführt") ||
-            lower.contains("sichere verbindung wird") ||
-            lower.contains("checking your browser") ||
-            lower.contains("enable javascript and cookies") ||
-            (lower.contains("just a moment") && lower.contains("cloudflare")) ->
-            CrawlerBlockedException("$platformName: Cloudflare challenge", ErrorType.CAPTCHA)
-        // eBay's edge serves this in place of results, with status 200: "SORRY Something went
-        // wrong on our end" and a reference. Measured, it is one request in several, and the next
-        // one a few seconds later goes through, so it is no block and starts no cooldown: the
-        // crawler asks again (see [isEdgeErrorPage]).
-        lower.contains("something went wrong on our end") && html.length < 10_000 ->
-            CrawlerBlockedException("$platformName: $EDGE_ERROR_PAGE", ErrorType.UNKNOWN)
-        lower.contains("something has gone wrong") && html.length < 10_000 ->
-            CrawlerBlockedException("$platformName: error page", ErrorType.UNKNOWN)
-        lower.contains("tut uns leid") && html.length < 10_000 ->
-            CrawlerBlockedException("$platformName: bot detection (Tut uns Leid)", ErrorType.BLOCKED_403)
-        else -> null
-    }
-}
-
-internal fun detectCaptcha(html: String): Boolean {
-    val lower = html.lowercase()
-
-    // Standard captcha widgets (small pages only, to avoid false positives on normal pages with captcha JS)
-    val hasCaptchaForm = lower.contains("g-recaptcha") ||
-        lower.contains("h-captcha") ||
-        lower.contains("cf-challenge-running") ||
-        lower.contains("cf-turnstile")
-    val hasBlockingText = lower.contains("are you a human") ||
-        lower.contains("bitte bestätige, dass du kein roboter bist") ||
-        lower.contains("please verify you are not a robot")
-    val isSmallPage = html.length < 20_000
-    if ((hasCaptchaForm || hasBlockingText) && isSmallPage) return true
-
-    // eBay-specific challenge page (can be large because it includes full site chrome)
-    if (lower.contains("pagename:'challengeget'") ||
-        lower.contains("ihr browser wird geprüft") ||
-        lower.contains("your browser is being verified")) return true
-
-    // Amazon bot/CAPTCHA detection — returned as HTTP 200, any page size
-    if (lower.contains("validatecaptcha") ||
-        lower.contains("<title>robot check</title>") ||
-        lower.contains("enter the characters you see below") ||
-        lower.contains("geben sie die zeichen ein")) return true
-
-    return false
-}

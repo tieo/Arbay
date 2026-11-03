@@ -21,24 +21,6 @@ class PageVerdictTest {
     private val resultsPage = "<html><body>" + "<article data-adid=\"1\">Makita DHP484</article>".repeat(2_000) + "</body></html>"
 
     @Test
-    fun `a small page asking to prove humanity is a captcha`() {
-        assertTrue(detectCaptcha("<html><div class=\"g-recaptcha\"></div>Are you a human?</html>"))
-        assertTrue(detectCaptcha("<html><title>Robot Check</title></html>"))
-    }
-
-    @Test
-    fun `a full results page that loads captcha script is not a captcha`() {
-        assertFalse(detectCaptcha(resultsPage + "<script src=\"https://www.google.com/recaptcha/api.js\"></script><div class=\"g-recaptcha\"></div>"))
-    }
-
-    @Test
-    fun `block pages are told apart by what they say`() {
-        assertEquals(ErrorType.BLOCKED_403, detectBlockPage("<html>Zugriff verweigert</html>", "Test")?.errorType)
-        assertEquals(ErrorType.CAPTCHA, detectBlockPage("<html><title>Just a moment...</title>cloudflare</html>", "Test")?.errorType)
-        assertNull(detectBlockPage(resultsPage, "Test"))
-    }
-
-    @Test
     fun `a failure reads as the kind it is`() {
         assertEquals(ErrorType.TIMEOUT, classifyException(RuntimeException("Request timeout has expired")))
         assertEquals(ErrorType.NETWORK_ERROR, classifyException(RuntimeException("Connection refused")))

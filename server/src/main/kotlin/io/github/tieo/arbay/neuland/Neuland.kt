@@ -2,7 +2,6 @@ package io.github.tieo.arbay.neuland
 
 import io.github.tieo.arbay.crawler.CrawlerBlockedException
 import io.github.tieo.arbay.crawler.ErrorType
-import io.github.tieo.arbay.crawler.NeulandBrowser
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -37,39 +36,6 @@ object Neuland {
     private val base = System.getenv("NEULAND_URL")?.trimEnd('/')?.takeIf { it.isNotBlank() }
     private val json = Json { ignoreUnknownKeys = true }
     private val client = HttpClient(CIO) { install(HttpTimeout) }
-
-    /**
-     * Reads [url] in Neuland's browser [browser] until one of [content] shows ([contentTimes] times),
-     * the site's error page
-     * ([errors]) does, a refusal stands, or [timeoutS] passes. Null where Neuland did not answer.
-     */
-    suspend fun read(browser: String, url: String, content: List<String>, errors: List<String>, refused: List<String>, timeoutS: Int, contentTimes: Int = 1): NeulandBrowser.Page? {
-        val body = JsonObject(mapOf(
-            "url" to JsonPrimitive(url),
-            "content" to JsonArray(content.map(::JsonPrimitive)),
-            "contentTimes" to JsonPrimitive(contentTimes),
-            "errors" to JsonArray(errors.map(::JsonPrimitive)),
-            "refused" to JsonArray(refused.map(::JsonPrimitive)),
-            "timeoutS" to JsonPrimitive(timeoutS),
-        ))
-        val answer = call("browsers/$browser/read", body, timeoutS + 30L) ?: return null
-        return NeulandBrowser.Page(
-            html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
-            page = answer["state"]?.jsonPrimitive?.contentOrNull ?: "unknown",
-        )
-    }
-
-    /** Where each of a site's redirects [urls] leads in Neuland's browser [browser]. */
-    suspend fun resolve(browser: String, urls: List<String>, leaving: String, timeoutS: Int): Map<String, String> {
-        val body = JsonObject(mapOf(
-            "urls" to JsonArray(urls.map(::JsonPrimitive)),
-            "leaving" to JsonPrimitive(leaving),
-            "timeoutS" to JsonPrimitive(timeoutS),
-        ))
-        val answer = call("browsers/$browser/resolve", body, timeoutS.toLong() * urls.size + 30) ?: return emptyMap()
-        return (answer["to"] as? JsonObject).orEmpty().mapNotNull { (k, v) -> v.jsonPrimitive.contentOrNull?.let { k to it } }.toMap()
-    }
 
     /**
      * What Neuland's offers readers answer at [path]: a site's search ("offers/search?site=&q=") or
@@ -143,18 +109,4 @@ object Neuland {
         val signedOut: Boolean get() = answer["signedOut"]?.jsonPrimitive?.contentOrNull == "true"
         val declined: Boolean get() = answer["declined"]?.jsonPrimitive?.contentOrNull == "true"
     }
-
-    private suspend fun call(path: String, body: JsonObject, limitS: Long): JsonObject? = runCatching {
-        val response = client.post("$base/$path") {
-            contentType(ContentType.Application.Json)
-            setBody(body.toString())
-            timeout { requestTimeoutMillis = limitS * 1000 }
-        }
-        val answer = json.parseToJsonElement(response.bodyAsText()).jsonObject
-        if (!response.status.isSuccess()) {
-            log.warn("Neuland {}: {}", path, answer["error"]?.jsonPrimitive?.contentOrNull ?: response.status)
-            return null
-        }
-        answer
-    }.onFailure { log.warn("Neuland {}: {}", path, it.message) }.getOrNull()
 }
