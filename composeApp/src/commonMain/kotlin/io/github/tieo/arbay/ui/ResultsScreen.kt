@@ -95,7 +95,6 @@ import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.askingSummary
-import io.github.tieo.arbay.results.captchaCount
 import io.github.tieo.arbay.results.clearBand
 import io.github.tieo.arbay.results.label
 import io.github.tieo.arbay.results.listingFoot
@@ -222,7 +221,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
-                MarketsLine(askingSummary(loading, total, completed, statuses), statuses.captchaCount() > 0, loading, total, completed) { panel(Panel.MARKETS) }
+                MarketsLine(askingSummary(loading, total, completed, statuses), loading, total, completed) { panel(Panel.MARKETS) }
             }
             if (state.summary.count > 0) item { PriceStrip(state) { panel(Panel.PRICES) } }
             item { NarrowingRow(session, state, hiddenCount = state.hidden.sumOf { it.total }, onPanel = ::panel) }
@@ -255,11 +254,11 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
 
 /** How the asking is going; a market that wants something from the reader makes it stand out. */
 @Composable
-private fun MarketsLine(text: String, attention: Boolean, loading: Boolean, total: Int, completed: Int, onClick: () -> Unit) {
+private fun MarketsLine(text: String, loading: Boolean, total: Int, completed: Int, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = arbay.pad, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Outlined.Storefront, null, Modifier.size(16.dp), tint = if (attention) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text, style = MaterialTheme.typography.bodySmall, color = if (attention) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Outlined.Storefront, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (loading) {
             Gap(6.dp)

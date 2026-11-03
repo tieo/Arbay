@@ -50,9 +50,9 @@ class AtTheSourceTest {
 
     @Test
     fun `mobile_de and AutoScout24 are asked for the limits only, AutoScout24 for the gearbox too`() {
-        val mobile = MobileDeCrawler(client).filterParams(crafter)
-        listOf("&fr=2018:", "&ml=:150000", "&p=10000:30990", "&ft=DIESEL").forEach { assertTrue(it in mobile, "$it in $mobile") }
-        listOf("&tr=", "&pw=", "&st=", "&dt=").forEach { assertFalse(it in mobile, "$it in $mobile") }
+        val mobile = MobileDeCrawler().vehicleQuery(crafter)
+        assertEquals(2018, mobile.registeredFrom); assertEquals(150_000, mobile.mileageMaxKm); assertEquals(listOf("diesel"), mobile.fuels)
+        assertEquals(null, mobile.powerMinKw); assertEquals(null, mobile.dealer); assertEquals(null, mobile.drivetrain)
         val as24 = AutoScout24Crawler().vehicleQuery(crafter)!!
         assertEquals(2018, as24.registeredFrom); assertEquals(150_000, as24.mileageMaxKm)
         assertEquals(listOf("diesel"), as24.fuels); assertEquals("automatic", as24.gearbox)
@@ -60,17 +60,10 @@ class AtTheSourceTest {
     }
 
     @Test
-    fun `mobile_de is asked for the wished gearbox while somebody waits, for every gearbox in turn for the watch`() {
-        val mobile = MobileDeCrawler(client)
-        assertEquals(listOf("AUTOMATIC_GEAR"), mobile.gearboxPasses(crafter))
-        assertEquals(listOf("AUTOMATIC_GEAR", "SEMIAUTOMATIC_GEAR", "MANUAL_GEAR"), mobile.gearboxPasses(crafter.copy(unattended = true)))
-        assertEquals(listOf(null), mobile.gearboxPasses(crafter.copy(carFilters = wishes.copy(transmission = null), unattended = true)))
-        assertTrue("&tr=MANUAL_GEAR" in mobile.filterParams(crafter, "MANUAL_GEAR"))
-        val card = Listing(id = "MOBILE_DE:1", platformId = PlatformId.MOBILE_DE, externalId = "1", url = "https://suchen.mobile.de/1", title = "VW Crafter", price = Money(20_000_00, Currency.EUR), scrapedAt = kotlin.time.Instant.fromEpochSeconds(0))
-        val manual = mobile.filedUnder(card, "MANUAL_GEAR").vehicle!!
-        assertEquals(Transmission.MANUAL, manual.gearbox); assertTrue(manual.isVerified(VehicleField.GEARBOX))
-        assertEquals(Transmission.AUTOMATIC, mobile.filedUnder(card, "SEMIAUTOMATIC_GEAR").vehicle?.gearbox)
-        assertEquals(card, mobile.filedUnder(card, null))
+    fun `mobile_de is asked for the wished gearbox while somebody waits, for none by the watch, whose cards state their own`() {
+        val mobile = MobileDeCrawler()
+        assertEquals("automatic", mobile.vehicleQuery(crafter).gearbox)
+        assertEquals(null, mobile.vehicleQuery(crafter.copy(unattended = true)).gearbox)
     }
 
     @Test

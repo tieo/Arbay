@@ -1,6 +1,5 @@
 package io.github.tieo.arbay.chat
 
-import io.github.tieo.arbay.crawler.StealthBrowserClient
 import io.github.tieo.arbay.model.PlatformId
 import java.io.File
 import kotlin.test.Test
@@ -14,7 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class MarketSidecarTest {
     /** A sidecar that answers every request as signed in, standing in for a market's browser. */
-    private val script = File(StealthBrowserClient.scriptDir, "test_sidecar.py").apply {
+    private val script = File(scriptDir, "test_sidecar.py").apply {
         writeText(
             """
             import json, sys

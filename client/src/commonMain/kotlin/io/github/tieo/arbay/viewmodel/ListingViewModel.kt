@@ -30,7 +30,6 @@ data class PlatformStatus(
     val rawCount: Int = 0,
     val error: String? = null,
     val errorType: String? = null,
-    val captchaUrl: String? = null,
     val fetchStage: String? = null,
     // The translated term a cross-border market was searched with, when it differs from the query.
     val queryUsed: String? = null,
@@ -731,7 +730,6 @@ class ListingViewModel(
                                     rawCount = event.rawCount,
                                     hasMore = event.hasMore,
                                     fromCache = event.fromCache,
-                                    captchaUrl = null, // solved (or never needed) — drop the link
                                 ) else it
                             }
                             // Reconcile: replace this platform's streamed preview listings with its
@@ -776,7 +774,6 @@ class ListingViewModel(
                                     status = errorStatus,
                                     error = event.error,
                                     errorType = event.errorType,
-                                    captchaUrl = event.captchaUrl,
                                 )
                             }
                         }
@@ -792,18 +789,6 @@ class ListingViewModel(
                             _platformStatuses.value = _platformStatuses.value.map {
                                 if (it.platformId == event.platform) it.copy(fetchStage = event.fetchStage ?: it.fetchStage)
                                 else it
-                            }
-                        }
-
-                        CrawlerEventType.CAPTCHA_INTERACTIVE -> {
-                            // The crawl exposed its live browser for a human to solve a captcha in
-                            // place. Attach the (base-qualified) solve link to the platform, which is
-                            // still running — it resumes once solved.
-                            val full = event.captchaUrl?.let {
-                                if (it.startsWith("http")) it else client.baseUrl + it
-                            }
-                            _platformStatuses.value = _platformStatuses.value.map {
-                                if (it.platformId == event.platform) it.copy(captchaUrl = full) else it
                             }
                         }
 

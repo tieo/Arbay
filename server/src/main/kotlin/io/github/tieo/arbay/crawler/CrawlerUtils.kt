@@ -156,46 +156,26 @@ internal suspend fun emitTermVerdict(term: SuggestedTerm) {
     coroutineContext[TermVerdictEmitter]?.emit(term)
 }
 
-/** CoroutineContext element notified when a stealth fetch exposes its live browser for a human to
- *  solve a captcha in place (same IP + fingerprint the token binds to), so the search route can push
- *  the solve link to the client. */
-class CaptchaInteractiveEmitter(val emit: suspend () -> Unit) : CoroutineContext.Element {
-    companion object Key : CoroutineContext.Key<CaptchaInteractiveEmitter>
-    override val key: CoroutineContext.Key<*> = Key
-}
-
-/** Signal that the current crawl has put a captcha up for interactive solving, if a
- *  [CaptchaInteractiveEmitter] is attached; a no-op otherwise. */
-internal suspend fun emitCaptchaInteractive() {
-    coroutineContext[CaptchaInteractiveEmitter]?.emit()
-}
-
 /**
- * The clock of one market's time limit, which stands still while a person is solving that
- * market's captcha in the live browser, and while the crawl waits for the market's request window
- * ([RequestMonitor.awaitBudget]) that other searches have spent, and starts over with every page
- * the market answers ([answered]). The limit is there for a crawl that never answers; a person
- * working through a challenge is not that, and counting their time cut off a solve in progress.
- * Neither is a crawl queued behind other searches: a Crafter search reading Kleinanzeigen while
- * three others did found the window spent, waited for it to open the vans' ads, and was given up
- * on with none of them read. Nor is one reading a long price band page after page: Kleinanzeigen's
- * 1,390 Crafters between 10,000 and 30,990 € take longer than the limit, and the 275 vans streamed
- * by then were thrown away with it. How long a person is given is the captcha gate's own limit in
- * the sidecar; how long a crawl waits is the waiter's own limit.
+ * The clock of one market's time limit, which stands still while the crawl waits for the market's
+ * request window ([RequestMonitor.awaitBudget]) or a browser that other searches hold, and starts
+ * over with every page the market answers ([answered]). The limit is there for a crawl that never
+ * answers. A crawl queued behind other searches is not that: a Crafter search reading
+ * Kleinanzeigen while three others did found the window spent, waited for it to open the vans'
+ * ads, and was given up on with none of them read. Nor is one reading a long price band page after
+ * page: Kleinanzeigen's 1,390 Crafters between 10,000 and 30,990 € take longer than the limit, and
+ * the 275 vans streamed by then were thrown away with it. How long a crawl waits is the waiter's
+ * own limit.
  */
 class CrawlClock internal constructor(private val limitMs: Long) : CoroutineContext.Element {
     companion object Key : CoroutineContext.Key<CrawlClock>
     override val key: CoroutineContext.Key<*> = Key
 
-    private var solving = false
     private var waits = 0
     private val standingStill = kotlinx.coroutines.flow.MutableStateFlow(false)
     private val answers = kotlinx.coroutines.flow.MutableStateFlow(0L)
 
-    private fun settle() { standingStill.value = solving || waits > 0 }
-
-    /** Stop the clock while a person is solving ([solving] true), run it again once they are done. */
-    fun personSolving(solving: Boolean) = synchronized(this) { this.solving = solving; settle() }
+    private fun settle() { standingStill.value = waits > 0 }
 
     /** Runs [block] with the clock standing still, for time spent waiting on other searches. */
     suspend fun <T> waitingOnOthers(block: suspend () -> T): T {

@@ -35,7 +35,7 @@ object CrawlerRegistry {
         PlatformId.AUTOSCOUT24_FR to AutoScout24Crawler(listOf("FR"), PlatformId.AUTOSCOUT24_FR),
         PlatformId.AUTOSCOUT24_ES to AutoScout24Crawler(listOf("ES"), PlatformId.AUTOSCOUT24_ES),
         PlatformId.AUTOSCOUT24_BE to AutoScout24Crawler(listOf("BE"), PlatformId.AUTOSCOUT24_BE),
-        PlatformId.MOBILE_DE to MobileDeCrawler(httpClient),
+        PlatformId.MOBILE_DE to MobileDeCrawler(),
         PlatformId.WILLHABEN to WillhabenCrawler(),
         PlatformId.IMMOSCOUT24 to ImmoScout24Crawler(httpClient),
         PlatformId.TRUCKSCOUT24 to TruckScout24Crawler(),

@@ -20,29 +20,6 @@ class SellerParsingTest {
         requireNotNull(javaClass.getResourceAsStream("/fixtures/$name")).bufferedReader().readText()
 
     @Test
-    fun `mobile_de names the seller of each card from the page's streamed data`() {
-        val listings = MobileDeCrawler(offlineClient()).parseSearchResults(fixture("mobilede_sellers.html"))
-        assertEquals(2, listings.size)
-        val dealer = listings.first { it.externalId == "100000001" }.seller!!
-        assertEquals("700001", dealer.id)
-        assertEquals("Beispiel Nutzfahrzeuge GmbH", dealer.name)
-        assertEquals(SellerType.BUSINESS, dealer.type)
-        assertEquals("https://www.mobile.de/bewertungen/BEISPIELNFZ", dealer.url)
-        val private = listings.first { it.externalId == "100000002" }.seller!!
-        assertEquals("700002", private.id)
-        assertEquals(SellerType.PRIVATE, private.type)
-        assertNull(private.name)
-    }
-
-    @Test
-    fun `every card on a real mobile_de page finds its seller`() {
-        val listings = MobileDeCrawler(offlineClient()).parseSearchResults(fixture("mobilede_search.html"))
-        assertTrue(listings.size >= 20)
-        assertTrue(listings.all { it.seller?.id != null }, "without a seller: " + listings.filter { it.seller?.id == null }.map { it.externalId })
-        assertTrue(listings.all { !it.seller?.name.isNullOrBlank() }, "every card on that page is a dealer's")
-    }
-
-    @Test
     fun `Kleinanzeigen knows a seller by account number and kind alone`() {
         val listings = KleinanzeigenCrawler(offlineClient()).parseSearchResults(fixture("kleinanzeigen_sellers.html"))
         assertEquals(2, listings.size)

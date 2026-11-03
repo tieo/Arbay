@@ -50,18 +50,13 @@ fun PlatformStatus.isProblem(): Boolean = when (status) {
     else -> true
 }
 
-/** How the asking is going, in one line: how many markets answered, how many could not be asked,
- *  and how many wait for a captcha someone has to solve. */
+/** How the asking is going, in one line: how many markets answered and how many could not be asked. */
 fun askingSummary(loading: Boolean, total: Int, completed: Int, statuses: List<PlatformStatus>): String {
-    val captcha = statuses.count { it.status == PlatformSearchStatus.CAPTCHA && it.captchaUrl != null }
     val failed = statuses.count { it.isProblem() }
     return when {
         loading && total > 0 -> "$completed of $total markets have answered"
         loading -> "Asking the markets"
         else -> "${statuses.count { it.status == PlatformSearchStatus.DONE }} of ${statuses.size} markets answered"
-    } + (if (failed > 0 && !loading) " · $failed could not be asked" else "") +
-        (if (captcha > 0) " · $captcha waiting for a captcha" else "")
+    } + (if (failed > 0 && !loading) " · $failed could not be asked" else "")
 }
 
-/** How many markets wait for a captcha that can be solved in place. */
-fun List<PlatformStatus>.captchaCount(): Int = count { it.status == PlatformSearchStatus.CAPTCHA && it.captchaUrl != null }

@@ -18,7 +18,6 @@ data class CrawlerSearchEvent(
     val droppedCounts: List<DropCount> = emptyList(),
     val error: String? = null,
     val errorType: String? = null,
-    val captchaUrl: String? = null,
     // The term this platform was actually searched with when it differs from the user's query — a
     // cross-border market asked in its own language (e.g. "levigatrice per parquet").
     val queryUsed: String? = null,
@@ -49,9 +48,6 @@ enum class CrawlerEventType {
     PLATFORM_PROGRESS,
     PLATFORM_DONE,
     PLATFORM_ERROR,
-    // A crawl has exposed its live browser (noVNC) for the user to solve a captcha in place; the
-    // captchaUrl carries the path to open. The crawl continues once solved.
-    CAPTCHA_INTERACTIVE,
     SEARCH_COMPLETE,
 }
 

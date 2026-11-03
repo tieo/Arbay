@@ -171,6 +171,8 @@ class WebCrawler(private val client: HttpClient) : Crawler {
             log.warn("Web: {} passes itself off as another shop, left out", domain)
             return Page(Outcome.NOTHING_SOLD)
         }
+        // A product's address that lands on the shop's front page is a product it no longer has.
+        if (ProductPages.landedOnFrontPage(html, url)) return Page(Outcome.NOTHING_SOLD)
         if (offers.isNotEmpty()) return Page(Outcome.OFFERS, offers)
         // A site's own search API answering no offer its recipe reads has nothing priced for the
         // words: Boels lists its toilet containers for "Dusch-WC" with no rate and a banner by the

@@ -36,13 +36,6 @@ class PriceBandTest {
     }
 
     @Test
-    fun `mobile_de reads as many pages as the offers wanted fill`() {
-        val mobile = MobileDeCrawler(HttpClient(MockEngine { respond("") }))
-        assertEquals(3, mobile.pagesFor(60, DEEP_SEARCH_PAGES))
-        assertEquals(DEEP_SEARCH_PAGES, mobile.pagesFor(WHOLE_BAND_RESULTS, DEEP_SEARCH_PAGES))
-    }
-
-    @Test
     fun `TruckScout24 pages through the band and stops at a short page`() = runBlocking {
         val asked = mutableListOf<Int>()
         val crawler = TruckScout24Crawler { _, _, page ->

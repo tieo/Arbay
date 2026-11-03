@@ -100,6 +100,25 @@ object ProductPages {
     }
 
     /**
+     * Whether the page at [pageUrl], an address deeper than the site's root, is the site's front
+     * page by its own account: every address it gives for itself on its host (canonical, og:url,
+     * hreflang) is the root. A shop sends the address of a product it no longer has to its front
+     * page (duschmeister.de's Villeroy & Boch Subway urinal lid), whose teasers then read as offers
+     * for the words searched.
+     */
+    fun landedOnFrontPage(html: String, pageUrl: String): Boolean {
+        val asked = runCatching { java.net.URI(pageUrl) }.getOrNull() ?: return false
+        if (asked.rawPath.orEmpty().trim('/').isEmpty()) return false
+        val host = asked.host?.removePrefix("www.") ?: return false
+        val doc = Jsoup.parse(html)
+        val own = (doc.select("link[rel=canonical], link[rel=alternate][hreflang]").map { it.attr("href") } +
+            doc.select("meta[property=og:url]").map { it.attr("content") })
+            .mapNotNull { runCatching { java.net.URI(it.trim()) }.getOrNull() }
+            .filter { it.host?.removePrefix("www.") == host }
+        return own.isNotEmpty() && own.all { it.rawPath.orEmpty().trim('/').isEmpty() && it.rawQuery == null }
+    }
+
+    /**
      * Whether the page passes itself off as another shop: it names itself (`og:site_name`) as a
      * shop whose name is a letter or two off its own address. medymarkt.live serves MediaMarkt's
      * pages, name and all, to take payments for goods it never sends.

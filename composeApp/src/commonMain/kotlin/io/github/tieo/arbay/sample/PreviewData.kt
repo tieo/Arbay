@@ -248,13 +248,11 @@ object PreviewData {
     val nobodyHadAnything: List<io.github.tieo.arbay.viewmodel.PlatformStatus> =
         allAnswered.map { it.copy(resultCount = 0, rawCount = 0, hasMore = false) }
 
-    /** A market holding a captcha open, which is neither an answer nor a failure. */
+    /** Markets a captcha stopped, beside one that answered. */
     val captchaHeld: List<io.github.tieo.arbay.viewmodel.PlatformStatus> = listOf(
         answer(PlatformId.KLEINANZEIGEN, PlatformSearchStatus.DONE, raw = 42, kept = 31),
-        answer(PlatformId.MOBILE_DE, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0)
-            .copy(captchaUrl = "https://arbay.example/captcha/mobile-de"),
-        answer(PlatformId.BILBASEN, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0)
-            .copy(captchaUrl = "https://arbay.example/captcha/bilbasen"),
+        answer(PlatformId.MOBILE_DE, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0),
+        answer(PlatformId.BILBASEN, PlatformSearchStatus.CAPTCHA, raw = 0, kept = 0),
     )
 
     /** Every market failed, in each of the ways they fail. */

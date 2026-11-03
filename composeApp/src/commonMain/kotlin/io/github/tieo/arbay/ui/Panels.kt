@@ -226,7 +226,7 @@ private fun HiddenPanel(session: Session, route: Route.Results, state: ResultsSt
 }
 
 /** What each market answered, and which the reader looks at: ticking one narrows what is shown and
- *  makes sure it is asked; none ticked is all of them. A captcha is solved right there. */
+ *  makes sure it is asked; none ticked is all of them. */
 @Composable
 private fun MarketsPanel(session: Session, state: ResultsState) {
     val vm = session.listings
@@ -248,9 +248,6 @@ private fun MarketsPanel(session: Session, state: ResultsState) {
                 }
             }
             Muted(if (status == null) "not asked" else "$count", style = MaterialTheme.typography.bodyMedium)
-        }
-        status?.takeIf { it.status == PlatformSearchStatus.CAPTCHA }?.captchaUrl?.let { url ->
-            OutlinedButton(onClick = { openBrowser(url) }) { Text("Solve the captcha for ${platform.displayName}") }
         }
         if (status?.status == PlatformSearchStatus.BLOCKED) OutlinedButton(onClick = { vm.tryNow(platform) }) { Text("Ask ${platform.displayName} now") }
     }

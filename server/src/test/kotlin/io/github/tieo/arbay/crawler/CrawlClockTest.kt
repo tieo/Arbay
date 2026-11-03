@@ -21,26 +21,22 @@ class CrawlClockTest {
     }
 
     @Test
-    fun `the time a person spends solving a captcha does not count`() = runBlocking {
+    fun `the time spent waiting on other searches does not count`() = runBlocking {
         val answer = withCrawlLimitOrNull(300) {
             val clock = coroutineContext[CrawlClock]!!
             delay(100)
-            clock.personSolving(true)
-            delay(600)
-            clock.personSolving(false)
+            clock.waitingOnOthers { delay(600) }
             delay(100)
-            "solved"
+            "waited"
         }
-        assertEquals("solved", answer)
+        assertEquals("waited", answer)
     }
 
     @Test
-    fun `the clock runs again once the person is done`() = runBlocking {
+    fun `the clock runs again once the wait is over`() = runBlocking {
         assertNull(withCrawlLimitOrNull(300) {
             val clock = coroutineContext[CrawlClock]!!
-            clock.personSolving(true)
-            delay(100)
-            clock.personSolving(false)
+            clock.waitingOnOthers { delay(100) }
             delay(1_000)
             "too late"
         })

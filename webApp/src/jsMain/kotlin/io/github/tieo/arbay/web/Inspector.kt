@@ -255,11 +255,6 @@ private fun MarketsPanel(app: WebApp, route: Route.Results, state: ResultsState)
                 Span({ classes("market-count") }) { Text(if (status == null) "not asked" else "$kept") }
                 val note = status?.saidWhat(kept, hiddenByWords = kept == 0 && (sentByMarket[platform] ?: 0) > 0)
                 note?.let { Span({ classes("muted", "small") }) { Text(it) } }
-                status?.takeIf { it.status == PlatformSearchStatus.CAPTCHA }?.captchaUrl?.let { url ->
-                    A(href = url, attrs = { classes("button"); attr("target", "_blank"); attr("rel", "noopener") }) {
-                        Text("Solve the captcha")
-                    }
-                }
                 if (status?.status == PlatformSearchStatus.BLOCKED) QuietButton("Ask now") { vm.tryNow(platform) }
             }
         }

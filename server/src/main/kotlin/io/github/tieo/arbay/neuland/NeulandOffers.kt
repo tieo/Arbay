@@ -140,10 +140,17 @@ object NeulandOffers {
         val dealer: Boolean? = null,
         /** Any of these, by Neuland's names ("petrol", "hybrid-diesel"); none is any. */
         val fuels: List<String> = emptyList(),
+        /** Any of these bodies, by Neuland's names ("small-car", "transporter"); none is any. */
+        val bodies: List<String> = emptyList(),
+        /** The least Euro emission class. */
+        @kotlinx.serialization.SerialName("emission_min") val emissionMin: Int? = null,
     ) {
         companion object {
             /** A fuel by Neuland's name for it. */
             fun fuel(fuel: io.github.tieo.arbay.model.Fuel) = fuel.name.lowercase().replace('_', '-')
+
+            /** A body by Neuland's name for it. */
+            fun body(body: io.github.tieo.arbay.model.BodyType) = body.name.lowercase().replace('_', '-')
         }
     }
 
@@ -161,6 +168,8 @@ object NeulandOffers {
         val available: Boolean? = null,
         /** When the ad went up, where the page says. */
         val listedAt: kotlin.time.Instant? = null,
+        /** How many reviews the seller's rating rests on, where the page says more than the card. */
+        val sellerReviews: Int? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -180,6 +189,7 @@ object NeulandOffers {
             },
             available = read.available,
             listedAt = read.listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
+            sellerReviews = read.sellerAccount?.reviews,
         )
     }
 
@@ -247,6 +257,7 @@ object NeulandOffers {
     @Serializable private data class NeulandDetail(
         val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
         val place: NeulandPlace? = null, val available: Boolean? = null, val listed: String? = null,
+        @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
     )
     @Serializable private data class NeulandAccount(
         val id: String, val dealer: Boolean = false, val name: String? = null, val url: String? = null,

@@ -4,7 +4,6 @@ import kotlinx.coroutines.flow.transformWhile
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.classifier.CarCriteriaScorer
 import io.github.tieo.arbay.crawler.BlockCooldown
-import io.github.tieo.arbay.crawler.CaptchaInteractiveEmitter
 import io.github.tieo.arbay.crawler.CarFilterEngine
 import io.github.tieo.arbay.crawler.cannotAnswer
 import io.github.tieo.arbay.crawler.CarQueryResolver
@@ -984,23 +983,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 }
                             }
 
-                            // When a stealth crawl exposes its live browser for a human captcha
-                            // solve, push the noVNC path to the client. It rides the same Authelia-
-                            // gated arbay host (Caddy /captcha/ → the container's noVNC), so the app
-                            // prepends its own base URL.
-                            val captchaEmitter = CaptchaInteractiveEmitter {
-                                resultChannel.send(CrawlerSearchEvent(
-                                    type = CrawlerEventType.CAPTCHA_INTERACTIVE,
-                                    platform = platformId.name,
-                                    platformName = platformId.displayName,
-                                    captchaUrl = "/captcha/vnc.html?autoconnect=true&resize=scale",
-                                ))
-                            }
-
                             val event = try {
                                 // Bounded by the market's budget around this block, which is what
                                 // turns a crawl that never answers into a TIMEOUT report.
-                                val rawResults = kotlinx.coroutines.withContext(progressEmitter + partialEmitter + captchaEmitter + termsEmitter + verdictEmitter + categoryEmitter + unreadable) {
+                                val rawResults = kotlinx.coroutines.withContext(progressEmitter + partialEmitter + termsEmitter + verdictEmitter + categoryEmitter + unreadable) {
                                     crawler.searchAllSpellings(pq, corpusBackground(listingRepo))
                                 }
                                 // A crawler that does not stream per page (single-fetch, or one not
@@ -1083,7 +1069,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                     platformName = platformId.displayName,
                                     error = "${e.message ?: "Blocked"} [$snapId]",
                                     errorType = e.errorType.name,
-                                    captchaUrl = if (e.errorType == ErrorType.CAPTCHA) "https://${platformId.displayName.lowercase().replace(" ", "")}.de" else null,
                                 )
                             } catch (e: CancellationException) {
                                 // The budget ran out (reported below) or the app hung up. Neither is

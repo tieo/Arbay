@@ -5,7 +5,6 @@ import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.rememberOpenSearch
 import io.github.tieo.arbay.results.rememberResultsState
 import io.github.tieo.arbay.results.askingSummary
-import io.github.tieo.arbay.results.captchaCount
 import io.github.tieo.arbay.results.newCount
 import io.github.tieo.arbay.results.setBand
 import io.github.tieo.arbay.results.setSort
@@ -239,12 +238,11 @@ private fun KeyboardWalk(route: Route.Results, ids: List<String>) {
     }
 }
 
-/** How the asking is going, in one line; a market that wants something from the reader says so. */
+/** How the asking is going, in one line. */
 @Composable
 private fun MarketsLine(route: Route.Results, loading: Boolean, total: Int, completed: Int, statuses: List<PlatformStatus>) {
-    val captcha = statuses.captchaCount()
     Button(attrs = {
-        classes(*listOfNotNull("markets-line", "attention".takeIf { captcha > 0 }, "on".takeIf { route.panel == Panel.MARKETS }).toTypedArray())
+        classes(*listOfNotNull("markets-line", "on".takeIf { route.panel == Panel.MARKETS }).toTypedArray())
         onClick { togglePanel(route, Panel.MARKETS) }
     }) {
         Icon(Glyph.Store, 16)

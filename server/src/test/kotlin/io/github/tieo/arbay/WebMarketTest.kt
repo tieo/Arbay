@@ -401,6 +401,19 @@ class WebMarketTest {
     }
 
     @Test
+    fun `a product's address that lands on the front page sells nothing`() {
+        // duschmeister.de sends the address of the Villeroy & Boch Subway urinal lid it no longer
+        // has to its front page, which names itself by the site's root and shows teasers with prices.
+        val page = javaClass.getResource("/fixtures/web/duschmeister-front-page.html")!!.readText()
+        assertTrue(ProductPages.landedOnFrontPage(page, "https://www.duschmeister.de/Villeroy-Boch-Subway-Deckel-fuer-Urinal-in-Alpin-Weiss.html"))
+        assertFalse(ProductPages.landedOnFrontPage(page, "https://www.duschmeister.de/"), "the front page asked for is asked for")
+        val product = """<head><link rel="canonical" href="https://www.duschmeister.de/Subway-Deckel.html">
+            <link rel="alternate" href="https://www.douchemeister.nl" hreflang="nl"></head><body>59,90 € In den Warenkorb</body>"""
+        assertFalse(ProductPages.landedOnFrontPage(product, "https://www.duschmeister.de/Subway-Deckel.html"))
+        assertFalse(ProductPages.landedOnFrontPage("<body>59,90 €</body>", "https://shop.example/p/1"), "a page saying nothing of itself")
+    }
+
+    @Test
     fun `running costs and estimates are no price`() {
         // co2-adapter.de's product finder: what a refill costs and saves, and a maker's budget guess (grohe.com).
         assertFalse(ProductPages.sellsSomething("""<body><header><a>Warenkorb</a><a>Kasse</a></header><h1>Navigator</h1>

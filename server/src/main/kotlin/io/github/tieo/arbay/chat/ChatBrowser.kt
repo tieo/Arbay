@@ -1,7 +1,6 @@
 package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.crawler.StealthBrowserClient
 import io.github.tieo.arbay.crawler.killTree
 import io.github.tieo.arbay.model.PlatformId
 import java.io.BufferedReader
@@ -143,8 +142,8 @@ open class MarketSidecar(
     private fun ensureRunning() {
         if (process?.isAlive == true) return
         ensureXvfb()
-        val started = ProcessBuilder("python3", File(StealthBrowserClient.scriptDir, script).absolutePath)
-            .directory(StealthBrowserClient.scriptDir)
+        val started = ProcessBuilder("python3", File(scriptDir, script).absolutePath)
+            .directory(scriptDir)
             .redirectError(ProcessBuilder.Redirect.appendTo(DataDir.file("logs/$logName").apply { parentFile.mkdirs() }))
             .also {
                 it.environment()["DISPLAY"] = ":$display"
