@@ -534,46 +534,6 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             call.respond(CrawlerStatusTracker.getStatus(platform))
         }
 
-        /** The page a market actually served, through the same fetch a crawl uses. A parser is
-         *  fixed against the markup in front of it, and a market that answers a crawl while
-         *  refusing everything else leaves no other way to see it. */
-        get("/page") {
-            val url = requirePublicHttpUrl(call.request.queryParameters["url"] ?: throw BadRequestException("Missing url"))
-            // The page a crawler would see, through the same tiers a crawl uses: eBay answers a
-            // plain client with a 1.8 KB challenge, and answers TLS impersonation with a 403 on the
-            // pages it defends hardest, which is no use to anyone fixing a parser against its
-            // markup. `prime` is the page to arrive from, the way a real reader would.
-            val prime = call.request.queryParameters["prime"]?.let(::requirePublicHttpUrl)
-            // mobile.de answers a plain client, TLS impersonation and the ordinary browser tier
-            // with nothing at all — it is reachable only through the stealth sidecar its crawler
-            // uses, which is also the only way to check one of its filter parameters by hand.
-            val html = if (call.request.queryParameters["stealth"]?.toBooleanStrictOrNull() == true) {
-                val marker = call.request.queryParameters["wait"] ?: "result-listing"
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    io.github.tieo.arbay.crawler.RenderBrowsers.rendered(url, marker, timeoutS = 40)
-                }
-            } else if (call.request.queryParameters["ebay"]?.toBooleanStrictOrNull() == true) {
-                // eBay answers only the warm Chrome its crawler reads through; any other browser
-                // gets its error page.
-                val marker = call.request.queryParameters["wait"] ?: "x-item-title"
-                io.github.tieo.arbay.crawler.EbayBrowser.get(url, listOf(marker))?.html
-                    ?: "The eBay browser did not answer"
-            } else if (call.request.queryParameters["browser"]?.toBooleanStrictOrNull() == true) {
-                io.github.tieo.arbay.crawler.fetchWithFallback(
-                    io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
-                    primeUrl = prime, browserOnly = true,
-                )
-            } else {
-                runCatching { io.github.tieo.arbay.neuland.NeulandHttp.fetch(url, cameFrom = prime) }
-                    .getOrElse {
-                        io.github.tieo.arbay.crawler.fetchHttp(
-                            io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",
-                        )
-                    }
-            }
-            call.respondText(html, ContentType.Text.Plain)
-        }
-
         // Everything one listing's own page says, for the sheet that shows one listing: the
         // seller's whole text, the specs the card omits, and where the thing is. Asked when
         // someone opens it, since an item page costs a browser load on the markets that defend

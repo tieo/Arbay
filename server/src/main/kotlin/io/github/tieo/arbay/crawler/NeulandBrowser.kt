@@ -69,19 +69,6 @@ open class NeulandBrowser(
 }
 
 /**
- * The browser every eBay page is read through. eBay's edge serves its error page to every client
- * that does not look like a person's browser; a Chrome that keeps its profile and reads one page
- * after another is not one of them.
- */
-object EbayBrowser : NeulandBrowser(
-    "ebay", errors = listOf("went wrong"),
-    // Five eBay sites, each search word's other spellings and every search running at once read
-    // through it: with one tab, two saved searches of a dozen spellings each held all of the server's
-    // search slots for twenty minutes.
-    tabs = 3,
-)
-
-/**
  * The browser the search engines that refuse a plain request are asked through: Google answers only
  * browsers that run its scripts. Each web search asks five engines through it.
  */

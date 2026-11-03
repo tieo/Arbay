@@ -23,6 +23,21 @@ import kotlinx.serialization.json.Json
 object NeulandOffers {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** What a refusal from Neuland means for the site: the site refusing (its status, or a browser's
+     *  read ending on its error page or a block) starts the site's cooldown; Neuland not answering,
+     *  as while it restarts for a deploy, is no word from the site. */
+    private fun Neuland.Refusal.errorType(): io.github.tieo.arbay.crawler.ErrorType {
+        val status = answer["status"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+        val state = (answer["state"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        return when {
+            this.status == 0 -> io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR
+            status == 429 -> io.github.tieo.arbay.crawler.ErrorType.RATE_LIMITED_429
+            status == 403 || state == "errorpage" || state == "refused" -> io.github.tieo.arbay.crawler.ErrorType.BLOCKED_403
+            status == 503 -> io.github.tieo.arbay.crawler.ErrorType.SERVICE_UNAVAILABLE_503
+            else -> io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR
+        }
+    }
+
     /** One page of a site's answer as Arbay keeps it: its listings, the searches the site lists as
      *  related, and the conditions its own search was asked. */
     data class Answer(val listings: List<Listing>, val related: List<String>, val asked: List<String>)
@@ -39,6 +54,7 @@ object NeulandOffers {
         site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
         vehicle: VehicleQuery? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null, countries: List<String> = emptyList(),
         otherwise: Condition? = null, kinds: Set<String>? = null,
+        sold: Boolean = false, conditions: List<String> = emptyList(), perPage: Int? = null,
     ): Answer {
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
@@ -47,6 +63,9 @@ object NeulandOffers {
             min?.let { put("minCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             max?.let { put("maxCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             vehicle?.let { put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), it)) }
+            if (sold) put("sold", kotlinx.serialization.json.JsonPrimitive(true))
+            if (conditions.isNotEmpty()) put("conditions", kotlinx.serialization.json.JsonArray(conditions.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            perPage?.let { put("perPage", kotlinx.serialization.json.JsonPrimitive(it)) }
             if (countries.isNotEmpty()) put("countries", kotlinx.serialization.json.JsonArray(countries.map { kotlinx.serialization.json.JsonPrimitive(it) }))
             near?.let { area ->
                 put("near", kotlinx.serialization.json.buildJsonObject {
@@ -62,7 +81,7 @@ object NeulandOffers {
         val answer = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
         } catch (e: Neuland.Refusal) {
-            throw io.github.tieo.arbay.crawler.CrawlerBlockedException("$siteName: ${e.message}", io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR)
+            throw io.github.tieo.arbay.crawler.CrawlerBlockedException("$siteName: ${e.message}", e.errorType())
         }
         val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", answer.toString(), it as? Exception) }
@@ -76,6 +95,9 @@ object NeulandOffers {
                 url = o.url,
                 title = o.title,
                 price = o.price.money(),
+                priceUpTo = o.priceUpTo?.money(),
+                sold = o.sold,
+                soldDate = o.ended?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
                 oldPrice = o.asking?.money(),
                 negotiable = o.negotiable,
                 saleType = if (auctionOnly) SaleType.AUCTION else SaleType.FIXED_PRICE,
@@ -184,6 +206,12 @@ object NeulandOffers {
         val shipping: Shipping? = null,
         /** What the site files it as, in its own key. */
         val kind: String? = null,
+        /** How many are left, where the page says; [moreInStock] where that is a floor. */
+        val stock: Int? = null,
+        val moreInStock: Boolean = false,
+        /** What the seller says of the condition, apart from the description. */
+        val conditionNote: String? = null,
+        val coupon: io.github.tieo.arbay.model.Coupon? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -216,12 +244,16 @@ object NeulandOffers {
             },
             title = read.title,
             price = read.price?.money(),
-            shipping = read.shipping?.money()?.let { Shipping(cost = it, available = true) } ?: when (read.ships) {
-                true -> Shipping(available = true)
-                false -> Shipping(available = false, pickup = true)
-                null -> null
+            shipping = read.shipping?.money()?.let { Shipping(cost = it, free = it.amount == 0L, pickup = read.pickup, available = true) } ?: when (read.ships) {
+                true -> Shipping(available = true, pickup = read.pickup)
+                false -> Shipping(available = false, pickup = read.pickup)
+                null -> if (read.pickup) Shipping(available = false, pickup = true) else null
             },
             kind = read.kind,
+            stock = read.stock,
+            moreInStock = read.moreInStock,
+            conditionNote = read.conditionNote,
+            coupon = read.coupon?.let { io.github.tieo.arbay.model.Coupon(it.price.money(), it.code, it.terms) },
         )
     }
 
@@ -253,6 +285,9 @@ object NeulandOffers {
         val negotiable: Boolean = false,
         /** Ships at a cost the card leaves open (true), or is collected only (false). */
         val ships: Boolean? = null,
+        @kotlinx.serialization.SerialName("price_up_to") val priceUpTo: NeulandMoney? = null,
+        val sold: Boolean = false,
+        val ended: String? = null,
     ) {
         /** The seller's account on the market; a private person's name is not kept. */
         fun account() = sellerAccount?.let {
@@ -281,6 +316,7 @@ object NeulandOffers {
         val doors: Int? = null,
         @kotlinx.serialization.SerialName("wheelbase_mm") val wheelbaseMm: Int? = null,
         @kotlinx.serialization.SerialName("emission_sticker") val emissionSticker: Int? = null,
+        val body: String? = null,
         val upholstery: String? = null,
         @kotlinx.serialization.SerialName("inspection_until") val inspectionUntil: String? = null,
     ) {
@@ -296,6 +332,7 @@ object NeulandOffers {
             color = color,
             emissionClassEuro = emissionClass,
             emissionSticker = emissionSticker,
+            bodyType = body?.let { b -> io.github.tieo.arbay.model.BodyType.entries.firstOrNull { it.name == b.uppercase().replace('-', '_') } },
             upholstery = upholstery,
             inspectionUntil = inspectionUntil,
             doors = doors,
@@ -316,7 +353,12 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
         val photos: List<String> = emptyList(), val title: String? = null, val price: NeulandMoney? = null,
         val shipping: NeulandMoney? = null, val ships: Boolean? = null, val kind: String? = null,
+        val pickup: Boolean = false, val stock: Int? = null,
+        @kotlinx.serialization.SerialName("more_in_stock") val moreInStock: Boolean = false,
+        @kotlinx.serialization.SerialName("condition_note") val conditionNote: String? = null,
+        val coupon: NeulandCoupon? = null,
     )
+    @Serializable private data class NeulandCoupon(val price: NeulandMoney, val code: String? = null, val terms: String? = null)
     @Serializable private data class NeulandAuction(
         @kotlinx.serialization.SerialName("buy_now") val buyNow: Boolean = false,
         val bid: NeulandMoney? = null, val bids: Int? = null, val ends: String? = null,

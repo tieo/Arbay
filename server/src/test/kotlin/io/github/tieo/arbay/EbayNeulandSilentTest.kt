@@ -6,10 +6,6 @@ import io.github.tieo.arbay.crawler.EbayDeCrawler
 import io.github.tieo.arbay.crawler.ErrorType
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,8 +20,8 @@ class EbayNeulandSilentTest {
     @Test
     fun `a search Neuland gave no answer to is a network error and starts no cooldown`() = runBlocking {
         BlockCooldown.clear()
-        // No Neuland is set up in tests, so its browser answers nothing; eBay refuses the plain client.
-        val crawler = EbayDeCrawler(HttpClient(MockEngine { respond("", HttpStatusCode.Forbidden) }))
+        // No Neuland is set up in tests, so it answers nothing.
+        val crawler = EbayDeCrawler()
         val e = assertFailsWith<CrawlerBlockedException> { crawler.search(SearchQuery(text = "2TB NVMe", category = io.github.tieo.arbay.model.MarketGroup.GENERAL)) }
         assertEquals(ErrorType.NETWORK_ERROR, e.errorType, e.message)
         assertFalse(BlockCooldown.isBlock(e.errorType))

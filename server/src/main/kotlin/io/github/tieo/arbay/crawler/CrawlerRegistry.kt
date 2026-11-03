@@ -14,11 +14,11 @@ object CrawlerRegistry {
     }
 
     private val crawlers: Map<PlatformId, Crawler> = mapOf(
-        PlatformId.EBAY_DE to EbayDeCrawler(httpClient),
-        PlatformId.EBAY_COM to EbayDeCrawler(httpClient, PlatformId.EBAY_COM, "ebay.com"),
-        PlatformId.EBAY_IT to EbayDeCrawler(httpClient, PlatformId.EBAY_IT, "ebay.it"),
-        PlatformId.EBAY_FR to EbayDeCrawler(httpClient, PlatformId.EBAY_FR, "ebay.fr"),
-        PlatformId.EBAY_ES to EbayDeCrawler(httpClient, PlatformId.EBAY_ES, "ebay.es"),
+        PlatformId.EBAY_DE to EbayDeCrawler(),
+        PlatformId.EBAY_COM to EbayDeCrawler(PlatformId.EBAY_COM, "ebay.com"),
+        PlatformId.EBAY_IT to EbayDeCrawler(PlatformId.EBAY_IT, "ebay.it"),
+        PlatformId.EBAY_FR to EbayDeCrawler(PlatformId.EBAY_FR, "ebay.fr"),
+        PlatformId.EBAY_ES to EbayDeCrawler(PlatformId.EBAY_ES, "ebay.es"),
         PlatformId.KLEINANZEIGEN to KleinanzeigenCrawler(httpClient),
         PlatformId.AMAZON_DE to AmazonDeCrawler(),
         PlatformId.IDEALO to IdealoCrawler(),

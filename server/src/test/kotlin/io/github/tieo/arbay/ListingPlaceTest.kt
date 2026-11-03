@@ -1,6 +1,5 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.EbayDeCrawler
 import io.github.tieo.arbay.crawler.RelevanceFilter
 import io.github.tieo.arbay.crawler.VehicleTextParser
 import io.github.tieo.arbay.crawler.area
@@ -32,22 +31,6 @@ class ListingPlaceTest {
         url = "https://example.invalid/$id", title = title,
         price = Money(1_000_00, Currency.EUR), scrapedAt = Clock.System.now(),
     )
-
-    @Test
-    fun `eBay states the place on the item page`() {
-        val html = """{"shipping":{},"itemLocation":{"_type":"LabelsValues","labels":[{"_type":""" +
-            """"TextualDisplay","textSpans":[{"_type":"TextSpan","text":"Standort"}]}],"values":""" +
-            """[{"_type":"TextualDisplay","textSpans":[{"_type":"TextSpan","text":"Hamburg, """ +
-            """Deutschland"}]}]},"getRates":{}}"""
-        val place = EbayDeCrawler.itemLocation(html)
-        assertEquals("Hamburg", place?.city)
-        assertEquals("DE", place?.country)
-    }
-
-    @Test
-    fun `a page without the block states no place`() {
-        assertNull(EbayDeCrawler.itemLocation("""{"price":{"value":"EUR 12,00"}}"""))
-    }
 
     @Test
     fun `a search that names no place covers everywhere`() {
