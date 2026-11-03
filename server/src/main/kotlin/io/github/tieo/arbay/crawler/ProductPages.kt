@@ -69,7 +69,7 @@ object ProductPages {
      */
     fun sellsSomething(html: String): Boolean {
         val doc = Jsoup.parse(html)
-        if (isArticle(doc) || isForum(doc) || soldOut(doc)) return false
+        if (isArticle(doc) || isForum(doc) || isComparison(doc) || soldOut(doc)) return false
         // A popup's amounts are not the page's own: delicious-aqua.de sells on request only, and
         // its closed savings calculator dialog named "Anlagenpreis (einmalig) 2.499 €".
         doc.select("dialog, [aria-modal=true]").remove()
@@ -137,6 +137,20 @@ object ProductPages {
         // review of three 18 TB drives names their prices and links Amazon.
         return types.any { it in ARTICLE_TYPES } || doc.selectFirst("meta[property=og:type][content=article]") != null
     }
+
+    /**
+     * Whether the page sets models side by side by their specifications, naming them "A vs B" in its
+     * title or heading, and offers none of them in its structured data: apple.com's "iPhone 13 vs
+     * iPhone 13 Pro" lists both as no longer sold, and its only amounts ("Ab 2.299 €") belong to the
+     * current model its third column defaults to.
+     */
+    private fun isComparison(doc: Document): Boolean {
+        if (statedOffers(doc).isNotEmpty()) return false
+        val named = listOfNotNull(doc.title(), doc.selectFirst("h1")?.text())
+        return named.any { COMPARED.containsMatchIn(it) }
+    }
+
+    private val COMPARED = Regex("""\S\s+(vs\.?|versus)\s+\S""", RegexOption.IGNORE_CASE)
 
     /**
      * Whether the page is a thread of a forum's software, which says so in its markup where its

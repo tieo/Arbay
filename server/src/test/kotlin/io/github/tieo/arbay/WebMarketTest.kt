@@ -346,6 +346,10 @@ class WebMarketTest {
         // weber.com's recipe page names its free delivery, grills.de's front page the value of a free gift.
         assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><p>Kostenlose Lieferung bei Bestellungen über 49,00 €</p><h1>Grillrezepte</h1></body>"))
         assertFalse(ProductPages.sellsSomething("<body><a>In den Warenkorb</a><p>Sie erhalten ein Starterset im Wert von rund 150€ gratis dazu!</p></body>"))
+        // apple.com's comparison of two iPhones it no longer sells: the amounts are its default
+        // third column's, a current model; a shop stating its offer beside "vs" still sells.
+        assertFalse(ProductPages.sellsSomething("<html><head><title>iPhone 13 vs iPhone 13 Pro - Apple (DE)</title></head><body><a>Kaufen</a><p>iPhone 13 — Nicht verfügbar</p><p>iPhone 13 Pro — Nicht verfügbar</p><p>iPhone Duo Ab 2.299 €</p></body></html>"))
+        assertTrue(ProductPages.sellsSomething("""<html><head><title>Kabel A vs B</title><script type="application/ld+json">{"@type":"Product","name":"Kabel A","offers":{"@type":"Offer","price":"9.99","priceCurrency":"EUR"}}</script></head><body><a>In den Warenkorb</a><p>9,99 €</p></body></html>"""))
         // kamera-express.de's comparison of three cameras names only its newsletter's discount.
         assertFalse(ProductPages.sellsSomething("<body><a>Warenkorb</a><h1>Vergleiche die Sony A7 III, A7 IV und A7 V</h1><p>Abonniere unseren Newsletter. Erhalte sofort 5 € Rabatt</p></body>"))
         // emero's magazine names only what its buyer protection covers and the order value free delivery starts at.
