@@ -10,7 +10,7 @@ class ImmoScout24Crawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.immobilienscout24.de/Suche/de/wohnung-mieten?enteredFrom=result_list&searchQuery=${query.positiveText.encodeUrl()}"
-        // The generic HTTP and curl_cffi tiers get detected here
+        // The generic HTTP and Chrome-fingerprint tiers get detected here
         // (401s and timeouts across the board) — the page itself is not actually behind a hard
         // block, since the zendriver real-Chrome stealth tier loads it cleanly (verified live: real
         // title, real listing cards, no captcha/access-denied text). Go straight to it rather than

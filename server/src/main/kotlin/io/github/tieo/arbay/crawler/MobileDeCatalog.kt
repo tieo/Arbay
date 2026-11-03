@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandHttp
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
@@ -69,7 +70,7 @@ object MobileDeCatalog {
 
     /** `{"makes":[{"i":25200,"n":"Volkswagen"},…]}` and the same shape for models. */
     private suspend fun fetch(url: String, key: String): Map<String, Int>? = try {
-        val body = CurlCffiClient.fetch(url)
+        val body = NeulandHttp.fetch(url)
         val array = json.parseToJsonElement(body).jsonObject[key]?.jsonArray
         array?.mapNotNull { entry ->
             val obj = entry.jsonObject

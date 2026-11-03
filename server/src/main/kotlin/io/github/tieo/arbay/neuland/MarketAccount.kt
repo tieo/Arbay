@@ -23,14 +23,14 @@ class MarketAccount(private val browser: String, private val site: String) {
     private val path = "browsers/$browser/account/$site"
 
     private suspend inline fun <reified T> get(sub: String, limitS: Long = 90): T =
-        json.decodeFromJsonElement(Neuland.account(HttpMethod.Get, "$path$sub", limitS = limitS))
+        json.decodeFromJsonElement(Neuland.request(HttpMethod.Get, "$path$sub", limitS = limitS))
 
     private suspend inline fun <reified T> send(method: HttpMethod, sub: String, body: JsonElement?, limitS: Long = 120): T =
-        json.decodeFromJsonElement(Neuland.account(method, "$path$sub", body, limitS))
+        json.decodeFromJsonElement(Neuland.request(method, "$path$sub", body, limitS))
 
     suspend fun conversations(page: Int = 0): List<Conversation> = get("/conversations?page=$page")
     suspend fun thread(id: String): Thread = get("/conversations/${id.encoded()}")
-    suspend fun markRead(id: String) { Neuland.account(HttpMethod.Post, "$path/conversations/${id.encoded()}/read", limitS = 60) }
+    suspend fun markRead(id: String) { Neuland.request(HttpMethod.Post, "$path/conversations/${id.encoded()}/read", limitS = 60) }
     suspend fun reply(id: String, text: String): Thread = send(HttpMethod.Post, "/conversations/${id.encoded()}/reply", JsonObject(mapOf("text" to JsonPrimitive(text))))
     suspend fun message(listing: String, text: String): Thread = send(HttpMethod.Post, "/listings/${listing.encoded()}/message", JsonObject(mapOf("text" to JsonPrimitive(text))))
     suspend fun shippingOptions(listing: String): List<ShippingOption> = get("/shipping-options/${listing.encoded()}", 60)

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.neuland.Neuland
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
@@ -183,15 +184,15 @@ class EbayDeCrawler(
             return fetchActiveAndSoldHttp(httpHtml, query, allResults, seenIds)
         }
 
-        // Step 2: CurlCffi (Chrome TLS fingerprint — often bypasses eBay bot checks)
-        emitter?.emit("CurlCffi")
+        // Step 2: Neuland's client greeting the site as Chrome does (often passes eBay's bot checks)
+        emitter?.emit("ChromeHttp")
         val curlHtml = if (!plainTiers) null else try {
-            val html = CurlCffiClient.fetch(firstUrl, primeUrl = "https://www.$domain")
+            val html = NeulandHttp.fetch(firstUrl, cameFrom = "https://www.$domain")
             validateHtml(html, "eBay")
             html
         } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
 
-        // A CurlCffi page that parses to zero listings for a keyword search is almost always a
+        // A page fetched with Chrome's fingerprint that parses to zero listings for a keyword search is almost always a
         // soft block (eBay serves a 200 challenge/empty page), not a genuinely empty result — so
         // fall through to the real-Chrome tier, which primes cookies and clears most soft blocks.
         val curlFirstPage = curlHtml?.let { parseSearchResults(it) }
@@ -208,7 +209,7 @@ class EbayDeCrawler(
             if (firstPage.size >= 20 && allResults.size < cap) {
                 for (page in 2..maxPages) {
                     val html = try {
-                        val h = CurlCffiClient.fetch(buildSearchUrl(query, page))
+                        val h = NeulandHttp.fetch(buildSearchUrl(query, page))
                         validateHtml(h, "eBay"); h
                     } catch (e: CancellationException) { throw e } catch (_: Exception) {
                         // eBay refuses a later page to this tier while serving the first, so the
@@ -236,7 +237,7 @@ class EbayDeCrawler(
                     val soldQuery = query.copy(soldOnly = true)
                     for (soldPage in 1..maxPages) {
                         val html = try {
-                            val h = CurlCffiClient.fetch(buildSearchUrl(soldQuery, soldPage))
+                            val h = NeulandHttp.fetch(buildSearchUrl(soldQuery, soldPage))
                             validateHtml(h, "eBay"); h
                         } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
                         val sold = parseSearchResults(html).map { it.copy(sold = true) }

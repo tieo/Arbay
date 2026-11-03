@@ -565,7 +565,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     primeUrl = prime, browserOnly = true,
                 )
             } else {
-                runCatching { io.github.tieo.arbay.crawler.CurlCffiClient.fetch(url, primeUrl = prime) }
+                runCatching { io.github.tieo.arbay.neuland.NeulandHttp.fetch(url, cameFrom = prime) }
                     .getOrElse {
                         io.github.tieo.arbay.crawler.fetchHttp(
                             io.github.tieo.arbay.crawler.CrawlerRegistry.httpClient, url, "debug",

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.coroutines.CancellationException
@@ -22,7 +23,7 @@ class MarktplaatsCrawler(
      *  attribute object the card leaves out (power, gearbox, fuel, doors, body type, colour), so a
      *  filter on those verifies instead of soft-passing. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        MarktplaatsDetailParser.parseAd(CurlCffiClient.fetch(listing.url, primeUrl = host))
+        MarktplaatsDetailParser.parseAd(NeulandHttp.fetch(listing.url, cameFrom = host))
     } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
     }
@@ -84,10 +85,10 @@ class MarktplaatsCrawler(
                 val range = "PriceCents:${query.minPrice?.amount ?: "null"}:${query.maxPrice?.amount ?: "null"}"
                 val api = "$host/lrp/api/search?query=${text.encodeUrl()}&limit=$API_PAGE&offset=${(page - 1) * API_PAGE}" +
                     "&attributeRanges%5B%5D=${range.encodeUrl()}"
-                return@paginate parseApiAnswer(CurlCffiClient.fetch(api, primeUrl = if (page <= 1) host else null))
+                return@paginate parseApiAnswer(NeulandHttp.fetch(api, cameFrom = if (page <= 1) host else null))
             }
             val url = if (page <= 1) base else "${base}p/$page/"
-            val html = CurlCffiClient.fetch(url, primeUrl = if (page <= 1) host else null)
+            val html = NeulandHttp.fetch(url, cameFrom = if (page <= 1) host else null)
             if (carsCategory) parseCarsCategory(html)
             else parseSearchResults(html, requireVehicleSpecs = car != null)
         }

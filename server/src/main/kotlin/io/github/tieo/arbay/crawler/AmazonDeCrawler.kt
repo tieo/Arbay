@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlinx.coroutines.CancellationException
@@ -17,7 +18,7 @@ class AmazonDeCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage
         for (page in query.startPage until query.startPage + maxPages) {
             val url = buildSearchUrl(query, page)
             val html = try {
-                CurlCffiClient.fetch(url, primeUrl = if (page == query.startPage) "https://www.amazon.de" else null)
+                NeulandHttp.fetch(url, cameFrom = if (page == query.startPage) "https://www.amazon.de" else null)
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 if (page == query.startPage) throw e
                 break

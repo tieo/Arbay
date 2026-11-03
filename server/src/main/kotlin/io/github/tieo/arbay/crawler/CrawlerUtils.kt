@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandHttp
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SuggestedTerm
@@ -398,13 +399,13 @@ internal fun validateBrowserResult(result: FetchResult, platformName: String): S
  *
  * Fallback order:
  * 1. HTTP GET (fast, no JS: works for most platforms)
- * 2. CurlCffi (Chrome's TLS fingerprint)
+ * 2. Neuland's client with Chrome's TLS fingerprint
  * 3. Neuland's render browser, which gets past a site's checks itself
  * 4. The real-Chrome stealth sidecar, for sites that name a [stealthMarker]
  *
  * Each step is tried only if the previous step failed with a retryable error.
  *
- * With browserOnly the HTTP and CurlCffi steps are skipped and the chain starts at the browser,
+ * With browserOnly the HTTP and Chrome-fingerprint steps are skipped and the chain starts at the browser,
  * for platforms whose bot protection blocks every non-browser client.
  */
 internal suspend fun fetchWithFallback(
@@ -457,18 +458,18 @@ internal suspend fun fetchWithFallback(
             if (!isRetryable(e)) throw e
         }
 
-        // === Step 2: CurlCffi (Chrome TLS fingerprint) ===
-        emitter?.let { it.emit("CurlCffi") }
+        // === Step 2: Neuland's client with Chrome's TLS fingerprint ===
+        emitter?.let { it.emit("ChromeHttp") }
         try {
-            val html = CurlCffiClient.fetch(url, primeUrl = primeUrl)
+            val html = NeulandHttp.fetch(url, cameFrom = primeUrl)
             validateHtml(html, platformName)
             html.proven()
-            RequestMonitor.recordTier(platformName, "CurlCffi")
+            RequestMonitor.recordTier(platformName, "ChromeHttp")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             if (isPageMissing(e)) throw e
-            errors.add("CurlCffi: ${e.message?.take(60)}")
-            fetchLog.debug("[{}] CurlCffi failed: {}", platformName, e.message?.take(80))
+            errors.add("ChromeHttp: ${e.message?.take(60)}")
+            fetchLog.debug("[{}] ChromeHttp failed: {}", platformName, e.message?.take(80))
         }
     }
 

@@ -116,10 +116,10 @@ object Neuland {
     }
 
     /**
-     * A call to one of Neuland's account routes (`browsers/{name}/account/{site}/…`): the status it
+     * A JSON call to Neuland (its account routes, a page fetched without a browser): the status it
      * answered and its JSON. A Neuland that is not set up or did not answer is a [Refusal] of status 0.
      */
-    suspend fun account(method: io.ktor.http.HttpMethod, path: String, body: kotlinx.serialization.json.JsonElement? = null, limitS: Long = 120): kotlinx.serialization.json.JsonElement {
+    suspend fun request(method: io.ktor.http.HttpMethod, path: String, body: kotlinx.serialization.json.JsonElement? = null, limitS: Long = 120): kotlinx.serialization.json.JsonElement {
         val base = base ?: throw Refusal(0, "Neuland is not set up (NEULAND_URL)", JsonObject(emptyMap()))
         val response = runCatching {
             client.request("$base/$path") {

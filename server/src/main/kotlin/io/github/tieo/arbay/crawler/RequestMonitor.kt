@@ -19,7 +19,7 @@ object RequestMonitor {
         val totalRequests: Long = 0,
         val blocks: Long = 0,
         val tierHttp: Long = 0,
-        val tierCurlCffi: Long = 0,
+        val tierChromeHttp: Long = 0,
         val tierBrowser: Long = 0,
         val lastRequest: Instant? = null,
         val lastBlock: Instant? = null,
@@ -44,7 +44,7 @@ object RequestMonitor {
         val total = AtomicLong()
         val blocks = AtomicLong()
         val http = AtomicLong()
-        val curlCffi = AtomicLong()
+        val chromeHttp = AtomicLong()
         val browser = AtomicLong()
         @Volatile var lastRequest: Instant? = null
         @Volatile var lastBlock: Instant? = null
@@ -133,7 +133,7 @@ object RequestMonitor {
         val c = counters(platform)
         when (tier) {
             "HTTP" -> c.http
-            "CurlCffi" -> c.curlCffi
+            "ChromeHttp" -> c.chromeHttp
             else -> c.browser
         }.incrementAndGet()
     }
@@ -152,7 +152,7 @@ object RequestMonitor {
                 totalRequests = c.total.get(),
                 blocks = c.blocks.get(),
                 tierHttp = c.http.get(),
-                tierCurlCffi = c.curlCffi.get(),
+                tierChromeHttp = c.chromeHttp.get(),
                 tierBrowser = c.browser.get(),
                 lastRequest = c.lastRequest,
                 lastBlock = c.lastBlock,

@@ -20,7 +20,7 @@ object NeulandSign {
 
     /** Whether the account browser is signed in to [site] ("ebay.de"), asked of the site now. */
     suspend fun standing(site: String): MarketAccount.Standing =
-        json.decodeFromJsonElement(Neuland.account(HttpMethod.Get, "browsers/$BROWSER/account/$site", limitS = 60))
+        json.decodeFromJsonElement(Neuland.request(HttpMethod.Get, "browsers/$BROWSER/account/$site", limitS = 60))
 
     /**
      * Asks Neuland Sign to sign the account browser in to [site] again, with the account it was
