@@ -48,6 +48,8 @@ object NeulandOffers {
                 imageUrls = listOfNotNull(o.image),
                 seller = o.seller?.let { Seller(name = it) },
                 shipping = o.shipping?.money()?.let(::delivery),
+                location = o.location(),
+                listingDate = o.listedAt(),
                 scrapedAt = now,
             )
         }
@@ -62,6 +64,7 @@ object NeulandOffers {
     suspend fun searchVehicles(
         site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
         page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null,
+        otherwise: Condition? = null,
     ): List<Listing> {
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
@@ -98,8 +101,10 @@ object NeulandOffers {
                 title = o.title,
                 price = o.price.money(),
                 imageUrls = listOfNotNull(o.image),
-                location = o.place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) },
+                location = o.location(),
                 description = o.description,
+                condition = otherwise,
+                listingDate = o.listedAt(),
                 scrapedAt = now,
                 // What the site states wins and counts as verified; the card's words fill the rest.
                 vehicle = io.github.tieo.arbay.crawler.VehicleTextParser.merge(
@@ -144,6 +149,10 @@ object NeulandOffers {
         val vehicle: io.github.tieo.arbay.model.VehicleInfo?,
         /** The page's labelled facts, label and value as the site writes them. */
         val specs: List<Pair<String, String>>,
+        /** Where the thing is, where the page says more than the card. */
+        val location: io.github.tieo.arbay.model.Location? = null,
+        /** Whether the ad is still up: false where the page says it is sold or gone, null where it says neither. */
+        val available: Boolean? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -155,6 +164,13 @@ object NeulandOffers {
             description = read.description,
             vehicle = read.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
             specs = read.specs.mapNotNull { row -> if (row.size == 2) row[0] to row[1] else null },
+            location = read.place?.let { p ->
+                io.github.tieo.arbay.model.Location(
+                    city = p.town, zip = p.postcode, country = p.country,
+                    raw = listOfNotNull(p.postcode, p.town).joinToString(" ").takeIf { it.isNotBlank() },
+                )
+            },
+            available = read.available,
         )
     }
 
@@ -177,7 +193,12 @@ object NeulandOffers {
         val place: NeulandPlace? = null, val description: String? = null,
         @kotlinx.serialization.SerialName("card_text") val cardText: String? = null,
         val vehicle: NeulandVehicle? = null,
-    )
+        /** When it went up, RFC 3339. */
+        val listed: String? = null,
+    ) {
+        fun location() = place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) }
+        fun listedAt() = listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() }
+    }
     @Serializable private data class NeulandVehicle(
         @kotlinx.serialization.SerialName("registered_year") val registeredYear: Int? = null,
         @kotlinx.serialization.SerialName("registered_month") val registeredMonth: Int? = null,
@@ -205,7 +226,10 @@ object NeulandOffers {
             drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
         )
     }
-    @Serializable private data class NeulandDetail(val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList())
+    @Serializable private data class NeulandDetail(
+        val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
+        val place: NeulandPlace? = null, val available: Boolean? = null,
+    )
     @Serializable private data class NeulandPlace(val town: String? = null, val postcode: String? = null, val country: String? = null)
     @Serializable private data class OfferList(val offers: List<NeulandOffer>)
 }
