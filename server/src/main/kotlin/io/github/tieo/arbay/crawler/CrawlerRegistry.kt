@@ -20,7 +20,7 @@ object CrawlerRegistry {
         PlatformId.EBAY_FR to EbayDeCrawler(httpClient, PlatformId.EBAY_FR, "ebay.fr"),
         PlatformId.EBAY_ES to EbayDeCrawler(httpClient, PlatformId.EBAY_ES, "ebay.es"),
         PlatformId.KLEINANZEIGEN to KleinanzeigenCrawler(httpClient),
-        PlatformId.AMAZON_DE to AmazonDeCrawler(httpClient),
+        PlatformId.AMAZON_DE to AmazonDeCrawler(),
         PlatformId.IDEALO to IdealoCrawler(),
         PlatformId.GEIZHALS to GeizhalsCrawler(),
         PlatformId.VINTED_DE to VintedDeCrawler(httpClient),
