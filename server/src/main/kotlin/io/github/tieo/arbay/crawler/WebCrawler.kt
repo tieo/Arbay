@@ -36,7 +36,7 @@ class WebCrawler(private val client: HttpClient) : Crawler {
     override val platformId = PlatformId.WEB
 
     /** The search engines whose results pages a search reads for shops. */
-    internal val engines = SearchEngines(client)
+    internal val engines = SearchEngines()
     private val log = LoggerFactory.getLogger(WebCrawler::class.java)
 
     override suspend fun search(query: SearchQuery): List<Listing> {
