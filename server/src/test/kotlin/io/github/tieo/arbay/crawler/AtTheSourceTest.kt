@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.NeulandOffers
+
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain
@@ -72,9 +74,10 @@ class AtTheSourceTest {
 
     @Test
     fun `TruckScout24 is asked for the price only, Kleinanzeigen never for the gearbox`() {
-        val ts = TruckScout24Crawler(client).filterParams(crafter)
-        assertTrue("&price-to=30990" in ts, ts)
-        listOf("mileage", "power", "fuel+type", "gearing").forEach { assertFalse(it in ts, "$it in $ts") }
+        val ts = TruckScout24Crawler().vehicleQuery(crafter)
+        assertEquals(NeulandOffers.VehicleQuery(make = ts.make, model = ts.model), ts, "nothing but make and model beside the price")
+        val strict = TruckScout24Crawler().vehicleQuery(crafter.copy(carFilters = crafter.carCriteria.copy(strictUnknown = true)))
+        assertTrue(strict.gearbox != null && strict.fuels.isNotEmpty(), "$strict")
         val c = crafter.carCriteria.atTheSource()
         val ka = KleinanzeigenUrlBuilder.carAttrFilters(gearbox = c.transmission?.name, minYear = c.firstRegFromYear, maxMileageKm = c.maxMileageKm)
         assertFalse(ka.any { it.startsWith("autos.shift_s") }, "$ka")

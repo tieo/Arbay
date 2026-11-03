@@ -114,6 +114,7 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("mileage_min_km") val mileageMinKm: Int? = null,
         @kotlinx.serialization.SerialName("mileage_max_km") val mileageMaxKm: Int? = null,
         @kotlinx.serialization.SerialName("power_min_kw") val powerMinKw: Int? = null,
+        @kotlinx.serialization.SerialName("power_max_kw") val powerMaxKw: Int? = null,
         /** Any of these, by Neuland's names ("petrol", "hybrid-diesel"); none is any. */
         val fuels: List<String> = emptyList(),
     ) {
@@ -121,6 +122,28 @@ object NeulandOffers {
             /** A fuel by Neuland's name for it. */
             fun fuel(fuel: io.github.tieo.arbay.model.Fuel) = fuel.name.lowercase().replace('_', '-')
         }
+    }
+
+    /** What the page of the offer at [url] tells beyond its card. */
+    data class Detail(
+        /** The seller's text, one line per line they wrote. */
+        val description: String?,
+        /** The vehicle as the site states it, its fields verified. */
+        val vehicle: io.github.tieo.arbay.model.VehicleInfo?,
+        /** The page's labelled facts, label and value as the site writes them. */
+        val specs: List<Pair<String, String>>,
+    )
+
+    /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
+    suspend fun detail(url: String, siteName: String): Detail {
+        val body = Neuland.offers("offers/detail?url=${url.encodeURLParameter()}")
+        val read = runCatching { json.decodeFromString(NeulandDetail.serializer(), body) }
+            .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer's detail", body, it as? Exception) }
+        return Detail(
+            description = read.description,
+            vehicle = read.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
+            specs = read.specs.mapNotNull { row -> if (row.size == 2) row[0] to row[1] else null },
+        )
     }
 
     /** Every seller of the offer at [url], cheapest delivered first; none where the site lists none. */
@@ -151,6 +174,9 @@ object NeulandOffers {
         val fuel: String? = null,
         val gearbox: String? = null,
         val drivetrain: String? = null,
+        val seats: Int? = null,
+        val color: String? = null,
+        @kotlinx.serialization.SerialName("emission_class") val emissionClass: Int? = null,
     ) {
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
             firstRegYear = registeredYear,
@@ -159,9 +185,13 @@ object NeulandOffers {
             powerKw = powerKw,
             fuel = fuel?.let { f -> io.github.tieo.arbay.model.Fuel.entries.firstOrNull { it.name == f.uppercase().replace('-', '_') } },
             gearbox = when (gearbox) { "manual" -> io.github.tieo.arbay.model.Transmission.MANUAL; "automatic" -> io.github.tieo.arbay.model.Transmission.AUTOMATIC; else -> null },
+            seats = seats,
+            color = color,
+            emissionClassEuro = emissionClass,
             drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
         )
     }
+    @Serializable private data class NeulandDetail(val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList())
     @Serializable private data class NeulandPlace(val town: String? = null, val postcode: String? = null, val country: String? = null)
     @Serializable private data class OfferList(val offers: List<NeulandOffer>)
 }

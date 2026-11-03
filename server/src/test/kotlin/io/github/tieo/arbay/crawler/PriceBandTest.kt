@@ -43,20 +43,23 @@ class PriceBandTest {
     }
 
     @Test
-    fun `TruckScout24 pages through the band cheapest first and stops at a short page`() = runBlocking {
-        val asked = mutableListOf<String>()
-        val client = HttpClient(MockEngine { request ->
-            val url = request.url.toString()
-            asked += url
-            val page = Regex("""[?&]page=(\d+)""").find(url)?.groupValues?.get(1)?.toInt() ?: 1
-            val cards = if (page == 1) 25 else 10
-            respond(page(offset = (page - 1) * 25, count = cards), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/html"))
-        })
-        val found = TruckScout24Crawler(client).search(crafter)
+    fun `TruckScout24 pages through the band and stops at a short page`() = runBlocking {
+        val asked = mutableListOf<Int>()
+        val crawler = TruckScout24Crawler { _, _, page ->
+            asked += page
+            val offset = (page - 1) * 25
+            (0 until if (page == 1) 25 else 10).map { i ->
+                val id = "${offset + i}"
+                io.github.tieo.arbay.model.Listing(
+                    id = "TRUCKSCOUT24:$id", platformId = io.github.tieo.arbay.model.PlatformId.TRUCKSCOUT24, externalId = id,
+                    url = "https://www.truckscout24.de/tsp/$id", title = "VW Crafter $id", price = Money((10_000 + offset + i) * 100L, Currency.EUR),
+                    scrapedAt = kotlin.time.Instant.fromEpochSeconds(0),
+                )
+            }
+        }
+        val found = crawler.search(crafter)
         assertEquals(35, found.size)
-        assertEquals(2, asked.size, "a short second page is the last: $asked")
-        assertTrue(asked.all { "sort-field=preis&sort-direction=asc" in it }, "$asked")
-        assertTrue("page=2" in asked[1])
+        assertEquals(listOf(1, 2), asked, "a short second page is the last")
     }
 
     @Test
