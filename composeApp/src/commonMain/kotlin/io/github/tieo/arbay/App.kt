@@ -75,13 +75,13 @@ fun App() {
             }
         }
 
-        // A tapped link: its place opens, and a sign-in it asks for starts there.
+        // A tapped link: its place opens; a sign-in it asks for is the accounts panel's, where the
+        // market's account row asks Neuland Sign.
         val link by AppLinks.pending.collectAsState()
         LaunchedEffect(link) {
             val opened = AppLinks.take() ?: return@LaunchedEffect
             val rest = opened.removePrefix("${io.github.tieo.arbay.model.SignInLink.APP_SCHEME}://open")
             navigator.top(Route.parse(rest.substringBefore('?')))
-            io.github.tieo.arbay.model.SignInLink.parse(rest.substringAfter('?', ""))?.let { session.chat.beginSignIn(it.market, it.payment) }
         }
 
         // Which page this is, so an assistant asked about "what I am looking at" knows.

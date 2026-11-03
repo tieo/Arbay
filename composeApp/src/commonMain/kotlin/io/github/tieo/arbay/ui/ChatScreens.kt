@@ -68,8 +68,6 @@ import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.OutgoingState
 import io.github.tieo.arbay.model.TEMPLATE_FILL_INS
-import io.github.tieo.arbay.model.SignInAsk
-import io.github.tieo.arbay.model.SignInStep
 import io.github.tieo.arbay.model.accountName
 import io.github.tieo.arbay.model.PlatformId
 import androidx.compose.foundation.border
@@ -269,43 +267,19 @@ private fun Bubble(m: ChatMessage) {
 fun AccountPanel(session: Session) {
     val chat = session.chat
     val accounts by chat.accounts.collectAsState()
-    val signIn by chat.signIn.collectAsState()
-    val signInMarket by chat.signInMarket.collectAsState()
-    val busy by chat.signInBusy.collectAsState()
     Panel {
         if (accounts.isEmpty()) Busy()
         // One group per market, the groups a full gap apart, whatever each one ends with.
         val sites by chat.sites.collectAsState()
         LaunchedEffect(Unit) { chat.watch() }
         Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) { accounts.forEach { a -> Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
-            // A market Neuland Sign signs in: where its account stands, as the market answers now.
+            // Neuland Sign signs every market in: where its account stands, as the market answers now.
             a.signInSite?.let { site ->
                 SiteSignIn(
                     session, site, a.market.accountName, sites?.accounts?.get(site),
                     idle = if (a.signedIn) "Signed in" + (a.name?.let { " as $it" } ?: "") else a.problem ?: "Not signed in",
                     failedIdle = a.problem != null,
                 )
-                return@Column
-            }
-            val step = signIn?.takeIf { signInMarket == a.market }
-            when {
-                step != null -> {
-                    Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
-                    SignInSteps(step, a.market, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
-                }
-                busy && signInMarket == a.market -> SiteHead(a.market.accountName, "opening the sign-in") { Busy() }
-                // A market can ask its password again before a message (eBay does), so a signed-in
-                // account can be signed in afresh too.
-                a.signedIn -> {
-                    SiteHead(a.market.accountName, "Signed in" + (a.name?.let { " as $it" } ?: "")) {
-                        OutlinedButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
-                    }
-                    // The payment service the checkout hands over to, signed in to in the same browser.
-                    a.payment?.let { payment -> TextButton(onClick = { chat.beginSignIn(a.market, payment = true) }) { Text("Sign in to $payment") } }
-                }
-                else -> SiteHead(a.market.accountName, a.problem ?: "Not signed in", failed = a.problem != null) {
-                    OutlinedButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
-                }
             }
         } } }
     }
@@ -393,60 +367,6 @@ private fun SiteHead(name: String, status: String?, failed: Boolean = false, act
             else Muted(it, maxLines = 1)
         }
         action()
-    }
-}
-
-/**
- * The market's login page as it stands: a field for what it asks (e-mail, password, a code), and
- * its picture, which takes taps for anything else it shows.
- */
-@Composable
-private fun SignInSteps(step: SignInStep, market: PlatformId, onType: (String) -> Unit, onKey: (String) -> Unit, onTap: (Double, Double) -> Unit, onCancel: () -> Unit) {
-    step.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-    TextButton(onClick = onCancel) { Text("Cancel") }
-    step.picture?.let { picture ->
-        var size by remember { mutableStateOf(IntSize.Zero) }
-        AsyncImage(
-            model = "data:image/jpeg;base64,$picture",
-            contentDescription = "The ${market.accountName} sign-in page",
-            modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).border(1.dp, arbay.line, MaterialTheme.shapes.small)
-                .onSizeChanged { size = it }
-                .pointerInput(step.width, step.height) {
-                    detectTapGestures { at ->
-                        if (size.width > 0 && step.width > 0) onTap(at.x.toDouble() * step.width / size.width, at.y.toDouble() * step.height / size.height)
-                    }
-                },
-            contentScale = ContentScale.FillWidth,
-        )
-        // The phone's keyboard, typing into the page: what is added goes in as typed, what is taken
-        // away as that many backspaces, and the keyboard's own Enter as Enter.
-        // A new field on the page starts empty here too.
-        var mirror by remember(step.step) { mutableStateOf("") }
-        // A sign-in opened from a push starts below the fold of Settings: it comes into view with
-        // its field focused, so the keyboard is up for what the page asks.
-        val seen = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
-        val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-        LaunchedEffect(Unit) {
-            seen.bringIntoView()
-            runCatching { focus.requestFocus() }
-        }
-        OutlinedTextField(
-            value = mirror,
-            onValueChange = { next ->
-                when {
-                    next.startsWith(mirror) -> next.removePrefix(mirror).takeIf { it.isNotEmpty() }?.let(onType)
-                    mirror.startsWith(next) -> repeat(mirror.length - next.length) { onKey("BackSpace") }
-                    else -> { repeat(mirror.length) { onKey("BackSpace") }; if (next.isNotEmpty()) onType(next) }
-                }
-                mirror = next
-            },
-            modifier = Modifier.fillMaxWidth().bringIntoViewRequester(seen).focusRequester(focus),
-            placeholder = { Text("Type on the page") },
-            singleLine = true,
-            visualTransformation = if (step.step == SignInAsk.PASSWORD) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { onKey("Return"); mirror = "" }),
-        )
     }
 }
 

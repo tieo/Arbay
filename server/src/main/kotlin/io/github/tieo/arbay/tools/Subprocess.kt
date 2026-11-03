@@ -15,13 +15,12 @@ private val pipeReaders = Executors.newCachedThreadPool { task ->
 }
 
 /**
- * Run a helper (python fetchers, xvfb-run with Chrome under it) to completion and collect what
- * it printed.
+ * Run a helper (the OCR and model scripts) to completion and collect what it printed.
  *
  * The process and everything it started are killed on every way out that is not a clean exit,
- * which is the calling coroutine being cancelled: the search that wanted the page is gone, or
- * its market's time limit ran out. Killing only the direct child is not enough, since xvfb-run
- * leaves its python, Chrome and Xvfb running when it alone is killed.
+ * which is the calling coroutine being cancelled: the search that wanted it is gone, or its time
+ * limit ran out. Killing only the direct child is not enough, since a helper's own children keep
+ * running when it alone is killed.
  */
 internal suspend fun runProcess(args: List<String>): ProcessOutcome {
     val process = ProcessBuilder(args).redirectErrorStream(false).start()

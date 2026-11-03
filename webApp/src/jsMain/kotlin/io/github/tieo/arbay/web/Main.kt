@@ -51,13 +51,11 @@ fun ArbayWeb() {
     LaunchedEffect(Unit) { loadServerSettings(app.client) }
     LaunchedEffect(Unit) { app.products.loadProducts() }
     LaunchedEffect(Unit) { app.chat.watch() }
-    // A sign-in the address asks for (`/settings?signin=VINTED_DE&payment=true`) starts at once; the
-    // address then drops it, so going back or reloading does not start it again.
+    // A sign-in the address asks for (`/settings?signin=VINTED_DE`) is the accounts panel's, which
+    // the address opens; the address then drops it.
     LaunchedEffect(Unit) {
-        io.github.tieo.arbay.model.SignInLink.parse(kotlinx.browser.window.location.search)?.let { link ->
-            app.chat.beginSignIn(link.market, link.payment)
+        if (io.github.tieo.arbay.model.SignInLink.parse(kotlinx.browser.window.location.search) != null)
             kotlinx.browser.window.history.replaceState(null, "", kotlinx.browser.window.location.pathname)
-        }
     }
     LaunchedEffect(Unit) { SharedState.follow(app.client) }
     // What changes anywhere shows here at once; what an assistant is talking about opens here.

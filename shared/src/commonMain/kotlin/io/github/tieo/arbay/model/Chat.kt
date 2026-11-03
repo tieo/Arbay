@@ -16,44 +16,11 @@ data class ChatAccount(
     val market: PlatformId = PlatformId.KLEINANZEIGEN,
     val signedIn: Boolean = false,
     val name: String? = null,
-    /** The market's sign-in page is open in Arbay's browser, waiting for the user. */
-    val signingIn: Boolean = false,
     /** Why the account can't be reached right now, when it can't. */
     val problem: String? = null,
     /** The site Neuland Sign signs this market's account in to ("kleinanzeigen.de"), where it does:
      *  its sign-in is asked and shown as the shop accounts' are. */
     val signInSite: String? = null,
-    /** The payment service the market's checkout hands over to, signed in to in the same browser (Vinted's PayPal). */
-    val payment: String? = null,
-)
-
-/**
- * Where signing in to the market stands, as the app shows it: what the login page asks for, what it
- * said went wrong, and a picture of the page, which the user works as the page itself: clicks and
- * keys on it pass through to the page as they are.
- */
-@Serializable
-data class SignInStep(
-    val step: SignInAsk,
-    val error: String? = null,
-    /** The page as a JPEG, base64. */
-    val picture: String? = null,
-    val width: Int = 0,
-    val height: Int = 0,
-)
-
-@Serializable
-enum class SignInAsk { EMAIL, PASSWORD, CODE, OTHER, DONE }
-
-@Serializable
-data class SignInInput(
-    val value: String? = null,
-    val x: Double? = null,
-    val y: Double? = null,
-    /** Characters the user typed on the page's picture. */
-    val text: String? = null,
-    /** One key the user pressed on it, by its X name: Return, BackSpace, Tab, Left... */
-    val key: String? = null,
 )
 
 @Serializable

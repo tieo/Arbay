@@ -9,7 +9,6 @@ import io.github.tieo.arbay.chat.Chat
 import io.github.tieo.arbay.chat.ChatFailure
 import io.github.tieo.arbay.model.ChatSettings
 import io.github.tieo.arbay.model.SendRequest
-import io.github.tieo.arbay.model.SignInInput
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.ktor.http.*
@@ -37,10 +36,6 @@ fun Route.chatRoutes() {
             call.chat { call.respond(mapOf("sent" to Chat.askSignIn(link, force = true))) }
         }
         // Signing in from inside the app; what is typed is passed to the page and not kept.
-        post("/signin") { call.chat { call.respond(Chat.beginSignIn(call.market(), payment = call.request.queryParameters["payment"] == "true")) } }
-        get("/signin") { call.chat { call.respond(Chat.signInStep(call.market())) } }
-        post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>(), call.market())) } }
-        post("/signin/cancel") { call.chat { call.respond(Chat.cancelSignIn(call.market())) } }
 
         get("/conversations") { call.chat { call.respond(Chat.conversations()) } }
         // New messages from the other side, as the watch found them, after the one numbered

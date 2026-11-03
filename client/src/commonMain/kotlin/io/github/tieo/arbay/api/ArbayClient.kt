@@ -271,20 +271,6 @@ class ArbayClient(
             parameter("push", false)
         }.body()
 
-    suspend fun beginChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false): SignInStep =
-        client.post("$baseUrl/api/chat/signin?market=${market.name}" + if (payment) "&payment=true" else "").body()
-    suspend fun chatSignInStep(market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
-        client.get("$baseUrl/api/chat/signin?market=${market.name}").body()
-
-    suspend fun chatSignInInput(input: SignInInput, market: PlatformId = PlatformId.KLEINANZEIGEN): SignInStep =
-        client.post("$baseUrl/api/chat/signin/input?market=${market.name}") {
-            contentType(ContentType.Application.Json)
-            setBody(input)
-        }.body()
-
-    suspend fun cancelChatSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount =
-        client.post("$baseUrl/api/chat/signin/cancel?market=${market.name}").body()
-
     suspend fun conversations(): List<Conversation> = client.get("$baseUrl/api/chat/conversations").body()
 
     suspend fun conversation(id: String): Conversation =

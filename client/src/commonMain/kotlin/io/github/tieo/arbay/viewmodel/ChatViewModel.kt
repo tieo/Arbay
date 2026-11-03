@@ -17,9 +17,6 @@ import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Purchase
 import io.github.tieo.arbay.model.PurchaseRequest
-import io.github.tieo.arbay.model.SignInAsk
-import io.github.tieo.arbay.model.SignInInput
-import io.github.tieo.arbay.model.SignInStep
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -129,13 +126,6 @@ class ChatViewModel(
                 _accounts.value = accounts
                 val account = accounts.firstOrNull { it.market == PlatformId.KLEINANZEIGEN } ?: client.chatAccount()
                 _account.value = account
-                // A sign-in going on in Arbay's browser shows here too, at the step it has reached.
-                accounts.firstOrNull { it.signingIn }?.let { signing ->
-                    if (_signIn.value == null) {
-                        _signInMarket.value = signing.market
-                        followSignIn()
-                    }
-                }
                 _outbox.value = client.outbox()
                 if (account.signedIn) _conversations.value = client.conversations()
             }
@@ -249,133 +239,6 @@ class ChatViewModel(
         _settings.value = new
         if (rendersASample) return
         viewModelScope.launch { attempt { _settings.value = client.updateChatSettings(new) } }
-    }
-
-    private val _signIn = MutableStateFlow<SignInStep?>(null)
-    /** Signing in from inside the app, while it is going on: what the market's page asks for now. */
-    val signIn: StateFlow<SignInStep?> = _signIn.asStateFlow()
-
-    private val _signInBusy = MutableStateFlow(false)
-    val signInBusy: StateFlow<Boolean> = _signInBusy.asStateFlow()
-
-    private val _signInMarket = MutableStateFlow(PlatformId.KLEINANZEIGEN)
-    /** The market the sign-in going on is for; one goes on at a time. */
-    val signInMarket: StateFlow<PlatformId> = _signInMarket.asStateFlow()
-
-    /** Starts signing in to [market], or with [payment] to the payment service its checkout uses. */
-    fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false) {
-        signInFollower?.cancel()
-        signInRound++
-        pendingInputs.clear()
-        _signIn.value = null
-        _signInMarket.value = market
-        signInStep { client.beginChatSignIn(market, payment) }
-    }
-
-    /** Hand [value] to the field the page asks for; it goes to the page and is not kept. */
-    fun signInWith(value: String) = signInInput(SignInInput(value = value))
-
-    /** Tap the page at a point of its picture, in the page's own pixels. */
-    fun signInTap(x: Double, y: Double) = signInInput(SignInInput(x = x, y = y))
-
-    /** Characters typed on the page's picture, passed on as typed. */
-    fun signInType(text: String) = signInInput(SignInInput(text = text))
-
-    /** One named key pressed on the page's picture: Return, BackSpace, Tab... */
-    fun signInKey(key: String) = signInInput(SignInInput(key = key))
-
-    /** Inputs not yet passed on, in the order given. */
-    private val pendingInputs = ArrayDeque<SignInInput>()
-
-    /**
-     * Passes [input] on after every input before it. Characters typed while the one before is still
-     * on its way go in one request with the ones waiting before them: each request answers with a
-     * new picture of the page, and a word sent a key at a time took a second for every key.
-     */
-    private fun signInInput(input: SignInInput) {
-        // Called and drained on the main thread, so the queue needs no lock.
-        val last = pendingInputs.lastOrNull()
-        // The first input is the one on its way, and is never added to.
-        if (input.text != null && last?.text != null && pendingInputs.size > 1) pendingInputs[pendingInputs.lastIndex] = last.copy(text = last.text + input.text)
-        else pendingInputs.addLast(input)
-        if (pendingInputs.size > 1) return
-        val market = _signInMarket.value
-        signInStep {
-            var step: SignInStep? = null
-            while (true) {
-                val next = pendingInputs.firstOrNull() ?: break
-                try {
-                    step = client.chatSignInInput(next, market)
-                    pendingInputs.removeFirstOrNull()
-                } catch (e: Exception) {
-                    // What was typed after a failed input would land out of place; the user types it again.
-                    pendingInputs.clear()
-                    throw e
-                }
-            }
-            step ?: client.chatSignInStep(market)
-        }
-    }
-
-    fun cancelSignIn() = viewModelScope.launch {
-        signInFollower?.cancel()
-        // Keys still on their way belong to the sign-in called off; they go nowhere.
-        signInRound++
-        _signIn.value = null
-        val market = _signInMarket.value
-        attempt {
-            val left = client.cancelChatSignIn(market)
-            if (market == PlatformId.KLEINANZEIGEN) _account.value = left
-            _accounts.update { all -> all.map { if (it.market == left.market) left else it } }
-        }
-    }
-
-    /** One input at a time and in the order given, so keys reach the page as they were typed. */
-    private val signInInputs = Mutex()
-
-    /** Counts sign-ins begun and called off, so an input queued for one is dropped once it is over. */
-    private var signInRound = 0
-
-    private fun signInStep(call: suspend () -> SignInStep) {
-        val round = signInRound
-        viewModelScope.launch {
-            signInInputs.withLock {
-                if (round != signInRound) return@withLock
-                _signInBusy.value = true
-                attempt {
-                    val step = call()
-                    if (round == signInRound) {
-                        show(step)
-                        followSignIn()
-                    }
-                }
-                _signInBusy.value = false
-            }
-        }
-    }
-
-    private fun show(step: SignInStep) {
-        _signIn.value = step.takeIf { it.step != SignInAsk.DONE }
-        if (step.step == SignInAsk.DONE) refresh()
-    }
-
-    private var signInFollower: Job? = null
-
-    /**
-     * Keep the shown step the page's own while signing in: the page moves on by itself (a code
-     * sent, a check passed) and from other devices, not only from this one's buttons.
-     */
-    private fun followSignIn() {
-        if (rendersASample || signInFollower?.isActive == true) return
-        signInFollower = viewModelScope.launch {
-            if (_signIn.value == null) attempt { show(client.chatSignInStep(_signInMarket.value)) }
-            while (isActive && _signIn.value != null) {
-                // Often enough that the picture reads as the page itself.
-                delay(1_500)
-                if (_signInBusy.value) continue
-                attempt { show(client.chatSignInStep(_signInMarket.value)) }
-            }
-        }
     }
 
     fun dismissError() { _error.value = null }

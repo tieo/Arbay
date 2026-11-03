@@ -27,8 +27,6 @@ import org.jetbrains.compose.web.dom.Form
 import io.github.tieo.arbay.model.composeBlocks
 import io.github.tieo.arbay.model.canMessage
 import io.github.tieo.arbay.model.accountName
-import io.github.tieo.arbay.model.SignInStep
-import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Panel
@@ -200,38 +198,17 @@ private fun Bubble(m: ChatMessage) {
 fun AccountSection(app: WebApp) {
     val chat = app.chat
     val accounts by chat.accounts.collectAsState()
-    val signIn by chat.signIn.collectAsState()
-    val signInMarket by chat.signInMarket.collectAsState()
-    val busy by chat.signInBusy.collectAsState()
     LaunchedEffect(Unit) { chat.watch() }
     if (accounts.isEmpty()) Busy()
     val sites by chat.sites.collectAsState()
     accounts.forEach { a ->
-        // A market Neuland Sign signs in: where its account stands, as the market answers now.
+        // Neuland Sign signs every market in: where its account stands, as the market answers now.
         a.signInSite?.let { site ->
             SiteSignIn(
                 app, site, a.market.accountName, sites?.accounts?.get(site),
                 idle = if (a.signedIn) "Signed in" + (a.name?.let { " as $it" } ?: "") else a.problem ?: "Not signed in",
                 failedIdle = a.problem != null,
             )
-            return@forEach
-        }
-        val step = signIn?.takeIf { signInMarket == a.market }
-        Div({ classes("account") }) {
-            when {
-                // The market's sign-in shows as a picture of Arbay's browser, which takes taps and keys.
-                step != null -> { H3 { Text(a.market.accountName) }; PictureSignIn(app, step, a.market) }
-                busy && signInMarket == a.market -> SiteHead(a.market.accountName, "opening the sign-in") { Busy() }
-                // A market can ask its password again before a message (eBay does), so a signed-in
-                // account can be signed in afresh too.
-                a.signedIn -> SiteHead(a.market.accountName, "Signed in" + (a.name?.let { " as $it" } ?: "")) {
-                    QuietButton("Sign in again") { chat.beginSignIn(a.market) }
-                    a.payment?.let { payment -> QuietButton("Sign in to $payment") { chat.beginSignIn(a.market, payment = true) } }
-                }
-                else -> SiteHead(a.market.accountName, a.problem ?: "Not signed in", failed = a.problem != null) {
-                    QuietButton("Sign in") { chat.beginSignIn(a.market) }
-                }
-            }
         }
     }
 }
@@ -314,51 +291,6 @@ private fun SiteHead(name: String, status: String?, failed: Boolean = false, act
         H3 { Text(name) }
         status?.let { Span({ classes(*listOfNotNull("who", "failed".takeIf { failed }).toTypedArray()) }) { Text(it) } }
         action()
-    }
-}
-
-/**
- * The market's login page in Arbay's browser, as it stands: a click on its picture clicks the page
- * there, and what is typed in the field below goes into the page as typed, Enter included.
- */
-@Composable
-private fun PictureSignIn(app: WebApp, step: SignInStep, market: PlatformId) {
-    val chat = app.chat
-    step.error?.let { P({ classes("small", "sign-in-error") }) { Text(it) } }
-    Div({ classes("inline-form") }) { QuietButton("Cancel") { chat.cancelSignIn() } }
-    step.picture?.let { picture ->
-        Img(src = "data:image/jpeg;base64,$picture", alt = "The ${market.accountName} sign-in page") {
-            classes("sign-in-picture")
-            onClick { event ->
-                val image = event.target as? org.w3c.dom.HTMLImageElement ?: return@onClick
-                if (image.clientWidth > 0 && step.width > 0) {
-                    chat.signInTap(event.offsetX * step.width / image.clientWidth, event.offsetY * step.height / image.clientHeight)
-                }
-            }
-        }
-        // A new field on the page starts empty here too.
-        var mirror by remember(step.step) { mutableStateOf("") }
-        Input(if (step.step == SignInAsk.PASSWORD) InputType.Password else InputType.Text) {
-            classes("sign-in-typing")
-            placeholder("Type on the page")
-            value(mirror)
-            onInput { event ->
-                val next = event.value
-                when {
-                    next.startsWith(mirror) -> next.removePrefix(mirror).takeIf { it.isNotEmpty() }?.let(chat::signInType)
-                    mirror.startsWith(next) -> repeat(mirror.length - next.length) { chat.signInKey("BackSpace") }
-                    else -> { repeat(mirror.length) { chat.signInKey("BackSpace") }; if (next.isNotEmpty()) chat.signInType(next) }
-                }
-                mirror = next
-            }
-            onKeyDown { event ->
-                if (event.key == "Enter") {
-                    event.preventDefault()
-                    chat.signInKey("Return")
-                    mirror = ""
-                }
-            }
-        }
     }
 }
 

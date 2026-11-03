@@ -1,21 +1,15 @@
 FROM eclipse-temurin:21-jre-noble
 
-# Pages are read through Neuland (NEULAND_URL); what the server still runs itself:
-#  - Vinted's account browser (vinted_chat.py on market_browser.py) drives real Google Chrome via
-#    zendriver on an Xvfb display and works its checkout with real X input (xdotool)
+# Every page is read and every market account worked through Neuland (NEULAND_URL); what the server
+# still runs itself:
 #  - SmartScreens reads the SMART screens in a drive ad's photos with RapidOCR (PaddleOCR's models on
 #    ONNX Runtime; its OpenCV wants libGL and glib), which reads a phone photo of a monitor where
 #    Tesseract does not (installed beside Debian's numpy, which pip cannot replace); ModelGuesses reads type plates with Tesseract (German and English).
 #  - pip installs beside Debian's own Python packages (--ignore-installed): it cannot uninstall one
 #    Debian installed (typing_extensions), and their newer releases need newer ones.
-# Chrome comes in through ADD so every build fetches the current stable: a layer cached with an
-# older Chrome kept 150 in the image, which sites answered "Access denied" while 155 got results.
-ADD https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb /tmp/chrome.deb
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip xvfb xdotool tesseract-ocr tesseract-ocr-deu libgl1 libglib2.0-0 \
-    && apt-get install -y --no-install-recommends /tmp/chrome.deb \
-    && rm /tmp/chrome.deb \
-    && pip3 install --break-system-packages --ignore-installed zendriver "huggingface_hub[hf_xet]" \
+    && apt-get install -y --no-install-recommends python3 python3-pip tesseract-ocr tesseract-ocr-deu libgl1 libglib2.0-0 \
+    && pip3 install --break-system-packages --ignore-installed "huggingface_hub[hf_xet]" \
     && pip3 install --break-system-packages --ignore-installed rapidocr_onnxruntime==1.4.4 \
     && rm -rf /var/lib/apt/lists/*
 
