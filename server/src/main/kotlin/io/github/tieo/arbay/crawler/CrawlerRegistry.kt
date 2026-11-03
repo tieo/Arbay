@@ -24,7 +24,7 @@ object CrawlerRegistry {
         PlatformId.IDEALO to IdealoCrawler(),
         PlatformId.GEIZHALS to GeizhalsCrawler(),
         PlatformId.VINTED_DE to VintedDeCrawler(httpClient),
-        PlatformId.BACKMARKET_DE to BackMarketCrawler(httpClient),
+        PlatformId.BACKMARKET_DE to BackMarketCrawler(),
         PlatformId.REBUY to RebuyCrawler(),
         PlatformId.REFURBED to RefurbedCrawler(httpClient),
         PlatformId.MARKTPLAATS to MarktplaatsCrawler(httpClient),
