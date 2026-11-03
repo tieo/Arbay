@@ -9,14 +9,14 @@ import kotlin.time.Instant
 
 /**
  * The user's Kleinanzeigen account, which Neuland's account browser is signed in to: Neuland reads
- * and writes its conversations, offers and listings as the site's own pages do, and Auth
+ * and writes its conversations, offers and listings as the site's own pages do, and NeuAuth
  * signs it in. This turns Neuland's records into Arbay's and its errors into [ChatFailure]s.
  */
 object Kleinanzeigen {
     /** The Neuland site the account is on. */
     const val SITE = "kleinanzeigen.de"
 
-    val account = MarketAccount(io.github.tieo.arbay.neuland.NeulandAuth.BROWSER, SITE)
+    val account = MarketAccount(io.github.tieo.arbay.neuland.NeuAuth.BROWSER, SITE)
 
     /** [work] on the account, a refusal of Neuland's as a [ChatFailure] in its words. */
     suspend fun <T> on(work: suspend MarketAccount.() -> T): T = try {

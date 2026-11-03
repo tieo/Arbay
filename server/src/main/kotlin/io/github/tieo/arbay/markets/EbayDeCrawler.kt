@@ -3,7 +3,7 @@ package io.github.tieo.arbay.markets
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.neuland.MarketAccount
 import io.github.tieo.arbay.neuland.NeulandOffers
-import io.github.tieo.arbay.neuland.NeulandAuth
+import io.github.tieo.arbay.neuland.NeuAuth
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import io.github.tieo.arbay.relevance.CarQueryResolver
@@ -75,7 +75,7 @@ class EbayDeCrawler(
     /** A search for sold offers that eBay refused may be the account signed out; the user is asked
      *  to sign in again only where the account says so. */
     private suspend fun askSignInWhereSignedOut() {
-        val standing = runCatching { MarketAccount(NeulandAuth.BROWSER, "ebay.de").standing() }.getOrNull() ?: return
+        val standing = runCatching { MarketAccount(NeuAuth.BROWSER, "ebay.de").standing() }.getOrNull() ?: return
         if (!standing.signedIn) {
             log.info("{}: the account browser is signed out of eBay", domain)
             io.github.tieo.arbay.chat.Chat.askSignIn(SignInLink(PlatformId.EBAY_DE))

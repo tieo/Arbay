@@ -202,7 +202,7 @@ fun AccountSection(app: WebApp) {
     if (accounts.isEmpty()) Busy()
     val sites by chat.sites.collectAsState()
     accounts.forEach { a ->
-        // Auth signs every market in: where its account stands, as the market answers now.
+        // NeuAuth signs every market in: where its account stands, as the market answers now.
         a.signInSite?.let { site ->
             SiteSignIn(
                 app, site, a.market.accountName, sites?.accounts?.get(site),
@@ -223,9 +223,9 @@ fun siteName(site: String) = when (site) {
 
 /**
  * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops), each with
- * where its latest sign-in stands. A sign-in is asked of Auth, whose page opens in a new
+ * where its latest sign-in stands. A sign-in is asked of NeuAuth, whose page opens in a new
  * tab: the password is given and sealed there, and the second factor shows there. A market account
- * Auth signs in (Kleinanzeigen) shows with the market accounts instead.
+ * NeuAuth signs in (Kleinanzeigen) shows with the market accounts instead.
  */
 @Composable
 fun SiteAccountSection(app: WebApp, only: String? = null, account: String? = null) {
@@ -241,8 +241,8 @@ fun SiteAccountSection(app: WebApp, only: String? = null, account: String? = nul
 }
 
 /**
- * One account Auth signs in: its name, where its latest sign-in stands (or [idle], what is
- * known of the account otherwise), and signing in, which opens Auth's page in a new tab.
+ * One account NeuAuth signs in: its name, where its latest sign-in stands (or [idle], what is
+ * known of the account otherwise), and signing in, which opens NeuAuth's page in a new tab.
  * Where no account is [known] for the site, the e-mail is asked first.
  */
 @Composable

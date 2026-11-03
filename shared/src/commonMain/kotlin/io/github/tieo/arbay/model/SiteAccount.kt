@@ -21,7 +21,7 @@ data class SiteSignIn(
     /** What the site shows where the sign-in does not know the page, in the page's own words. */
     val text: String? = null,
 ) {
-    /** Whether the sign-in is open: waiting for the password on Auth's page, the browser
+    /** Whether the sign-in is open: waiting for the password on NeuAuth's page, the browser
      *  working, or waiting for the phone or a code. */
     val running: Boolean get() = state in setOf("asked", "signing-in", "phone", "code", "choose", "shows")
 
@@ -42,7 +42,7 @@ data class SiteSignIn(
 }
 
 /** Every site Neuland signs its account browser in to, where the latest sign-in of each stands (a
- *  site without one has none on record), that sign-in's Auth page, and the account each was
+ *  site without one has none on record), that sign-in's NeuAuth page, and the account each was
  *  last signed in to with. */
 @Serializable
 data class SiteSignIns(
@@ -52,6 +52,6 @@ data class SiteSignIns(
     val accounts: Map<String, String> = emptyMap(),
 )
 
-/** A sign-in Auth holds open: its id, and its page where the password is given. */
+/** A sign-in NeuAuth holds open: its id, and its page where the password is given. */
 @Serializable
 data class AskedSignIn(val id: String, val page: String)

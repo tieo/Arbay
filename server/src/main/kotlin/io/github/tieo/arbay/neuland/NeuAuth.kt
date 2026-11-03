@@ -8,11 +8,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
- * The user's own accounts in Neuland's account browser, which Auth signs in: whether the
- * browser is signed in to a site, and asking Auth to sign it in again, which sends its
+ * The user's own accounts in Neuland's account browser, which NeuAuth signs in: whether the
+ * browser is signed in to a site, and asking NeuAuth to sign it in again, which sends its
  * sign-in page to the user's phone.
  */
-object NeulandAuth {
+object NeuAuth {
     /** Neuland's browser the user's own accounts are signed in to. */
     const val BROWSER = "accounts"
 
@@ -23,7 +23,7 @@ object NeulandAuth {
         json.decodeFromJsonElement(Neuland.request(HttpMethod.Get, "browsers/$BROWSER/account/$site", limitS = 60))
 
     /**
-     * Asks Auth to sign the account browser in to [site] again, with the account it was
+     * Asks NeuAuth to sign the account browser in to [site] again, with the account it was
      * last signed in to with there, for [asker] (in words the user knows). [withKept] starts it with
      * the password Neuland keeps for the account, the user only confirming where the site asks on
      * their phone. A site signed in to through another's account ([through], "google.com" for a

@@ -263,7 +263,7 @@ class ArbayClient(
     /** Where Neuland's account browser stands with each site. */
     suspend fun siteSignIns(): io.github.tieo.arbay.model.SiteSignIns = client.get("$baseUrl/api/accounts").body()
 
-    /** Asks Auth for a sign-in to [site] as [account]; its page, where the password is
+    /** Asks NeuAuth for a sign-in to [site] as [account]; its page, where the password is
      *  given, opens here rather than as a push to the phone. */
     suspend fun askSiteSignIn(site: String, account: String): io.github.tieo.arbay.model.AskedSignIn =
         client.post("$baseUrl/api/accounts/$site/ask") {

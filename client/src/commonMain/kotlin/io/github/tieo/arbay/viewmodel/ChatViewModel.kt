@@ -154,7 +154,7 @@ class ChatViewModel(
         }
     }
 
-    /** Asks Auth for a sign-in to [site] as [account] and hands its page to [open], where
+    /** Asks NeuAuth for a sign-in to [site] as [account] and hands its page to [open], where
      *  the password is given and every later step shows. */
     fun signInSite(site: String, account: String, open: (String) -> Unit) = viewModelScope.launch {
         attempt {

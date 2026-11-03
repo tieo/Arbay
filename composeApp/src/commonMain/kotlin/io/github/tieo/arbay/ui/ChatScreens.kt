@@ -273,7 +273,7 @@ fun AccountPanel(session: Session) {
         val sites by chat.sites.collectAsState()
         LaunchedEffect(Unit) { chat.watch() }
         Column(verticalArrangement = Arrangement.spacedBy(arbay.gap)) { accounts.forEach { a -> Column(verticalArrangement = Arrangement.spacedBy(arbay.gap / 2)) {
-            // Auth signs every market in: where its account stands, as the market answers now.
+            // NeuAuth signs every market in: where its account stands, as the market answers now.
             a.signInSite?.let { site ->
                 SiteSignIn(
                     session, site, a.market.accountName, sites?.accounts?.get(site),
@@ -295,7 +295,7 @@ fun siteName(site: String) = when (site) {
 
 /**
  * The accounts Neuland's account browser signs in to for buying (Google, PayPal, shops), each with
- * where its latest sign-in stands. A sign-in is asked of Auth, whose page opens here: the
+ * where its latest sign-in stands. A sign-in is asked of NeuAuth, whose page opens here: the
  * password is given and sealed there, and the second factor shows there. A market account Neuland
  * Sign signs in (Kleinanzeigen) shows with the market accounts instead.
  */
@@ -317,8 +317,8 @@ fun SiteAccountPanel(session: Session, only: String? = null, account: String? = 
 }
 
 /**
- * One account Auth signs in: its name, where its latest sign-in stands (or [idle], what is
- * known of the account otherwise), and signing in, which opens Auth's page. Where no account
+ * One account NeuAuth signs in: its name, where its latest sign-in stands (or [idle], what is
+ * known of the account otherwise), and signing in, which opens NeuAuth's page. Where no account
  * is [known] for the site, the e-mail is asked first.
  */
 @Composable
