@@ -1,40 +1,35 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.model.carCriteria
 import io.github.tieo.arbay.model.*
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
+import io.github.tieo.arbay.neuland.NeulandOffers
 
 /**
- * Crawler for finn.no, Norway's dominant marketplace and its main used-vehicle source. finn.no runs
- * on Schibsted's "mobility" platform — the same JSON search API and native filter scheme as dba.dk —
- * so it filters at the source (year/mileage/power/price/gearbox) via the shared [MobilityApi] and
- * needs only its host and currency (NOK). See [DbaCrawler].
+ * finn.no, Norway's market's used cars, read by Neuland through Schibsted's mobility search: by the make and model the words name
+ * (or the words), asked the site's own filters for first registration, mileage, power, price and
+ * gearbox.
  */
-class FinnCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage {
+class FinnCrawler : Crawler, StartsAtAnyPage {
     override val platformId = PlatformId.FINN
-
-    private val host = "www.finn.no"
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val car = CarQueryResolver.resolveForCarSite(query.positiveText)
-        val text = if (car != null) {
-            listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
-        } else {
-            query.positiveText
-        }
+        val criteria = query.carCriteria
+        val vehicle = NeulandOffers.VehicleQuery(
+            make = car?.makeSlug,
+            model = car?.modelSlug,
+            gearbox = when (criteria.transmission) {
+                Transmission.AUTOMATIC -> "automatic"
+                Transmission.MANUAL -> "manual"
+                null -> null
+            },
+            registeredFrom = criteria.firstRegFromYear,
+            registeredTo = criteria.firstRegToYear,
+            mileageMaxKm = criteria.maxMileageKm,
+            powerMinKw = criteria.minPowerKw,
+        )
         return paginate(query) { page ->
-            val url = MobilityApi.searchUrl(host, text, query, page, Currency.NOK)
-            MobilityApi.parseDocs(fetchJson(url), platformId, Currency.NOK, "NO", host) ?: emptyList()
+            NeulandOffers.searchVehicles("finn.no", query.positiveText, platformId, "FINN", vehicle, page, query.minPrice, query.maxPrice)
         }
     }
-
-    private suspend fun fetchJson(url: String): String =
-        client.get(url) {
-            headers {
-                append("User-Agent", USER_AGENT)
-                append("Accept", "application/json")
-            }
-        }.body()
 }
