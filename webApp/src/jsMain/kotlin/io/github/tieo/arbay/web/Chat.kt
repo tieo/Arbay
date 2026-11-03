@@ -216,22 +216,21 @@ fun AccountSection(app: WebApp) {
             )
             return@forEach
         }
-        H3 { Text(a.market.accountName) }
         val step = signIn?.takeIf { signInMarket == a.market }
-        when {
-            step != null -> PictureSignIn(app, step, a.market)
-            busy && signInMarket == a.market -> Busy()
-            // A market can ask its password again before a message (eBay does), so a signed-in
-            // account can be signed in afresh too.
-            a.signedIn -> Div({ classes("inline-form") }) {
-                Span({ classes("muted") }) { Text("Signed in" + (a.name?.let { " as $it" } ?: "")) }
-                QuietButton("Sign in again") { chat.beginSignIn(a.market) }
-                a.payment?.let { payment -> QuietButton("Sign in to $payment") { chat.beginSignIn(a.market, payment = true) } }
-            }
-            else -> {
-                a.problem?.let { P({ classes("muted", "small") }) { Text(it) } }
+        Div({ classes("account") }) {
+            when {
                 // The market's sign-in shows as a picture of Arbay's browser, which takes taps and keys.
-                Div({ classes("actions") }) { PrimaryButton("Sign in") { chat.beginSignIn(a.market) } }
+                step != null -> { H3 { Text(a.market.accountName) }; PictureSignIn(app, step, a.market) }
+                busy && signInMarket == a.market -> SiteHead(a.market.accountName, "opening the sign-in") { Busy() }
+                // A market can ask its password again before a message (eBay does), so a signed-in
+                // account can be signed in afresh too.
+                a.signedIn -> SiteHead(a.market.accountName, "Signed in" + (a.name?.let { " as $it" } ?: "")) {
+                    QuietButton("Sign in again") { chat.beginSignIn(a.market) }
+                    a.payment?.let { payment -> QuietButton("Sign in to $payment") { chat.beginSignIn(a.market, payment = true) } }
+                }
+                else -> SiteHead(a.market.accountName, a.problem ?: "Not signed in", failed = a.problem != null) {
+                    QuietButton("Sign in") { chat.beginSignIn(a.market) }
+                }
             }
         }
     }

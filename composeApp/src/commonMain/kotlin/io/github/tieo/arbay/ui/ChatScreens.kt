@@ -287,24 +287,24 @@ fun AccountPanel(session: Session) {
                 )
                 return@Column
             }
-            Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
             val step = signIn?.takeIf { signInMarket == a.market }
             when {
-                step != null -> SignInSteps(step, a.market, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
-                busy && signInMarket == a.market -> Busy()
+                step != null -> {
+                    Text(a.market.accountName, style = MaterialTheme.typography.titleMedium)
+                    SignInSteps(step, a.market, onType = chat::signInType, onKey = chat::signInKey, onTap = chat::signInTap, onCancel = chat::cancelSignIn)
+                }
+                busy && signInMarket == a.market -> SiteHead(a.market.accountName, "opening the sign-in") { Busy() }
                 // A market can ask its password again before a message (eBay does), so a signed-in
                 // account can be signed in afresh too.
                 a.signedIn -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Muted("Signed in" + (a.name?.let { " as $it" } ?: ""))
-                        TextButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
+                    SiteHead(a.market.accountName, "Signed in" + (a.name?.let { " as $it" } ?: "")) {
+                        OutlinedButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in again") }
                     }
                     // The payment service the checkout hands over to, signed in to in the same browser.
                     a.payment?.let { payment -> TextButton(onClick = { chat.beginSignIn(a.market, payment = true) }) { Text("Sign in to $payment") } }
                 }
-                else -> {
-                    a.problem?.let { Muted(it) }
-                    Button(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
+                else -> SiteHead(a.market.accountName, a.problem ?: "Not signed in", failed = a.problem != null) {
+                    OutlinedButton(onClick = { chat.beginSignIn(a.market) }) { Text("Sign in") }
                 }
             }
         } } }
