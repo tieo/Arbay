@@ -1,8 +1,9 @@
 # Teaching the web market a new site
 
 The web market (`WebCrawler`) asks six search engines for a search's words and reads every shop
-page they list. A page is read by the structured data shops publish for search engines
-(`ProductPages`: JSON-LD, microdata, OpenGraph), or by the site's recipe (`SiteRecipes`). Before a site gets
+page they list. Neuland reads each page (`GET /shops/page`): by the structured data shops publish for
+search engines (its `crates/read/src/shop.rs`: JSON-LD, microdata, OpenGraph), or by the site's recipe
+(`crates/read/src/recipes.rs`), the recipes kept in Neuland's data. Before a site gets
 here, two generic readers try it: the JSON a JavaScript shop hands its page (`__NEXT_DATA__`,
 `application/json` scripts), and the box a list page repeats with a link and a price in each; a
 single product page is also guessed from its one heading and its price element. A page that sells
@@ -111,8 +112,9 @@ as medymarkt.live serving MediaMarkt's pages) is never read and never reported.
 
 1. Fetch the kept page and read it. Decide what kind of page it is: one product, a list of
    products, or a page that sells nothing (a review, a manual, a forum with a price in it).
-2. A page that sells nothing is a false report. Fix `ProductPages.sellsSomething` so pages like it
-   are not reported, with a test in `WebMarketTest` built from the page, and deploy.
+2. A page that sells nothing is a false report. Fix `sells_something` in Neuland's
+   `crates/read/src/shop.rs` so pages like it are not reported, with a test in
+   `crates/read/tests/shop.rs` built from the page, and deploy Neuland.
 3. Otherwise find the elements carrying each offer's title and price, and the link and image where
    the page lists several. Prefer attributes meant for machines (`content`, `data-price`) over
    visible text. Find the site's own search (its search form's action) for `searchUrl`, and write a
@@ -124,8 +126,9 @@ as medymarkt.live serving MediaMarkt's pages) is never read and never reported.
    request, which reads it the way a search will.
 6. Where no recipe can read the site (the offers come from a JSON API the page calls, a price
    needs a variant picked first, the site answers Arbay's fetch with a block page), change the
-   code instead: `WebCrawler`, `ProductPages` or `SiteRecipes`, with a test, committed and deployed
-   as every Arbay change is.
+   code instead: Neuland's shop reading (`crates/read/src/shop.rs`, `recipes.rs`,
+   `crates/neuland/src/shop.rs` for how a page is fetched) or Arbay's `WebCrawler` for which pages
+   are read, with a test, committed and deployed.
 7. A site that blocks every way in, or turns out to sell nothing, is given up on with
    `POST /api/web/gaps/<domain>/given-up`, so the searches waiting on it finish, and said so in the
    report. A site given up on is neither reported again nor guessed at until a recipe for it is
