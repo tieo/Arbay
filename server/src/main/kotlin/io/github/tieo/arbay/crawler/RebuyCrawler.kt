@@ -1,77 +1,12 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
-import io.ktor.client.*
-import kotlin.time.Clock
-import kotlinx.serialization.json.*
-import org.jsoup.Jsoup
+import io.github.tieo.arbay.neuland.NeulandOffers
 
-class RebuyCrawler(private val client: HttpClient) : Crawler {
+/** reBuy, read by Neuland in its render browser: its products in stock, used, delivered free. */
+class RebuyCrawler : Crawler {
     override val platformId = PlatformId.REBUY
 
-    private val json = Json { ignoreUnknownKeys = true }
-
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        val url = "https://www.rebuy.de/kaufen/suchen?q=${query.positiveText.encodeUrl()}"
-        // HTTP always 429, so a browser reads it. Rebuy computes a proof of work (VDF) in a Web
-        // Worker before it injects the product data as script#ry-inject, which can take a minute.
-        val html = readInBrowser(url, "reBuy", markers = listOf("id=\"ry-inject\""), timeoutS = 60)
-        return parseSearchResults(html)
-    }
-
-    private fun parseSearchResults(html: String): List<Listing> {
-        val doc = Jsoup.parse(html)
-        val now = Clock.System.now()
-
-        // Rebuy embeds all product data as JSON in <script id="ry-inject">
-        val scriptEl = doc.selectFirst("script#ry-inject")
-            ?: throw CrawlerBlockedException("reBuy: product data not found in page (rate limited?)", ErrorType.RATE_LIMITED_429)
-        val rootJson = try {
-            json.parseToJsonElement(scriptEl.data()).jsonObject
-        } catch (e: Exception) {
-            throw unreadablePage("reBuy", "product data does not decode", html, e)
-        }
-
-        val docs = rootJson["productListViewDto"]
-            ?.jsonObject?.get("searchResponse")
-            ?.jsonObject?.get("products")
-            ?.jsonObject?.get("docs")
-            ?.jsonArray ?: return emptyList()
-
-        return docs.mapNotNull { item ->
-            val obj = item.jsonObject
-            val id = obj["id"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
-            val name = obj["name"]?.jsonPrimitive?.contentOrNull?.trim()
-                ?: obj["basic_name"]?.jsonPrimitive?.contentOrNull?.trim()
-                ?: return@mapNotNull null
-            if (name.isBlank()) return@mapNotNull null
-
-            val bluePrice = obj["blue_price"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
-            val price = Money(bluePrice, Currency.EUR)
-
-            val inStock = obj["has_variant_in_stock"]?.jsonPrimitive?.booleanOrNull ?: true
-
-            val catSlug = obj["category_sanitized_name"]?.jsonPrimitive?.contentOrNull ?: "produkte"
-            val productSlug = obj["product_sanitized_name"]?.jsonPrimitive?.contentOrNull ?: name.lowercase().replace(" ", "-")
-            val url = "https://www.rebuy.de/i,$id/$catSlug/$productSlug"
-
-            val imageUrl = obj["thumbs_cover_urls"]?.jsonObject?.get("350x350")?.jsonPrimitive?.contentOrNull
-                ?: obj["thumbs_cover_urls"]?.jsonObject?.get("200x200")?.jsonPrimitive?.contentOrNull
-
-            if (!inStock) return@mapNotNull null
-
-            Listing(
-                id = "${platformId.name}:$id",
-                platformId = platformId,
-                externalId = id.toString(),
-                url = url,
-                title = name,
-                price = price,
-                condition = Condition.USED,
-                imageUrls = listOfNotNull(imageUrl),
-                shipping = Shipping(free = true), // reBuy: free shipping on all orders
-                scrapedAt = now,
-            )
-        }
-    }
+    override suspend fun search(query: SearchQuery): List<Listing> =
+        NeulandOffers.search("rebuy.de", query.positiveText, platformId, "reBuy").map { it.copy(condition = Condition.USED) }
 }
