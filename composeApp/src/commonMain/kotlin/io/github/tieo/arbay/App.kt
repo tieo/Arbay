@@ -76,7 +76,7 @@ fun App() {
         }
 
         // A tapped link: its place opens; a sign-in it asks for is the accounts panel's, where the
-        // market's account row asks Neuland Sign.
+        // market's account row asks Auth.
         val link by AppLinks.pending.collectAsState()
         LaunchedEffect(link) {
             val opened = AppLinks.take() ?: return@LaunchedEffect

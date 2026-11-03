@@ -18,7 +18,7 @@ data class ChatAccount(
     val name: String? = null,
     /** Why the account can't be reached right now, when it can't. */
     val problem: String? = null,
-    /** The site Neuland Sign signs this market's account in to ("kleinanzeigen.de"), where it does:
+    /** The site Auth signs this market's account in to ("kleinanzeigen.de"), where it does:
      *  its sign-in is asked and shown as the shop accounts' are. */
     val signInSite: String? = null,
 )

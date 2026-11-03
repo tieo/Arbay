@@ -72,7 +72,7 @@ object Chat {
     private val outbox = mutableListOf<OutgoingMessage>()
     private var settings: ChatSettings
 
-    /** The markets whose account Neuland's account browser holds, by the site Neuland Sign signs
+    /** The markets whose account Neuland's account browser holds, by the site Auth signs
      *  it in to; one eBay account answers for every eBay site. */
     private val neulandSites = mapOf(PlatformId.KLEINANZEIGEN to Kleinanzeigen.SITE, PlatformId.EBAY_DE to "ebay.de", PlatformId.WILLHABEN to "willhaben.at", PlatformId.VINTED_DE to "vinted.de")
 
@@ -122,7 +122,7 @@ object Chat {
         val last = paymentCheckFile.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0
         if (System.currentTimeMillis() - last < 24 * 3_600_000L) return
         paymentCheckFile.writeText(System.currentTimeMillis().toString())
-        val signedIn = runCatching { io.github.tieo.arbay.neuland.NeulandSign.standing(PAYMENT_SITE).signedIn }.getOrNull() ?: return
+        val signedIn = runCatching { io.github.tieo.arbay.neuland.NeulandAuth.standing(PAYMENT_SITE).signedIn }.getOrNull() ?: return
         if (!signedIn) reloginPayment()
     }
 
@@ -132,7 +132,7 @@ object Chat {
      * the phone. True when it is signed in.
      */
     suspend fun reloginPayment(): Boolean {
-        if (io.github.tieo.arbay.neuland.NeulandSign.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted")) return true
+        if (io.github.tieo.arbay.neuland.NeulandAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted")) return true
         log.warn("PayPal sign-in for Vinted did not come through")
         askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         return false
@@ -141,12 +141,12 @@ object Chat {
     // --- account ---
 
     /** The user's account on [market]: signed in or not, and whether a sign-in is going on. Where
-     *  a sign-in through Neuland Sign stands shows with the shop accounts' sign-ins. */
+     *  a sign-in through Auth stands shows with the shop accounts' sign-ins. */
     suspend fun account(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount {
         val site = neulandSite(market) ?: throw ChatFailure("Arbay has no account on ${market.displayName}", signedOut = false)
         val shown = if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market
         return try {
-            val standing = io.github.tieo.arbay.neuland.NeulandSign.standing(site)
+            val standing = io.github.tieo.arbay.neuland.NeulandAuth.standing(site)
             ChatAccount(market = shown, signedIn = standing.signedIn, name = standing.name, signInSite = site)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
             ChatAccount(market = shown, problem = e.message, signInSite = site)
@@ -310,7 +310,7 @@ object Chat {
             put("pay", JsonPrimitive(request.pay))
         }
         val answer = try {
-            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeulandSign.BROWSER}/checkout/vinted.de", body, limitS = 200)
+            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeulandAuth.BROWSER}/checkout/vinted.de", body, limitS = 200)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
             // Signed out of Vinted: the user is asked to sign the account browser in, on the phone.
             if (e.signedOut) askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
@@ -353,13 +353,13 @@ object Chat {
         val last = signInAsked[link]
         if (!force && last != null && now - last < 3_600_000) return false
         signInAsked[link] = now
-        // A market Neuland Sign signs in gets Neuland's own page sent to the phone; the app is
+        // A market Auth signs in gets Neuland's own page sent to the phone; the app is
         // opened only where Neuland knows no account to sign in.
         val site = if (link.payment) PAYMENT_SITE else neulandSite(link.market)
         val asker = if (link.payment) "Arbay, to pay at ${link.market.displayName}" else "Arbay, for your ${link.market.displayName} account"
         // Vinted signs in through Google, whose account stands for it until Neuland knows Vinted's own.
         val through = "google.com".takeIf { link.market == PlatformId.VINTED_DE && !link.payment }
-        if (site != null && io.github.tieo.arbay.neuland.NeulandSign.askAgain(site, asker, through = through)) return true
+        if (site != null && io.github.tieo.arbay.neuland.NeulandAuth.askAgain(site, asker, through = through)) return true
         val what = if (link.payment) "PayPal" else link.market.displayName
         return io.github.tieo.arbay.monitoring.Ntfy.send(
             title = "$what needs you to sign in",

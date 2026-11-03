@@ -647,7 +647,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Push a request to the user's phone that opens the Arbay app on a market's sign-in page, or with payment on the " +
                 "sign-in page of the payment service the market's checkout uses (Vinted's PayPal), for the user to sign in themselves. " +
                 "With site instead (google.com, paypal.com), a sign-in of Neuland's account browser for buying at shops through " +
-                "Neuland Sign: its page goes to the phone, where the user gives the password; account is the one to sign in " +
+                "Auth: its page goes to the phone, where the user gives the password; account is the one to sign in " +
                 "(the one last used where left out), asker who wants it, in words the user knows.",
             props = {
                 string("market", "The market, as KLEINANZEIGEN, EBAY_DE, WILLHABEN or VINTED_DE")
@@ -662,7 +662,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     args.str("account")?.let { parameter("account", it) }
                     args.str("asker")?.let { parameter("asker", it) }
                 }
-                return@tool if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else "Sent to the phone through Neuland Sign: ${r.bodyAsText()}"
+                return@tool if (!r.status.isSuccess()) "Not sent: ${r.bodyAsText()}" else "Sent to the phone through Auth: ${r.bodyAsText()}"
             }
             if (args.str("market") == null) return@tool "Name a market or a site."
             val r = http.post("$base/api/chat/signin/ask") {
