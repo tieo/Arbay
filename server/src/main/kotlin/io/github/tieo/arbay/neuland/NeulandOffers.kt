@@ -23,9 +23,14 @@ import kotlinx.serialization.json.Json
 object NeulandOffers {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** What [site] (a domain) offers for [words], as listings of [platform], new and at a fixed price. */
-    suspend fun search(site: String, words: String, platform: PlatformId, siteName: String): List<Listing> {
-        val body = Neuland.offers("offers/search?site=$site&q=${words.encodeURLParameter()}")
+    /**
+     * What [site] (a domain) offers for [words], as listings of [platform], at a fixed price: page
+     * [page] of the answer, inside the price band [min]..[max] where the site's search takes one.
+     * Their condition is the site's words where it states one, otherwise [otherwise].
+     */
+    suspend fun search(site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null, otherwise: Condition? = Condition.NEW): List<Listing> {
+        val band = listOfNotNull(min?.let { "&min_cents=${it.amount}" }, max?.let { "&max_cents=${it.amount}" }).joinToString("")
+        val body = Neuland.offers("offers/search?site=$site&q=${words.encodeURLParameter()}&page=$page$band")
         val list = runCatching { json.decodeFromString(OfferList.serializer(), body) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", body, it as? Exception) }
         val now = Clock.System.now()
@@ -37,8 +42,9 @@ object NeulandOffers {
                 url = o.url,
                 title = o.title,
                 price = o.price.money(),
+                oldPrice = o.asking?.money(),
                 saleType = SaleType.FIXED_PRICE,
-                condition = Condition.NEW,
+                condition = o.condition?.let(Condition::parse) ?: otherwise,
                 imageUrls = listOfNotNull(o.image),
                 seller = o.seller?.let { Seller(name = it) },
                 shipping = o.shipping?.money()?.let(::delivery),
@@ -62,6 +68,7 @@ object NeulandOffers {
     @Serializable private data class NeulandOffer(
         val id: String, val title: String, val url: String, val image: String? = null,
         val price: NeulandMoney, val shipping: NeulandMoney? = null, val seller: String? = null,
+        val condition: String? = null, val asking: NeulandMoney? = null,
     )
     @Serializable private data class OfferList(val offers: List<NeulandOffer>)
 }
