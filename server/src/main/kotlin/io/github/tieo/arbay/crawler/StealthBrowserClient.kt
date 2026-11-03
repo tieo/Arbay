@@ -29,7 +29,7 @@ object StealthBrowserClient {
      *  account sidecars import market_browser.py. */
     internal val scriptDir: File by lazy {
         val dir = File(System.getProperty("java.io.tmpdir"), "arbay-stealth").apply { mkdirs() }
-        for (name in listOf("mobilede_fetch.py", "stealth_fetch.py", "captcha_gate.py", "market_browser.py", "vinted_chat.py")) {
+        for (name in listOf("mobilede_fetch.py", "captcha_gate.py", "market_browser.py", "vinted_chat.py")) {
             val res = StealthBrowserClient::class.java.getResourceAsStream("/$name")
                 ?: error("$name not found in classpath")
             File(dir, name).outputStream().use { res.copyTo(it) }
@@ -37,22 +37,6 @@ object StealthBrowserClient {
         dir
     }
     private val scriptPath: String get() = File(scriptDir, "mobilede_fetch.py").absolutePath
-    private val genericScriptPath: String get() = File(scriptDir, "stealth_fetch.py").absolutePath
-
-    /** Load [url] in real Chrome and return its HTML once [waitMarker] (a literal substring, e.g. a
-     *  data-qa attribute) appears in the rendered DOM, so a client-rendered grid is present rather
-     *  than the empty post-challenge shell. For Cloudflare/Datadome pages whose content is painted
-     *  after the challenge clears. */
-    suspend fun fetchRendered(url: String, waitMarker: String, waitSeconds: Int = 30, minMatches: Int = 1): String {
-        val args = listOf("xvfb-run", "-a", "python3", genericScriptPath, url, waitMarker, waitSeconds.toString(), minMatches.toString())
-        val outcome = runProcess(args)
-        if (outcome.exitCode != 0) {
-            log.warn("stealth render exit {} for {}: {}", outcome.exitCode, url, outcome.stderr.take(200))
-            val type = if (outcome.exitCode == 2) ErrorType.CAPTCHA else ErrorType.UNKNOWN
-            throw CrawlerBlockedException("stealth render $url: exit ${outcome.exitCode}", type)
-        }
-        return outcome.stdout.toString(Charsets.UTF_8)
-    }
 
     /** Load [url] in real Chrome, solve the Akamai challenge once, then page through up to
      *  [maxPages] in the same session, invoking [onPage] with each page's HTML the moment the

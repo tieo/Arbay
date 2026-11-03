@@ -491,7 +491,7 @@ internal suspend fun fetchWithFallback(
         emitter?.let { it.emit("Stealth") }
         try {
             // The marker showing is what proves the page; a challenge script left in it is not a block.
-            val html = StealthBrowserClient.fetchRendered(url, stealthMarker, waitSeconds = 40, minMatches = stealthMinMatches)
+            val html = RenderBrowsers.rendered(url, stealthMarker, timeoutS = 40, times = stealthMinMatches)
             RequestMonitor.recordTier(platformName, "Stealth")
             return html
         } catch (e: CancellationException) { throw e } catch (e: Exception) {

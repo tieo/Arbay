@@ -39,13 +39,15 @@ object Neuland {
     private val client = HttpClient(CIO) { install(HttpTimeout) }
 
     /**
-     * Reads [url] in Neuland's browser [browser] until one of [content] shows, the site's error page
+     * Reads [url] in Neuland's browser [browser] until one of [content] shows ([contentTimes] times),
+     * the site's error page
      * ([errors]) does, a refusal stands, or [timeoutS] passes. Null where Neuland did not answer.
      */
-    suspend fun read(browser: String, url: String, content: List<String>, errors: List<String>, refused: List<String>, timeoutS: Int): NeulandBrowser.Page? {
+    suspend fun read(browser: String, url: String, content: List<String>, errors: List<String>, refused: List<String>, timeoutS: Int, contentTimes: Int = 1): NeulandBrowser.Page? {
         val body = JsonObject(mapOf(
             "url" to JsonPrimitive(url),
             "content" to JsonArray(content.map(::JsonPrimitive)),
+            "contentTimes" to JsonPrimitive(contentTimes),
             "errors" to JsonArray(errors.map(::JsonPrimitive)),
             "refused" to JsonArray(refused.map(::JsonPrimitive)),
             "timeoutS" to JsonPrimitive(timeoutS),

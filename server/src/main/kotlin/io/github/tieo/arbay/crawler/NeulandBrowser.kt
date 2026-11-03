@@ -26,12 +26,28 @@ open class NeulandBrowser(
      * Reads [url] until one of [markers] shows in it, the site's error page or one of [refusals]
      * does, or [timeoutS] passes. Null where Neuland did not answer.
      */
-    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList()): Page? {
-        val page = inTab { Neuland.read(name, url, markers, errors, refusals, timeoutS) } ?: return null
+    suspend fun get(url: String, markers: List<String>, timeoutS: Int = 30, refusals: List<String> = emptyList(), markerTimes: Int = 1): Page? {
+        val page = inTab { Neuland.read(name, url, markers, errors, refusals, timeoutS, markerTimes) } ?: return null
         // Any page the site answers with, its error page too, is the site answering: the crawl's time
         // limit is there for a crawl that hangs, and one eBay keeps refusing and asking again is not.
         kotlin.coroutines.coroutineContext[CrawlClock]?.answered()
         return page
+    }
+
+    /**
+     * [url] once the page's own script has drawn what [marker] marks, [times] over (a grid of cards
+     * shows its card markup once per card, a script naming it once), past whatever stands before it
+     * that Neuland passes. A page that never shows it is a [CrawlerBlockedException]: a refusal
+     * Neuland could not pass, or the page not drawing what was asked.
+     */
+    suspend fun rendered(url: String, marker: String, timeoutS: Int = 30, times: Int = 1): String {
+        val page = get(url, listOf(marker), timeoutS, markerTimes = times)
+            ?: throw CrawlerBlockedException("Neuland did not answer for $url", ErrorType.NETWORK_ERROR)
+        return when (page.page) {
+            "content" -> page.html
+            "refused" -> throw CrawlerBlockedException("$url: refused, past what Neuland passes", ErrorType.CAPTCHA, url = url, html = page.html)
+            else -> throw CrawlerBlockedException("$url: ${page.page}, $marker never showed $times times", ErrorType.UNKNOWN, url = url, html = page.html)
+        }
     }
 
     /**

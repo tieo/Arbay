@@ -551,7 +551,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val html = if (call.request.queryParameters["stealth"]?.toBooleanStrictOrNull() == true) {
                 val marker = call.request.queryParameters["wait"] ?: "result-listing"
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    io.github.tieo.arbay.crawler.StealthBrowserClient.fetchRendered(url, marker, waitSeconds = 40)
+                    io.github.tieo.arbay.crawler.RenderBrowsers.rendered(url, marker, timeoutS = 40)
                 }
             } else if (call.request.queryParameters["ebay"]?.toBooleanStrictOrNull() == true) {
                 // eBay answers only the warm Chrome its crawler reads through; any other browser

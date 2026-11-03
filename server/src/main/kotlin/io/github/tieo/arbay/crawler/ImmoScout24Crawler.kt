@@ -17,7 +17,7 @@ class ImmoScout24Crawler(private val client: HttpClient) : Crawler {
         // burning through tiers known to fail first. "headline" is the card title's own
         // data-testid — unlike "/expose/" (also a substring of a CSS background-image path,
         // matching before any real card has rendered), it appears only inside an actual card.
-        val html = StealthBrowserClient.fetchRendered(url, waitMarker = "data-testid=\"headline\"", waitSeconds = 25, minMatches = 3)
+        val html = RenderBrowsers.rendered(url, "data-testid=\"headline\"", timeoutS = 25, times = 3)
         return parseSearchResults(html)
     }
 

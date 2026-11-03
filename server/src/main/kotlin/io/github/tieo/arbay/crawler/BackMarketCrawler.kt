@@ -10,12 +10,12 @@ class BackMarketCrawler(private val client: HttpClient) : Crawler {
 
     override suspend fun search(query: SearchQuery): List<Listing> {
         val url = "https://www.backmarket.de/de-de/search?q=${query.positiveText.encodeUrl()}"
-        // Cloudflare serves a challenge to a plain client with Chrome's fingerprint; the zendriver real-Chrome stealth tier passes
+        // Cloudflare serves a challenge to a plain client with Chrome's fingerprint; Neuland's render browsers pass
         // it. The product grid is client-rendered after the
         // challenge clears, so wait for the productCard marker rather than the bare shell.
         // Require several card matches so a lone preload reference to the selector does not satisfy
         // the wait before the grid paints.
-        val html = StealthBrowserClient.fetchRendered(url, waitMarker = "data-qa=\"productCard\"", waitSeconds = 30, minMatches = 3)
+        val html = RenderBrowsers.rendered(url, "data-qa=\"productCard\"", timeoutS = 30, times = 3)
         return parseSearchResults(html)
     }
 
