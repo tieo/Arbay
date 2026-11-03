@@ -121,32 +121,34 @@ object Chat {
 
     private val paymentCheckFile = DataDir.file("payment_check.txt")
 
+    /** The payment service Vinted's checkout hands over to, as Neuland signs in to it. */
+    private const val PAYMENT_SITE = "paypal.com"
+
+    /** Vinted, as Neuland's account browser buys there; signed in to through Google. */
+    private const val CHECKOUT_SITE = "vinted.de"
+
     /**
-     * Once a day, whether the payment service Vinted's checkout hands over to still knows Arbay's
-     * browser, signing in again with the password its Chrome keeps where it does not: a buy that
-     * meets a signed-out PayPal loses the offer while the user is asked. The last check's time is
-     * kept on disk, as the server restarts more often than once a day.
+     * Once a day, whether the payment service Vinted's checkout hands over to still knows Neuland's
+     * account browser, signing in again with the password Neuland keeps where it does not: a buy
+     * that meets a signed-out PayPal loses the offer while the user is asked. The last check's time
+     * is kept on disk, as the server restarts more often than once a day.
      */
     private suspend fun checkPaymentDaily() {
         val last = paymentCheckFile.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0
         if (System.currentTimeMillis() - last < 24 * 3_600_000L) return
         paymentCheckFile.writeText(System.currentTimeMillis().toString())
-        if (VintedChatBrowser.call("status")["payment"] == null) return
-        reloginPayment()
+        val signedIn = runCatching { io.github.tieo.arbay.neuland.NeulandSign.standing(PAYMENT_SITE).signedIn }.getOrNull() ?: return
+        if (!signedIn) reloginPayment()
     }
 
     /**
-     * Signs the Vinted browser in to its payment service again on its own (see vinted_chat.py's
-     * relogin_payment); where that fails, the user is asked on the phone. True when it is signed in.
+     * Signs Neuland's account browser in to the payment service again with the password Neuland
+     * keeps, the user confirming in the PayPal app; where Neuland keeps none, the user is asked on
+     * the phone. True when it is signed in.
      */
     suspend fun reloginPayment(): Boolean {
-        val o = VintedChatBrowser.call("relogin_payment", 240_000, "waitConfirm" to 150)
-        if (o["signedIn"]?.bool() == true) return true
-        log.warn("PayPal sign-in for Vinted failed: {}", o["problem"]?.str())
-        // The page it stopped on, to read afterwards.
-        (o["detail"] as? JsonObject)?.get("picture")?.str()?.let { picture ->
-            runCatching { DataDir.file("logs/paypal-signin.jpg").writeBytes(java.util.Base64.getDecoder().decode(picture)) }
-        }
+        if (io.github.tieo.arbay.neuland.NeulandSign.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted")) return true
+        log.warn("PayPal sign-in for Vinted did not come through")
         askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         return false
     }
@@ -353,26 +355,61 @@ object Chat {
     suspend fun buy(request: PurchaseRequest): Purchase {
         val host = runCatching { java.net.URI(request.url).host }.getOrNull()
         if (host != "www.vinted.de") throw ChatFailure("Arbay buys at Vinted's checkout only, not at $host", signedOut = false)
-        var o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
-        // PayPal signed out: signed in again with the saved password, the buy is made once more.
-        if (o["paymentSignedOut"]?.bool() == true && reloginPayment()) {
-            o = VintedChatBrowser.call("buy", 180_000, "url" to request.url, "most" to request.allInEur, "pay" to request.pay)
-        }
-        fun num(key: String) = (o[key] as? JsonPrimitive)?.doubleOrNull
+        var bought = checkout(request)
+        // PayPal signed out: signed in again with the kept password, the buy is made once more.
+        if (bought.paymentSignedOut && reloginPayment()) bought = checkout(request)
         return Purchase(
-            buyable = o["buyable"]?.bool() == true,
-            itemEur = num("item"),
-            feeEur = num("fee"),
-            shippingEur = num("shipping"),
-            totalEur = num("total"),
-            payment = o["payment"]?.str(),
-            paid = o["paid"]?.bool() == true,
-            problem = o["problem"]?.str(),
-            picture = o["picture"]?.str(),
+            buyable = bought.buyable,
+            itemEur = bought.item?.eur(),
+            feeEur = bought.fee?.eur(),
+            shippingEur = bought.shipping?.eur(),
+            totalEur = bought.total?.eur(),
+            payment = bought.payment,
+            paid = bought.paid,
+            problem = bought.problem,
+            picture = bought.picture,
         ).also {
             if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur)
         }
     }
+
+    /** Vinted's checkout of [request]'s listing in Neuland's account browser, as it stood. */
+    private suspend fun checkout(request: PurchaseRequest): NeulandPurchase {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("url", JsonPrimitive(request.url))
+            put("mostCents", JsonPrimitive(kotlin.math.round(request.allInEur * 100).toLong()))
+            put("pay", JsonPrimitive(request.pay))
+        }
+        val answer = try {
+            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeulandSign.BROWSER}/checkout/vinted.de", body, limitS = 200)
+        } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
+            // Signed out of Vinted: the user is asked to sign the account browser in, on the phone.
+            if (e.signedOut) io.github.tieo.arbay.neuland.NeulandSign.askAgain(CHECKOUT_SITE, "Arbay, to buy at Vinted", through = "google.com")
+            throw ChatFailure("Vinted's checkout: ${e.message}", signedOut = e.signedOut)
+        }
+        return checkoutJson.decodeFromJsonElement(NeulandPurchase.serializer(), answer)
+    }
+
+    private val checkoutJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    @kotlinx.serialization.Serializable
+    private data class NeulandAmount(val cents: Long, val currency: String = "EUR") {
+        fun eur() = cents / 100.0
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class NeulandPurchase(
+        val buyable: Boolean = false,
+        val item: NeulandAmount? = null,
+        val fee: NeulandAmount? = null,
+        val shipping: NeulandAmount? = null,
+        val total: NeulandAmount? = null,
+        val payment: String? = null,
+        val paid: Boolean = false,
+        val problem: String? = null,
+        @kotlinx.serialization.SerialName("payment_signed_out") val paymentSignedOut: Boolean = false,
+        val picture: String? = null,
+    )
 
     /** When each sign-in was last asked for on the phone, so a run of failed buys sends one push. */
     private val signInAsked = java.util.concurrent.ConcurrentHashMap<io.github.tieo.arbay.model.SignInLink, Long>()
@@ -389,9 +426,10 @@ object Chat {
         signInAsked[link] = now
         // A market Neuland Sign signs in gets Neuland's own page sent to the phone; the app is
         // opened only where Neuland knows no account to sign in.
-        val site = neulandSite(link.market)
-        if (site != null && !link.payment && io.github.tieo.arbay.neuland.NeulandSign.askAgain(site, "Arbay, for your ${link.market.displayName} account")) return true
-        val what = if (link.payment) sidecarFor(link.market).call("status")["payment"]?.str() ?: "the payment service" else link.market.displayName
+        val site = if (link.payment) PAYMENT_SITE else neulandSite(link.market)
+        val asker = if (link.payment) "Arbay, to pay at ${link.market.displayName}" else "Arbay, for your ${link.market.displayName} account"
+        if (site != null && io.github.tieo.arbay.neuland.NeulandSign.askAgain(site, asker)) return true
+        val what = if (link.payment) "PayPal" else link.market.displayName
         return io.github.tieo.arbay.monitoring.Ntfy.send(
             title = "$what needs you to sign in",
             message = if (link.payment) "${link.market.displayName} pays with $what, which has signed Arbay out. Tap to sign in." else "Tap to sign in to ${link.market.displayName} again.",
