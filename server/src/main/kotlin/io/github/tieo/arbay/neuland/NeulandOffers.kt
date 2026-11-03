@@ -111,9 +111,17 @@ object NeulandOffers {
         val gearbox: String? = null,
         @kotlinx.serialization.SerialName("registered_from") val registeredFrom: Int? = null,
         @kotlinx.serialization.SerialName("registered_to") val registeredTo: Int? = null,
+        @kotlinx.serialization.SerialName("mileage_min_km") val mileageMinKm: Int? = null,
         @kotlinx.serialization.SerialName("mileage_max_km") val mileageMaxKm: Int? = null,
         @kotlinx.serialization.SerialName("power_min_kw") val powerMinKw: Int? = null,
-    )
+        /** Any of these, by Neuland's names ("petrol", "hybrid-diesel"); none is any. */
+        val fuels: List<String> = emptyList(),
+    ) {
+        companion object {
+            /** A fuel by Neuland's name for it. */
+            fun fuel(fuel: io.github.tieo.arbay.model.Fuel) = fuel.name.lowercase().replace('_', '-')
+        }
+    }
 
     /** Every seller of the offer at [url], cheapest delivered first; none where the site lists none. */
     suspend fun sellers(url: String): List<SellerOffer> =
@@ -137,6 +145,7 @@ object NeulandOffers {
     )
     @Serializable private data class NeulandVehicle(
         @kotlinx.serialization.SerialName("registered_year") val registeredYear: Int? = null,
+        @kotlinx.serialization.SerialName("registered_month") val registeredMonth: Int? = null,
         @kotlinx.serialization.SerialName("mileage_km") val mileageKm: Int? = null,
         @kotlinx.serialization.SerialName("power_kw") val powerKw: Int? = null,
         val fuel: String? = null,
@@ -145,6 +154,7 @@ object NeulandOffers {
     ) {
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
             firstRegYear = registeredYear,
+            firstRegMonth = registeredMonth,
             mileageKm = mileageKm,
             powerKw = powerKw,
             fuel = fuel?.let { f -> io.github.tieo.arbay.model.Fuel.entries.firstOrNull { it.name == f.uppercase().replace('-', '_') } },
