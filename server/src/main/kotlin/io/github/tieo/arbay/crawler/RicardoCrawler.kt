@@ -1,224 +1,44 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
-import io.ktor.client.*
-import kotlin.time.Clock
-import kotlin.time.Instant
-import kotlinx.serialization.json.*
+import io.github.tieo.arbay.neuland.NeulandOffers
+import kotlinx.coroutines.CancellationException
 
 /**
- * Crawler for ricardo.ch, Switzerland's largest general marketplace and the only Swiss source
- * that exposes vehicle listings on a fetchable, filtering search URL.
+ * ricardo.ch, Switzerland's largest general marketplace and the only Swiss source with a fetchable
+ * search for vehicles too, read by Neuland. A car query is searched by its make and model words;
+ * ricardo has no vehicle category in its search, so on a car query what it files as anything but
+ * a whole vehicle (floor mats, a licence-plate light, a keychain for a Crafter) is left out. A
+ * product search keeps every kind: its machines are filed as grinding_machine and the like.
  *
- * The page is a Next.js App Router app: results are server-rendered into the React Server
- * Component stream as `self.__next_f.push([1,"<json-string>"])` chunks rather than a single
- * `__NEXT_DATA__` blob. Concatenating the decoded chunks yields a payload holding an
- * `"articles"` array with id, title, price, image, condition and shipping location.
- *
- * autoscout24.ch is deliberately not used: none of its search URLs apply the make/model filter
- * (slug, numeric id and query-param forms all return the same unfiltered promo feed) and it
- * issues no client-side listings request, so no fetchable URL yields filtered Swiss results.
+ * autoscout24.ch is not used: none of its search addresses applies the make/model filter and it
+ * issues no client-side listings request, so no fetchable address yields filtered Swiss results.
  */
-class RicardoCrawler(private val client: HttpClient) : Crawler, StartsAtAnyPage, FetchesEveryPage, KnowsLocation, SellsByAuction {
+class RicardoCrawler : Crawler, StartsAtAnyPage, FetchesEveryPage, KnowsLocation, SellsByAuction {
     override val platformId = PlatformId.RICARDO
 
-    private val json = Json { ignoreUnknownKeys = true }
+    override suspend fun search(query: SearchQuery): List<Listing> {
+        val car = CarQueryResolver.resolve(query.positiveText)
+        val words = car?.let { listOfNotNull(it.makeSlug.replace("-", " "), it.modelSlug).joinToString(" ") } ?: query.positiveText
+        return paginate(query) { page ->
+            NeulandOffers.search(
+                "ricardo.ch", words, platformId, "ricardo.ch", page, max = query.maxPrice,
+                otherwise = null, kinds = VEHICLE_KINDS.takeIf { car != null },
+            )
+        }
+    }
 
-    /**
-     * The seller's text and every photo of the gallery, off the item page. The page sits behind
-     * Cloudflare's challenge where the search does not, so it is read by the tier that ticks the
-     * box, known through by the gallery it holds.
-     */
+    /** The seller's text and every photo of the gallery, off the item page. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        parseDetail(fetchWithFallback(client, listing.url, "ricardo.ch", stealthMarker = IMAGES_KEY, pageMarker = IMAGES_KEY))
-    } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+        val page = NeulandOffers.detail(listing.url, "ricardo.ch")
+        ListingDetail(description = page.description, photos = page.photos).takeIf { it.description != null || it.photos.isNotEmpty() }
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
         null
     }
 
-    /** The gallery, largest copies first in its order, and the description from the page's
-     *  Product data, which carries it as plain text where the article's own copy is HTML. */
-    internal fun parseDetail(html: String): ListingDetail? {
-        val photos = (balancedArray(html, IMAGES_KEY) ?: balancedArray(decodeChunks(html), IMAGES_KEY))
-            .orEmpty().mapNotNull { image ->
-                val o = image as? JsonObject ?: return@mapNotNull null
-                (o["bigSizeUrl"] ?: o["url"])?.jsonPrimitive?.contentOrNull
-            }
-        val description = Regex("""<script[^>]*application/ld\+json[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(html).mapNotNull { runCatching { json.parseToJsonElement(it.groupValues[1]) }.getOrNull() }
-            .flatMap { ld -> ((ld as? JsonObject)?.get("@graph") as? JsonArray ?: JsonArray(listOf(ld))).asSequence() }
-            .filterIsInstance<JsonObject>()
-            .firstOrNull { it["@type"]?.jsonPrimitive?.contentOrNull == "Product" }
-            ?.get("description")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
-        if (photos.isEmpty() && description == null) return null
-        return ListingDetail(description = description, photos = photos)
-    }
-
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        // A car query is searched by make and model words; ricardo has no vehicle-specific
-        // category filter in the URL, so the text carries the intent.
-        val car = CarQueryResolver.resolve(query.positiveText)
-        val text = if (car != null) {
-            listOfNotNull(car.makeSlug.replace("-", " "), car.modelSlug).joinToString(" ")
-        } else {
-            query.positiveText
-        }
-
-        // The vehicle-type guard only makes sense for a car search; a product search ("Parkett-
-        // schleifmaschine") legitimately wants grinding_machine etc., so it must not be filtered out.
-        val vehiclesOnly = car != null
-        return paginate(query) { page ->
-            val base = "https://www.ricardo.ch/de/s/${text.encodeUrl()}/"
-            val params = listOfNotNull(priceBand(query), "page=$page".takeIf { page > 1 })
-            val url = if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
-            parse(fetchWithFallback(client, url, "ricardo.ch"), vehiclesOnly)
-        }
-    }
-
-    /** ricardo's price ceiling, in francs, converted from the search's euro ceiling. ricardo
-     *  filters on the franc price before shipping and import VAT, which is below the landed price
-     *  the ceiling is set in, so it never leaves out an offer the landed ceiling would keep. The
-     *  floor is left to the landed price for the same reason, where it would cut the other way. */
-    internal fun priceBand(query: SearchQuery): String? =
-        query.maxPrice?.let { "range_filters.price.max=${ExchangeRates.convert(it.amount, it.currency.name, "CHF") / 100 + 1}" }
-
-    /** Decode the RSC stream and map its `articles` array to listings. */
-    internal fun parse(html: String, vehiclesOnly: Boolean = false): List<Listing> {
-        val articles = extractArticles(html) ?: return emptyList()
-        val now = Clock.System.now()
-
-        return articles.mapNotNull { element ->
-            runCatching { parseArticle(element, now, vehiclesOnly) }.getOrNull()
-        }
-    }
-
-    /**
-     * Rebuild the RSC payload from the `self.__next_f.push([1,"…"])` chunks and pull out the
-     * `articles` array. Each chunk body is a JSON-encoded string, so it is decoded by parsing it
-     * as one, which handles every escape the stream uses.
-     */
-    private fun extractArticles(html: String): JsonArray? = balancedArray(decodeChunks(html), ARTICLES_KEY)
-
-    /** The JSON array after the first [key] in [blob]. */
-    private fun balancedArray(blob: String, key: String): JsonArray? {
-        val start = blob.indexOf(key)
-        if (start < 0) return null
-        val arrayStart = start + key.length
-
-        // The payload is not valid JSON as a whole, so take the balanced array by hand.
-        var depth = 0
-        for (i in arrayStart until blob.length) {
-            when (blob[i]) {
-                '[' -> depth++
-                ']' -> {
-                    depth--
-                    if (depth == 0) {
-                        return runCatching {
-                            json.parseToJsonElement(blob.substring(arrayStart, i + 1)).jsonArray
-                        }.getOrNull()
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    /** Concatenate every `self.__next_f.push([1,"…"])` chunk body, escape-decoded. Scanned by hand,
-     *  not by regex: the bodies are ~1 MB and a backtracking string pattern overflows the stack. */
-    private fun decodeChunks(html: String): String {
-        val sb = StringBuilder()
-        var i = 0
-        while (true) {
-            val start = html.indexOf(CHUNK_MARKER, i)
-            if (start < 0) break
-            var j = start + CHUNK_MARKER.length
-            val body = StringBuilder()
-            while (j < html.length) {
-                val c = html[j]
-                if (c == '\\' && j + 1 < html.length) { body.append(c).append(html[j + 1]); j += 2; continue }
-                if (c == '"') break
-                body.append(c); j++
-            }
-            runCatching { json.parseToJsonElement("\"$body\"").jsonPrimitive.content }
-                .getOrNull()?.let { sb.append(it) }
-            i = j + 1
-        }
-        return sb.toString()
-    }
-
-    private fun parseArticle(element: JsonElement, scrapedAt: kotlin.time.Instant, vehiclesOnly: Boolean): Listing? {
-        val obj = element as? JsonObject ?: return null
-        val externalId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
-        val title = obj["title"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
-            ?: return null
-
-        // On a car query, a general marketplace answers with as many parts as vehicles (a Crafter
-        // search returns floor mats, a licence-plate light, a keychain). ricardo states the kind
-        // in productTypeKey, so drop anything it classifies as something other than a vehicle.
-        // A missing key is kept: unknown must not silently discard a real listing. Product searches
-        // pass through untouched — their productType (grinding_machine, …) is exactly what's wanted.
-        if (vehiclesOnly) {
-            val productType = obj["productTypeKey"]?.jsonPrimitive?.contentOrNull
-            if (productType != null && productType !in VEHICLE_PRODUCT_TYPES) return null
-        }
-
-        // Prices are whole Swiss francs. A buy-now price wins, because that is a price someone is
-        // asking; without one there is only the bid so far, which is not what the thing will cost.
-        // ricardo says which it is, so the listing carries it rather than the reader guessing.
-        val hasAuction = obj["hasAuction"]?.jsonPrimitive?.booleanOrNull ?: false
-        val hasBuyNow = obj["hasBuyNow"]?.jsonPrimitive?.booleanOrNull ?: false
-        val francs = obj["buyNowPrice"]?.jsonPrimitive?.longOrNull
-            ?: obj["bidPrice"]?.jsonPrimitive?.longOrNull
-            ?: return null
-        val saleType = if (hasAuction && !hasBuyNow) SaleType.AUCTION else SaleType.FIXED_PRICE
-        val endsAt = obj["endDate"]?.jsonPrimitive?.contentOrNull
-            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            ?.takeIf { saleType == SaleType.AUCTION }
-        val bids = obj["bidsCount"]?.jsonPrimitive?.intOrNull
-        if (francs <= 0) return null
-        val price = Money(francs * 100, Currency.CHF)
-
-        val imageUrl = obj["image"]?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("http") }
-
-        // Shipping carries the seller's town, the only location the search payload exposes.
-        val ship = obj["shipping"]?.jsonArray?.firstOrNull()?.jsonObject
-        val location = Location(
-            city = ship?.get("city")?.jsonPrimitive?.contentOrNull,
-            zip = ship?.get("zipCode")?.jsonPrimitive?.contentOrNull,
-            country = "CH",
-        )
-
-        val condition = VehicleCondition.parse(obj["conditionKey"]?.jsonPrimitive?.contentOrNull)
-        val vehicle = condition?.let {
-            VehicleTextParser.verifiedByPresence(VehicleInfo(condition = it))
-        }
-
-        return Listing(
-            id = "${platformId.name}:$externalId",
-            platformId = platformId,
-            externalId = externalId,
-            url = "https://www.ricardo.ch/de/a/$externalId/",
-            title = title,
-            price = price,
-            imageUrls = listOfNotNull(imageUrl),
-            location = location,
-            scrapedAt = scrapedAt,
-            vehicle = vehicle,
-            saleType = saleType,
-            auctionEndsAt = endsAt,
-            bidCount = bids,
-        )
-    }
-
     private companion object {
-        const val CHUNK_MARKER = "self.__next_f.push([1,\""
-        const val ARTICLES_KEY = "\"articles\":"
-        const val IMAGES_KEY = "\"images\":"
-
-        /** ricardo product types that are a whole vehicle. Everything else it classifies
-         *  (auto_part, car_mat, wheel, rim, trailer_coupling, keychain, ...) is an accessory. */
-        val VEHICLE_PRODUCT_TYPES = setOf(
-            "car", "commercial_vehicle", "truck", "caravan", "motorhome", "camper",
-            "van", "bus", "oldtimer",
-        )
+        /** ricardo's kinds that are a whole vehicle; everything else it files (auto_part, car_mat,
+         *  wheel, rim, trailer_coupling, keychain, ...) is an accessory. */
+        val VEHICLE_KINDS = setOf("car", "commercial_vehicle", "truck", "caravan", "motorhome", "camper", "van", "bus", "oldtimer")
     }
 }

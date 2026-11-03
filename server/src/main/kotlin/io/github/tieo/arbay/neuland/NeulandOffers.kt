@@ -28,13 +28,18 @@ object NeulandOffers {
      * [page] of the answer, inside the price band [min]..[max] where the site's search takes one.
      * Their condition is the site's words where it states one, otherwise [otherwise].
      */
-    suspend fun search(site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null, otherwise: Condition? = Condition.NEW): List<Listing> {
+    suspend fun search(
+        site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
+        otherwise: Condition? = Condition.NEW, kinds: Set<String>? = null,
+    ): List<Listing> {
         val band = listOfNotNull(min?.let { "&min_cents=${it.amount}" }, max?.let { "&max_cents=${it.amount}" }).joinToString("")
         val body = Neuland.offers("offers/search?site=$site&q=${words.encodeURLParameter()}&page=$page$band")
         val list = runCatching { json.decodeFromString(OfferList.serializer(), body) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", body, it as? Exception) }
         val now = Clock.System.now()
-        return list.offers.map { o ->
+        // Only the kinds asked for, where the site files its offers by kind; one it files nowhere stays.
+        return list.offers.filter { o -> kinds == null || o.kind == null || o.kind in kinds }.map { o ->
+            val auctionOnly = o.auction?.let { !it.buyNow } == true
             Listing(
                 id = "${platform.name}:${o.id}",
                 platformId = platform,
@@ -43,7 +48,9 @@ object NeulandOffers {
                 title = o.title,
                 price = o.price.money(),
                 oldPrice = o.asking?.money(),
-                saleType = SaleType.FIXED_PRICE,
+                saleType = if (auctionOnly) SaleType.AUCTION else SaleType.FIXED_PRICE,
+                auctionEndsAt = o.auction?.ends?.takeIf { auctionOnly }?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
+                bidCount = o.auction?.bids,
                 condition = o.condition?.let(Condition::parse) ?: otherwise,
                 imageUrls = listOfNotNull(o.image),
                 seller = o.account() ?: o.seller?.let { Seller(name = it) },
@@ -172,6 +179,8 @@ object NeulandOffers {
         val listedAt: kotlin.time.Instant? = null,
         /** How many reviews the seller's rating rests on, where the page says more than the card. */
         val sellerReviews: Int? = null,
+        /** Every photo of the gallery, largest copies. */
+        val photos: List<String> = emptyList(),
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -192,6 +201,7 @@ object NeulandOffers {
             available = read.available,
             listedAt = read.listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
             sellerReviews = read.sellerAccount?.reviews,
+            photos = read.photos,
         )
     }
 
@@ -217,6 +227,9 @@ object NeulandOffers {
         /** When it went up, RFC 3339. */
         val listed: String? = null,
         @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
+        val auction: NeulandAuction? = null,
+        /** What the site files it as, in its own key. */
+        val kind: String? = null,
     ) {
         /** The seller's account on the market; a private person's name is not kept. */
         fun account() = sellerAccount?.let {
@@ -268,6 +281,11 @@ object NeulandOffers {
         val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
         val place: NeulandPlace? = null, val available: Boolean? = null, val listed: String? = null,
         @kotlinx.serialization.SerialName("seller_account") val sellerAccount: NeulandAccount? = null,
+        val photos: List<String> = emptyList(),
+    )
+    @Serializable private data class NeulandAuction(
+        @kotlinx.serialization.SerialName("buy_now") val buyNow: Boolean = false,
+        val bid: NeulandMoney? = null, val bids: Int? = null, val ends: String? = null,
     )
     @Serializable private data class NeulandAccount(
         val id: String, val dealer: Boolean = false, val name: String? = null, val url: String? = null,
