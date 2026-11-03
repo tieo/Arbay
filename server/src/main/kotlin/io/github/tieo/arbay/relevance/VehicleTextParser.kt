@@ -357,11 +357,13 @@ object VehicleTextParser {
     }
 
     /** Fill a car listing's VehicleInfo from its own text, keeping any structured values a
-     *  crawler already set. Applied to car-search results so every platform is post-filterable. */
+     *  crawler already set, and take what the seller's words say over the form ([SellersWords]),
+     *  for every listing: a used floor sander at "650,00€ Netto zzgl. MwSt" costs 773.50 €, a
+     *  vehicle or not. Applied to search results so every platform is post-filterable. */
     fun enrich(listing: Listing): Listing {
         val fromText = parse("${listing.title} ${listing.description ?: ""}")
-        val merged = merge(listing.vehicle, fromText) ?: return listing
-        return SellersWords.apply(listing.copy(vehicle = merged))
+        val merged = merge(listing.vehicle, fromText)
+        return SellersWords.apply(if (merged != null) listing.copy(vehicle = merged) else listing)
     }
 
     /**

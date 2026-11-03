@@ -17,6 +17,10 @@ data class Listing(
     // [price] is then its cheapest: "EUR 95,30 a EUR 204,67" for a drive in 512 GB, 1 TB and 2 TB
     // titled "2TB". Which choice costs what only the ad's page says.
     val priceUpTo: Money? = null,
+    // The asking price as the ad states it where the ad calls it net, [price] then being the gross
+    // a private buyer pays: "650,00€ Netto zzgl. MwSt" is 773.50 €. Set once, so reading the ad's
+    // text again adds no VAT a second time.
+    val netPrice: Money? = null,
     val negotiable: Boolean = false,
     // How this is sold, when the market says. An auction's price is the bid so far, which is not
     // what the thing costs: a Crucial module alerted at €10.50 was €21.50 the next day and still

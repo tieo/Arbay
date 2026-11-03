@@ -387,7 +387,8 @@ private fun statedSale(listings: List<Listing>): List<Listing> = listings.map { 
 private fun asDelivered(listings: List<Listing>, query: SearchQuery): List<Listing> {
     val lat = query.userLat
     val lon = query.userLon
-    return statedSale(listings).map { l ->
+    return statedSale(listings).map { listing ->
+        val l = io.github.tieo.arbay.relevance.SellersWords.applyWithPageText(listing)
         val loc = l.location ?: return@map l
         val coords = if (loc.latitude != null && loc.longitude != null) loc.latitude!! to loc.longitude!!
             else Geocoder.resolve(loc.country, loc.zip, loc.city) ?: return@map l

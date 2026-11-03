@@ -49,6 +49,18 @@ Laufleistung: 297000"""
     }
 
     @Test
+    fun `a thing priced net gets the buyer's VAT once, however often its text is read`() {
+        // Kleinanzeigen Nordenstadt, live 2026-11-03: a rental firm's used floor sander.
+        val sander = van("2 Stk vorrätig !!! Kann auch einzeln erworben werden.\n\nPreis: 650,00€ Netto zzgl. MwSt !!!\n(Verhandlungsbasis)", euros = 650, km = null)
+            .copy(title = "Lägler Walzenschleifmaschine PROFIT *GEBRAUCHT*", vehicle = null)
+        val read = VehicleTextParser.enrich(sander)
+        assertEquals(773_50, read.price.amount)
+        assertEquals(650_00, read.netPrice?.amount)
+        assertEquals(773_50, VehicleTextParser.enrich(read).price.amount)
+        assertEquals(33_201_00, SellersWords.apply(SellersWords.apply(van("Preis Netto zzgl MwSt.", euros = 27_900, km = 92_000))).price.amount)
+    }
+
+    @Test
     fun `a price called net with no gross gets the buyer's VAT`() {
         // Kleinanzeigen Bassenheim, live 2026-10-24.
         val net = van("❗AHK 3.000 kg\n\n❗️Preis Netto zzgl MwSt.\n\nGerne nehmen wir ihre gebrauchten Nutzfahrzeuge in Zahlung.", euros = 27_900, km = 92_000)

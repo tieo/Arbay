@@ -343,7 +343,8 @@ class SavedSearchMonitor(
                 failed[platformId.name] = "no answer within 120 s"
                 continue
             }
-            val judged = RelevanceFilter.partition(results, query)
+            // The seller's words over the form: a price the ad calls net costs its VAT on top.
+            val judged = RelevanceFilter.partition(results.map(io.github.tieo.arbay.relevance.SellersWords::applyWithPageText), query)
             // Read by the offer judge as an opened search is, so a grigri bag charm that writes
             // the word wakes nobody about a belay device.
             OfferJudge.judge(judged.kept, product.searchQuery.positiveText).forEach { found[it.id] = it }

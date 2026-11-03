@@ -63,6 +63,14 @@ object SellersWords {
 
     private fun number(s: String) = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
 
+    /** [apply] over the ad's whole text where its page was read before, since a card's snippet
+     *  rarely reaches the price line; the listing keeps its own description. */
+    fun applyWithPageText(listing: Listing): Listing {
+        val page = io.github.tieo.arbay.markets.DetailCache.get(listing.id)?.description
+        if (page == null || page.length <= (listing.description?.length ?: 0)) return apply(listing)
+        return apply(listing.copy(description = page)).copy(description = listing.description)
+    }
+
     fun apply(listing: Listing): Listing {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
         return listing.withStatedPrice(text).withStatedMileage(text).withStatedGearbox(text).withGrossPrice(text)
@@ -114,7 +122,7 @@ object SellersWords {
      *  tax. A Bassenheim Crafter at 27,900 € said only "Preis Netto zzgl MwSt.", and cost 33,201 €;
      *  an Enkhuizen dealer's at 26,560 € said "prijzen zijn ex. BTW", and cost 32,138 €. */
     private fun Listing.withGrossPrice(text: String): Listing {
-        if (price.currency != Currency.EUR || !net.containsMatchIn(text)) return this
+        if (netPrice != null || price.currency != Currency.EUR || !net.containsMatchIn(text)) return this
         val settings = io.github.tieo.arbay.repo.ImportSettingsStore.current
         val home = settings.homeCountry.uppercase()
         val origin = originCountry(home).uppercase()
@@ -125,11 +133,11 @@ object SellersWords {
         }
         val asked = price.amount / 100
         val stated = gross.findAll(text).mapNotNull { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] }) }.toList()
-        stated.firstOrNull { it > asked && it <= asked * (1 + percent / 100) * 1.01 }?.let { return copy(price = Money(it * 100L, Currency.EUR)) }
+        stated.firstOrNull { it > asked && it <= asked * (1 + percent / 100) * 1.01 }?.let { return copy(price = Money(it * 100L, Currency.EUR), netPrice = price) }
         if (stated.isNotEmpty() || vatIncluded.containsMatchIn(text) || !priceCalledNet.containsMatchIn(text)) return this
         // A net amount below the asking price makes the asking price the gross.
         if (statedNet.findAll(text).any { m -> number(m.groupValues[1].ifEmpty { m.groupValues[2] })?.let { it < asked } == true }) return this
         if (!settings.enabled) return this
-        return copy(price = Money(price.amount + Math.round(price.amount * percent / 100), Currency.EUR))
+        return copy(price = Money(price.amount + Math.round(price.amount * percent / 100), Currency.EUR), netPrice = price)
     }
 }
