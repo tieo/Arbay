@@ -76,9 +76,9 @@ class EbayDeCrawler(
      * widening pause before it is taken as refused. The browser is free to other pages in the
      * pauses. Null where it is refused, which leaves the caller its other tiers.
      */
-    private suspend fun ebayPage(url: String, markers: List<String>, signedIn: Boolean = false): String? {
+    private suspend fun ebayPage(url: String, markers: List<String>, signedIn: Boolean = false, unanswered: () -> Unit = {}): String? {
         for (pause in REFUSED_PAUSES_MS + 0L) {
-            val page = (if (signedIn) accountPage(url, markers) else EbayBrowser.get(url, markers)) ?: return null
+            val page = (if (signedIn) accountPage(url, markers) else EbayBrowser.get(url, markers)) ?: return null.also { unanswered() }
             if (page.page == "content") return page.html
             log.info("{}: Chrome got {} for {}", domain, page.page, url)
             if (page.page != "errorpage" || pause == 0L) return null
@@ -110,9 +110,9 @@ class EbayDeCrawler(
      * wants or a page comes back short, then its sold page where asked. Null where the first page
      * was refused.
      */
-    private suspend fun browserSearch(query: SearchQuery): List<Listing>? {
+    private suspend fun browserSearch(query: SearchQuery, unanswered: () -> Unit = {}): List<Listing>? {
         // Sold listings show only to a signed-in browser, which is the user's own.
-        val first = ebayPage(buildSearchUrl(query, 1), SEARCH_MARKERS, signedIn = query.soldOnly) ?: return null
+        val first = ebayPage(buildSearchUrl(query, 1), SEARCH_MARKERS, signedIn = query.soldOnly, unanswered) ?: return null
         val seenIds = mutableSetOf<String>()
         // A search for sold offers asks eBay for its sold listings from the first page on.
         fun read(html: String) = parseSearchResults(html).map { if (query.soldOnly) it.copy(sold = true) else it }
@@ -165,7 +165,9 @@ class EbayDeCrawler(
 
         // The Chrome eBay lets through reads the search; the tiers below are left for when it cannot.
         emitter?.emit("Chrome")
-        browserSearch(query)?.let { return it }
+        // Neuland not answering at all (restarting for a deploy) is no word from eBay.
+        var neulandSilent = false
+        browserSearch(query) { neulandSilent = true }?.let { return it }
 
         // eBay refuses its search to the plain and the TLS-impersonating client alike, every search
         // on ebay.de, and a refusal counts against this address as much as a burst does. After
@@ -252,6 +254,10 @@ class EbayDeCrawler(
 
         // The Chrome eBay lets through was asked first, at the top: a refusal there and from both
         // plain tiers leaves nothing else to ask.
+        // Where Neuland gave no answer, eBay refused nothing, and a block's cooldown would keep
+        // asking it off for twenty minutes after Neuland is back: 2026-11-03, when Neuland restarted
+        // for a deploy, every eBay site went on a block cooldown.
+        if (neulandSilent) throw CrawlerBlockedException("eBay: Neuland did not answer, and both plain tiers were refused", ErrorType.NETWORK_ERROR, url = firstUrl)
         throw CrawlerBlockedException("eBay: refused to the Chrome and to both plain tiers", ErrorType.BLOCKED_403, url = firstUrl)
     }
 
