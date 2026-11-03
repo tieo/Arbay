@@ -56,7 +56,8 @@ fun priceSummary(offers: List<Listing>, sold: List<Listing> = emptyList()): Pric
             spread[bucket]++
         }
     }
-    val soldAmounts = sold.map { it.displayAmount() }.sorted()
+    // A sale to an accepted offer went for less than the price it shows, by an amount nobody sees.
+    val soldAmounts = sold.filter { !it.soldToOffer }.map { it.displayAmount() }.sorted()
     return PriceSummary(
         count = amounts.size,
         cheapest = low?.let { Money(it, currency) },

@@ -122,6 +122,20 @@ class NarrowingTest {
     }
 
     @Test
+    fun `a sale to an accepted offer is no sold price, since what was paid is not shown`() {
+        val sold = listOf(
+            listing("paid", 300, sold = true),
+            listing("haggled", 900, sold = true).copy(soldToOffer = true),
+            listing("haggled too", 950, sold = true).copy(soldToOffer = true),
+            listing("paid too", 310, sold = true),
+            listing("paid as well", 320, sold = true),
+        )
+        val summary = io.github.tieo.arbay.results.priceSummary(emptyList(), sold)
+        assertEquals(31_000, summary.sold?.middle?.amount)
+        assertEquals(3, summary.sold?.count)
+    }
+
+    @Test
     fun `a broken one is not the cheapest offer of the thing`() {
         val offers = listOf(listing("broken", 50, Condition.PARTS_ONLY), listing("working", 55, Condition.USED))
         val summary = io.github.tieo.arbay.results.priceSummary(offers)

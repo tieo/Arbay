@@ -97,6 +97,7 @@ object NeulandOffers {
                 price = o.price.money(),
                 priceUpTo = o.priceUpTo?.money(),
                 sold = o.sold,
+                soldToOffer = o.offerAccepted,
                 soldDate = o.ended?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
                 oldPrice = o.asking?.money(),
                 negotiable = o.negotiable,
@@ -288,6 +289,7 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("price_up_to") val priceUpTo: NeulandMoney? = null,
         val sold: Boolean = false,
         val ended: String? = null,
+        @kotlinx.serialization.SerialName("offer_accepted") val offerAccepted: Boolean = false,
     ) {
         /** The seller's account on the market; a private person's name is not kept. */
         fun account() = sellerAccount?.let {

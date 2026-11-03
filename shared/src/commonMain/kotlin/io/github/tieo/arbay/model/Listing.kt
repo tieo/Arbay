@@ -46,6 +46,9 @@ data class Listing(
     val listingDate: Instant? = null,
     val soldDate: Instant? = null,
     val sold: Boolean = false,
+    /** Sold to an offer the seller accepted below [price], which then is what was asked; the
+     *  market does not show what was paid. */
+    val soldToOffer: Boolean = false,
     val gtin: String? = null,
     val mpn: String? = null,
     val scrapedAt: Instant,
