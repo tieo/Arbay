@@ -76,11 +76,11 @@ object Chat {
     private var settings: ChatSettings
 
     /** The markets whose session a browser of Arbay's own holds. */
-    val sidecars: Map<PlatformId, MarketSidecar> = listOf(WillhabenChatBrowser, VintedChatBrowser).associateBy { it.market }
+    val sidecars: Map<PlatformId, MarketSidecar> = listOf(VintedChatBrowser).associateBy { it.market }
 
     /** The markets whose account Neuland's account browser holds, by the site Neuland Sign signs
      *  it in to; one eBay account answers for every eBay site. */
-    private val neulandSites = mapOf(PlatformId.KLEINANZEIGEN to Kleinanzeigen.SITE, PlatformId.EBAY_DE to "ebay.de")
+    private val neulandSites = mapOf(PlatformId.KLEINANZEIGEN to Kleinanzeigen.SITE, PlatformId.EBAY_DE to "ebay.de", PlatformId.WILLHABEN to "willhaben.at")
 
     /** The Neuland site of [market]'s account, where Neuland holds it. */
     fun neulandSite(market: PlatformId): String? = neulandSites[if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market]
