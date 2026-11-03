@@ -339,6 +339,11 @@ class WebMarketTest {
         assertFalse(ProductPages.sellsSomething("<html id=\"XenForo\"><body><h1>Urinal-Deckel: Scharnier befestigen</h1><p>Da musst du vermutlich in den 90€ teuren Apfel beißen. Nicht ohne Grund kaufen viele neu.</p></body></html>"))
         // techtest.org's review, an article by its OpenGraph type alone.
         assertFalse(ProductPages.sellsSomething("<html><head><meta property=\"og:type\" content=\"article\"></head><body><h1>3x 18TB HDDs im Vergleich</h1><p>So kostet die Red Pro ca. 490€.</p><a>418,30 € bei Amazon kaufen</a></body></html>"))
+        // ssd-tester.de's benchmark table: an Amazon price and a sponsored link beside each drive.
+        assertFalse(ProductPages.sellsSomething("""<body><h1>M2 SSD Benchmark &amp; Performance Tests</h1><table><tr><td><a href="/wd_sn8100_2tb.html">WD_BLACK SN8100 2TB</a></td><td>14728 MB/s</td><td>430&nbsp;<small>€</small></td>
+            <td><a href="https://www.amazon.de/gp/product/B0D/?tag=ssd-tester-21" rel="sponsored nofollow noopener" title="Produkt kaufen">kaufen</a></td></tr></table></body>"""))
+        // A shop with a basket of its own still sells beside a sponsored link.
+        assertTrue(ProductPages.sellsSomething("""<body><a>Warenkorb</a><h1>WD_BLACK SN8100 2TB</h1><p>430,00 €</p><button>In den Warenkorb</button><a href="https://partner.example/" rel="sponsored">Anzeige</a></body>"""))
         // bergfreunde.de's GriGri+, sold out: its one variant at price 0, OutOfStock.
         assertFalse(ProductPages.sellsSomething("""<script type="application/ld+json">{"@type":"ProductGroup","name":"Petzl GriGri+","hasVariant":[{"@type":"Product","name":"Petzl GriGri+","offers":{"@type":"Offer","price":0,"priceCurrency":"EUR","availability":"https://schema.org/OutOfStock"}}]}</script><body><h1>Petzl GriGri+</h1><p>Sonst 109,95 €</p><button>In den Warenkorb</button></body>"""))
         // matthiashaltenhof.de's camera test states the camera as a reviewed Product, offering nothing.

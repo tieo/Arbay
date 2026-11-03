@@ -69,7 +69,7 @@ object ProductPages {
      */
     fun sellsSomething(html: String): Boolean {
         val doc = Jsoup.parse(html)
-        if (isArticle(doc) || isForum(doc) || isComparison(doc) || soldOut(doc)) return false
+        if (isArticle(doc) || isForum(doc) || isComparison(doc) || sendsBuyersElsewhere(doc) || soldOut(doc)) return false
         // A popup's amounts are not the page's own: delicious-aqua.de sells on request only, and
         // its closed savings calculator dialog named "Anlagenpreis (einmalig) 2.499 €".
         doc.select("dialog, [aria-modal=true]").remove()
@@ -168,6 +168,19 @@ object ProductPages {
         val named = listOfNotNull(doc.title(), doc.selectFirst("h1")?.text())
         return named.any { COMPARED.containsMatchIn(it) }
     }
+
+    /**
+     * Whether every way to buy on the page is a paid link to another shop, marked as one
+     * (`rel="sponsored"`, as search engines ask of affiliate links), with no basket of the page's
+     * own and no offer in its structured data: ssd-tester.de's benchmark table quotes an Amazon
+     * price beside each of its 500 drives and sells none of them.
+     */
+    private fun sendsBuyersElsewhere(doc: Document): Boolean {
+        if (statedOffers(doc).isNotEmpty() || doc.selectFirst("a[rel~=sponsored]") == null) return false
+        return !OWN_BASKET.containsMatchIn(doc.body()?.text()?.lowercase().orEmpty())
+    }
+
+    private val OWN_BASKET = Regex("""warenkorb|in den korb|zur kasse|add to (cart|basket)|\bcheckout\b|panier|carrello|carrito|winkelwagen""")
 
     private val COMPARED = Regex("""\S\s+(vs\.?|versus)\s+\S""", RegexOption.IGNORE_CASE)
 
