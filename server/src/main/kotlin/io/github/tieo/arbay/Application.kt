@@ -78,6 +78,8 @@ fun Application.module() {
             }
         }
     }
+    // Bids set up on auctions are placed in each auction's last seconds.
+    launch { io.github.tieo.arbay.chat.AuctionBids.run() }
     // Start background monitor if tracking was previously enabled
     if (FreeItemProfileStore.get()?.trackingEnabled == true) {
         FreeItemMonitor.start()

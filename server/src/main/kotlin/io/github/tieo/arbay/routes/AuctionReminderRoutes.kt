@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.routes
 
+import io.github.tieo.arbay.chat.AuctionBids
+import io.github.tieo.arbay.model.AuctionBidRequest
 import io.github.tieo.arbay.model.AuctionReminder
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.repo.AuctionReminderStore
@@ -18,6 +20,35 @@ fun Route.auctionReminderRoutes() {
             val id = call.parameters["listingId"] ?: throw BadRequestException("Missing listingId")
             AuctionReminderStore.remove(id)
             call.respond(HttpStatusCode.OK, mapOf("ok" to true))
+        }
+    }
+}
+
+/** Bids Arbay places in an auction's last seconds, held here because they are placed whether or
+ *  not the app is open. `POST /try` reads eBay's review of a bid without placing it. */
+fun Route.auctionBidRoutes() {
+    route("/api/auctions/bids") {
+        get { call.respond(AuctionBids.all()) }
+        post {
+            val request = call.receive<AuctionBidRequest>()
+            val bid = runCatching { AuctionBids.ask(request) }.getOrElse { throw BadRequestException(it.message ?: "no bid") }
+            call.respond(bid)
+        }
+        post("/try") {
+            val request = call.receive<AuctionBidRequest>()
+            val max = AuctionBids.maxCents(request.allInEur, request.shippingEur) ?: throw BadRequestException("nothing is left to bid after shipping")
+            val review = try {
+                AuctionBids.review(request.url, max / 100.0, request.allInEur)
+            } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
+                throw BadRequestException("eBay's bid form: ${e.message}")
+            } catch (e: IllegalArgumentException) {
+                throw BadRequestException(e.message ?: "no look now")
+            }
+            call.respond(review)
+        }
+        delete("/{listingId}") {
+            val id = call.parameters["listingId"] ?: throw BadRequestException("Missing listingId")
+            call.respond(mapOf("cancelled" to AuctionBids.cancel(id)))
         }
     }
 }

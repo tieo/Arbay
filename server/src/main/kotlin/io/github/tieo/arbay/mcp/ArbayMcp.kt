@@ -867,6 +867,42 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             },
         ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true) }
 
+        tool(
+            "try_bid",
+            "Read eBay's own review of a bid on an eBay.de auction without placing it, signed in to the user's eBay account: the bid " +
+                "so far, the least eBay takes next, the bid as eBay reads it back, shipping and the total. Places nothing.",
+            props = {
+                string("listing_id", "An eBay.de auction id from search", required = true)
+                number("all_in_eur", "Most the user pays, shipping included, in euros (160.00 for 160 €)", required = true)
+            },
+        ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = false) }
+
+        tool(
+            "bid_at_end",
+            "Bid on an eBay.de auction in its last seconds, as the user approved: up to the all-in limit less the auction's " +
+                "shipping. One bid stands at a time; a bid whose turn comes while another stands is skipped. Neuland confirms it " +
+                "only while eBay's review reads back the bid and totals no more than the limit.",
+            destructive = true,
+            props = {
+                string("listing_id", "An eBay.de auction id from search", required = true)
+                number("all_in_eur", "Most the user pays, shipping included, in euros (160.00 for 160 €)", required = true)
+            },
+        ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = true) }
+
+        tool("auction_bids", "The bids set up on auctions: waiting for the end, placed, ended, skipped or not placed, and why.") {
+            getJson<List<io.github.tieo.arbay.model.AuctionBid>>("/api/auctions/bids").joinToString("\n") { it.describe() }.ifEmpty { "No bids." }
+        }
+
+        tool(
+            "cancel_bid",
+            "Take back a bid on an auction that is still waiting for the auction's end; a bid placed stands.",
+            destructive = true,
+            props = { string("listing_id", "The auction", required = true) },
+        ) { args ->
+            val r = http.delete("$base/api/auctions/bids/${args.str("listing_id")!!.encodeURLPathPart()}")
+            if (r.bodyAsText().contains("true")) "Cancelled." else "Nothing waiting to cancel."
+        }
+
         // ── Selling ──
 
         tool("ads_for_sale", "The user's ads for sale on Kleinanzeigen: drafts not posted yet, and the ones posted.") {
@@ -1105,6 +1141,25 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         return json.decodeFromString(io.github.tieo.arbay.model.Purchase.serializer(), r.bodyAsText()).describe()
     }
 
+    /** eBay's review of a bid on auction [id] within [allInEur], or the bid set up for its end with [place]. */
+    private suspend fun auctionBid(id: String, allInEur: Double, place: Boolean): String {
+        val l = offer(id) ?: return "Unknown offer; search first."
+        if (l.platformId != io.github.tieo.arbay.model.PlatformId.EBAY_DE) return "Arbay bids on eBay.de only; this offer is on ${l.platformId.displayName}."
+        if (l.saleType != io.github.tieo.arbay.model.SaleType.AUCTION) return "This offer is no auction."
+        val ends = l.auctionEndsAt ?: return "The auction's end is not known; read it again."
+        val shipping = l.shipping?.let { if (it.free) io.github.tieo.arbay.model.Money(0, it.cost?.currency ?: io.github.tieo.arbay.model.Currency.EUR) else it.cost }
+            ?: return "The auction's shipping is not known; a bid needs it to stay within the limit."
+        if (shipping.currency != io.github.tieo.arbay.model.Currency.EUR) return "The auction ships for ${shipping.currency}, not euros."
+        val request = io.github.tieo.arbay.model.AuctionBidRequest(l.id, l.url, l.title, ends, shipping.amount / 100.0, allInEur)
+        val r = http.post("$base/api/auctions/bids${if (place) "" else "/try"}") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(io.github.tieo.arbay.model.AuctionBidRequest.serializer(), request))
+        }
+        if (!r.status.isSuccess()) return "${if (place) "No bid set up" else "Could not read the bid form"}: ${r.bodyAsText()}"
+        return if (place) json.decodeFromString(io.github.tieo.arbay.model.AuctionBid.serializer(), r.bodyAsText()).describe()
+        else json.decodeFromString(io.github.tieo.arbay.model.BidReview.serializer(), r.bodyAsText()).describe()
+    }
+
     private suspend fun hiddenOffers(): Set<String> =
         ((getJsonElement("/api/state") as? JsonObject)?.get("hiddenOffers") as? JsonArray).orEmpty().mapNotNull { it.jsonPrimitive.contentOrNull }.toSet()
 
@@ -1141,11 +1196,29 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     ) = textTool(name, description, destructive, readOnly = !destructive && name.startsWith("list") || name in READ_ONLY, props, run)
 
     private companion object {
-        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout", "try_bid", "auction_bids")
     }
 }
 
 /** A Vinted checkout in words: what it adds up to, and whether it was paid or why not. */
+internal fun io.github.tieo.arbay.model.AuctionBid.describe(): String =
+    "$state · $title · up to $maxEur € + $shippingEur € shipping = $allInEur € all in · ends $endsAt · $url" +
+        (problem?.let { " · $it" } ?: "") + (outcome?.let { " · eBay: ${it.replace(Regex("\\s+"), " ").take(300)}" } ?: "")
+
+internal fun io.github.tieo.arbay.model.BidReview.describe(): String = when {
+    !biddable -> "The item page shows no bid button: no auction, or ended."
+    else -> listOfNotNull(
+        currentEur?.let { "bid so far $it €" + (bids?.let { b -> " ($b bids)" } ?: "") },
+        leastEur?.let { "eBay takes $it € or more" },
+        maxEur?.let { "eBay reads the bid as $it €" },
+        shippingEur?.let { "shipping $it €" },
+        totalEur?.let { "total at most about $it €" },
+        if (placed) "PLACED" + (standing?.let { st -> if (st) ", listed among the running bids" else ", NOT listed among the running bids" } ?: "") else "not placed",
+        problem?.let { "stopped: $it" },
+        outcome?.let { "eBay: ${it.replace(Regex("\\s+"), " ").take(300)}" },
+    ).joinToString(" · ")
+}
+
 internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
     !buyable -> "Vinted no longer offers to buy it."
     else -> listOfNotNull(

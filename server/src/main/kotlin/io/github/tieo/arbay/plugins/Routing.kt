@@ -5,6 +5,7 @@ import io.github.tieo.arbay.monitoring.SavedSearchMonitor
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
 import io.github.tieo.arbay.routes.archiveRoutes
+import io.github.tieo.arbay.routes.auctionBidRoutes
 import io.github.tieo.arbay.routes.crawlerRoutes
 import io.github.tieo.arbay.routes.freeItemRoutes
 import io.github.tieo.arbay.routes.auctionReminderRoutes
@@ -48,6 +49,7 @@ fun Application.configureRouting() {
         archiveRoutes()
         importSettingsRoutes()
         auctionReminderRoutes()
+        auctionBidRoutes()
         chatRoutes()
         accountRoutes()
         sellingRoutes()
