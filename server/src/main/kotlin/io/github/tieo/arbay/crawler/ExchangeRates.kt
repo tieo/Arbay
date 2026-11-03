@@ -1,23 +1,16 @@
 package io.github.tieo.arbay.crawler
 
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
+import io.github.tieo.arbay.neuland.Neuland
+import io.ktor.http.HttpMethod
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
-@Serializable
-data class ExchangeRateResponse(
-    val rates: Map<String, Double>,
-    val base: String = "EUR",
-)
-
+/** Euro rates of the currencies the markets ask in, as Neuland reads them (units per euro). */
 object ExchangeRates {
     private val log = LoggerFactory.getLogger(ExchangeRates::class.java)
-    private val json = Json { ignoreUnknownKeys = true }
-    private val client = HttpClient()
 
     private val SUPPORTED = setOf("EUR", "USD", "GBP", "CHF", "PLN", "DKK", "SEK", "CZK", "NOK", "RSD")
 
@@ -28,10 +21,9 @@ object ExchangeRates {
 
     suspend fun refresh() {
         try {
-            val response: String = client.get("https://open.er-api.com/v6/latest/EUR").body()
-            val parsed = json.parseToJsonElement(response).jsonObject
-            val fetchedRates = parsed["rates"]?.jsonObject?.mapValues { it.value.jsonPrimitive.double } ?: return
-            rates = fetchedRates.filterKeys { it in SUPPORTED } + ("EUR" to 1.0)
+            val fetched = Neuland.request(HttpMethod.Get, "rates", limitS = 60).jsonObject["rates"]?.jsonObject
+                ?.mapValues { it.value.jsonPrimitive.double } ?: return
+            rates = fetched.filterKeys { it in SUPPORTED } + ("EUR" to 1.0)
             lastUpdate = System.currentTimeMillis()
             log.info("Exchange rates updated: {}", rates)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
