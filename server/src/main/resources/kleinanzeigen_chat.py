@@ -33,7 +33,6 @@ Protocol: one JSON object per line on stdin, one JSON answer per line on stdout,
   {"op": "reply", "id": "..", "text": ".."}         -> {"ok": true, "answer": <the gateway's answer to the post>}
   {"op": "read", "id": ".."}                        -> {"ok": true}
   {"op": "contact", "adId": "..", "text": ".."}     -> {"ok": true, "conversationId": "..", "requests": [...]}; failing, "detail" holds the page
-  {"op": "contact_preview", "adId": ".."}           -> {"ok": true, "field": bool, "send": [labels], "picture": ..}; types and sends nothing
   {"op": "shipping_options", "adId": ".."}          -> {"ok": true, "data": <gateway payload>}; the ways the ad ships through "Sicher bezahlen", priced as at payment
   {"op": "post_ad", "categoryId": "173", "title": "..", "description": "..", "attributes": {"Marke": "Google", "Zustand": "Gut"},
    "priceType": "VB", "price": 449, "shipping": true, "buyNow": true, "photos": [paths], "send": false}
@@ -546,16 +545,6 @@ class Chat:
         except Exception as e:
             detail["unreadable"] = str(e)
         return detail
-
-    async def contact_preview(self, ad_id: str) -> dict:
-        """Everything up to the message, nothing typed or sent: does the ad page show its message field?"""
-        await self.session()
-        field = await self.open_contact(ad_id)
-        sends = await self.visible(self.CONTACT_SEND)
-        detail = await self.page_detail()
-        await self.tab.get(ROOT + "/")
-        return {"ok": True, "field": field is not None, "send": [ (e.text_all or "").strip() for e, _ in sends ],
-                "picture": detail.get("picture"), "url": detail.get("url")}
 
     async def contact(self, ad_id: str, text: str) -> dict:
         """The first message about an ad, written into the ad page's own message dialog and sent with
@@ -1104,8 +1093,6 @@ async def handle(chat: Chat, req: dict) -> dict:
         return await chat.reply(req["id"], req["text"])
     if op == "read":
         return await chat.read(req["id"])
-    if op == "contact_preview":
-        return await chat.contact_preview(str(req["adId"]))
     if op == "shipping_options":
         return await chat.shipping_options(str(req["adId"]))
     if op == "offer":

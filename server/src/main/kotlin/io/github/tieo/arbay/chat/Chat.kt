@@ -191,18 +191,6 @@ object Chat {
         return signedIn
     }
 
-    /**
-     * Signs [market]'s browser in with the cookies of a session the user already has in a browser of
-     * their own, handed over whole; no password passes. The account as it then stands.
-     */
-    suspend fun takeSession(market: PlatformId, cookies: JsonArray): ChatAccount {
-        val sidecar = sidecarFor(market)
-        sidecar.call("set_cookies", 90_000, "cookies" to cookies)
-        signingIn -= sidecar.market
-        Live.changed(LiveKind.CHAT)
-        return account(market)
-    }
-
     /** Opens [market]'s sign-in page, or with [payment] the sign-in page of the payment service its checkout uses. */
     suspend fun beginSignIn(market: PlatformId = PlatformId.KLEINANZEIGEN, payment: Boolean = false): SignInStep {
         val sidecar = sidecarFor(market)
@@ -467,9 +455,6 @@ object Chat {
     /** Sends [price] as a price offer, refused before sending if the payment would pass [allInEur]. */
     suspend fun sendOffer(id: String, price: Double, allInEur: Double): PriceOffer =
         offerDialog(id, price, allInEur, send = true)
-
-    /** Opens an ad's message dialog without typing or sending, to see that it is there. */
-    suspend fun contactPreview(adId: String): JsonObject = ChatBrowser.call("contact_preview", 90_000, "adId" to adId)
 
     /** Old finished entries go; what is waiting or failed stays until it's dealt with. */
     private fun trimOutbox() {

@@ -43,13 +43,6 @@ fun Route.chatRoutes() {
         get("/signin") { call.chat { call.respond(Chat.signInStep(call.market())) } }
         post("/signin/input") { call.chat { call.respond(Chat.signInWith(call.receive<SignInInput>(), call.market())) } }
         post("/signin/cancel") { call.chat { call.respond(Chat.cancelSignIn(call.market())) } }
-        // A session the user already has elsewhere, its cookies handed over whole: name, value,
-        // domain, path, secure, httpOnly and expires (seconds since 1970) each.
-        post("/session") {
-            val cookies = call.receive<kotlinx.serialization.json.JsonArray>()
-            if (cookies.isEmpty()) throw BadRequestException("No cookies")
-            call.chat { call.respond(Chat.takeSession(call.market(), cookies)) }
-        }
         // Signing in on the site's own pages, shown inside the app through the proxy. The session cookie
         // is only sent to the proxy's paths, so the browser holds an id and nothing of the site's.
         post("/signin/proxy") {
@@ -125,11 +118,6 @@ fun Route.chatRoutes() {
 
         get("/review") { call.chat { call.respond(Chat.review()) } }
         get("/settings") { call.respond(Chat.settings()) }
-        // The message dialog of one ad, opened and looked at; nothing is typed or sent.
-        get("/contact-preview") {
-            val adId = call.queryParameters["adId"]?.takeIf { it.all(Char::isDigit) } ?: throw BadRequestException("adId")
-            call.chat { call.respond(Chat.contactPreview(adId)) }
-        }
         get("/costs") { call.respond(io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()) }
         put("/settings") { call.respond(Chat.updateSettings(call.receive<ChatSettings>())) }
     }
