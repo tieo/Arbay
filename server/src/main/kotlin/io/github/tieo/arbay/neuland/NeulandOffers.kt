@@ -53,6 +53,64 @@ object NeulandOffers {
         }
     }
 
+    /**
+     * The cars or vans [site] (a domain) offers for [words] and [vehicle]'s conditions, as listings
+     * of [platform]: page [page], inside the price band [min]..[max] where the site's search takes
+     * one, each with its place, the seller's words, and what its card shows about the vehicle, read
+     * by [VehicleTextParser].
+     */
+    suspend fun searchVehicles(
+        site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
+        page: Int = 1, min: Money? = null, max: Money? = null,
+    ): List<Listing> {
+        val request = kotlinx.serialization.json.buildJsonObject {
+            put("site", kotlinx.serialization.json.JsonPrimitive(site))
+            put("words", kotlinx.serialization.json.JsonPrimitive(words))
+            put("page", kotlinx.serialization.json.JsonPrimitive(page))
+            min?.let { put("minCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
+            max?.let { put("maxCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
+            put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), vehicle))
+        }
+        val answer = try {
+            Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
+        } catch (e: Neuland.Refusal) {
+            throw io.github.tieo.arbay.crawler.CrawlerBlockedException("$siteName: ${e.message}", io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR)
+        }
+        val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
+            .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", answer.toString(), it as? Exception) }
+        val now = Clock.System.now()
+        return list.offers.map { o ->
+            Listing(
+                id = "${platform.name}:${o.id}",
+                platformId = platform,
+                externalId = o.id,
+                url = o.url,
+                title = o.title,
+                price = o.price.money(),
+                imageUrls = listOfNotNull(o.image),
+                location = o.place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) },
+                description = o.description,
+                scrapedAt = now,
+                vehicle = o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
+            )
+        }
+    }
+
+    private val vehicleJson = Json { encodeDefaults = false; explicitNulls = false }
+
+    /** A car or van search's conditions as Neuland's search takes them; a field not given is not asked. */
+    @Serializable
+    data class VehicleQuery(
+        val make: String? = null,
+        val model: String? = null,
+        /** "manual" or "automatic". */
+        val gearbox: String? = null,
+        @kotlinx.serialization.SerialName("registered_from") val registeredFrom: Int? = null,
+        @kotlinx.serialization.SerialName("registered_to") val registeredTo: Int? = null,
+        @kotlinx.serialization.SerialName("mileage_max_km") val mileageMaxKm: Int? = null,
+        @kotlinx.serialization.SerialName("power_min_kw") val powerMinKw: Int? = null,
+    )
+
     /** Every seller of the offer at [url], cheapest delivered first; none where the site lists none. */
     suspend fun sellers(url: String): List<SellerOffer> =
         json.decodeFromString(ListSerializer(NeulandSeller.serializer()), Neuland.offers("offers/sellers?url=${url.encodeURLParameter()}"))
@@ -69,6 +127,9 @@ object NeulandOffers {
         val id: String, val title: String, val url: String, val image: String? = null,
         val price: NeulandMoney, val shipping: NeulandMoney? = null, val seller: String? = null,
         val condition: String? = null, val asking: NeulandMoney? = null,
+        val place: NeulandPlace? = null, val description: String? = null,
+        @kotlinx.serialization.SerialName("card_text") val cardText: String? = null,
     )
+    @Serializable private data class NeulandPlace(val town: String? = null, val postcode: String? = null, val country: String? = null)
     @Serializable private data class OfferList(val offers: List<NeulandOffer>)
 }

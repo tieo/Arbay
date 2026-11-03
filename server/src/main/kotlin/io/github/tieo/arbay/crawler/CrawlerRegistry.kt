@@ -41,7 +41,7 @@ object CrawlerRegistry {
         PlatformId.TRUCKSCOUT24 to TruckScout24Crawler(httpClient),
         PlatformId.OTOMOTO to OtomotoCrawler(httpClient),
         PlatformId.DBA to DbaCrawler(httpClient),
-        PlatformId.BILBASEN to BilbasenCrawler(httpClient),
+        PlatformId.BILBASEN to BilbasenCrawler(),
         PlatformId.BYTBIL to BytbilCrawler(httpClient),
         PlatformId.SAUTO to SautoCrawler(httpClient),
         PlatformId.RICARDO to RicardoCrawler(httpClient),
