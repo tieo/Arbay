@@ -161,16 +161,19 @@ class WebCrawler : Crawler {
     private suspend fun read(url: String, words: String, renders: java.util.concurrent.atomic.AtomicInteger? = null): Page {
         val domain = SiteRecipes.domainOf(url)
         val givenUp = SiteGaps.isGivenUp(domain)
-        val render = !givenUp && (renders == null || renders.get() > 0)
+        // A re-read in the browser is taken from the search's budget before asking, and given back
+        // where the page did not need it, so pages read at once cannot all take the last one.
+        val render = !givenUp && (renders == null || renders.getAndDecrement() > 0)
         val page = try {
             json.decodeFromJsonElement(ShopPage.serializer(), io.github.tieo.arbay.neuland.Neuland.request(
                 io.ktor.http.HttpMethod.Get, "shops/page?url=${url.encodeUrl()}&render=$render", limitS = PAGE_TIMEOUT_MS / 1000,
             ))
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            if (render) renders?.incrementAndGet()
             log.debug("Web: {} not read: {}", url, e.message?.take(80))
             return Page(Outcome.BLOCKED)
         }
-        if (page.readAgain) renders?.decrementAndGet()
+        if (render && !page.readAgain) renders?.incrementAndGet()
         return when (page.outcome) {
             "offers" -> Page(Outcome.OFFERS, page.offers)
             "nothing-sold" -> Page(Outcome.NOTHING_SOLD)
