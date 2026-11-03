@@ -125,27 +125,6 @@ class CrawlerParserProbe {
     }
 
     @Test
-    fun testAutoScout24Parser() = runBlocking {
-        val file = File("/tmp/autoscout.html")
-        if (!file.exists()) {
-            println("SKIP: /tmp/autoscout.html not found")
-            return@runBlocking
-        }
-        val client = mockClientFrom("/tmp/autoscout.html")
-        val crawler = AutoScout24Crawler(client)
-        val carQuery = SearchQuery(text = "BMW 320d", category = MarketGroup.VEHICLES)
-        val results = crawler.search(carQuery)
-        println("AutoScout24 parsed: ${results.size} results")
-        assertTrue(results.isNotEmpty(), "AutoScout24 parser should find results")
-        results.take(3).forEach {
-            println("  [${it.platformId}] ${it.title} — ${it.price.amount / 100}€ — ${it.url}")
-            assertEquals(PlatformId.AUTOSCOUT24, it.platformId)
-            assertTrue(it.title.isNotBlank())
-            assertTrue(it.price.amount > 0)
-        }
-    }
-
-    @Test
     fun testRefurbedParser() = runBlocking {
         val file = File("/tmp/refurbed.html")
         if (!file.exists()) {

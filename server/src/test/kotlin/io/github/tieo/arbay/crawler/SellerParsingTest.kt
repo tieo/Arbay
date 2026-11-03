@@ -20,26 +20,6 @@ class SellerParsingTest {
         requireNotNull(javaClass.getResourceAsStream("/fixtures/$name")).bufferedReader().readText()
 
     @Test
-    fun `AutoScout24 names a dealer by its account number, company name and page`() {
-        val listings = AutoScout24Crawler(offlineClient()).parseFromNextData(fixture("autoscout24_sellers.html"))!!
-        val dealer = listings.first { it.externalId.startsWith("aaaaaaaa") }.seller!!
-        assertEquals("900001", dealer.id)
-        assertEquals("Beispiel Nutzfahrzeuge GmbH", dealer.name)
-        assertEquals(SellerType.BUSINESS, dealer.type)
-        assertEquals("https://www.autoscout24.de/haendler/beispiel-nutzfahrzeuge", dealer.url)
-    }
-
-    @Test
-    fun `AutoScout24 keeps a private seller's number and not their name`() {
-        val listings = AutoScout24Crawler(offlineClient()).parseFromNextData(fixture("autoscout24_sellers.html"))!!
-        val private = listings.first { it.externalId.startsWith("bbbbbbbb") }.seller!!
-        assertEquals("900002", private.id)
-        assertEquals(SellerType.PRIVATE, private.type)
-        assertNull(private.name)
-        assertNull(private.url)
-    }
-
-    @Test
     fun `mobile_de names the seller of each card from the page's streamed data`() {
         val listings = MobileDeCrawler(offlineClient()).parseSearchResults(fixture("mobilede_sellers.html"))
         assertEquals(2, listings.size)

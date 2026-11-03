@@ -2,15 +2,23 @@ package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.carCriteria
-import io.ktor.client.*
+import io.github.tieo.arbay.neuland.NeulandOffers
 import kotlinx.coroutines.CancellationException
-import kotlin.time.Clock
-import kotlinx.serialization.json.*
-import org.jsoup.Jsoup
 
+/**
+ * AutoScout24, read by Neuland: by the make and model the words name, in [countries] (ISO codes),
+ * cheapest first, around the searched place where there is one (in that place's country alone).
+ *
+ * The site's own filter removes every ad that states nothing for the field, and this app keeps
+ * those, marked unchecked. So a condition goes to the site only where its ads nearly all state it,
+ * measured against 1625 Crafters (asking a range that excludes nothing): registration, mileage,
+ * price, fuel and the kind of seller always; the gearbox always as well, since every ad states one
+ * (72 of 72, 2026-10-21) and leaving it out filled the 20 pages the site serves with the other
+ * gearbox; doors (1606), seats (1614), power and four-wheel drive (an equipment flag) only for a
+ * search that excludes unstated specs anyway; emission class (1267) and body (446) never.
+ */
 class AutoScout24Crawler(
-    private val client: HttpClient,
-    private val countries: List<String> = EUROPE,
+    private val countries: List<String> = listOf("DE"),
     override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
 ) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice {
     override val nativeCriteria = setOf(
@@ -18,445 +26,64 @@ class AutoScout24Crawler(
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
     )
 
-
-    private val countryParam: String get() = countries.joinToString("%2C")
-
-    /**
-     * What the card never carries, off the ad's own page: the seller's own text, and the wheelbase
-     * that is written inside it.
-     *
-     * This site has a `wheelBase` key in the page's own data and it was empty on every Crafter
-     * measured. Where a wheelbase is stated at all it is a line of the dealer's equipment list —
-     * "Radstand 3640 mm", "Radabstand: 4490 mm" — which is also the only place the full
-     * description lives: the card's description is the site's own summary line ("EZ: 10-2020 |
-     * 145737 km") and says nothing the specs do not.
-     */
-    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        val html = fetchWithFallback(client, listing.url, "AutoScout24", waitSelector = "main")
-        val doc = Jsoup.parse(html)
-        val description = sellersOwnText(doc)
-        // Only the wheelbase is taken from the prose. Everything else on this page is already on
-        // the card as a structured value, and reading it out of an advert's sales text again would
-        // let "ab 199 € mtl., 1. Hand, 130.000 km Garantie" overwrite what the site itself stated.
-        val wheelbase = VehicleTextParser.parseWheelbaseMm(description ?: doc.text())
-        ListingDetail(
-            vehicle = wheelbase?.let {
-                VehicleInfo(wheelbaseMm = it, verified = setOf(VehicleField.WHEELBASE))
-            },
-            description = listOfNotNull(description, equipment(doc)?.let { "Ausstattung: $it" })
-                .joinToString("\n\n").takeIf { it.isNotBlank() },
-            listedAt = listedAt(doc),
-        ).takeIf { it.vehicle != null || it.description != null }
-    } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        null
-    }
-
-    /** The equipment the dealer ticked on the site, as one line ("Klimaanlage, Sitzheizung, …"):
-     *  `listingDetails.vehicle.equipment`, grouped by category. What a seller's prose leaves out —
-     *  whether there is air conditioning at all — is often only here. */
-    internal fun equipment(doc: org.jsoup.nodes.Document): String? {
-        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
-        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() as? JsonObject ?: return null
-        val groups = (((root["props"] as? JsonObject)?.get("pageProps") as? JsonObject)
-            ?.get("listingDetails") as? JsonObject)?.get("vehicle")?.let { it as? JsonObject }
-            ?.get("equipment") as? JsonObject ?: return null
-        return groups.values.flatMap { group ->
-            (group as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("id")?.jsonPrimitive?.contentOrNull }
-        }.takeIf { it.isNotEmpty() }?.joinToString(", ")
-    }
-
-    /** When the ad went up, as the page's data states it: `listingDetails.createdTimestampWithOffset`. */
-    internal fun listedAt(doc: org.jsoup.nodes.Document): kotlin.time.Instant? {
-        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
-        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() as? JsonObject ?: return null
-        val stamp = ((root["props"] as? JsonObject)?.get("pageProps") as? JsonObject)
-            ?.get("listingDetails")?.let { it as? JsonObject }?.get("createdTimestampWithOffset")
-            ?.let { it as? JsonPrimitive }?.takeIf { it.isString }?.content ?: return null
-        return runCatching { kotlin.time.Instant.parse(stamp) }.getOrNull()
-    }
-
-    /**
-     * The dealer's own description, out of the page's data island.
-     *
-     * The island carries several `description` keys — the site's own page blurb ("Finde jetzt
-     * deinen Volkswagen …") among them — so the longest one wins, which is the advert every time.
-     */
-    private fun sellersOwnText(doc: org.jsoup.nodes.Document): String? {
-        val island = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
-        val root = runCatching { Json.parseToJsonElement(island) }.getOrNull() ?: return null
-        var longest: String? = null
-        fun walk(element: JsonElement) {
-            when (element) {
-                is JsonObject -> element.forEach { (key, value) ->
-                    if (key == "description" && value is JsonPrimitive && value.isString) {
-                        val text = value.content
-                        if (text.length > (longest?.length ?: 0)) longest = text
-                    }
-                    walk(value)
-                }
-                is JsonArray -> element.forEach { walk(it) }
-                else -> {}
-            }
-        }
-        walk(root)
-        // The advert is written as HTML inside that string; a reader wants the lines, not the tags.
-        return longest
-            ?.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
-            ?.replace(Regex("""</li>""", RegexOption.IGNORE_CASE), "\n")
-            ?.replace(Regex("""<[^>]+>"""), " ")
-            ?.let { org.jsoup.parser.Parser.unescapeEntities(it, false) }
-            ?.replace(Regex("""[ \t]{2,}"""), " ")
-            ?.replace(Regex("""\n{3,}"""), "\n\n")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-
     override suspend fun search(query: SearchQuery): List<Listing> {
-        val carQuery = CarQueryResolver.resolveForCarSite(query.positiveText)
-            ?: return emptyList()
-
-        val basePath = buildString {
-            append("https://www.autoscout24.de/lst/")
-            append(carQuery.makeSlug)
-            carQuery.modelSlug?.let { append("/").append(it) }
-            // Four-wheel drive is an equipment slug here rather than a parameter — the site's own
-            // "Volkswagen Crafter Allrad" link — and it narrows 1625 vans to 114 at the source.
-            // Like every equipment list it is written by the sellers who bothered, so it is asked
-            // for only when the search excludes what states nothing anyway.
-            if (query.carCriteria.drivetrain == Drivetrain.AWD && query.carCriteria.strictUnknown)
-                append("/eq_allrad")
-        }
-
+        // A query that names no make the site knows is not sent: the site ignores the words and
+        // answers its default feed, which the relevance filter throws away whole.
+        val vehicle = vehicleQuery(query) ?: return emptyList()
+        val area = query.area(countries.first())
         return paginate(query.wholePriceBand()) { page ->
-            val pageParam = if (page <= 1) "" else "&page=$page"
-            // A postcode radius is a statement about one country, and this site drops it when the
-            // country list holds several. Centred on a place, the search asks that country.
-            val cy = query.area(isoCountry(countries.firstOrNull()))
-                ?.let { siteCountry(it.country) } ?: countryParam
-            val url = "$basePath?atype=C&cy=$cy&desc=0&sort=price&ustate=N%2CU${filterParams(query)}$pageParam"
-            val html = fetchWithFallback(client, url, "AutoScout24", waitSelector = "article")
-            parseFromNextData(html) ?: parseFromHtml(html)
+            NeulandOffers.searchVehicles(
+                "autoscout24.de", query.positiveText, platformId, "AutoScout24", vehicle, page,
+                query.minPrice, query.maxPrice, area, countries = countries,
+            )
         }
     }
 
-    // A query that names no make this site knows used to be sent anyway, with the text in a
-    // `query` parameter the site ignores: it answered with its default feed, and the relevance
-    // filter threw the whole page away. Fetching a page in order to discard it is a request that
-    // costs the same as a useful one and counts the same against this address, so the search is
-    // simply not made. It was the single largest error class in the logs.
-
-    /** The two-letter code as this site's own country letter. */
-    private fun siteCountry(iso: String): String = when (iso.uppercase()) {
-        "DE" -> "D"
-        "AT" -> "A"
-        "BE" -> "B"
-        "ES" -> "E"
-        "FR" -> "F"
-        "IT" -> "I"
-        "LU" -> "L"
-        else -> iso.uppercase()
-    }
-
-    /** This site's own country letters as the two-letter codes everything else uses. */
-    private fun isoCountry(siteCode: String?): String = when (siteCode?.uppercase()) {
-        "D" -> "DE"
-        "A" -> "AT"
-        "B" -> "BE"
-        "E" -> "ES"
-        "F" -> "FR"
-        "I" -> "IT"
-        "L" -> "LU"
-        else -> siteCode?.uppercase()?.takeIf { it.length == 2 } ?: "DE"
-    }
-
-    /** AutoScout24 supports every vehicle filter as a URL parameter, so the site returns
-     *  only matching cars and far less needs scraping. Parameter names verified live. */
-    internal fun filterParams(query: SearchQuery): String = buildString {
-        // Where the search is centred, as this site takes it: its own postcode field and a radius
-        // in kilometres. Without it every search is nationwide and "near me" is only a label the
-        // app draws afterwards.
-        // The postcode has to belong to a country this instance covers, and this site writes those
-        // in its own alphabet — "D" for Germany, "A" for Austria — which is not what a postcode
-        // index is keyed by.
-        query.area(isoCountry(countries.firstOrNull()))?.let { area ->
-            area.zip?.let { append("&zip=$it&zipr=${area.radiusKm}") }
-        }
+    /** What the site is asked beside the price band and the place; none where the words name no car. */
+    internal fun vehicleQuery(query: SearchQuery): NeulandOffers.VehicleQuery? {
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText) ?: return null
         val c = query.carCriteria.atTheSource()
-        c.firstRegFromYear?.let { append("&fregfrom=$it") }
-        c.firstRegToYear?.let { append("&fregto=$it") }
-        c.maxMileageKm?.let { append("&kmto=$it") }
-        query.maxPrice?.let { max ->
-            val eur = if (max.currency == Currency.EUR) max.amount / 100
-            else ExchangeRates.convert(max.amount, max.currency.name, "EUR") / 100
-            append("&priceto=$eur")
-        }
-        query.minPrice?.let { min ->
-            val eur = if (min.currency == Currency.EUR) min.amount / 100
-            else ExchangeRates.convert(min.amount, min.currency.name, "EUR") / 100
-            append("&pricefrom=$eur")
-        }
-        c.minMileageKm?.let { append("&kmfrom=$it") }
-        c.minPowerKw?.let { append("&powertype=kw&powerfrom=$it") }
-        c.maxPowerKw?.let { append("&powertype=kw&powerto=$it") }
-        // The gearbox goes even where the fit score weighs it: every ad here states one (72 of 72
-        // Crafters, 2026-10-21), so the site removes exactly the vans Arbay's own filter removes.
-        // Left out, the manual vans filled the 20 pages the site serves: Germany answered 401
-        // Crafters in the band, 49 of them automatic, and 21 of those were never read.
-        when (query.carCriteria.transmission) {
-            Transmission.AUTOMATIC -> append("&gear=A")
-            Transmission.MANUAL -> append("&gear=M")
-            null -> {}
-        }
-        // Everything below is filtered by the site itself, each verified against its own result
-        // count: asking for one fuel, one body, a door or seat count, an emission class or a kind
-        // of seller narrows what comes back instead of narrowing it here afterwards. A crawl that
-        // fetches what the criteria already rule out spends the page budget on listings that are
-        // thrown away — a real search returned 74 vans and kept one.
-        // Only where this site's own listings nearly all state the field, since its filter removes
-        // every listing that states nothing and this app keeps those, marked unchecked. Measured by
-        // asking for a range that excludes nothing, against 1625 Crafters: doors 1606, seats 1614,
-        // fuel, mileage, power and seller all 1625 — but emission class only 1267 and body type
-        // 446, so those two are filtered here rather than there.
-        c.fuels.singleOrNull()?.let { fuel -> siteFuel(fuel)?.let { append("&fuel=$it") } }
-        // 19 of 1625 state no door count and 11 no seat count, so those go only with a strict search.
-        if (c.strictUnknown) {
-            c.minDoors?.let { append("&doorfrom=$it") }
-            c.minSeats?.let { append("&seatsfrom=$it") }
-        }
-        c.sellerType?.let {
-            append(if (it == SellerType.PRIVATE) "&custtype=P" else "&custtype=D")
-        }
-    }
-
-    /** This site's own fuel letters. Measured on its result counts: D keeps the diesels, B the
-     *  petrol ones, E the electric. */
-    private fun siteFuel(fuel: Fuel): String? = when (fuel) {
-        Fuel.DIESEL -> "D"
-        Fuel.PETROL -> "B"
-        Fuel.ELECTRIC -> "E"
-        Fuel.LPG -> "L"
-        Fuel.CNG -> "C"
-        Fuel.HYBRID_PETROL, Fuel.HYBRID_DIESEL, Fuel.PLUGIN_HYBRID, Fuel.MILD_HYBRID -> "2"
-        else -> null
-    }
-
-
-
-    companion object {
-        /** AutoScout24 country codes reachable from the .de front end, covering Germany
-         *  and the EU markets worth sourcing used vehicles from. Cross-border listings
-         *  carry their origin in location.country. */
-        // NOTE: "CH" is NOT a valid cy code here and zeroes the whole query — Switzerland needs its
-        // real AutoScout24 country code (unknown; the .ch front end may use a different scheme).
-        val EUROPE = listOf("D", "A", "B", "E", "F", "I", "L", "NL")
-    }
-
-    internal fun parseFromNextData(html: String): List<Listing>? {
-        val doc = Jsoup.parse(html)
-        val nextDataScript = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: return null
-        val now = Clock.System.now()
-
-        return try {
-            val json = Json { ignoreUnknownKeys = true }
-            val root = json.parseToJsonElement(nextDataScript).jsonObject
-            val listings = root["props"]?.jsonObject
-                ?.get("pageProps")?.jsonObject
-                ?.get("listings")?.jsonArray
-                ?: return null
-
-            listings.mapNotNull { element ->
-                val obj = element.jsonObject
-                val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-
-                val vehicleTitle = buildString {
-                    obj["vehicle"]?.jsonObject?.let { v ->
-                        v["make"]?.jsonPrimitive?.contentOrNull?.let { append(it) }
-                        v["model"]?.jsonPrimitive?.contentOrNull?.let { append(" $it") }
-                        v["modelVersionInput"]?.jsonPrimitive?.contentOrNull?.let { append(" $it") }
-                    }
-                }.trim()
-
-                val title = vehicleTitle.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-
-                // Price is in tracking.price (raw integer) or price.priceFormatted
-                val trackingPrice = obj["tracking"]?.jsonObject?.get("price")?.jsonPrimitive?.contentOrNull
-                    ?.toLongOrNull()
-                val price = if (trackingPrice != null) {
-                    Money(trackingPrice * 100, Currency.EUR)
-                } else {
-                    val formatted = obj["price"]?.jsonObject?.get("priceFormatted")?.jsonPrimitive?.contentOrNull
-                    formatted?.let { Money.parse(it) }
-                } ?: return@mapNotNull null
-
-                val relUrl = obj["url"]?.jsonPrimitive?.contentOrNull ?: "/angebote/$id"
-                val url = "https://www.autoscout24.de$relUrl"
-
-                // Images is a list of URL strings
-                val imageUrl = obj["images"]?.jsonArray?.firstOrNull()?.let { el ->
-                    when (el) {
-                        is JsonPrimitive -> el.contentOrNull
-                        is JsonObject -> el["url"]?.jsonPrimitive?.contentOrNull
-                        else -> null
-                    }
-                }
-
-                val locationObj = obj["location"]?.jsonObject
-                val location = locationObj?.let {
-                    Location(
-                        city = it["city"]?.jsonPrimitive?.contentOrNull,
-                        zip = it["zip"]?.jsonPrimitive?.contentOrNull,
-                        country = it["countryCode"]?.jsonPrimitive?.contentOrNull,
-                    )
-                }
-
-                val tracking = obj["tracking"]?.jsonObject
-                val mileageText = tracking?.get("mileage")?.jsonPrimitive?.contentOrNull
-                val yearText = tracking?.get("firstRegistration")?.jsonPrimitive?.contentOrNull
-
-                val description = buildString {
-                    yearText?.let { append("EZ: $it") }
-                    mileageText?.let {
-                        if (isNotEmpty()) append(" | ")
-                        append("$it km")
-                    }
-                }.takeIf { it.isNotBlank() }
-
-                // AutoScout24 carries structured vehicle attributes in the listing's `vehicle`
-                // object (fuel, transmission, displacement) — authoritative, so verified.
-                val v = obj["vehicle"]?.jsonObject
-                val details = cardDetails(obj)
-                val structured = VehicleInfo(
-                    firstRegYear = yearText?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() },
-                    firstRegMonth = details["calendar"]?.let { Regex("""^(0?[1-9]|1[0-2])/(19|20)\d{2}$""").find(it.trim()) }
-                        ?.groupValues?.get(1)?.toIntOrNull(),
-                    powerKw = details["speedometer"]?.let { Regex("""(\d{2,3})\s?kW""").find(it) }
-                        ?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 20..1000 },
-                    mileageKm = mileageText?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 1..2_000_000 },
-                    fuel = Fuel.parse(v?.get("fuel")?.jsonPrimitive?.contentOrNull),
-                    gearbox = Transmission.parse(v?.get("transmission")?.jsonPrimitive?.contentOrNull),
-                    displacementCc = v?.get("engineDisplacementInCCM")?.jsonPrimitive?.contentOrNull
-                        ?.replace(Regex("""[^0-9]"""), "")?.toIntOrNull()?.takeIf { it in 600..8000 },
-                )
-                val vehicle = VehicleTextParser.merge(
-                    VehicleTextParser.verifiedByPresence(structured),
-                    VehicleTextParser.parse("$title ${description ?: ""}"),
-                )
-
-                Listing(
-                    id = "${platformId.name}:$id",
-                    platformId = platformId,
-                    externalId = id,
-                    url = url,
-                    title = title,
-                    price = price,
-                    imageUrls = listOfNotNull(imageUrl),
-                    location = location,
-                    description = description,
-                    scrapedAt = now,
-                    vehicle = vehicle,
-                    seller = sellerOf(obj["seller"] as? JsonObject)?.withRatings(obj["ratings"] as? JsonObject),
-                )
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * The card's spec line, `vehicleDetails`, keyed by its icon name: "speedometer" holds the
-     * power ("130 kW (177 PS)"), "calendar" the first registration ("06/2019"). The card's
-     * `vehicle` object has no power at all, so without this line every van whose title does not
-     * name its power was scored as if it had none. An entry marked a placeholder states nothing.
-     */
-    internal fun cardDetails(card: JsonObject): Map<String, String> =
-        (card["vehicleDetails"] as? JsonArray).orEmpty().mapNotNull { el ->
-            val entry = el as? JsonObject ?: return@mapNotNull null
-            if (entry["isPlaceholder"]?.jsonPrimitive?.contentOrNull == "true") return@mapNotNull null
-            val icon = entry["iconName"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val data = entry["data"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            icon to data
-        }.toMap()
-
-    /**
-     * Who sells it, from the card's `seller` object: the site's own account number, which every
-     * card carries, and for a dealer its company name and its page on the site.
-     *
-     * A private seller is shown under a person's name and phone number, which are not kept: the
-     * number alone is enough to recognise the account again.
-     */
-    internal fun sellerOf(seller: JsonObject?): Seller? {
-        val id = seller?.get("id")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
-        val dealer = seller["type"]?.jsonPrimitive?.contentOrNull.equals("Dealer", ignoreCase = true)
-        return Seller(
-            id = id,
-            type = if (dealer) SellerType.BUSINESS else SellerType.PRIVATE,
-            name = if (dealer) seller["companyName"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() } else null,
-            url = if (dealer) (seller["links"] as? JsonObject)?.get("infoPage")?.jsonPrimitive?.contentOrNull
-                ?.takeIf { it.startsWith("https://") }?.substringBefore('?') else null,
+        return NeulandOffers.VehicleQuery(
+            make = car.makeSlug,
+            model = car.modelSlug,
+            gearbox = when (query.carCriteria.transmission) {
+                Transmission.AUTOMATIC -> "automatic"
+                Transmission.MANUAL -> "manual"
+                null -> null
+            },
+            registeredFrom = c.firstRegFromYear,
+            registeredTo = c.firstRegToYear,
+            mileageMinKm = c.minMileageKm,
+            mileageMaxKm = c.maxMileageKm,
+            powerMinKw = c.minPowerKw,
+            powerMaxKw = c.maxPowerKw,
+            fuels = c.fuels.map(NeulandOffers.VehicleQuery::fuel),
+            drivetrain = "all".takeIf { c.strictUnknown && c.drivetrain == Drivetrain.AWD },
+            doorsMin = c.minDoors.takeIf { c.strictUnknown },
+            seatsMin = c.minSeats.takeIf { c.strictUnknown },
+            dealer = c.sellerType?.let { it != SellerType.PRIVATE },
         )
     }
 
-    /** The dealer's stars and how many reviews they rest on, from the card's `ratings` object, where
-     *  the site shows them at all (`ratingsEnabled`). */
-    internal fun Seller.withRatings(ratings: JsonObject?): Seller {
-        if (ratings?.get("ratingsEnabled")?.jsonPrimitive?.contentOrNull != "true") return this
-        val count = ratings["ratingsCount"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.takeIf { it > 0 } ?: return this
-        val stars = ratings["ratingsStars"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: return this
-        return copy(rating = stars, reviewCount = count)
-    }
-
-    internal fun parseFromHtml(html: String): List<Listing> {
-        val doc = Jsoup.parse(html)
-        val now = Clock.System.now()
-
-        val items = doc.select("article[data-testid=list-item]")
-
-        return items.mapNotNull { item ->
-            val titleEl = item.selectFirst("h2 span") ?: return@mapNotNull null
-            val title = titleEl.text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            // Data attributes on the article element
-            val mileage = item.attr("data-mileage").takeIf { it.isNotBlank() && it != "unknown" }
-            val registration = item.attr("data-first-registration").takeIf { it.isNotBlank() && it != "new" }
-            val zipCode = item.attr("data-listing-zip-code").takeIf { it.isNotBlank() }
-
-            // Construct ID from href or use index
-            val linkEl = item.selectFirst("a[href*='/angebote/']")
-            val href = linkEl?.attr("href") ?: ""
-            val externalId = Regex("""/angebote/([a-f0-9-]+)""").find(href)?.groupValues?.get(1)
-                ?: item.hashCode().toString()
-            val url = if (href.startsWith("http")) href else "https://www.autoscout24.de$href"
-
-            val priceEl = item.selectFirst("[class*=price]")
-            val priceText = priceEl?.text() ?: return@mapNotNull null
-            val price = Money.parse(priceText) ?: return@mapNotNull null
-
-            val imageUrl = item.selectFirst("picture source")?.attr("srcset")
-                ?.split(",")?.firstOrNull()?.trim()?.split(" ")?.firstOrNull()
-
-            val location = zipCode?.let { Location(zip = it) }
-
-            val description = buildString {
-                registration?.let { append("EZ: $it") }
-                mileage?.let {
-                    if (isNotEmpty()) append(" | ")
-                    append("$it km")
-                }
-            }.takeIf { it.isNotBlank() }
-
-            Listing(
-                id = "${platformId.name}:$externalId",
-                platformId = platformId,
-                externalId = externalId,
-                url = url,
-                title = title,
-                price = price,
-                imageUrls = listOfNotNull(imageUrl),
-                location = location,
-                description = description,
-                scrapedAt = now,
-            )
-        }
+    /**
+     * What the card never carries, off the ad's own page: the seller's own text, the equipment
+     * they ticked (what their prose often leaves out, air conditioning at all) and when the ad
+     * went up. The site's own wheelbase field was empty on every Crafter measured; where one is
+     * stated it is a line of the dealer's text ("Radstand 3640 mm"), so only the wheelbase is read
+     * from the prose: anything else read there could overwrite what the card states
+     * ("130.000 km Garantie").
+     */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        val page = NeulandOffers.detail(listing.url, "AutoScout24")
+        val wheelbase = page.description?.let(VehicleTextParser::parseWheelbaseMm)
+        val equipment = page.specs.firstOrNull { it.first == "Ausstattung" }?.second
+        ListingDetail(
+            vehicle = wheelbase?.let { VehicleInfo(wheelbaseMm = it, verified = setOf(VehicleField.WHEELBASE)) },
+            description = listOfNotNull(page.description, equipment?.let { "Ausstattung: $it" })
+                .joinToString("\n\n").takeIf { it.isNotBlank() },
+            listedAt = page.listedAt,
+        ).takeIf { it.vehicle != null || it.description != null }
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        null
     }
 }

@@ -30,11 +30,11 @@ object CrawlerRegistry {
         PlatformId.MARKTPLAATS to MarktplaatsCrawler(httpClient),
         // Home markets on one chip; the neighbouring countries AutoScout24 also serves are
         // split into their own selectable markets so their coverage is visible, not buried.
-        PlatformId.AUTOSCOUT24 to AutoScout24Crawler(httpClient, listOf("D", "A", "L", "NL")),
-        PlatformId.AUTOSCOUT24_IT to AutoScout24Crawler(httpClient, listOf("I"), PlatformId.AUTOSCOUT24_IT),
-        PlatformId.AUTOSCOUT24_FR to AutoScout24Crawler(httpClient, listOf("F"), PlatformId.AUTOSCOUT24_FR),
-        PlatformId.AUTOSCOUT24_ES to AutoScout24Crawler(httpClient, listOf("E"), PlatformId.AUTOSCOUT24_ES),
-        PlatformId.AUTOSCOUT24_BE to AutoScout24Crawler(httpClient, listOf("B"), PlatformId.AUTOSCOUT24_BE),
+        PlatformId.AUTOSCOUT24 to AutoScout24Crawler(listOf("DE", "AT", "LU", "NL")),
+        PlatformId.AUTOSCOUT24_IT to AutoScout24Crawler(listOf("IT"), PlatformId.AUTOSCOUT24_IT),
+        PlatformId.AUTOSCOUT24_FR to AutoScout24Crawler(listOf("FR"), PlatformId.AUTOSCOUT24_FR),
+        PlatformId.AUTOSCOUT24_ES to AutoScout24Crawler(listOf("ES"), PlatformId.AUTOSCOUT24_ES),
+        PlatformId.AUTOSCOUT24_BE to AutoScout24Crawler(listOf("BE"), PlatformId.AUTOSCOUT24_BE),
         PlatformId.MOBILE_DE to MobileDeCrawler(httpClient),
         PlatformId.WILLHABEN to WillhabenCrawler(),
         PlatformId.IMMOSCOUT24 to ImmoScout24Crawler(httpClient),

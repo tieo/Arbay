@@ -53,9 +53,10 @@ class AtTheSourceTest {
         val mobile = MobileDeCrawler(client).filterParams(crafter)
         listOf("&fr=2018:", "&ml=:150000", "&p=10000:30990", "&ft=DIESEL").forEach { assertTrue(it in mobile, "$it in $mobile") }
         listOf("&tr=", "&pw=", "&st=", "&dt=").forEach { assertFalse(it in mobile, "$it in $mobile") }
-        val as24 = AutoScout24Crawler(client).filterParams(crafter)
-        listOf("&fregfrom=2018", "&kmto=150000", "&fuel=", "&gear=A").forEach { assertTrue(it in as24, "$it in $as24") }
-        listOf("&powerfrom=", "&custtype=").forEach { assertFalse(it in as24, "$it in $as24") }
+        val as24 = AutoScout24Crawler().vehicleQuery(crafter)!!
+        assertEquals(2018, as24.registeredFrom); assertEquals(150_000, as24.mileageMaxKm)
+        assertEquals(listOf("diesel"), as24.fuels); assertEquals("automatic", as24.gearbox)
+        assertEquals(null, as24.powerMinKw); assertEquals(null, as24.dealer)
     }
 
     @Test
