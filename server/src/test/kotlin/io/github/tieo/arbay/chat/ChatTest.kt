@@ -8,7 +8,8 @@ import kotlin.test.assertEquals
 
 class ChatTest {
     /** The fee as Kleinanzeigen's help article states it in the saved fixture. */
-    private val protection = KleinanzeigenCosts.parseProtection(javaClass.getResource("/fixtures/kleinanzeigen_help_sicher_bezahlen.json")!!.readText())
+    /** "Servicegebühr von 0,50 € + 4,5 % des Kaufpreises", as the help article stated it on 2026-10-08. */
+    private val protection = io.github.tieo.arbay.model.BuyerProtection(fixedEur = 0.5, share = 0.045)
 
     @Test
     fun offerKeepsPriceShippingAndFeeWithinTheLimit() {

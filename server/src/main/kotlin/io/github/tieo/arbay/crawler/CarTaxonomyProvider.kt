@@ -13,7 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import org.jsoup.Jsoup
+import io.ktor.http.encodeURLParameter
 import org.slf4j.LoggerFactory
 
 /**
@@ -25,17 +25,14 @@ import org.slf4j.LoggerFactory
  * startup, so a restart (a deploy, in particular) serves the full catalog immediately rather than
  * the thin bundled seed for the several minutes the next refresh takes to finish.
  *
- * AutoScout24 is pan-European and embeds its full make catalog
- * (props.pageProps.taxonomy.makesSorted, ~290 makes as {label, value}) in the __NEXT_DATA__ of
- * any search page, and each make's own listing page embeds that make's full model list the same
- * way — so this is the real, unabridged filter catalog the site itself offers, not a hand-typed
- * guess at "the popular models" (which is what shipped before, and was missing things like the
- * Ford S-Max).
+ * AutoScout24 is pan-European, and Neuland reads its filter catalog: about 290 makes, and each
+ * make's full model list, so this is the real, unabridged catalog the site itself offers, not a
+ * hand-typed guess at "the popular models" (which is what shipped before, and was missing things
+ * like the Ford S-Max).
  */
 object CarTaxonomyProvider {
 
     private val log = LoggerFactory.getLogger(CarTaxonomyProvider::class.java)
-    private const val CATALOG_URL = "https://www.autoscout24.de/lst?atype=C&cy=D&sort=standard"
     private val json = Json { ignoreUnknownKeys = true }
     private val persistFile = DataDir.file("car_taxonomy.json")
 
@@ -60,31 +57,22 @@ object CarTaxonomyProvider {
         }
     }
 
-    /** Fetch AutoScout24's model catalog for one make. The make page embeds every make's models
-     *  under taxonomy.models keyed by numeric make id; the selected make's list is the one to read. */
-    private suspend fun probeModels(makeSlug: String, siteId: String?): List<CarModelNode> = try {
-        val url = "https://www.autoscout24.de/lst/$makeSlug?atype=C&cy=D&sort=standard"
-        val html = fetchWithFallback(CrawlerRegistry.httpClient, url, "AutoScout24-models", waitSelector = "article")
-        parseAutoScout24Models(html, siteId)
-    } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        log.warn("Model probe for {} failed: {}", makeSlug, e.message)
-        emptyList()
-    }
+    @kotlinx.serialization.Serializable private data class Entry(val name: String, val id: String)
 
-    /** taxonomy.models is a map of make id -> [{value, label}]; pick the target make (or the sole
-     *  entry) and turn each into a CarModelNode carrying the AutoScout24 model token. */
-    internal fun parseAutoScout24Models(html: String, siteId: String?): List<CarModelNode> {
-        val nextData = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = json.parseToJsonElement(nextData).jsonObject
-        val models = root["props"]?.jsonObject?.get("pageProps")?.jsonObject
-            ?.get("taxonomy")?.jsonObject?.get("models")?.jsonObject ?: return emptyList()
-        val entry = (siteId?.let { models[it] } ?: models.values.singleOrNull())?.jsonArray ?: return emptyList()
-        return entry.mapNotNull { el ->
-            val o = el.jsonObject
-            val label = o["label"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val value = o["value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            CarModelNode(id = slug(label), name = label, platformSlugs = mapOf("AUTOSCOUT24" to value))
-        }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+    /** AutoScout24's makes, by Neuland. */
+    private suspend fun makes(): List<Entry> =
+        json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(Entry.serializer()),
+            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Get, "vehicles/makes?site=autoscout24.de", limitS = 150))
+
+    /** One make's models on AutoScout24, by Neuland, each carrying the site's model token. */
+    private suspend fun probeModels(make: Entry): List<CarModelNode> = try {
+        val path = "vehicles/models?site=autoscout24.de&make=${make.name.encodeURLParameter()}&id=${make.id.encodeURLParameter()}"
+        json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(Entry.serializer()), io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Get, path, limitS = 150))
+            .map { CarModelNode(id = slug(it.name), name = it.name, platformSlugs = mapOf("AUTOSCOUT24" to it.id)) }
+            .distinctBy { it.id }.sortedBy { it.name.lowercase() }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        log.warn("Model probe for {} failed: {}", make.name, e.message)
+        emptyList()
     }
 
     /** Rebuild the whole taxonomy — make list AND every make's live model list — from AutoScout24.
@@ -94,8 +82,7 @@ object CarTaxonomyProvider {
      *  failure so a bad fetch never empties the picker. */
     suspend fun refresh() {
         val makes = try {
-            val html = fetchWithFallback(CrawlerRegistry.httpClient, CATALOG_URL, "AutoScout24-taxonomy", waitSelector = "article")
-            parseAutoScout24Makes(html)
+            makes()
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log.warn("Car taxonomy refresh failed: ${e.message}; keeping current")
             return
@@ -110,13 +97,13 @@ object CarTaxonomyProvider {
         val previousModels: Map<String, List<CarModelNode>> =
             current.makes.associate { it.id to it.models }
 
-        val nodes = makes.distinctBy { slug(it.first) }.mapIndexed { index, (name, siteId) ->
-            val id = slug(name)
+        val nodes = makes.distinctBy { slug(it.name) }.mapIndexed { index, make ->
+            val id = slug(make.name)
             // Paced so a full pass over ~290 makes stays a slow trickle, the same reasoning the
             // interactive crawlers already throttle by, not a burst against one site's IP.
             if (index > 0) delay(800L + Random.nextLong(200, 700))
             val probed = try {
-                probeModels(id, siteId)
+                probeModels(make)
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 log.debug("Model probe for {} failed: {}", id, e.message)
                 emptyList()
@@ -125,7 +112,7 @@ object CarTaxonomyProvider {
             // the bundled seed, so one bad night never regresses a make that already synced fine.
             val models = probed.ifEmpty { previousModels[id]?.ifEmpty { null } ?: seedModels[id] ?: emptyList() }
             if ((index + 1) % 25 == 0) log.info("Car taxonomy models: {}/{} makes probed", index + 1, makes.size)
-            CarMakeNode(id = id, name = name, models = models, platformSlugs = mapOf("AUTOSCOUT24" to siteId))
+            CarMakeNode(id = id, name = make.name, models = models, platformSlugs = mapOf("AUTOSCOUT24" to make.id))
         }.sortedBy { it.name.lowercase() }
 
         // Version hashes both the make list AND every make's model ids, so the app re-pulls
@@ -139,22 +126,6 @@ object CarTaxonomyProvider {
             "Car taxonomy refreshed: {} makes, {} total models (version {})",
             current.makes.size, current.makes.sumOf { it.models.size }, current.version,
         )
-    }
-
-    /** Parse AutoScout24 __NEXT_DATA__ props.pageProps.taxonomy.makesSorted -> (name, siteId). */
-    internal fun parseAutoScout24Makes(html: String): List<Pair<String, String>> {
-        val nextData = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__")?.data() ?: return emptyList()
-        val root = json.parseToJsonElement(nextData).jsonObject
-        val makesSorted = root["props"]?.jsonObject
-            ?.get("pageProps")?.jsonObject
-            ?.get("taxonomy")?.jsonObject
-            ?.get("makesSorted")?.jsonArray ?: return emptyList()
-        return makesSorted.mapNotNull { el ->
-            val o = el.jsonObject
-            val label = o["label"]?.jsonPrimitive?.contentOrNull?.trim() ?: return@mapNotNull null
-            val value = o["value"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            if (label.isBlank()) null else label to value
-        }
     }
 
     private fun slug(name: String): String =

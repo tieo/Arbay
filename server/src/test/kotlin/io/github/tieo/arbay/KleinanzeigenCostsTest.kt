@@ -9,26 +9,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Kleinanzeigen's own shipping list and help articles, as saved on 2026-10-08. */
+/** Kleinanzeigen's own shipping list and door prices as it stated them on 2026-10-08 (Neuland reads them). */
 class KleinanzeigenCostsTest {
-    private fun fixture(name: String) = javaClass.getResource("/fixtures/$name")!!.readText()
-    private val options = KleinanzeigenCosts.parseOptions(fixture("kleinanzeigen_shipping_options.json"))
-    private val door = KleinanzeigenCosts.parseDoorPrices(fixture("kleinanzeigen_help_delivery.json"))
-
-    @Test
-    fun readsTheShippingList() {
-        val paeckchen = options.first { it.id == "HERMES_001" }
-        assertEquals(99, paeckchen.priceInEuroCent)
-        assertEquals(true, paeckchen.fromPrice)
-        assertEquals(false, options.first { it.id == "DHL_001" }.fromPrice)
-    }
-
-    @Test
-    fun readsHermesDoorPricesUnderTheirHeader() {
-        // Päckchen: 3,70 to a parcel shop; to the door 4,95 (label in a shop) or 4,89 (online).
-        assertEquals(KleinanzeigenCosts.DoorPrice("Hermes", "Päckchen", 495), door.first { it.product == "Päckchen" })
-        assertEquals(645, door.first { it.product == "S-Paket" }.cents)
-    }
+    private val options = listOf(
+        KleinanzeigenCosts.Option("HERMES_001", "Päckchen", "HERMES", "Hermes", "SMALL", 99, fromPrice = true),
+        KleinanzeigenCosts.Option("HERMES_002", "S-Paket", "HERMES", "Hermes", "SMALL", 199, fromPrice = true),
+        KleinanzeigenCosts.Option("HERMES_003", "M-Paket", "HERMES", "Hermes", "MEDIUM", 299, fromPrice = true),
+        KleinanzeigenCosts.Option("DHL_001", "Paket 2 kg", "DHL", "DHL", "SMALL", 619),
+        KleinanzeigenCosts.Option("DHL_002", "Paket 5 kg", "DHL", "DHL", "MEDIUM", 769),
+    )
+    private val door = listOf(
+        KleinanzeigenCosts.DoorPrice("Hermes", "Päckchen", 495),
+        KleinanzeigenCosts.DoorPrice("Hermes", "S-Paket", 645),
+    )
 
     @Test
     fun aParcelShopFromPriceGetsItsPackagesDoorPrice() {
@@ -45,11 +38,6 @@ class KleinanzeigenCostsTest {
     fun aSellersOwnPriceIsNoParcelShopPrice() {
         assertNull(KleinanzeigenCosts.doorDelivery(Money.cents(500), options, door))
         assertNull(KleinanzeigenCosts.doorDelivery(Money.cents(619), options, door))
-    }
-
-    @Test
-    fun readsTheSicherBezahlenFee() {
-        assertEquals(BuyerProtection(fixedEur = 0.5, share = 0.045), KleinanzeigenCosts.parseProtection(fixture("kleinanzeigen_help_sicher_bezahlen.json")))
     }
 
     @Test
