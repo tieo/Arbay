@@ -267,12 +267,21 @@ class SmartScreensTest {
 
     @Test
     fun `a one byte NVMe value read larger than a byte is a misread, not a worn out drive`() {
-        // The photo shows an Intel 660p at 94 % health: 6 % used and 100 % spare, which the OCR read
-        // as 90000000000000 and 9000000000000.
-        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_en_nvme_intel660p_misread"), 1))
+        // The photo shows an Intel 660p at 94 % health: 6 % used and 100 % spare, which the OCR of
+        // the whole photo read as 90000000000000 and 9000000000000.
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_en_nvme_intel660p_column").first(), 1))
         assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
         assertNull(r.wearUsed)
         assertNull(r.spareLeft)
+        assertEquals(24_518L, r.powerOnHours)
+    }
+
+    @Test
+    fun `the hex column read again on its own gives the values the whole photo misread`() {
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_en_nvme_intel660p_column"), 1))
+        assertEquals(DriveVerdict.CLEAN, r.verdict, r.toString())
+        assertEquals(6, r.wearUsed)
+        assertEquals(100, r.spareLeft)
         assertEquals(24_518L, r.powerOnHours)
     }
 }

@@ -123,6 +123,9 @@ object SmartScreens {
     private val smartctlFailed = Regex("""self-assessment\s+test\s+result:\s*FAILED""", RegexOption.IGNORE_CASE)
     private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
 
+    /** A raw value as CrystalDiskInfo shows it in hex, standing alone on its line's end. */
+    private val hexValue = Regex("""\b[0-9A-FOQ]{10,16}\s*$""", RegexOption.MULTILINE)
+
     /** Between the texts of a photo's readings, where it was read more than once. */
     private const val PASS_BREAK = "\n\u000C\n"
 
@@ -487,10 +490,13 @@ object SmartScreens {
      *  is a photo read that shows no screen. */
     private fun known(url: String): Result<String?>? {
         val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null } ?: return null
-        // A text read once, as every photo is that shows no screen, is read again at twice the size
-        // where a better parser now finds a screen in it. RapidOCR reads a photo once, so this is
-        // Tesseract's alone.
-        val readOnce = !PhotoText.screenReaderPresent && known.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
+        // A text read once where a better parser now finds a screen in it is read again: Tesseract
+        // reads every screen a second time at twice the size, RapidOCR a table of hex values a
+        // second time from its column alone.
+        val readOnce = known.getOrNull()?.let { text ->
+            PASS_BREAK !in text && see(text) != null &&
+                (!PhotoText.screenReaderPresent || hexValue.findAll(text).count() >= 3)
+        } == true
         return known.takeUnless { readOnce }
     }
 
@@ -499,8 +505,8 @@ object SmartScreens {
         val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
             // A photo that shows a SMART screen is read a second time at twice the size, and a
             // count is believed only where both readings agree: Tesseract reads a slashed zero as
-            // 0 at one size and 9 at another. RapidOCR takes some five seconds a photo, which a
-            // second reading would double, so its one reading stands.
+            // 0 at one size and 9 at another. RapidOCR reads a hex column a second time itself,
+            // from a crop of it, which costs a fraction of reading the whole photo again.
             ocr(bytes, 1.0)?.let { first ->
                 if (PhotoText.screenReaderPresent || see(first) == null) first
                 else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK)
