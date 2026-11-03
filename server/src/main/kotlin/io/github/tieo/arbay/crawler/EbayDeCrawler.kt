@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.crawler
 
+import io.github.tieo.arbay.neuland.Neuland
 import io.github.tieo.arbay.model.*
 import io.ktor.client.*
 import kotlin.coroutines.coroutineContext
@@ -85,23 +86,22 @@ class EbayDeCrawler(
         return null
     }
 
+    /** eBay's header link to its sign-in, shown only to a browser signed out. */
+    private val SIGNED_OUT_LINK = "sgfl=gh"
+
     /**
-     * [url] read in the user's own signed-in eBay browser: eBay shows its sold listings to nobody
-     * signed out, and sends every other browser to its sign-in page. Null where the account is not
-     * signed in or eBay asks its password again.
+     * [url] read in Neuland's account browser, signed in to the user's eBay account: eBay shows its
+     * sold listings to nobody signed out, and sends every other browser to its sign-in page. Null
+     * where the account is not signed in or eBay asks to sign in again, which asks the user to.
      */
-    private suspend fun accountPage(url: String, markers: List<String>): NeulandBrowser.Page? = try {
-        val answer = io.github.tieo.arbay.chat.EbayChatBrowser.call(
-            "page", 60_000, "url" to url, "markers" to kotlinx.serialization.json.JsonArray(markers.map(::JsonPrimitive)), "wait" to 25,
-        )
-        NeulandBrowser.Page(
-            html = answer["html"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            url = answer["url"]?.jsonPrimitive?.contentOrNull ?: url,
-            page = answer["page"]?.jsonPrimitive?.contentOrNull ?: "unknown",
-        )
-    } catch (e: io.github.tieo.arbay.chat.ChatFailure) {
-        log.info("{}: the account's browser could not read {}: {}", domain, url, e.message)
-        null
+    private suspend fun accountPage(url: String, markers: List<String>): NeulandBrowser.Page? {
+        val page = Neuland.read(io.github.tieo.arbay.neuland.NeulandSign.BROWSER, url, markers, listOf("went wrong"), emptyList(), 25) ?: return null
+        if ("signin.ebay" in page.url || SIGNED_OUT_LINK in page.html && page.page != "content") {
+            log.info("{}: the account browser is signed out of eBay at {}", domain, url)
+            io.github.tieo.arbay.chat.Chat.askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.EBAY_DE))
+            return null
+        }
+        return page
     }
 
     /**

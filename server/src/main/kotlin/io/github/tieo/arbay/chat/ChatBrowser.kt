@@ -191,9 +191,6 @@ open class MarketSidecar(
     }
 }
 
-/** The user's eBay session, for every eBay site, kept by ebay_chat.py; apart from the crawler's Chrome. */
-object EbayChatBrowser : MarketSidecar(PlatformId.EBAY_DE, "ebay_chat.py", 93, "ARBAY_EBAY_CHAT_PROFILE", "ebay-chat-profile", "ebay-chat-browser.log", 5902, idleClose = 15.minutes)
-
 /** The user's willhaben session, kept by willhaben_chat.py. */
 object WillhabenChatBrowser : MarketSidecar(PlatformId.WILLHABEN, "willhaben_chat.py", 92, "ARBAY_WILLHABEN_CHAT_PROFILE", "willhaben-chat-profile", "willhaben-chat-browser.log", 5903, idleClose = 15.minutes)
 

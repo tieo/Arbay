@@ -75,16 +75,22 @@ object Chat {
     private val outbox = mutableListOf<OutgoingMessage>()
     private var settings: ChatSettings
 
-    /** The markets whose session a browser of Arbay's own holds; Kleinanzeigen's is Neuland's. */
-    val sidecars: Map<PlatformId, MarketSidecar> = listOf(EbayChatBrowser, WillhabenChatBrowser, VintedChatBrowser).associateBy { it.market }
+    /** The markets whose session a browser of Arbay's own holds. */
+    val sidecars: Map<PlatformId, MarketSidecar> = listOf(WillhabenChatBrowser, VintedChatBrowser).associateBy { it.market }
+
+    /** The markets whose account Neuland's account browser holds, by the site Neuland Sign signs
+     *  it in to; one eBay account answers for every eBay site. */
+    private val neulandSites = mapOf(PlatformId.KLEINANZEIGEN to Kleinanzeigen.SITE, PlatformId.EBAY_DE to "ebay.de")
+
+    /** The Neuland site of [market]'s account, where Neuland holds it. */
+    fun neulandSite(market: PlatformId): String? = neulandSites[if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market]
 
     /** Every market the user can sign in to. */
-    val markets: List<PlatformId> = listOf(PlatformId.KLEINANZEIGEN) + sidecars.keys
+    val markets: List<PlatformId> = neulandSites.keys.toList() + sidecars.keys
 
-    /** The browser of [market]; one eBay account answers for every eBay site. */
+    /** The browser of [market], where one of Arbay's own holds its session. */
     fun sidecarFor(market: PlatformId): MarketSidecar =
-        sidecars[if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market]
-            ?: throw ChatFailure("Arbay cannot sign in to ${market.displayName}", signedOut = false)
+        sidecars[market] ?: throw ChatFailure("Arbay cannot sign in to ${market.displayName} here; Neuland Sign does", signedOut = false)
 
     /** The markets a sign-in is going on in. */
     private val signingIn = java.util.concurrent.ConcurrentHashMap.newKeySet<PlatformId>()
@@ -148,13 +154,16 @@ object Chat {
     // --- account ---
 
     /** The user's account on [market]: signed in or not, and whether a sign-in is going on. Where
-     *  Kleinanzeigen's sign-in stands is Neuland Sign's, shown with the shop accounts' sign-ins. */
+     *  a sign-in through Neuland Sign stands shows with the shop accounts' sign-ins. */
     suspend fun account(market: PlatformId = PlatformId.KLEINANZEIGEN): ChatAccount {
-        if (market == PlatformId.KLEINANZEIGEN) return try {
-            val standing = Kleinanzeigen.on { standing() }
-            ChatAccount(market = market, signedIn = standing.signedIn, name = standing.name, signInSite = Kleinanzeigen.SITE)
-        } catch (e: ChatFailure) {
-            ChatAccount(market = market, problem = e.message, signInSite = Kleinanzeigen.SITE)
+        neulandSite(market)?.let { site ->
+            val shown = if (market.name.startsWith("EBAY")) PlatformId.EBAY_DE else market
+            return try {
+                val standing = io.github.tieo.arbay.neuland.NeulandSign.standing(site)
+                ChatAccount(market = shown, signedIn = standing.signedIn, name = standing.name, signInSite = site)
+            } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
+                ChatAccount(market = shown, problem = e.message, signInSite = site)
+            }
         }
         val sidecar = sidecarFor(market)
         val signing = sidecar.market in signingIn
@@ -378,9 +387,10 @@ object Chat {
         val last = signInAsked[link]
         if (!force && last != null && now - last < 3_600_000) return false
         signInAsked[link] = now
-        // Kleinanzeigen signs in through Neuland Sign, which sends its own page to the phone; the app
-        // is opened only where Neuland knows no account to sign in.
-        if (link.market == PlatformId.KLEINANZEIGEN && !link.payment && Kleinanzeigen.askSignIn()) return true
+        // A market Neuland Sign signs in gets Neuland's own page sent to the phone; the app is
+        // opened only where Neuland knows no account to sign in.
+        val site = neulandSite(link.market)
+        if (site != null && !link.payment && io.github.tieo.arbay.neuland.NeulandSign.askAgain(site, "Arbay, for your ${link.market.displayName} account")) return true
         val what = if (link.payment) sidecarFor(link.market).call("status")["payment"]?.str() ?: "the payment service" else link.market.displayName
         return io.github.tieo.arbay.crawler.Ntfy.send(
             title = "$what needs you to sign in",

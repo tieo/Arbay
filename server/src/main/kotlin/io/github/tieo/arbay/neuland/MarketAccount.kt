@@ -28,7 +28,6 @@ class MarketAccount(private val browser: String, private val site: String) {
     private suspend inline fun <reified T> send(method: HttpMethod, sub: String, body: JsonElement?, limitS: Long = 120): T =
         json.decodeFromJsonElement(Neuland.account(method, "$path$sub", body, limitS))
 
-    suspend fun standing(): Standing = get("", 60)
     suspend fun conversations(page: Int = 0): List<Conversation> = get("/conversations?page=$page")
     suspend fun thread(id: String): Thread = get("/conversations/${id.encoded()}")
     suspend fun markRead(id: String) { Neuland.account(HttpMethod.Post, "$path/conversations/${id.encoded()}/read", limitS = 60) }
