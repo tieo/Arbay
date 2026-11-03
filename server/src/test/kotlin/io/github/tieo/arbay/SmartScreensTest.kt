@@ -264,4 +264,15 @@ class SmartScreensTest {
         assertNull(r.uncorrectable)
         assertTrue(r.powerOnHours == null || r.powerOnHours == 321L, r.toString())
     }
+
+    @Test
+    fun `a one byte NVMe value read larger than a byte is a misread, not a worn out drive`() {
+        // The photo shows an Intel 660p at 94 % health: 6 % used and 100 % spare, which the OCR read
+        // as 90000000000000 and 9000000000000.
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_en_nvme_intel660p_misread"), 1))
+        assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
+        assertNull(r.wearUsed)
+        assertNull(r.spareLeft)
+        assertEquals(24_518L, r.powerOnHours)
+    }
 }

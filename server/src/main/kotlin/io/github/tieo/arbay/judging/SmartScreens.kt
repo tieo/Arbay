@@ -105,6 +105,11 @@ object SmartScreens {
 
     private val nvmeAttributes = setOf(Attribute.CRITICAL_WARNING, Attribute.SPARE_THRESHOLD, Attribute.SPARE, Attribute.USED, Attribute.MEDIA_ERRORS)
 
+    /** The NVMe log page holds these in one byte each, so a larger value is the OCR's: RapidOCR read an
+     *  Intel 660p's spare "00000000000064" as "9000000000000" and its wear "00000000000006" as
+     *  "90000000000000", which alone made a 94 % healthy drive FAILING. */
+    private val oneByteAttributes = setOf(Attribute.CRITICAL_WARNING, Attribute.SPARE_THRESHOLD, Attribute.SPARE, Attribute.USED)
+
     /** An NVMe row's raw value: CrystalDiskInfo's fourteen hex digits at the end of the line, which the
      *  OCR at times splits once ("000000000001 28") or reads a zero of as O. */
     private val nvmeRaw = Regex("""([0-9A-FOQ]{6,16}(?:\s[0-9A-FOQ]{1,8})?)\W*$""")
@@ -242,7 +247,9 @@ object SmartScreens {
             val attribute = Attribute.entries.firstOrNull { it.names.containsMatchIn(line) } ?: continue
             found++
             if (nvmeScreen && (attribute in nvmeAttributes || attribute == Attribute.HOURS)) {
-                if (!headerHours.containsMatchIn(line)) nvmeValue(line)?.let { nvmeRows[attribute] = it }
+                if (!headerHours.containsMatchIn(line)) nvmeValue(line)
+                    ?.takeUnless { attribute in oneByteAttributes && it > 0xFF }
+                    ?.let { nvmeRows[attribute] = it }
                 continue
             }
             if (attribute in nvmeAttributes) continue
