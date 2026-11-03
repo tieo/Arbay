@@ -1,75 +1,12 @@
 package io.github.tieo.arbay.crawler
 
 import io.github.tieo.arbay.model.*
-import io.ktor.client.*
-import kotlin.time.Clock
-import org.jsoup.Jsoup
+import io.github.tieo.arbay.neuland.NeulandOffers
 
-class GeizhalsCrawler(private val client: HttpClient) : Crawler {
+/** Geizhals, read by Neuland: its search sorted by price, each product with its lowest item price. */
+class GeizhalsCrawler : Crawler {
     override val platformId = PlatformId.GEIZHALS
 
-    override suspend fun search(query: SearchQuery): List<Listing> {
-        // Cheapest first: in its own order Geizhals answers "20TB HDD" with whole NAS systems that
-        // come with drives, and the drives themselves never reach the page read.
-        val url = "https://geizhals.de/?fs=${query.positiveText.encodeUrl()}&sort=p"
-        // Cloudflare checks the TLS fingerprint, which the plain HTTP client fails; Neuland's
-        // browser reads the page where the plain tiers are refused.
-        val html = fetchWithFallback(
-            client, url, "Geizhals",
-            primeUrl = "https://geizhals.de",
-            waitNetworkIdle = true,
-        )
-        return parseSearchResults(html)
-    }
-
-    private fun parseSearchResults(html: String): List<Listing> {
-        val doc = Jsoup.parse(html)
-        val now = Clock.System.now()
-
-        // Gallery view (default) or list view
-        val items = doc.select("article.galleryview__item")
-            .ifEmpty { doc.select(".listview__item") }
-            .ifEmpty { doc.select(".productlist__product") }
-
-        return items.mapNotNull { item ->
-            val titleEl = item.selectFirst("h3.galleryview__name a")
-                ?: item.selectFirst(".galleryview__name-link")
-                ?: item.selectFirst(".productlist__link")
-                ?: item.selectFirst(".listview__name a")
-                ?: return@mapNotNull null
-            val title = titleEl.text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            val href = titleEl.attr("href")
-            val url = if (href.startsWith("http")) href else "https://geizhals.de$href"
-
-            val externalId = Regex("""[/-][av]?(\d{5,})""").find(href)?.groupValues?.get(1)
-                ?: return@mapNotNull null
-
-            val priceText = item.selectFirst(".galleryview__price span.price")?.text()
-                ?: item.selectFirst(".galleryview__price-link .price")?.text()
-                ?: item.selectFirst(".productlist__price")?.text()
-                ?: item.selectFirst(".listview__price")?.text()
-                ?: item.selectFirst("[class*=price]")?.text()
-                ?: return@mapNotNull null
-            val price = Money.parse(priceText) ?: return@mapNotNull null
-
-            val imageUrl = item.selectFirst("img.galleryview__image")?.attr("src")
-                ?: item.selectFirst("img")?.let {
-                    it.attr("src").ifBlank { it.attr("data-src") }
-                }?.takeIf { it.startsWith("http") }
-
-            Listing(
-                id = "${platformId.name}:$externalId",
-                platformId = platformId,
-                externalId = externalId,
-                url = url,
-                title = title,
-                price = price,
-                condition = Condition.NEW,
-                imageUrls = listOfNotNull(imageUrl),
-                scrapedAt = now,
-            )
-        }
-    }
+    override suspend fun search(query: SearchQuery): List<Listing> =
+        NeulandOffers.search("geizhals.de", query.positiveText, platformId, "Geizhals")
 }

@@ -184,27 +184,6 @@ class CrawlerParserProbe {
     }
 
     @Test
-    fun testGeizhalsParser() = runBlocking {
-        val file = File("/tmp/geizhals2.html")
-        if (!file.exists()) {
-            println("SKIP: /tmp/geizhals2.html not found")
-            return@runBlocking
-        }
-        val client = mockClientFrom("/tmp/geizhals2.html")
-        val crawler = GeizhalsCrawler(client)
-        val results = crawler.search(query)
-        println("Geizhals parsed: ${results.size} results")
-        assertTrue(results.isNotEmpty(), "Geizhals parser should find results")
-        results.take(3).forEach {
-            println("  [${it.platformId}] ${it.title} — ${it.price.amount / 100}€ — ${it.url}")
-            assertEquals(PlatformId.GEIZHALS, it.platformId)
-            assertTrue(it.title.isNotBlank())
-            assertTrue(it.price.amount > 0)
-        }
-    }
-
-    // Test error classification and captcha detection utilities directly
-    @Test
     fun testHttpErrorClassification() = runBlocking {
         val client = mockClientWith("", HttpStatusCode.ServiceUnavailable)
         val response = client.get("http://test")

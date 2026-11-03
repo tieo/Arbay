@@ -22,7 +22,7 @@ object CrawlerRegistry {
         PlatformId.KLEINANZEIGEN to KleinanzeigenCrawler(httpClient),
         PlatformId.AMAZON_DE to AmazonDeCrawler(httpClient),
         PlatformId.IDEALO to IdealoCrawler(),
-        PlatformId.GEIZHALS to GeizhalsCrawler(httpClient),
+        PlatformId.GEIZHALS to GeizhalsCrawler(),
         PlatformId.VINTED_DE to VintedDeCrawler(httpClient),
         PlatformId.BACKMARKET_DE to BackMarketCrawler(httpClient),
         PlatformId.REBUY to RebuyCrawler(httpClient),
