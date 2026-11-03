@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.neuland
 
-import io.github.tieo.arbay.crawler.CrawlerBlockedException
-import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.markets.CrawlerBlockedException
+import io.github.tieo.arbay.markets.ErrorType
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO

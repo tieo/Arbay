@@ -1,9 +1,9 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.BlockCooldown
-import io.github.tieo.arbay.crawler.CrawlerBlockedException
-import io.github.tieo.arbay.crawler.EbayDeCrawler
-import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.markets.BlockCooldown
+import io.github.tieo.arbay.markets.CrawlerBlockedException
+import io.github.tieo.arbay.markets.EbayDeCrawler
+import io.github.tieo.arbay.markets.ErrorType
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.SearchQuery
 import kotlinx.coroutines.runBlocking

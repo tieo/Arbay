@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.VehicleTextParser
+import io.github.tieo.arbay.relevance.VehicleTextParser
 import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.model.Drivetrain
 import io.github.tieo.arbay.model.Transmission

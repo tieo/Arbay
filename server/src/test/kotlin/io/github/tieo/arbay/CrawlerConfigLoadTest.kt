@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CrawlerConfig
+import io.github.tieo.arbay.markets.CrawlerConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

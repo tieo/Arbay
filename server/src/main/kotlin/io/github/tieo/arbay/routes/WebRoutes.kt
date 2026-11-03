@@ -1,8 +1,8 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.SiteGaps
-import io.github.tieo.arbay.crawler.SiteRecipes
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.SiteGaps
+import io.github.tieo.arbay.markets.SiteRecipes
 import io.github.tieo.arbay.plugins.BadRequestException
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.ktor.http.ContentType
@@ -48,7 +48,7 @@ fun Route.webRoutes() {
         get("/serp") {
             val q = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() } ?: throw BadRequestException("Missing q")
             val engines = call.request.queryParameters.getAll("engine").orEmpty().toSet()
-            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler
+            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.markets.WebCrawler
                 ?: throw NotFoundException("The web market is not running")
             call.respond(web.engines.serp(q, engines))
         }
@@ -56,7 +56,7 @@ fun Route.webRoutes() {
         get("/images") {
             val q = call.request.queryParameters["q"]?.trim()?.takeIf { it.isNotEmpty() } ?: throw BadRequestException("Missing q")
             val pages = call.request.queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 10) ?: 3
-            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler
+            val web = CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.markets.WebCrawler
                 ?: throw NotFoundException("The web market is not running")
             call.respond(web.engines.images(q, pages))
         }
@@ -72,7 +72,7 @@ fun Route.webRoutes() {
             SiteGaps.takeBack(SiteRecipes.domainOf("https://$domain/"))
             // What the searches that met the site before it was learned missed, read now and added
             // to them, the ones still open on a screen included.
-            val learned = (CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.crawler.WebCrawler)
+            val learned = (CrawlerRegistry.crawlerFor(io.github.tieo.arbay.model.PlatformId.WEB) as? io.github.tieo.arbay.markets.WebCrawler)
                 ?.learned(SiteRecipes.domainOf("https://$domain/")).orEmpty()
             call.respond(learned.mapValues { it.value.size })
         }

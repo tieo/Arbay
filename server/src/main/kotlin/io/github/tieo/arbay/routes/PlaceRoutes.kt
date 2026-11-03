@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.Geocoder
+import io.github.tieo.arbay.judging.Geocoder
 import io.github.tieo.arbay.plugins.NotFoundException
 import io.ktor.http.*
 import io.ktor.server.response.*

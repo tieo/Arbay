@@ -117,7 +117,7 @@ class ArbayMcpTest {
         }
         val products = io.github.tieo.arbay.repo.ProductRepo()
         routing {
-            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            productRoutes(products, io.github.tieo.arbay.monitoring.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
             mcpRoutes("", client)
         }
         val mcp = createClient { install(ClientSSE) }.mcpStreamableHttp("/mcp")
@@ -144,7 +144,7 @@ class ArbayMcpTest {
         }
         val products = io.github.tieo.arbay.repo.ProductRepo()
         routing {
-            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            productRoutes(products, io.github.tieo.arbay.monitoring.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
             mcpRoutes("", client)
         }
         val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
@@ -175,7 +175,7 @@ class ArbayMcpTest {
         }
         val products = io.github.tieo.arbay.repo.ProductRepo()
         routing {
-            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            productRoutes(products, io.github.tieo.arbay.monitoring.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
             mcpRoutes("", client)
         }
         val saved = products.create(io.github.tieo.arbay.model.TrackedProduct(
@@ -215,7 +215,7 @@ class ArbayMcpTest {
         }
         val products = io.github.tieo.arbay.repo.ProductRepo()
         routing {
-            productRoutes(products, io.github.tieo.arbay.crawler.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
+            productRoutes(products, io.github.tieo.arbay.monitoring.SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo()))
             mcpRoutes("", client)
         }
         val van = products.create(io.github.tieo.arbay.model.TrackedProduct(

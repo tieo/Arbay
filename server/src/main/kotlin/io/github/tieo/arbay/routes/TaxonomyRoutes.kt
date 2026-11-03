@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.CarTaxonomyProvider
+import io.github.tieo.arbay.relevance.CarTaxonomyProvider
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*

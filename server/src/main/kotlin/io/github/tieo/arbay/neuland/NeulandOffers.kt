@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.neuland
 
-import io.github.tieo.arbay.crawler.unreadablePage
+import io.github.tieo.arbay.markets.unreadablePage
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
@@ -26,15 +26,15 @@ object NeulandOffers {
     /** What a refusal from Neuland means for the site: the site refusing (its status, or a browser's
      *  read ending on its error page or a block) starts the site's cooldown; Neuland not answering,
      *  as while it restarts for a deploy, is no word from the site. */
-    private fun Neuland.Refusal.errorType(): io.github.tieo.arbay.crawler.ErrorType {
+    private fun Neuland.Refusal.errorType(): io.github.tieo.arbay.markets.ErrorType {
         val status = answer["status"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
         val state = (answer["state"] as? kotlinx.serialization.json.JsonPrimitive)?.content
         return when {
-            this.status == 0 -> io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR
-            status == 429 -> io.github.tieo.arbay.crawler.ErrorType.RATE_LIMITED_429
-            status == 403 || state == "errorpage" || state == "refused" -> io.github.tieo.arbay.crawler.ErrorType.BLOCKED_403
-            status == 503 -> io.github.tieo.arbay.crawler.ErrorType.SERVICE_UNAVAILABLE_503
-            else -> io.github.tieo.arbay.crawler.ErrorType.NETWORK_ERROR
+            this.status == 0 -> io.github.tieo.arbay.markets.ErrorType.NETWORK_ERROR
+            status == 429 -> io.github.tieo.arbay.markets.ErrorType.RATE_LIMITED_429
+            status == 403 || state == "errorpage" || state == "refused" -> io.github.tieo.arbay.markets.ErrorType.BLOCKED_403
+            status == 503 -> io.github.tieo.arbay.markets.ErrorType.SERVICE_UNAVAILABLE_503
+            else -> io.github.tieo.arbay.markets.ErrorType.NETWORK_ERROR
         }
     }
 
@@ -52,7 +52,7 @@ object NeulandOffers {
      */
     suspend fun ask(
         site: String, words: String, platform: PlatformId, siteName: String, page: Int = 1, min: Money? = null, max: Money? = null,
-        vehicle: VehicleQuery? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null, countries: List<String> = emptyList(),
+        vehicle: VehicleQuery? = null, near: io.github.tieo.arbay.markets.SearchArea? = null, countries: List<String> = emptyList(),
         otherwise: Condition? = null, kinds: Set<String>? = null,
         sold: Boolean = false, conditions: List<String> = emptyList(), perPage: Int? = null,
     ): Answer {
@@ -81,7 +81,7 @@ object NeulandOffers {
         val answer = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
         } catch (e: Neuland.Refusal) {
-            throw io.github.tieo.arbay.crawler.CrawlerBlockedException("$siteName: ${e.message}", e.errorType())
+            throw io.github.tieo.arbay.markets.CrawlerBlockedException("$siteName: ${e.message}", e.errorType())
         }
         val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", answer.toString(), it as? Exception) }
@@ -115,10 +115,10 @@ object NeulandOffers {
                 listingDate = o.listedAt(),
                 description = o.description,
                 scrapedAt = now,
-                vehicle = if (vehicle == null) o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence)
-                else io.github.tieo.arbay.crawler.VehicleTextParser.merge(
-                    o.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
-                    o.cardText?.let(io.github.tieo.arbay.crawler.VehicleTextParser::parse),
+                vehicle = if (vehicle == null) o.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence)
+                else io.github.tieo.arbay.relevance.VehicleTextParser.merge(
+                    o.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence),
+                    o.cardText?.let(io.github.tieo.arbay.relevance.VehicleTextParser::parse),
                 ),
             )
         }
@@ -134,7 +134,7 @@ object NeulandOffers {
     /** The cars or vans [site] offers for [words] and [vehicle]'s conditions (see [ask]). */
     suspend fun searchVehicles(
         site: String, words: String, platform: PlatformId, siteName: String, vehicle: VehicleQuery,
-        page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.crawler.SearchArea? = null,
+        page: Int = 1, min: Money? = null, max: Money? = null, near: io.github.tieo.arbay.markets.SearchArea? = null,
         otherwise: Condition? = null, countries: List<String> = emptyList(),
     ): List<Listing> = ask(site, words, platform, siteName, page, min, max, vehicle, near, countries, otherwise).listings
 
@@ -221,7 +221,7 @@ object NeulandOffers {
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer's detail", body, it as? Exception) }
         return Detail(
             description = read.description,
-            vehicle = read.vehicle?.info()?.let(io.github.tieo.arbay.crawler.VehicleTextParser::verifiedByPresence),
+            vehicle = read.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence),
             specs = read.specs.mapNotNull { row -> if (row.size == 2) row[0] to row[1] else null },
             location = read.place?.let { p ->
                 io.github.tieo.arbay.model.Location(

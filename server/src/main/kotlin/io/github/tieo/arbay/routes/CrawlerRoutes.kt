@@ -3,41 +3,41 @@ package io.github.tieo.arbay.routes
 import kotlinx.coroutines.flow.transformWhile
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.classifier.CarCriteriaScorer
-import io.github.tieo.arbay.crawler.BlockCooldown
-import io.github.tieo.arbay.crawler.CarFilterEngine
-import io.github.tieo.arbay.crawler.cannotAnswer
-import io.github.tieo.arbay.crawler.CarQueryResolver
-import io.github.tieo.arbay.crawler.CrawlThrottle
-import io.github.tieo.arbay.crawler.Crawler
-import io.github.tieo.arbay.crawler.CrawlerBlockedException
-import io.github.tieo.arbay.crawler.CrawlerConfig
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.CrawlerStatusTracker
-import io.github.tieo.arbay.crawler.DetailEnricher
-import io.github.tieo.arbay.crawler.ErrorSnapshotStore
-import io.github.tieo.arbay.crawler.ErrorType
-import io.github.tieo.arbay.crawler.ExchangeRates
-import io.github.tieo.arbay.crawler.FetchProgressEmitter
-import io.github.tieo.arbay.crawler.Geocoder
-import io.github.tieo.arbay.crawler.PartialResultEmitter
-import io.github.tieo.arbay.crawler.PlatformStatus
-import io.github.tieo.arbay.crawler.QueryResultCache
-import io.github.tieo.arbay.crawler.QueryVariants
-import io.github.tieo.arbay.crawler.RelevanceFilter
-import io.github.tieo.arbay.crawler.RequestMonitor
-import io.github.tieo.arbay.crawler.SellsByAuction
-import io.github.tieo.arbay.crawler.SoldDetector
-import io.github.tieo.arbay.crawler.TermVerdictEmitter
-import io.github.tieo.arbay.crawler.TermsUsedEmitter
-import io.github.tieo.arbay.crawler.Translator
-import io.github.tieo.arbay.crawler.VehicleTextParser
-import io.github.tieo.arbay.crawler.area
-import io.github.tieo.arbay.crawler.askedInItsOwnLanguage
-import io.github.tieo.arbay.crawler.classifyException
-import io.github.tieo.arbay.crawler.localizedQuery
-import io.github.tieo.arbay.crawler.searchAllSpellings
-import io.github.tieo.arbay.crawler.trackedSearch
-import io.github.tieo.arbay.crawler.withCrawlLimitOrNull
+import io.github.tieo.arbay.markets.BlockCooldown
+import io.github.tieo.arbay.relevance.CarFilterEngine
+import io.github.tieo.arbay.markets.cannotAnswer
+import io.github.tieo.arbay.relevance.CarQueryResolver
+import io.github.tieo.arbay.markets.CrawlThrottle
+import io.github.tieo.arbay.markets.Crawler
+import io.github.tieo.arbay.markets.CrawlerBlockedException
+import io.github.tieo.arbay.markets.CrawlerConfig
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.CrawlerStatusTracker
+import io.github.tieo.arbay.judging.DetailEnricher
+import io.github.tieo.arbay.markets.ErrorSnapshotStore
+import io.github.tieo.arbay.markets.ErrorType
+import io.github.tieo.arbay.judging.ExchangeRates
+import io.github.tieo.arbay.markets.FetchProgressEmitter
+import io.github.tieo.arbay.judging.Geocoder
+import io.github.tieo.arbay.markets.PartialResultEmitter
+import io.github.tieo.arbay.markets.PlatformStatus
+import io.github.tieo.arbay.markets.QueryResultCache
+import io.github.tieo.arbay.relevance.QueryVariants
+import io.github.tieo.arbay.relevance.RelevanceFilter
+import io.github.tieo.arbay.markets.RequestMonitor
+import io.github.tieo.arbay.markets.SellsByAuction
+import io.github.tieo.arbay.judging.SoldDetector
+import io.github.tieo.arbay.markets.TermVerdictEmitter
+import io.github.tieo.arbay.markets.TermsUsedEmitter
+import io.github.tieo.arbay.relevance.Translator
+import io.github.tieo.arbay.relevance.VehicleTextParser
+import io.github.tieo.arbay.markets.area
+import io.github.tieo.arbay.relevance.askedInItsOwnLanguage
+import io.github.tieo.arbay.markets.classifyException
+import io.github.tieo.arbay.relevance.localizedQuery
+import io.github.tieo.arbay.markets.searchAllSpellings
+import io.github.tieo.arbay.markets.trackedSearch
+import io.github.tieo.arbay.markets.withCrawlLimitOrNull
 import io.github.tieo.arbay.model.*
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.SaleType
@@ -134,7 +134,7 @@ private suspend fun finishedResults(
     // waved through for want of an address.
     val (filtered, criteriaDropped) = carPostFilter(raw, query, isCarQuery, crawler)
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
-        io.github.tieo.arbay.crawler.LocationEnricher.enrich(filtered, crawler) else filtered
+        io.github.tieo.arbay.judging.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
     val listings = withFit(withPhotoCopies(asDelivered(inside, query)), query, isCarQuery)
     listings.forEach { listingRepo.upsert(it) }
@@ -180,7 +180,7 @@ private fun io.ktor.server.routing.RoutingCall.applyCarFilters(base: SearchQuery
     // Without a position of its own, a search is measured from the user's home, so every offer
     // still carries its distance and a fit weighs it.
     val here = p["lat"]?.toDoubleOrNull()?.let { lat -> p["lon"]?.toDoubleOrNull()?.let { lat to it } }
-        ?: io.github.tieo.arbay.crawler.Geocoder.home()
+        ?: io.github.tieo.arbay.judging.Geocoder.home()
     return base.withCarFilters(filters.takeUnless { it.isEmpty }).copy(
         userLat = here?.first,
         userLon = here?.second,
@@ -399,9 +399,9 @@ private fun asDelivered(listings: List<Listing>, query: SearchQuery): List<Listi
     }
 }
 
-/** Each listing with the ads elsewhere that show one of its photos ([io.github.tieo.arbay.crawler.PhotoPrints]). */
+/** Each listing with the ads elsewhere that show one of its photos ([io.github.tieo.arbay.judging.PhotoPrints]). */
 private fun withPhotoCopies(listings: List<Listing>): List<Listing> = listings.map { l ->
-    io.github.tieo.arbay.crawler.PhotoPrints.copiesOf(l).takeIf { it.isNotEmpty() }?.let { l.copy(photosAlsoIn = it) } ?: l
+    io.github.tieo.arbay.judging.PhotoPrints.copiesOf(l).takeIf { it.isNotEmpty() }?.let { l.copy(photosAlsoIn = it) } ?: l
 }
 
 /**
@@ -415,14 +415,14 @@ private fun withFit(listings: List<Listing>, query: SearchQuery, isCarQuery: Boo
     val softDriveHours = io.github.tieo.arbay.model.FitAlertSettings().softDriveHours
     val things = query.productWishes?.takeUnless { it.isEmpty }
     if (!isCarQuery && things != null) return listings.map { l ->
-        val fit = io.github.tieo.arbay.crawler.FitScore.score(l, things, io.github.tieo.arbay.crawler.FitScore.priceEur(l), softDriveHours)
+        val fit = io.github.tieo.arbay.judging.FitScore.score(l, things, io.github.tieo.arbay.judging.FitScore.priceEur(l), softDriveHours)
             ?: return@map l
         l.copy(matchScore = fit.score, fit = fit.parts)
     }
     if (!isCarQuery) return listings
     val wishes = query.toCarFilters() ?: return listings
     return listings.map { l ->
-        val fit = io.github.tieo.arbay.crawler.FitScore.score(l, wishes, io.github.tieo.arbay.crawler.FitScore.priceEur(l), softDriveHours)
+        val fit = io.github.tieo.arbay.judging.FitScore.score(l, wishes, io.github.tieo.arbay.judging.FitScore.priceEur(l), softDriveHours)
             ?: return@map l
         val described = l.matchScore
         if (described == null) l.copy(matchScore = fit.score, fit = fit.parts)
@@ -558,13 +558,13 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             suspend fun ListingDetail.priced(): ListingDetail {
                 val read = withBrokenRead()
                 return if (platform != PlatformId.KLEINANZEIGEN) read
-                else read.copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(read.shipping) {
+                else read.copy(shipping = io.github.tieo.arbay.judging.KleinanzeigenCosts.withDoorDelivery(read.shipping) {
                     id.substringAfter(':').takeIf { it.all(Char::isDigit) }?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
                 })
             }
             val crawler = CrawlerRegistry.crawlerFor(platform)
                 ?: throw BadRequestException("No crawler for $platform")
-            io.github.tieo.arbay.crawler.DetailCache.get(id)
+            io.github.tieo.arbay.markets.DetailCache.get(id)
                 ?.takeUnless { platform == PlatformId.KLEINANZEIGEN && it.shipping == null }
                 // eBay's description was read from its page only later; a page read before is read again.
                 ?.takeUnless { platform.name.startsWith("EBAY") && it.description == null }
@@ -572,10 +572,10 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                 // for days ("Endet am 26. Oct."), so an eBay page is read again after a day.
                 ?.takeUnless {
                     platform.name.startsWith("EBAY") &&
-                        (it.shipping == null || (io.github.tieo.arbay.crawler.DetailCache.ageMs(id) ?: 0) > EBAY_PAGE_FRESH_MS)
+                        (it.shipping == null || (io.github.tieo.arbay.markets.DetailCache.ageMs(id) ?: 0) > EBAY_PAGE_FRESH_MS)
                 }
                 // So is the page of a market whose gallery is read, where it was read before galleries were.
-                ?.takeUnless { crawler is io.github.tieo.arbay.crawler.ReadsGalleries && it.photos.isEmpty() }
+                ?.takeUnless { crawler is io.github.tieo.arbay.markets.ReadsGalleries && it.photos.isEmpty() }
                 ?.let { return@get call.respond(it.priced()) }
             // Checked only before a fetch: a page already read is served without resolving its host,
             // so it is still there when the server cannot reach the internet.
@@ -590,7 +590,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             if (detail == null) {
                 call.respond(HttpStatusCode.NoContent)
             } else {
-                io.github.tieo.arbay.crawler.DetailCache.put(id, detail)
+                io.github.tieo.arbay.markets.DetailCache.put(id, detail)
                 call.respond(detail.priced())
             }
         }
@@ -602,8 +602,8 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             // A photo address that is not a public web address is left out rather than failing the
             // ad's every other photo with it.
             val photos = ask.photos.take(20).mapNotNull { runCatching { requirePublicHttpUrl(it) }.getOrNull() }
-            call.respond(io.github.tieo.arbay.crawler.SmartScreens.read(ask.listingId, ask.title, photos) {
-                io.github.tieo.arbay.crawler.PhotoPrints.downloadAt(it)
+            call.respond(io.github.tieo.arbay.judging.SmartScreens.read(ask.listingId, ask.title, photos) {
+                io.github.tieo.arbay.judging.PhotoPrints.downloadAt(it)
             })
         }
 
@@ -613,7 +613,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val url = requirePublicHttpUrl(call.queryParameters["url"] ?: throw BadRequestException("Missing url"))
             val platform = call.queryParameters["platform"]?.let { runCatching { PlatformId.valueOf(it) }.getOrNull() }
                 ?: throw BadRequestException("Missing or unknown platform")
-            val crawler = CrawlerRegistry.crawlerFor(platform) as? io.github.tieo.arbay.crawler.KnowsAdState
+            val crawler = CrawlerRegistry.crawlerFor(platform) as? io.github.tieo.arbay.markets.KnowsAdState
                 ?: return@get call.respond(HttpStatusCode.NoContent)
             // The price and shipping come with the state, off the same fetch, for an offer about to
             // be written.
@@ -623,7 +623,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
             val adId = url.substringAfterLast('/').substringBefore('-').takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
             call.respond(
                 if (platform != PlatformId.KLEINANZEIGEN) now
-                else now.copy(shipping = io.github.tieo.arbay.crawler.KleinanzeigenCosts.withDoorDelivery(now.shipping) {
+                else now.copy(shipping = io.github.tieo.arbay.judging.KleinanzeigenCosts.withDoorDelivery(now.shipping) {
                     adId?.let { io.github.tieo.arbay.chat.Chat.shippingOptions(it) }
                 }),
             )
@@ -781,7 +781,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           val streamed = java.util.concurrent.atomic.AtomicInteger(0)
                           // The shops the web market met and could not read, which this search
                           // then stays open for while they are learned.
-                          val unreadable = io.github.tieo.arbay.crawler.UnreadableSites()
+                          val unreadable = io.github.tieo.arbay.markets.UnreadableSites()
                           // A crawler that never returns must not outlive the request. Without this
                           // its coroutine holds the stream open, the stream holds the scrape permit,
                           // and the server refuses every later search as busy until it restarts.
@@ -816,7 +816,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                             val pq = localizedQuery(searchQuery, platformId)
                             // Set when the market says it answered from one of its own categories.
                             val answeredFromCategory = java.util.concurrent.atomic.AtomicBoolean(false)
-                            val categoryEmitter = io.github.tieo.arbay.crawler.CategoryAnswerEmitter {
+                            val categoryEmitter = io.github.tieo.arbay.markets.CategoryAnswerEmitter {
                                 answeredFromCategory.set(true)
                             }
                             val termsUsed = java.util.Collections.synchronizedList(mutableListOf<String>())
@@ -962,7 +962,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                 // A market answering with one title over and over is a parser
                                 // reading the wrong node, which otherwise shows up only as results
                                 // quietly going missing.
-                                io.github.tieo.arbay.crawler.repeatedTitleReport(rawResults, pq)?.let { report ->
+                                io.github.tieo.arbay.markets.repeatedTitleReport(rawResults, pq)?.let { report ->
                                     CrawlerStatusTracker.recordError(platformId, report, ErrorType.PARSE_ERROR)
                                     ErrorSnapshotStore.capture(
                                         platform = platformId.name, query = pq.text,
@@ -1090,7 +1090,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           var reported = done
                           if (done != null && doneBy != null && done.listings.any { it.location == null }) {
                               try {
-                                  val placed = io.github.tieo.arbay.crawler.LocationEnricher.enrich(done.listings, doneBy)
+                                  val placed = io.github.tieo.arbay.judging.LocationEnricher.enrich(done.listings, doneBy)
                                   if (placed.zip(done.listings).any { (a, b) -> a.location != b.location }) {
                                       reported = done.copy(listings = asDelivered(placed, localizedQuery(searchQuery, platformId)))
                                       resultChannel.send(reported)
@@ -1127,7 +1127,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                                   ))
                                   learning()
                                   kotlinx.coroutines.withTimeoutOrNull(LEARNING_WAIT_MS) {
-                                      io.github.tieo.arbay.crawler.SiteGaps.learned
+                                      io.github.tieo.arbay.markets.SiteGaps.learned
                                           .transformWhile { l ->
                                               if (l.domain in waiting) {
                                                   waiting -= l.domain
@@ -1169,9 +1169,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                           // report goes out again with the offers they agree are something else
                           // put last, and those the word rule put last wrongly brought back.
                           val toJudge = reported
-                          if (toJudge != null && io.github.tieo.arbay.crawler.OfferJudge.enabled) {
+                          if (toJudge != null && io.github.tieo.arbay.judging.OfferJudge.enabled) {
                               try {
-                                  val judged = io.github.tieo.arbay.crawler.OfferJudge.judge(toJudge.listings, searchQuery.positiveText)
+                                  val judged = io.github.tieo.arbay.judging.OfferJudge.judge(toJudge.listings, searchQuery.positiveText)
                                   if (judged != toJudge.listings) resultChannel.send(toJudge.copy(listings = judged))
                               } catch (e: CancellationException) {
                                   throw e

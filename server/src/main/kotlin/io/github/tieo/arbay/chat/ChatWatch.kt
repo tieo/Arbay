@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.crawler.Ntfy
+import io.github.tieo.arbay.monitoring.Ntfy
 import io.github.tieo.arbay.model.Conversation
 import io.github.tieo.arbay.repo.readStore
 import io.github.tieo.arbay.repo.writeTextAtomically

@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.Geocoder
+import io.github.tieo.arbay.judging.Geocoder
 import io.github.tieo.arbay.model.ImportSettings
 import io.github.tieo.arbay.model.MarketSettings
 import io.github.tieo.arbay.repo.ImportSettingsStore

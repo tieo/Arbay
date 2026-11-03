@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.SmartScreens
+import io.github.tieo.arbay.judging.SmartScreens
 import io.github.tieo.arbay.model.SmartReading
 import kotlinx.serialization.json.Json
 import java.io.File

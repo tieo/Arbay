@@ -173,7 +173,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             all.forEach { seen[it.id] = it }
             val removed = dropped.toSortedMap()
             removed.values.flatten().forEach { seen[it.listing.id] = it.listing }
-            val views = io.github.tieo.arbay.crawler.ViewCounts.of(shown.map { it.id })
+            val views = io.github.tieo.arbay.judging.ViewCounts.of(shown.map { it.id })
             return buildString {
                 appendLine("${shown.size} of ${all.size} offers for \"$words\":")
                 shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
@@ -312,11 +312,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     .mapNotNull { it.jsonPrimitive.contentOrNull }.takeIf { it.isNotEmpty() }
                     ?.let { ids -> ids.take(20).joinToString(", ", prefix = "\n  new: ") + if (ids.size > 20) ", and ${ids.size - 20} more (new_offers lists them all)" else "" } ?: "") + ((s?.get("missingTopOffers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
                     .joinToString("") { o ->
-                        val why = if (o.str("state") == "RULED_OUT") "RULED OUT of its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} by the search's rule \"${o.str("ruledOutBy")}\" (check the ad really breaks it)"
+                        val why = if (o.str("state") == "RULED_OUT") "RULED OUT of its top ${io.github.tieo.arbay.judging.TopOffers.TOP} by the search's rule \"${o.str("ruledOutBy")}\" (check the ad really breaks it)"
                             else o.str("marketError")?.let { e ->
                                 val market = runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(o.str("listingId")!!.substringBefore(':')).displayName }.getOrNull() ?: "its market"
-                                "LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} ($market gave the last run no answer, so it was never looked for: $e)"
-                            } ?: ("LOST from its top ${io.github.tieo.arbay.crawler.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")")
+                                "LOST from its top ${io.github.tieo.arbay.judging.TopOffers.TOP} ($market gave the last run no answer, so it was never looked for: $e)"
+                            } ?: ("LOST from its top ${io.github.tieo.arbay.judging.TopOffers.TOP} (the last run did not return it; ad " + (o.str("adState")?.lowercase() ?: "state unknown") + ")")
                         val looked = o.str("checkedAt")?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
                             ?.let { " (looked for ${hoursAgo(it)})" }.orEmpty()
                         "\n  $why$looked: ${o.str("title")} · ${o.num("priceEur")?.toInt()} € · best fit " +
@@ -705,7 +705,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val now = drafted.values.associate { l -> l.id to adNow(l) }
             val pageShipping = drafted.values.associate { l -> l.id to (now[l.id]?.shipping ?: pageShipping(l)) }
             val toDoor = getJson<ChatSettings>("/api/chat/settings").toDoor
-            val costs = io.github.tieo.arbay.crawler.KleinanzeigenCosts.costs()
+            val costs = io.github.tieo.arbay.judging.KleinanzeigenCosts.costs()
             args.strs("listing_ids").joinToString("\n\n") { id ->
                 val l = drafted[id] ?: return@joinToString "$id: unknown offer; search first."
                 if (!l.platformId.canMessage) return@joinToString "$id: only Kleinanzeigen sellers can be written to."
@@ -1091,7 +1091,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private suspend fun offer(id: String): Listing? = (seen[id]
         ?: runCatching { getJson<Listing>("/api/listings/${id.encodeURLPathPart()}") }.getOrNull()
         ?: io.github.tieo.arbay.repo.ListingArchive.get(id))
-        ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.crawler.PhotoPrints.copiesOf(it)) }
+        ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.judging.PhotoPrints.copiesOf(it)) }
 
     /** [id]'s checkout read, or bought within [allInEur] with [pay]. */
     private suspend fun purchase(id: String, allInEur: Double, pay: Boolean): String {

@@ -1,11 +1,12 @@
 package io.github.tieo.arbay.tools
 
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.MarketCapabilities
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.MarketCapabilities
 import io.github.tieo.arbay.model.PlatformId
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.system.exitProcess
+import io.github.tieo.arbay.markets.pageLimit
 
 /**
  * Prints what every market can do, as the crawlers themselves declare it. The model site renders

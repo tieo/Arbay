@@ -1,0 +1,1873 @@
+package io.github.tieo.arbay.relevance
+
+import io.github.tieo.arbay.model.BlockedDealer
+import io.github.tieo.arbay.model.DropReason
+import io.github.tieo.arbay.model.DroppedListing
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.blocking
+import io.github.tieo.arbay.repo.UserStateStore
+
+object RelevanceFilter {
+
+    // Unit suffixes that can be glued to a number: "256gb", "512tb", "16mp"
+    private val unitSuffixes = setOf("gb", "tb", "mb", "mp", "mhz", "ghz", "mah", "wh", "mm", "cm", "kg", "zoll", "inch")
+
+    data class ParsedQuery(
+        val positiveTokens: List<String>,
+        val negativeTokens: List<String>,
+        val orGroups: List<List<String>>,
+        /** Whether the search as typed names a unit, so sizes in a title are part of what it asks
+         *  for. Read once off every word typed: the words a listing is held to are narrowed to
+         *  those its market writes, and a unit typed apart ("256 GB") is rarely written apart. */
+        val asksForASize: Boolean = false,
+        /** Every word of the search as typed, in its order, whichever of them a listing is held
+         *  to: what a number counts is the word typed after it, required or not. */
+        val typed: List<String> = emptyList(),
+        /** A word typed with an umlaut, by the spelling without it: "lägler" is "laegler" here and
+         *  "Lagler" on most of the ads selling one. */
+        val plainVowels: Map<String, String> = emptyMap(),
+        /** Each blocked token as the reader typed it, to name it back to them: "2,5 zoll", not "2p5zoll". */
+        val blockedAs: Map<String, String> = emptyMap(),
+    )
+
+    /** Built from the query's own structured fields — [SearchQuery.excludeKeywords] for what must
+     *  not appear, [SearchQuery.aliases] for alternate phrasings that count as the same search.
+     *  Neither is read out of the query text: a person's search box, and a catalog entry's own
+     *  canonical phrase, both stay exactly the one thing they name. */
+    fun parseQuery(query: SearchQuery): ParsedQuery {
+        val orGroups = if (query.aliases.isNotEmpty()) {
+            (listOf(query.text) + query.aliases).map { tokenize(it) }
+        } else {
+            emptyList()
+        }
+        val positiveTokens = tokenize(query.text)
+        return ParsedQuery(
+            positiveTokens = positiveTokens,
+            negativeTokens = query.excludeKeywords.map { normalizeToken(it) },
+            // Two spellings of one blocked phrase ("2,5 zoll", "2.5 zoll") are named as the first.
+            blockedAs = query.excludeKeywords.asReversed().associateBy { normalizeToken(it) },
+            orGroups = orGroups,
+            asksForASize = (positiveTokens + orGroups.flatten()).any { namesAUnit(it) },
+            typed = positiveTokens,
+            plainVowels = (listOf(query.text) + query.aliases).flatMap { it.split(" ") }
+                .filter { w -> w.any { it in "äöüÄÖÜ" } }
+                .associate { w -> normalizeToken(w) to normalizeToken(w.replace(UMLAUT) { it.value.lowercase().let(PLAIN_VOWEL::getValue) }) },
+        )
+    }
+
+    private val UMLAUT = Regex("[äöüÄÖÜ]")
+    private val PLAIN_VOWEL = mapOf("ä" to "a", "ö" to "o", "ü" to "u")
+
+    /** A unit on its own ("GB"), or glued to a number or a kit's quantity×size ("32GB", "1x32GB"). */
+    private fun namesAUnit(token: String): Boolean =
+        token in unitSuffixes || unitSuffixes.any { u ->
+            token.endsWith(u) && token.dropLast(u.length).let { pre -> pre.isNotEmpty() && pre.all { c -> c.isDigit() || c == 'x' } }
+        }
+
+    /** The words of a phrase, with a storage size typed apart ("2 TB", "1x32 GB") joined back into
+     *  the one size it names. Apart, "2" matched the "M 2" of any M.2 drive and "tb" could be
+     *  implied by the rest of the answer, so a 256 GB drive passed as the 2 TB one asked for. */
+    private fun tokenize(phrase: String): List<String> {
+        val words = phrase.split(" ").filter { it.isNotBlank() }.map { normalizeToken(it) }
+        val joined = mutableListOf<String>()
+        for (w in words) {
+            val prev = joined.lastOrNull()
+            if (w in storageUnits && prev != null && prev.isNotEmpty() && prev.all { it.isDigit() || it == 'x' } && prev.first().isDigit()) {
+                joined[joined.lastIndex] = prev + w
+            } else {
+                joined += w
+            }
+        }
+        return joined
+    }
+
+    private val storageUnits = setOf("gb", "tb", "mb")
+
+    private fun normalizeToken(token: String): String {
+        val n = normalize(token.lowercase()).replace(" ", "")
+        // Fold a make alias to its canonical spelling so "vw" and "volkswagen" are one token.
+        return CarQueryResolver.makeSpellings(n)?.firstOrNull() ?: n
+    }
+
+    /** Canonicalize make aliases word-by-word in a normalized title, so "VW"/"Mercedes" match a
+     *  "Volkswagen"/"Mercedes-Benz" query token (and vice versa). */
+    private fun canonicalizeMakes(normalizedText: String): String =
+        normalizedText.split(" ").joinToString(" ") { w ->
+            CarQueryResolver.makeSpellings(w)?.firstOrNull() ?: w
+        }
+
+    /**
+     * The word the reader blocked that this listing carries, if any.
+     *
+     * Separate from the score so the app can say which word took a listing away. Folded into the
+     * score's one "reject" value, a blocked word was reported as "not one offer", which reads as
+     * the market having sent a placeholder or a bulk lot — twelve genuine vans sat under that
+     * heading because the reader had blocked "Pritsche".
+     */
+    fun blockedWord(listing: Listing, parsed: ParsedQuery): String? {
+        if (parsed.negativeTokens.isEmpty()) return null
+        val words = canonicalizeMakes(normalize(gluedThousands(listing.title.lowercase())))
+            .split(" ").filter { it.isNotBlank() }
+        return parsed.negativeTokens.firstOrNull { token -> matchesNegative(words, token) }?.let { parsed.blockedAs[it] ?: it }
+    }
+
+    /** A thousands group written German-style is one number: "30.000 km" is thirty thousand, not
+     *  a 30 next to a 000. Normalizing punctuation away split it in two, and a reader who blocked
+     *  the Crafter 30 lost every van whose title stated a mileage or a price beginning with 30. */
+    internal fun gluedThousands(text: String): String {
+        var out = text
+        // A dot or a typographic space, never a plain one: "30.000" and "30 000" (narrow no-break)
+        // are one number, while "Fold 6 512GB" is a model and a size standing next to each other.
+        repeat(3) { out = Regex("""(\d)[.\u00a0\u202f](\d{3})(?!\d)""").replace(out, "$1$2") }
+        return out
+    }
+
+    /** Short tokens ("s", "x") match as whole words only, so a blocked "-s" does not take every
+     *  "Series". Longer ones also match German plurals and compounds. */
+    private fun matchesNegative(words: List<String>, token: String): Boolean {
+        // A phrase is blocked as the words it is written as, side by side in the title: "2,5 zoll"
+        // is kept as one token ("2p5zoll"), which no single word of "SSD 2,5 Zoll" equals.
+        if ((2..4).any { n -> words.windowed(n).any { it.joinToString("") == token } }) return true
+        // A number is blocked as the whole number it is: "50" is the Crafter 50, and a title
+        // reading "50 mm" or "1950" is not that van.
+        if (token.all { it.isDigit() }) return words.any { it == token }
+        if (token.length <= 2) return words.any { it == token }
+        return words.any { word ->
+            word == token || word.endsWith(token) ||
+                word.endsWith(token + "n") || word.endsWith(token + "en") ||
+                (token.length >= 4 && word.contains(token))
+        }
+    }
+
+    /** [implied] are words of the search the market's own answer shows this listing to be, though
+     *  its title leaves them out (see [impliedWords]). */
+    fun score(listing: Listing, parsed: ParsedQuery, implied: Set<String> = emptySet()): Double {
+        // Each alias is the whole search phrased another way, and is held to everything the search
+        // typed alone is held to: its size, its model numbers, its "Pro XL" written together.
+        // Counted only as a share of words, "Pixel 9 Pro XL 256GB" let a 128GB phone, a 9 Pro and
+        // a 9 Pro Fold through on four words of five.
+        val phrasings = parsed.orGroups.filter { it.isNotEmpty() }
+        if (phrasings.isNotEmpty()) {
+            return phrasings.maxOf { score(listing, parsed.copy(positiveTokens = it, orGroups = emptyList()), implied) }
+        }
+        // Thousands groups are glued back together before anything else reads the title, so a
+        // mileage or a price is one number here as it is on the page. Split into "30" and "000",
+        // it both matched a blocked "30" and offered "000" as a model number to match against.
+        val titleNorm = normalize(gluedThousands(listing.title.lowercase()))
+        // Strip comparison phrases before token matching — prevents "wie WH-1000XM5" (German "like XM5")
+        // from matching the XM5 query. Amazon uses "gleicher Prozessor wie WH-1000XM5" to cross-sell
+        // related products, causing false positives when the model appears only in the comparison clause.
+        // Also strip "als X" (German "as X") for comparisons like "besser als WH-1000XM5".
+        val titleNormForMatching = canonicalizeMakes(
+            titleNorm
+                .replace(Regex("\\bwie\\s+\\S+(?:\\s+\\S+)?"), " ")
+                .replace(Regex("\\bals\\s+\\S+(?:\\s+\\S+)?"), " ")
+                .replace(Regex("\\s+"), " ").trim()
+        )
+        val titleCompact = titleNormForMatching.replace(" ", "")
+        // Strip context numbers that must NOT match numeric model tokens — BUT only strip storage
+        // values if the query isn't itself asking for a size. Asking for one means mentioning the
+        // unit at all: as its own word ("32 GB"), glued to the number ("32GB"), or glued to a
+        // kit's quantity×size ("1x32GB"). A fixed list of "plausible" sizes was tried here before
+        // and got it wrong both ways — it missed "1x32" (not a bare number) and would reject a
+        // real, non-power-of-two drive size ("500GB", "480GB") that a query is free to ask for.
+        // Read off the search as typed, not off the words this listing is held to: those are narrowed
+        // to what the market writes, and narrowed past "GB" the "256GB" a phone was sold as got
+        // stripped before "256" could match it, which threw every such phone off a 256 GB search.
+        val queryHasStorageToken = parsed.asksForASize || (parsed.positiveTokens + parsed.orGroups.flatten()).any { namesAUnit(it) }
+        val titleNormStripped = titleNormForMatching
+            .let { if (queryHasStorageToken) it else it.replace(Regex("\\d+\\s*(?:gb|tb|mb)\\b"), " ") }
+            // Greedy: strip ALL digit groups after the OS name (handles "ios 12 7 5" from "iOS 12.7.5")
+            .replace(Regex("\\bandroid\\s+(\\d+\\s*)+"), "android ")
+            .replace(Regex("\\bios\\s+(\\d+\\s*)+"), "ios ")
+            .replace(Regex("\\bipados\\s+(\\d+\\s*)+"), "ipados ")
+            .replace(Regex("\\b\\d+\\s+\\d\\s*(?:zoll|inch)\\b", RegexOption.IGNORE_CASE), " ")
+            // Strip count phrases: "2 Spiele", "1 Spiel", "3 Games" — a count is not a model number
+            .replace(Regex("\\b\\d+\\s+(?:spielen?|games?|titeln?)\\b", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("\\s+"), " ").trim()
+        val titleWords = titleNormStripped.split(" ").filter { it.isNotBlank() }
+
+        // Reject placeholder titles
+        if (isPlaceholderTitle(titleNorm, titleWords)) return -1.0
+
+        // Reject bulk lots: "15x", "x15", "15 Stück". A count of one is not a lot, and a number
+        // after the x is a size where a unit follows it — "Crucial CT32G4SFD832A, 32 GB, 1 x 32 GB"
+        // is one module, and reading it as a lot of 32 threw the exact product off the search.
+        // A count sits before the x ("20x", "4 x") or stands as its own word after it ("x 20").
+        // Glued to what follows, the x belongs to a model name — Biwin X570, Emtec X200 — and
+        // reading those as lots of 570 and 200 threw two real drives off a search for one.
+        // Glued, only two digits are a count: "20x" is twenty of them, while "SN850X" and a Ryzen
+        // "5800X" are the names of one, and reading them as lots threw a single 4TB drive away.
+        // A count followed by a length is a measurement: "M.2 22 x 80 mm" is the card's size.
+        // A spaced count is at most three digits: "Ryzen 9 7950 X" is a processor. And what the search
+        // itself names is never a count: "Surface Pro X 13" and a "ThinkBook 14x" are the machines.
+        // A spaced number after a short run of letters is the rest of a model name written apart,
+        // "WD Black SN 850 X" being the SN850X: read as a lot of 850, the drive was thrown away.
+        val searched = (parsed.positiveTokens + parsed.orGroups.flatten()).toSet()
+        val countBefore = Regex("""(?:^|\s)(?!1\s*x)(\d{2}x|\d{2,3}\s+x)(?:\s|$)(?!\s*\d+\s*(mm|cm)\b)""")
+            .findAll(titleNorm).any { m ->
+                val before = titleNorm.substring(0, m.range.first).trimEnd().substringAfterLast(' ')
+                val modelPrefix = before.length in 2..3 && before.all { it.isLetter() } && before !in COUNT_LEAD_WORDS
+                m.groupValues[1].replace(" ", "") !in searched && !(modelPrefix && ' ' in m.groupValues[1])
+            }
+        val countAfter = "x" !in searched &&
+            Regex("""(?:^|\s)x\s+\d{2,}(?:\s|$)(?!\s*(gb|tb|mb|mhz|mm|cm))""").containsMatchIn(titleNorm)
+        if (countBefore || countAfter) return -1.0
+
+        // Word-start positions in titleCompact (for guarding compact matches)
+        val wordStartsInCompact: Set<Int> = buildSet {
+            var pos = 0
+            for (word in titleNormForMatching.split(" ")) {
+                if (word.isNotEmpty()) add(pos)
+                pos += word.length
+            }
+        }
+
+        // The model the seller states apart from the title (an item's MPN, the model a shop writes
+        // only into the offer's address) is the listing's as much as a word of its title.
+        val statedModel = listing.mpn?.lowercase()?.replace(NON_ALNUM, "")?.takeIf { it.length >= 4 }
+
+        fun tokenMatches(token: String): Boolean {
+            if (token in implied) return true
+            parsed.plainVowels[token]?.let { plain -> if (tokenMatches(plain)) return true }
+            if (statedModel != null && token.replace(NON_ALNUM, "") == statedModel) return true
+            // A size is a number of bytes, written however the seller writes it: a 2TB drive is
+            // sold as "2048GB" and "2000GB" as often as "2TB", and only the spelling differs.
+            if (isASize(token)) sizeInGigabytes(token)?.let { asked ->
+                if (sizesIn(listing.title).any { sameSize(it, asked) }) return true
+            }
+            // A word the title says in other words: every PCIe M.2 drive is an NVMe drive, and
+            // geizhals, eBay and Ricardo name the bus instead ("M.2 2280 / M-Key / PCIe 4.0 x4").
+            WRITTEN_AS[token]?.let { names ->
+                if (names.matched.any { name -> " $titleNormForMatching ".contains(" $name ") }) return true
+            }
+            // A make glued to the model is one word on some markets: TruckScout24 writes
+            // "VWCrafter", and every real Crafter there read as carrying neither word of
+            // "Volkswagen Crafter" — the model is not at a word start, and the make is not the
+            // whole word. A word that is a make followed by this token is both of them.
+            if (token.length >= 4 && titleWords.any { word ->
+                    word.length > token.length && word.endsWith(token) &&
+                        CarQueryResolver.makeSpellings(word.dropLast(token.length)) != null
+                }
+            ) return true
+            // The make itself, glued to the front of the same word, in any of its spellings —
+            // "VWCrafter" carries "Volkswagen" as surely as "VW Crafter" does.
+            CarQueryResolver.makeSpellings(token)?.let { spellings ->
+                if (titleWords.any { word ->
+                        spellings.any { spelling ->
+                            word.length > spelling.length + 2 && word.startsWith(spelling) &&
+                                word.drop(spelling.length).all { c -> c.isLetter() || c.isDigit() }
+                        }
+                    }
+                ) return true
+            }
+            // A bare unit word ("GB", "MHz", "Zoll"...) is never its own word in a real listing
+            // title — every seller glues it to the number ("32GB"). A query typed with a space
+            // before the unit ("32 GB", "1x32 GB") must still match those titles.
+            if (token in unitSuffixes && titleWords.any { Regex("""^\d+${Regex.escape(token)}$""").matches(it) }) {
+                return true
+            }
+            // ≤2 chars: whole-word only, or number+unit (e.g. "6" matches "6" but not "16")
+            if (token.length <= 2) return titleWords.any { it == token }
+            // 3-5 chars: whole-word, or numeric token matching word that starts with it + unit suffix
+            // (e.g. "256" matches "256gb", "512" matches "512tb")
+            if (token.length <= 5) {
+                if (titleWords.any { it == token }) return true
+                // A plain size ("256") or a kit's quantity×size ("1x32", "2x16") both glue directly
+                // to a unit suffix in real listing titles ("256gb", "1x32gb"), never with the space a
+                // query typed between them ("1x32 GB" searching for a title that never wrote "1x32 "
+                // as its own word never matched anything, on any market, and looked identical to
+                // nothing existing).
+                if (token.all { it.isDigit() } || Regex("""^\d+x\d+$""").matches(token)) {
+                    if (titleWords.any { word -> word.startsWith(token) && unitSuffixes.any { word == token + it } }) return true
+                    // A van is sold as "Sprinter 314CDI" and a search asks for the 314: the trim
+                    // code glues onto the model number, and only letters may follow it, so 314 does
+                    // not reach 3140.
+                    if (titleWords.any { word ->
+                            word.length > token.length && word.startsWith(token) &&
+                                word.drop(token.length).all { c -> c.isLetter() }
+                        }
+                    ) return true
+                }
+                // A model line is the head of the full model number: "MG09" begins "MG09ACA18TE".
+                // A letter has to follow, so RX580 does not reach RX5800.
+                if (isAModelCode(token) && titleWords.any { word ->
+                        word.length > token.length && word.startsWith(token) && word[token.length].isLetter()
+                    }
+                ) return true
+                // Compact matching with word-boundary guard (catches hyphen-split tokens).
+                // e.g. "xt5" (from query "X-T5") matches "fujifilm x t5" via compact "fujifilmxt5".
+                // e.g. "usbc" (from "USB-C") matches "usb c" via compact "usbc".
+                // The word-boundary guard prevents "pro" matching inside "propellerschutz".
+                var searchFrom = 0
+                while (true) {
+                    val idx = titleCompact.indexOf(token, searchFrom)
+                    if (idx == -1) break
+                    val endIdx = idx + token.length
+                    if (idx in wordStartsInCompact &&
+                        (endIdx == titleCompact.length || endIdx in wordStartsInCompact)
+                    ) {
+                        // Extra guard: reject matches of the form "1-letter-word + all-digit-word"
+                        // (e.g. "s" + "10" from "Tab S 10.5" → "s10") to prevent old model numbers
+                        // from matching newer compact codes. Allow "x" + "t5" (letter+digit word) since
+                        // the second part contains a letter, making it a model-code suffix not a decimal.
+                        val splitInside = wordStartsInCompact.firstOrNull { it > idx && it < endIdx }
+                        val isLetterPlusDigits = splitInside != null &&
+                            splitInside - idx == 1 &&
+                            titleCompact[idx].isLetter() &&
+                            titleCompact.substring(splitInside, endIdx).all { c -> c.isDigit() }
+                        if (!isLetterPlusDigits) return true
+                    }
+                    searchFrom = idx + 1
+                }
+                return false
+            }
+            // ≥6 chars: raw substring or compact (long tokens are distinctive enough for substring)
+            if (titleNormForMatching.contains(token)) return true
+            // A German compound is written apart across a list — "Parkett-, Bodenschleifmaschine"
+            // is a Parkettschleifmaschine — and what it is about is its leading part. That part
+            // stands for the whole word, and only for that word: the rest of the search still has
+            // to be found, so a Tiguan does not pass a search for a Crafter on "Volkswagen" alone.
+            if (token.length >= COMPOUND_LENGTH && token.all { it.isLetter() } &&
+                titleCompact.contains(token.take(STEM_LENGTH))
+            ) return true
+            // A compound is also written as its last part alone, the rest said by the other words
+            // of the title: "Icy Box 4 Bay Gehäuse" is the "4 bay festplattengehäuse" searched for.
+            // Only beside other words of the search, which have to be found too: on its own,
+            // "maschine" would let every novel ending in it through a search for a machine.
+            if (parsed.positiveTokens.size >= 2 && token.length >= COMPOUND_LENGTH && token.all { it.isLetter() } &&
+                titleWords.any { w -> w.length >= COMPOUND_HEAD_LENGTH && token.length - w.length >= STEM_LENGTH / 2 && token.endsWith(w) }
+            ) return true
+            // titleCompact catches tokens split by hyphens/spaces (e.g. "wh1000xm6" = "WH-1000XM6").
+            // Guard: match must start AND end at word boundaries (prevents "g16" matching "8G 16GB").
+            var searchFrom = 0
+            while (true) {
+                val idx = titleCompact.indexOf(token, searchFrom)
+                if (idx == -1) break
+                val endIdx = idx + token.length
+                if (idx in wordStartsInCompact &&
+                    (endIdx == titleCompact.length || endIdx in wordStartsInCompact)
+                ) return true
+                searchFrom = idx + 1
+            }
+            return false
+        }
+
+        for (neg in parsed.negativeTokens) {
+            if (matchesNegative(titleWords, neg)) return -1.0
+        }
+
+        // Short model-code tokens MUST match as exact whole words:
+        // - Pure numeric (1-2 digit): "6", "12", "13" — without this, "Galaxy Z Fold 6" would match
+        //   "Fold3/Fold5" at 80% because "fold" matches "fold3" and all other tokens also match.
+        // - Mixed alphanumeric (length ≤ 3 with at least one digit): "r5", "a7", "m4", "s25"
+        //   These are specific model codes — "R5" must not match against "5D" variants. Without
+        //   this check, "Canon EOS R5 Mark II" scores 4/5=80% against "Canon EOS 5D Mark II".
+        // A size is required the same way: a 128GB phone is not the 256GB one on the strength of
+        // every other word.
+        val modelCodesRequired = parsed.positiveTokens.filter { t ->
+            (t.length <= 3 && t.any { c -> c.isDigit() }) || isASize(t)
+        }
+        // Use tokenMatches (not just titleWords) to support compact-form codes like "xt5"
+        // matching "x t5" (from "X-T5" hyphen-split in title).
+        if (modelCodesRequired.any { token -> !tokenMatches(token) }) return 0.0
+
+        // Bigram check: for each consecutive pair [word, short-numeric OR model qualifier] in
+        // the query, require the pair to appear consecutively in the title.
+        // Numeric example: "switch 2", "mini 7", "series 10" — prevents "Splatoon 2 Nintendo Switch"
+        // from matching "Nintendo Switch 2" because "2" is from the game title.
+        // Qualifier example: "s25 ultra", "pro max" — prevents "Galaxy S25 FE ultra sauber"
+        // (German "extremely clean") from matching "Galaxy S25 Ultra" query.
+        val sp = " $titleNormStripped "
+        val tokens = parsed.positiveTokens
+        for (i in 0 until tokens.size - 1) {
+            val a = tokens[i]
+            val b = tokens[i + 1]
+            // Only apply when 'a' is a proper word (length > 2) — skip short codes like "m4"
+            // that can appear in any order relative to their following size specifier.
+            val isNumericBigram = b.length <= 2 && b.all { c -> c.isDigit() } && a.length > 2 && a.any { c -> c.isLetter() }
+            // Model variant qualifiers must also be adjacent to their preceding token.
+            // Also applies when 'a' is a 2-char alphanumeric model code (e.g. "z6 iii", "r5 ii") —
+            // these are specific enough that the qualifier must be adjacent.
+            val isAlphanumericCode = a.length == 2 && a.any { c -> c.isLetter() } && a.any { c -> c.isDigit() }
+            val isQualifierBigram = b in MODEL_QUALIFIER_SUFFIXES && (a.length > 2 || isAlphanumericCode) ||
+                // "XL" after a qualifier is part of the model's name: a Pixel 9 Pro and a 9 Pro Fold
+                // are other phones than the 9 Pro XL. After anything else it is a clothing size,
+                // written wherever the seller puts it ("Jacke Gr. XL").
+                b == "xl" && a in MODEL_QUALIFIER_SUFFIXES
+            // A number can count the word after it rather than name a generation of the word
+            // before it: in "Yottamaster 4 Bay" the 4 is how many bays, and a title saying
+            // "Yottamaster DF4RU3 4-Bay" has it where it belongs.
+            // Read off the search as typed: a market that rarely writes "bay" is not held to it,
+            // and the 4 still counts the bays.
+            val typedOrder = parsed.typed.ifEmpty { tokens }
+            val countsTheNext = isNumericBigram && typedOrder.getOrNull(typedOrder.indexOf(b) + 1)?.takeIf { typedOrder.indexOf(b) >= 0 }?.let { c ->
+                c.any { it.isLetter() } && (sp.contains(" $b $c ") || sp.endsWith(" $b $c"))
+            } == true
+            // A number the title gives as a measure is the measure the search asks for, wherever
+            // the title puts it: "Unterschrank 80" is an 80 cm vanity, which sellers write
+            // "Schrankwaschtisch 80 cm" or "80 x 47 cm", never as a generation after the word.
+            val statedAsAMeasure = isNumericBigram && Regex("""(?:^| )$b ?(?:cm|mm|x ?\d)""").containsMatchIn(sp)
+            if ((isNumericBigram && !countsTheNext && !statedAsAMeasure) || isQualifierBigram) {
+                if (!sp.contains(" $a $b ") && !sp.endsWith(" $a $b")) {
+                    return 0.0
+                }
+            }
+        }
+
+        val tokenCount = parsed.positiveTokens.size
+        val matchedCount = parsed.positiveTokens.count { token -> tokenMatches(token) }
+
+        if (tokenCount == 0) return 0.5
+        return matchedCount.toDouble() / tokenCount
+    }
+
+    // A parsed price above this (in the listing's own currency's minor units) is a scrape
+    // artifact — digits from several DOM nodes concatenated into one number — not a real
+    // listing. 2e11 minor units clears the priciest genuine listing in every currency we
+    // crawl (weak-currency car prices top out ~1e9) while catching the ~1e15 garbage that
+    // was blowing up the price summary.
+    private const val MAX_PLAUSIBLE_MINOR_UNITS = 200_000_000_000L
+
+    /** A euro or less where the search's offers typically cost twenty or more is a seller's way of
+     *  leaving the price out ("1 € VB", a shop's fixed 1 € on a 2 TB drive), not what it sells for:
+     *  ranked by it, such an ad stood first as the cheapest of the search. */
+    private fun isATokenPrice(listing: Listing, middle: Long): Boolean =
+        listing.effectivePrice.amount in 1..100 && middle >= 2_000
+
+    private fun hasSanePrice(listing: Listing): Boolean =
+        listing.effectivePrice.amount in 0..MAX_PLAUSIBLE_MINOR_UNITS
+
+    // An offer to hire the item out, not to sell it. Its daily rate ("Parkettschleifmaschine
+    // Mieten, 1 EUR") is not a purchase price, so it wrecks the cheapest/median figures. Dropped
+    // unless the query itself asks to rent, in which case the user wants exactly these.
+    private val NON_ALNUM = Regex("""[^\p{L}\p{N}]""")
+
+    private val rentalOffer = Regex(
+        """\b(mieten|vermieten|zu\s+vermieten|vermietung|miete|mietpreis|leihen|verleih|""" +
+            """ausleihen|leihgeb(ü|ue)hr|te\s+huur|noleggio|a\s+noleggio|alquiler|""" +
+            """for\s+(hire|rent)|rental)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isRentalOffer(listing: Listing, queryText: String): Boolean {
+        if (rentalOffer.containsMatchIn(queryText)) return false
+        return listing.saleType == io.github.tieo.arbay.model.SaleType.RENT || rentalOffer.containsMatchIn(listing.title)
+    }
+
+    // "<something> für <the thing searched for>" names an accessory made FOR the product, not the
+    // product: a dust bag for a floor sander, a case for a phone. The giveaway is positional — the
+    // searched-for words sit only AFTER the preposition, while the head noun before it is something
+    // else entirely. A genuine listing puts the product itself in the head ("Lägler Hummel
+    // Parkettschleifmaschine für Profis"), so it keeps its query tokens before the preposition.
+    private val accessoryPreposition = Regex(
+        """\b(passend\s+für|geeignet\s+für|kompatibel\s+(mit|für)|für|fuer|compatible\s+with|""" +
+            """suitable\s+for|for|voor|per|pour|para)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** What a machine works on, named after "für" or "per" to say what it is for. */
+    private val material = Regex(
+        """parkett|parquet|parket|parketts|holz|holzb(ö|oe)den|dielen|legno|bois|wood|hardwood|floors?|boden|b(ö|oe)den|pavimenti|beton|estrich""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** How far past "für" the thing itself has to appear for the phrase to be about it. */
+    private const val WORDS_AFTER_FOR = 4
+
+    /** A product sold as a stand-in for another, which is the same kind of thing as what was
+     *  searched for rather than something made for it. */
+    private val substituteFor = Regex(
+        """\b(replacement|ersatz(modul|speicher)?|equivalent[ea]?|equivalente|sostituzione|""" +
+            """remplacement|reemplazo|sustituto|ricambio|vervanging|compatible\s+replacement|""" +
+            """alternativ(e|es)?)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isAccessoryFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        val tokens = parsed.positiveTokens
+        if (tokens.isEmpty()) return false
+        val match = accessoryPreposition.find(listing.title) ?: return false
+        val head = listing.title.substring(0, match.range.first).lowercase()
+        val tail = listing.title.substring(match.range.last + 1).lowercase()
+        // Compared with separators stripped, since query tokens are normalised the same way — a
+        // title's "MFC-L2750DW" must still match the token "mfcl2750dw".
+        fun holds(text: String, token: String): Boolean {
+            if (text.contains(token)) return true
+            val compact = text.replace(NON_ALNUM, "")
+            val tokenCompact = token.replace(NON_ALNUM, "")
+            if (compact.contains(tokenCompact)) return true
+            // A German compound names the same machine several ways: an ad for a capacitor says
+            // "für Parkettschleifer" where the search says "parkettschleifmaschine", and requiring
+            // the whole word meant the capacitor read as a machine. The shared stem is what the two
+            // have in common, and it is what the phrase after "für" is pointing at.
+            return tokenCompact.length >= 10 && compact.contains(tokenCompact.take(8))
+        }
+        // Only fires when the head names none of the query and the tail names it — otherwise the
+        // product itself leads the title and the phrase is a normal qualifier. A maker the tail
+        // names again is no part of the query in the head: "Geberit O-Ring für Duscharm für Geberit
+        // AquaClean" is Geberit's O-ring for the shower toilet, and its "Geberit" up front made it
+        // one of the toilets the search was for.
+        val pointed = tail.trim().split(Regex("\\s+")).take(WORDS_AFTER_FOR).joinToString(" ")
+        val headHasQuery = tokens.any { holds(head, it.lowercase()) && !holds(pointed, it.lowercase()) }
+        // What the phrase points at decides what it says. "Arbeitsspeicher für Laptop
+        // CT32G4SFD832A" names the machines the memory fits and is the memory; "Toner für Brother
+        // MFC-L2750DW" names what the toner is for and is not a printer.
+        val pointsAtAMachine = tail.trimStart().split(Regex("\\s+")).firstOrNull()
+            ?.let { hostDevice.matches(it.trim(',', '.', ':', ';')) } ?: false
+        if (pointsAtAMachine) return false
+        // A material after the preposition is what the thing works on, and the words after it
+        // name the thing itself: "Levigatrice per parquet HUMMEL" is a Hummel sanding parquet,
+        // not something sold for one.
+        if (tail.trimStart().split(Regex("\\s+")).firstOrNull()?.trim(',', '.', ':', ';')?.let { material.matches(it) } == true) return false
+        val pointedAt = tail.trim().split(Regex("\\s+")).take(WORDS_AFTER_FOR).joinToString(" ")
+        val tailHasQuery = tokens.any { holds(pointedAt, it.lowercase()) }
+        if (headHasQuery || !tailHasQuery) return false
+        // A substitute names the thing it replaces, and is the same kind of thing: "32GB DDR4
+        // SODIMM (Replacement for Crucial CT32G4SFD832A)" is a module, not a module's accessory.
+        if (substituteFor.containsMatchIn(listing.title)) return false
+        // The head is the accessory's own noun. If the query already asks for that noun, keep it.
+        val q = queryText.lowercase()
+        val headWords = head.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 4 && !pointed.contains(it) }
+        return headWords.none { q.contains(it) }
+    }
+
+    /** Sizes as a listing writes them: a number glued or spaced to a storage unit, French "Go"
+     *  and "To" included. A speed is not a size: "7.300 MB/s Lesen" is how fast the drive is, and
+     *  counting it as a second size made every drive that advertises one look like a row of variants. */
+    // Whole numbers only, never the tail of one: "1,12 TB" is an iMac's one and a bit terabytes,
+    // and read from its "12" it was the 12TB drive searched for.
+    private val sizeInTitle =
+        Regex("""(?<![\d.,])\b(\d{1,4}(?:[.,]\d{1,2})?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)\b(?!\s*/\s*s)""", RegexOption.IGNORE_CASE)
+
+    /** Every size the title states, in gigabytes. A thousands group is one number first: "2.000 GB"
+     *  is two terabytes, and read as "2." and "000 GB" it offered a drive of nothing beside it. */
+    private fun sizesIn(title: String): Set<Double> {
+        val text = gluedThousands(title)
+        val stated = sizeInTitle.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        // A range names its lower end without the unit: "1 - 4 TB" sells 1TB to 4TB, priced at 1TB.
+        val rangeStarts = sizeRange.findAll(text).mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        // "128/256GB" offers two tiers of storage. Below 32 the first number is working memory
+        // written beside the storage ("12/256GB"), and the listing is one device.
+        val tierStarts = storageTiers.findAll(text).mapNotNull { m ->
+            m.groupValues[1].toIntOrNull()?.takeIf { it >= 32 }?.let { sizeInGigabytes("${it}gb") }
+        } + spacedTiers.findAll(text).mapNotNull { m ->
+            // "256 512GB" with only a space between: a number that is itself a storage tier, and
+            // smaller than the one after it. A model number ("RTX 3070 512GB") is neither.
+            val first = m.groupValues[1].toInt()
+            val second = m.groupValues[2].toInt()
+            first.takeIf { it in STORAGE_TIERS && second in STORAGE_TIERS && it < second }?.let { sizeInGigabytes("${it}gb") }
+        }
+        // "6/14/16/18TB": a row of drives under one unit, each number a size of its own.
+        val slashed = slashedSizes.findAll(text).flatMap { m ->
+            m.groupValues[1].split('/').mapNotNull { n -> sizeInGigabytes(n.trim() + m.groupValues[2]) }
+        }
+        return (stated + rangeStarts + tierStarts + slashed).toSet()
+    }
+
+    private val slashedSizes = Regex("""\b(\d{1,2}(?:\s*/\s*\d{1,2})+)\s?(tb|to)\b""", RegexOption.IGNORE_CASE)
+
+    private val spacedTiers = Regex("""\b(\d{2,4})\s+(\d{2,4})\s?gb\b""", RegexOption.IGNORE_CASE)
+
+    private val STORAGE_TIERS = setOf(32, 64, 128, 256, 512, 1024)
+
+    private val storageTiers = Regex("""\b(\d{2,4})\s*/\s*\d{2,4}\s?gb\b""", RegexOption.IGNORE_CASE)
+
+    private val sizeRange = Regex("""\b(\d{1,4})\s*[-–]\s*\d{1,4}\s?(gb|tb)\b""", RegexOption.IGNORE_CASE)
+
+    /** Whether two sizes are the one size, decimal or binary: 2TB is sold as 2000GB and as 2048GB. */
+    private fun sameSize(a: Double, b: Double): Boolean =
+        a == b || a == b / 1000 * 1024 || b == a / 1000 * 1024
+
+    /**
+     * Whether the listing offers a row of sizes and is priced at the smallest of them.
+     *
+     * One eBay listing sells the same drive in 120GB, 240GB, 500GB, 1TB and 2TB, and the price on
+     * the card is the 120GB one. Measured over a live search for a 2TB drive: 31 of 188 results
+     * were shaped like this, at a median of 78 euro against 220 for the rest, so they take every
+     * cheapest place in the list and none of them is an offer of what was asked for.
+     *
+     * Only when the search names a size itself — a search for a drive by model has no size to be
+     * misled about.
+     */
+    private fun isOneOfSeveralSizes(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        // A phone's working memory is not a size it is sold in: "256 GB – 16 GB RAM" is one phone.
+        val offered = sizesIn(listing.title.replace(memorySize, " "))
+        // A drive that states its size twice ("2TB (2000GB)", "2TB (2048GB)") states one size. Only
+        // a listing that also offers something smaller than what was asked for is priced at a size
+        // nobody asked for, which is what makes its place among the cheapest wrong.
+        // A size fifty times smaller is not one on sale beside it: "7300MB" is a speed with its
+        // "/s" left off, and "Nur 5GB Geschrieben" how much the drive has written.
+        val smaller = offered.filter { it < asked.min() && !sameSize(it, asked.min()) && it >= asked.min() / 50 }
+        if (offered.size < 2 || smaller.isEmpty()) return false
+        // Unless the smaller sizes are what the asked-for size is made of: "M.2 SSD 2TB (2x 1TB)"
+        // is two terabytes, sold as two sticks, at a price for the pair.
+        return !addsUpToTheAskedSize(listing.title, asked.min())
+    }
+
+    /**
+     * A size stated as what something takes rather than what it is: "Upgrade bis 6TB", "passend
+     * für 14TB HDD", "10 TB HDD-Unterstützung", "bis zu 4 x 20 TB". A drive bay, a video recorder,
+     * a controller card and an enclosure name the largest drive they hold, and in a search for that
+     * drive they carry its size and its name. "Max" only with its dot or in full: the iPhone 11 Pro
+     * Max 256 GB is a phone of that size.
+     */
+    private val sizeAsALimit = Regex(
+        """\b(bis(\s+zu)?|up\s+to|max\.|maximal|erweiterbar\s+bis|unterst(ü|ue)tzt|supports?|(passend|geeignet)\s+f(ü|ue)r|for|f(ü|ue)r)""" +
+            """\s+(\d+\s*x\s*)?(?<n1>\d{1,4}(?:[.,]\d{1,2})?)\s?(?<u1>tb|gb|to|go)\b|""" +
+            """(?<![\d.,])\b(?<n2>\d{1,4}(?:[.,]\d{1,2})?)\s?(?<u2>tb|gb|to|go)\b[\s-]+(\p{L}+[\s-]+)?(unterst(ü|ue)tzung|support|kompatibel|compatible)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether every place the title states the size searched for states it as a limit (see
+     * [sizeAsALimit]), so the listing is something made to take that drive rather than the drive.
+     */
+    private fun takesTheSizeAsked(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        val title = gluedThousands(listing.title)
+        val limits = sizeAsALimit.findAll(title).toList()
+        if (limits.isEmpty()) return false
+        val limited = limits.mapNotNull { m ->
+            val number = m.groups["n1"]?.value ?: m.groups["n2"]?.value ?: return@mapNotNull null
+            val unit = m.groups["u1"]?.value ?: m.groups["u2"]?.value ?: return@mapNotNull null
+            sizeInGigabytes(number + unit)
+        }
+        if (limited.none { size -> asked.any { sameSize(it, size) } }) return false
+        // The same size stated plainly elsewhere in the title is the thing's own: take the limits
+        // out and see whether the asked size is still there.
+        val rest = sizeAsALimit.replace(title, " ")
+        return sizesIn(rest).none { size -> asked.any { sameSize(it, size) } }
+    }
+
+    /** "Gehäuse 8TB ohne HDD!": a word of the search named as left out, so the thing searched for is not in it. */
+    private fun leavesOutWhatWasAsked(listing: Listing, parsed: ParsedQuery): Boolean {
+        val words = parsed.positiveTokens.filter { !isASize(it) && it.length >= 3 && it.any(Char::isLetter) }
+        if (words.isEmpty()) return false
+        val title = normalize(listing.title.lowercase())
+        return words.any { w -> Regex("""\b(ohne|without|sans|senza|sin|zonder)\s+(\p{L}+\s+)?${Regex.escape(w.lowercase())}\b""").containsMatchIn(title) }
+    }
+
+    /**
+     * Whether the search names a size and the listing states sizes, none of them that one.
+     *
+     * Words are matched with their punctuation gone, so a "Seagate Exos 10E2400 1,2TB" reads as
+     * carrying the "12TB" a search for a 12TB Exos typed, and a Cisco "1,8TB" drive as an 18TB one.
+     * The sizes compared as numbers tell them apart. A size fifty times smaller than the one asked
+     * for is not the drive's ("Nur 5GB geschrieben"), and pieces adding up to it are it ("2x 6TB").
+     */
+    private fun statesAnotherSize(listing: Listing, parsed: ParsedQuery): Boolean {
+        val asked = askedSizes(parsed).ifEmpty { return false }
+        // A size far under the one asked is a cache or a memory ("256MB Cache"), unless it is written
+        // in terabytes: "HPE 0.30TB" is a 300 GB drive, and dropped from the sizes it passed for 30 TB.
+        val title = listing.title.replace(memorySize, " ")
+        val inTerabytes = sizeInTitle.findAll(gluedThousands(title))
+            .filter { it.groupValues[2].lowercase() in setOf("tb", "to", "terabyte", "terabytes") }
+            .mapNotNull { sizeInGigabytes(it.groupValues[1] + it.groupValues[2]) }
+        val offered = (sizesIn(title).filter { it >= asked.min() / 50 } + inTerabytes).distinct()
+        if (offered.isEmpty()) return false
+        if (offered.any { size -> asked.any { sameSize(it, size) } }) return false
+        return asked.none { addsUpToTheAskedSize(listing.title, it) }
+    }
+
+    /**
+     * Whether the title offers more than one size under its one price: "M.2 NVME SSD 1To 2To 4To".
+     * The price is the cheapest variant's, which may be a size the title never names, so it says
+     * nothing about what any one size costs. Kept on screen when the asked-for size is the
+     * smallest named (see [isOneOfSeveralSizes]), and still no price a watch can learn or beat.
+     * A drive stating its size twice ("2TB (2048GB)"), in pieces ("2TB (2x 1TB)"), or beside a
+     * figure fifty times smaller ("Nur 5GB geschrieben") states one size.
+     */
+    fun namesSeveralSizes(title: String): Boolean {
+        val offered = sizesIn(title.replace(memorySize, " "))
+        val largest = offered.maxOrNull() ?: return false
+        val others = offered.filter { !sameSize(it, largest) && it >= largest / 50 }
+        return others.isNotEmpty() && !addsUpToTheAskedSize(title, largest)
+    }
+
+    /** A size stated as working memory: "16 GB RAM", "32GB DDR5", or joined to the storage with a plus, "16GB+256GB"
+     *  and "256GB + 16GB". What the device runs on, beside what it stores. A phone's memory tier
+     *  written straight beside its storage is the same: "256GB-16GB", "16GB 256GB", "512GB 16GB". */
+    private val memorySize = Regex(
+        """\b\d{1,3}\s?gb\s*(ram|arbeitsspeicher|(lp)?ddr\d\w*)\b|\b\d{1,2}\s?gb\s*\+(?=\s*\d)|(?<=gb)\s*\+\s*\d{1,2}\s?gb\b|""" +
+            """(?<=\b(64|128|256|512)\s?gb|\b1\s?tb)\s*[-|,]?\s*\b(6|8|12|16|24)\s?gb\b|""" +
+            """\b(6|8|12|16|24)\s?gb\s*[-|,]?\s*(?=(64|128|256|512)\s?gb\b|1\s?tb\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** The sizes the search names, read off each phrasing as typed: "256 GB" with a space is as
+     *  much a size as "256GB", and read word by word it was neither. */
+    private fun askedSizes(parsed: ParsedQuery): List<Double> =
+        (listOf(parsed.positiveTokens) + parsed.orGroups).flatMap { sizesIn(it.joinToString(" ")) }
+
+    /** "2x 1TB", "4 x 512GB": a count and a size whose product is the size asked for, which is
+     *  that size sold in pieces rather than a smaller thing at a smaller price. */
+    private fun addsUpToTheAskedSize(title: String, askedGb: Double): Boolean =
+        Regex("""(\d{1,2})\s*x\s*(\d{1,4}(?:[.,]\d)?\s?(?:gb|tb|mb))""", RegexOption.IGNORE_CASE)
+            .findAll(title)
+            .any { m ->
+                // "1x 4TB" is one drive among others ("3x 2TB und 1x 4TB"), not the size in pieces.
+                val count = m.groupValues[1].toIntOrNull()?.takeIf { it >= 2 } ?: return@any false
+                val each = sizeInGigabytes(m.groupValues[2].replace(" ", "")) ?: return@any false
+                count * each == askedGb
+            }
+
+    /** A size in gigabytes, from the way a listing writes one, or null when the word is not a
+     *  size at all. Compared as numbers so "2TB" and "2000GB" are the one size they are. */
+    private fun sizeInGigabytes(token: String): Double? {
+        val m = Regex("""^(\d{1,4}(?:[.,]\d{1,2})?)\s?(gigabytes?|gigas?|terabytes?|gb|tb|mb|go|to)$""", RegexOption.IGNORE_CASE)
+            .find(token.trim()) ?: return null
+        val value = m.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return null
+        return when (m.groupValues[2].lowercase()) {
+            "tb", "to", "terabyte", "terabytes" -> value * 1000
+            "mb" -> value / 1000
+            else -> value
+        }
+    }
+
+    // A device that a searched-for part is built into, named as the thing on offer. A search for a
+    // 2TB M.2 SSD comes back with gaming PCs and MacBooks that have one inside, which are the same
+    // words and a different product — and, at ten to a hundred times the price, the ones that wreck
+    // what a search says the thing costs.
+    private val hostDevice = Regex(
+        """\b(gaming[\s-]?pc|gamer[\s-]?pc|komplett[\s-]?pc|desktop|tower|workstation|server|""" +
+            """notebook|laptop|macbook|imac|mac\s?mini|thinkpad|elitebook|probook|latitude|""" +
+            """zbook|precision|optiplex|thinkcentre|thinkstation|ideapad|vivobook|zenbook|""" +
+            """surface\s?(pro|laptop)|chromebook|mac\s?studio|steam\s?deck|rog\s?ally|""" +
+            """nuc|mini[\s-]?pc|all[\s-]?in[\s-]?one|playstation|ps5|xbox|konsole|console|""" +
+            // A video recorder for cameras ships with its drive inside: "Hiseeu NVR … 4TB HDD".
+            """nvr|dvr|videorekorder|(video)?registratore|time\s?capsule|""" +
+            // "PC SN730" is the name Western Digital sells a drive under, not a computer.
+            """pc(?!\s*sn\d)|""" +
+            // The same machines as the markets in other languages name them.
+            """port(á|a)til(es)?|ordenador(es)?|portatile|computer|ordinateur|draagbare)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Where a title's own name for what it sells ends and its spec list begins. */
+    private val specListStart = Regex("""[,|/:;•·]|\s[-–—]\s|\smit\s|\swith\s|\sinkl\b""")
+
+    /** Where in the title the first word of the search appears, comparing with separators stripped
+     *  from both sides so a title's "M.2" is found by the token "m2". Null when none appears. */
+    private fun firstTokenPosition(title: String, tokens: List<String>): Int? {
+        val positions = ArrayList<Int>(title.length)
+        val compact = StringBuilder(title.length)
+        title.lowercase().forEachIndexed { index, c ->
+            if (c.isLetterOrDigit()) { compact.append(c); positions += index }
+        }
+        val text = compact.toString()
+        return tokens.mapNotNull { token ->
+            text.indexOf(token.lowercase().replace(NON_ALNUM, "")).takeIf { it >= 0 }
+        }.minOrNull()?.let { positions.getOrNull(it) }
+    }
+
+    /**
+     * Whether the listing is a device the searched-for thing sits inside.
+     *
+     * The tell is where the words fall: the title names a machine of its own before its spec list
+     * starts, and the words searched for appear only inside that list. A listing for the part
+     * itself leads with the part ("Samsung 990 Evo Plus, NVMe M.2 2280"), so its own words are in
+     * the head. A search that asks for the machine keeps them, since then the machine is the thing.
+     */
+    private fun isBuiltIntoADevice(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        if (hostDevice.containsMatchIn(queryText) || phoneOrTablet.containsMatchIn(queryText)) return false
+        if (!driveHolder.containsMatchIn(queryText) && !enclosureWord.containsMatchIn(queryText) && namesADrive(queryText, parsed) &&
+            holdsTheDrives(listing.title)) return true
+        if (isADeviceOfThatSize(listing, parsed)) return true
+        // The rule weighs how much of the search falls either side of the machine's name, so it
+        // needs more than one word to weigh. Asked for a part number alone, everything sits on one
+        // side by definition, and "Crucial 32GB Notebook DDR4-SODIMM CT32G4SFD832A" — a module for
+        // notebooks — read as a notebook.
+        val tokens = parsed.positiveTokens.takeIf { it.size >= 2 } ?: return false
+        // Where the machine's own name ends: its spec list, or — for the titles written as one run
+        // of words, which is most of them on a classifieds site — the first word of the search.
+        val boundary = specListStart.find(listing.title)?.range?.first
+            ?: firstTokenPosition(listing.title, tokens)
+            ?: return false
+        val head = listing.title.substring(0, boundary)
+        // The machine has to be what the ad leads with. "Crucial 32GB DDR4-3200 SO-DIMM Laptop RAM
+        // CT32G4SFD832A" says "laptop" about what the part goes into, five words in, and is the
+        // part itself; "Gaming PC: 9850X3D, …" and "NEUER GAMER PC ULTRA 7 …" say it at the front,
+        // about themselves.
+        // Matched on the whole title, so what follows a name is seen even past the cut: "PC SN740"
+        // is a drive, and cut before "SN740" the head read as a PC.
+        val naming = hostDevice.findAll(listing.title)
+            .firstOrNull { it.range.last < boundary && namesTheMachineItself(listing.title, it) } ?: return false
+        if (head.take(naming.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
+        val headCompact = head.lowercase().replace(NON_ALNUM, "")
+        val tailCompact = listing.title.substring(boundary).lowercase().replace(NON_ALNUM, "")
+        val inHead = tokens.count { headCompact.contains(it.lowercase().replace(NON_ALNUM, "")) }
+        val inTail = tokens.count { tailCompact.contains(it.lowercase().replace(NON_ALNUM, "")) }
+        // More of the search in the spec list than in the name, rather than none in the name: a
+        // MacBook Pro M2 Max carries "m2" in its own name, where it is the processor and not the
+        // slot, and the drive it holds is listed with everything else it holds.
+        return inTail > inHead
+    }
+
+    /**
+     * A box made to hold drives, named by its line or its bays: a NAS ("NAS Buffalo TeraStation
+     * 5140DN mit 32TB", an empty one that takes up to 32 TB, at 450 euro the cheapest 32 TB
+     * drive), a drive bay ("Asustor Xpanstor 4 AS5004U 4-Bay mit 30TB"), a media player ("Himedia
+     * Q10 inkl. Fernbedienung (10TB interne HDD extra)"). Never "NAS" alone, which a drive's own
+     * title carries ("WD Red 4TB NAS HDD"). Unlike a PC, its maker and model come first, so it is
+     * found anywhere ahead of the size rather than in the first words.
+     */
+    private val driveHolder = Regex(
+        """\b(terastation|linkstation|diskstation|readynas|nas\d{3}|nas[\s-]?(system|server)|ds\d{3,4}\+?|""" +
+            // QNAP makes no drives, so its name alone is the NAS: "Qnap TS-432X 4x HDD 32TB NAS".
+            """qnap|ts-\d{3,4}\w*|\d[\s-]?bay|xpanstor|media\s?player|mediaplayer|himedia)(?!\w)""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** A search for the box itself: "4 bay festplattengehäuse usb 3.5" asks for the bays. */
+    private val enclosureWord = Regex(
+        """(gehäuse|gehaeuse|enclosure|docking|\bdock\b|jbod|\bdas\b|\bschacht|\d[\s-]?fach\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val saidToFit = Regex("""(?i)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
+
+    private fun holdsTheDrives(title: String): Boolean {
+        val holder = driveHolder.find(title) ?: return false
+        val size = sizeInTitle.find(title)
+        if (size != null && size.range.first < holder.range.first) return false
+        return !saidToFit.containsMatchIn(title.take(holder.range.first))
+    }
+
+    /** "PS5 kompatibel", "PS5 ready": the machine a part is said to fit, not the thing sold. */
+    private val fitsMachine = Regex("""^\W*(kompatib\w*|compatib\w*|ready|bereit|geeignet|tauglich)\b""", RegexOption.IGNORE_CASE)
+
+    private fun namesTheMachineItself(title: String, naming: MatchResult): Boolean {
+        val after = title.substring(naming.range.last + 1)
+        if (fitsMachine.containsMatchIn(after)) return false
+        // "Ps5 Wd black 4tb", "PlayStation | WE_Black SN850 NVMe", "steam deck 512gb 2230 nvme": the
+        // machine named as what the drive is for, with the drive straight after it. A machine sold
+        // with one says so first ("PS5 mit …", "Steam Deck mit 1 TB", "PlayStation 5 + …").
+        val next = after.split(Regex("[^\\p{L}\\p{N}._+&]+")).filter { it.isNotBlank() }.take(2)
+        return next.none { storageWord.matches(it) } || next.any { comesWithWord.matches(it) }
+    }
+
+    private val storageWord = Regex(
+        // "M.2" with its dot: "MacBook Pro M2 Max" names the processor.
+        """(?i)ssd|nvme|m\.2|22[3468]0|festplatte|wd|we_black|wd_black|western|samsung|seagate|crucial|""" +
+            """kingston|lexar|sandisk|corsair|kioxia|hynix|sabrent|teamgroup|adata|xpg|wd-black""",
+    )
+
+    private val comesWithWord = Regex("""(?i)mit|inkl\.?|inklusive|incl\.?|with|\+|&|und|and|plus""")
+
+    private val phoneOrTablet = Regex("""\b(smartphone|handy|iphone|ipad|galaxy|tablet)\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Whether the listing is a machine that holds the size searched for, and nothing else of the
+     * search. reBuy answers "1TB NVMe" with a Galaxy S25 Ultra 1TB, an iPhone Air 1TB and an Xbox One
+     * X 1 TB: none of them carries "NVMe" or anything written in its place, so on that market the
+     * word could not be required, and the size alone let them through. The machine is what the title
+     * leads with, in its first three words and ahead of the size; a drive that names what it goes
+     * into ("Samsung 980 Pro 1TB SSD für PC") names it after.
+     */
+    private fun isADeviceOfThatSize(listing: Listing, parsed: ParsedQuery): Boolean {
+        val words = parsed.positiveTokens.filterNot { isASize(it) }
+        if (words.isEmpty() || words.size == parsed.positiveTokens.size) return false
+        val size = sizeInTitle.find(listing.title) ?: return false
+        val device = listOfNotNull(hostDevice.find(listing.title), phoneOrTablet.find(listing.title))
+            .filter { namesTheMachineItself(listing.title, it) }
+            .minByOrNull { it.range.first } ?: return false
+        if (device.range.first > size.range.first) return false
+        if (listing.title.take(device.range.first).split(Regex("\\s+")).count { it.isNotBlank() } > 2) return false
+        return score(listing, parsed.copy(positiveTokens = words, orGroups = emptyList())) == 0.0
+    }
+
+    // What a thing is sold with, named as the thing on offer. A search for headphones comes back
+    // led by a storage case at 15 euro, a replacement headband at 18 and an aftermarket battery at
+    // 20, all of them carrying the model number because that is what they fit.
+    private val accessoryNoun = Regex(
+        // German builds these as compounds — Aufbewahrungshülle, Hochleistungsakku,
+        // Ersatzohrpolster — so the head noun is matched wherever the word ends, not only where it
+        // stands alone. The other languages a cross-border search reaches name them plainly.
+        """(?U)\w*(h(ü|ue)llen?|hoes(jes?)?|etuis?|taschen?|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
+            """polster|kopfband|halterung|st(ä|ae)nder|schutzfolien?|displayschutz|kameraschutz|(panzer|schutz)gl(a|ä)s(er)?|reparatur(set)?|""" +
+            """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung|""" +
+            // What a drive is put into rather than the drive: a search for a 2 TB M.2 came back led
+            // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
+            // what fits inside it.
+            """dockingstation|adapterkarten?|adapter|einbaurahmen)\b|\bpower\s?supply\b|""" +
+            // A heatsink is sold on a drive as often as on its own ("990 PRO mit Kühlkörper"), so
+            // it is the thing on offer only where the title says what it is for: "MSI SPATIUM
+            // Kühlkörper für M580 PCIe 5.0 NVMe M.2 2TB" is the cooler.
+            """\b(k(ü|ue)hlk(ö|oe)rper|heat\s?sinks?|cooler)(?=\s+(f(ü|ue)r|for|pour|per|para|voor)\b)|""" +
+            """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|""" +
+            """(é|e)tuis?|(back|flip|book|hard|soft)?covers?|case|charger|enclosure|caddy|docking\s?station|""" +
+            """screen\s?protectors?|praxisbuch|handbuch|anleitung|""" +
+            // A box sold empty: "Emty Box!!", "leere OVP", "nur Karton".
+            """(empty|emty|leere?)\s+(box|karton|ovp|verpackung)|nur\s+(die\s+)?(box|karton|ovp)|""" +
+            // Brands that make nothing but cases and glass for the phones they name.
+            """spigen|otterbox|benks|nillkin|ringke|caseology|rhinoshield|dbrand|""" +
+            """bo(î|i)tier|carcasa|caja\s+externa|behuizing|adaptador|adattatore|adaptateur|""" +
+            // A station that copies one drive onto another, sold under the sizes it copies: "M.2
+            // NVMe Duplicator Dual Bay Fast Offline Clone For SSD 2TB" stood at 108 € among the
+            // 2 TB drives.
+            """duplicat(or|ore|eur)|duplicador|clonador)\b|""" +
+            // Spanish names an enclosure "caja" and puts it first: "Caja Satechi Nvme Mini SSD".
+            // Further on the word is the drive's own box ("990 Pro 2TB con caja").
+            """^\s*caja\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "Tray Only", "Box only": the title says the one thing on offer is the part named, whatever
+     *  drive it names before. */
+    private val onlyThePart = Regex("""\b(box|tray|caddy|bracket|packaging|manual|case)\s+only\b|\bonly\s+(the\s+)?(box|tray|caddy|bracket)\b""", RegexOption.IGNORE_CASE)
+
+    /** "mit Tasche", "inkl. Ladekabel", "+ Etui", "mit viel Zubehör": what comes with the thing,
+     *  rather than instead of it. A word after one of these names an extra, and the ad is still
+     *  about the product. */
+    /** The nouns of [accessoryNoun] that name a box drives go into. */
+    private val driveBox = Regex("""(?i)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|caja\s+externa|behuizing)$""")
+
+    /** Words only storage gear carries: a drive, its interface, its form factor, its bays. */
+    private val storageGear = Regex(
+        """(?i)(festplatt|\bhdd|\bssd|\bsata\b|\bnvme\b|\bm\.2\b|\d[\s-]?bay\b|\bjbod\b|\bdas\b|\b3[.,]5\s?("|''|zoll|inch))""",
+    )
+
+    /** Whether the search asks for a drive, by a size or by what it is: the searches whose answers
+     *  boxes for drives turn up in as something other than what was asked. */
+    private fun namesADrive(queryText: String, parsed: ParsedQuery): Boolean =
+        askedSizes(parsed).isNotEmpty() || io.github.tieo.arbay.model.looksLikeADrive(queryText)
+
+    /** "Für" followed by a kind of drive rather than one drive: its size, its interface, or drives as such. */
+    private val forAnyDrive = Regex(
+        """^\s*(f(ü|ue)r|for|pour|per|para|voor)\s+(\d+\s*x\s*)?(\d[.,]5\s*("|''|zoll|inch|\b)|sata\b|hdds?\b|ssds?\b|festplatten\b|hard\s*(disk|drive)s?\b|disques?\b|m\.2\b|nvme\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val forWhat = Regex("""^\s*(f(ü|ue)r|for|pour|per|para|voor)\b""", RegexOption.IGNORE_CASE)
+    private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
+    private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
+
+    private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with|und|sowie|plus|and)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
+
+    /** A device's battery as its seller reports it: "Akku 85%", "100% Batterie", "Akku Kapazität
+     *  88%", "Batterie: %83", "Akku 100 Prozent", "Akku Top", "Neu Akku", "Batterie & Display Neu".
+     *  A battery sold on its own has no health to report and is not new in something. */
+    private val batteryReport = Regex(
+        """\d{2,3}\s?(%|prozent)\s*(akku|batterie|battery)|""" +
+            """(akku|batterie|battery)\w*(\s+\p{L}+){0,2}\s*:?\s*(\d{2,3}\s?(%|prozent)|%\s?\d{2,3})|""" +
+            """(akku|batterie|battery)\w*\s*(&\s*display\s*)?(neu|top|getauscht|gewechselt|erneuert|ersetzt)\b|""" +
+            """\b(neue[rnms]?|neu)\s+(akku|batterie|battery)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether the title's own subject is something sold alongside the thing searched for.
+     *
+     * Only where the query does not ask for it, and only where nothing marks it as an extra: a
+     * listing reading "WH-1000XM5 mit Tasche" is the headphones, and "WH-1000XM5
+     * Aufbewahrungshülle" is the bag.
+     */
+    private fun isAnAccessoryNamedOutright(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        if (accessoryNoun.containsMatchIn(queryText)) return false
+        if (onlyThePart.containsMatchIn(listing.title) && !onlyThePart.containsMatchIn(queryText)) return true
+        val reports = batteryReport.findAll(listing.title).map { it.range }.toList()
+        val match = accessoryNoun.findAll(listing.title)
+            .firstOrNull { m -> reports.none { m.range.first in it } } ?: return false
+        // A box for drives, sold for no drive in particular, is what a search naming no drive asks
+        // for: "TerraMaster D4" is a four-bay enclosure, and every one of its listings calls itself
+        // a "Festplattengehäuse". One said to be for something is still that something's accessory.
+        // "Für 3,5 Zoll SATA Festplatten" names every drive of a size, which is still none in particular:
+        // Amazon sells the ICY BOX IB-3640SU3 only as "4-fach Externes Festplattengehäuse für 3,5 Zoll SATA".
+        val after = listing.title.substring(match.range.last + 1)
+        if (driveBox.containsMatchIn(match.value) && storageGear.containsMatchIn(listing.title) && !namesADrive(queryText, parsed) &&
+            (!forWhat.containsMatchIn(after) || forAnyDrive.containsMatchIn(after))) return false
+        val before = listing.title.take(match.range.first)
+        // A board after the size is the board on offer unless the title calls it new: "256 GB
+        // Bundle Neues Mainboard" is a repaired phone, "1,0TB SAMSUNG Momentus Platine" a drive's
+        // circuit board sold as a spare.
+        if (boardNoun.matches(match.value) && !newBoard.containsMatchIn(before)) return true
+        // An accessory said to be for something is that accessory, whatever size it names before:
+        // "6TB UASP Acceleration HDD -Gehäuse für OS 9.1" is an empty enclosure.
+        if (forWhat.containsMatchIn(listing.title.substring(match.range.last + 1))) return true
+        // "mit", "und" make the noun an extra only where the thing searched for stands ahead of
+        // them: "WH-1000XM5 mit Tasche" is the headphones, and "SSD und Festplatten Docking Station"
+        // is a dock for both, which at €29 stood as the cheapest 32 TB drive.
+        comesWith.find(before)?.let { with ->
+            val head = before.take(with.range.first)
+            if (firstTokenPosition(head, parsed.positiveTokens) != null || saidAboutTheDevice(head, parsed)) return false
+        }
+        return !saidAboutTheDevice(before, parsed)
+    }
+
+    /**
+     * Whether what a title states ahead of an accessory's noun makes the noun part of a device's
+     * description. A case or a charger has no storage and no battery health: where the size searched
+     * for or a battery's state comes first, "Pixel 9 Pro XL 256 GB Akku 93%" reports the phone's
+     * battery, "256 GB Bundle Neues Mainboard" its repair, and "iPhone 11 Pro Max · 82 % Akku ·
+     * Zubehör" what comes with it.
+     */
+    private fun saidAboutTheDevice(before: String, parsed: ParsedQuery): Boolean {
+        if (batteryReport.containsMatchIn(before)) return true
+        val asked = askedSizes(parsed)
+        return asked.isNotEmpty() && sizesIn(before).any { offered -> asked.any { sameSize(it, offered) } }
+    }
+
+    // Consumables and spares sold FOR a machine, named without a "für" — a sanding search returns
+    // sandpaper, sanding belts, dust bags and filters far cheaper than any machine, which then poses
+    // as the "best price". Dropped only when the query itself does not ask for the consumable.
+    private val consumableNoun = Regex(
+        // German plurals, because the word boundary after the singular is what let an eight euro
+        // pack of "Schleifpapiere" through as a floor sander: an ad names what it is selling in
+        // whatever number it has of them.
+        // A compound's head is what it is: "Bandschleifbänder" are belts for a belt sander.
+        """\b(\p{L}*schleif(papiere?|b[aä]nd(er)?|scheiben?|rollen?|gitter|mittel)|""" +
+            """staubbeutel|staubfangs[aä]cke?|staubs[aä]cke?|filterbeutel|filters[aä]cke?|""" +
+            """ersatzbeutel|papiers[aä]cke?|zubeh(ö|oe)r|ersatzteile?|verschlei(ß|ss)teile?|""" +
+            // The electrical spares a machine is stripped for. Named as the thing being sold, so
+            // they carry the machine's own name and its price is a fraction of one, which put a
+            // €33 switch at the top of a search for the machine it belongs to.
+            """schalter|kohleb(ü|ue)rsten|kondensator|keilriemen|antriebsriemen|""" +
+            // The same in English, as Lägler's US dealer lists a Hummel's spares: "Belt Tensioner -
+            // Part# P064 - OEM", "Hummel Drum #P161", "Fan Insert - Complete Assembly". "OEM" alone
+            // is not one: a drive sold loose from a laptop is an OEM drive.
+            """part(?=\s*(#|no\b|number))|spare\s+parts?|replacement\s+parts?|complete\s+assembly|tensioner|contactor|""" +
+            // A sanding machine's drum, tensioning unit or drive sold apart: "Lägler Hummel Spann
+            // Aggregat Drive unit", "Nieuwe schuurwals Parketschuurmachine Hummel".
+            """schleifwalzen?|schuurwals|spann\s?aggregat|antriebseinheit|drive\s+unit|motor\s+complete|""" +
+            // What eBay Italy and Spain sell for a Hummel or a Bona Belt: its dolly, a Texan 240 V
+            // from two 120 V outlets power adapter ("alimentatore", "fuente de alimentación"), the
+            // fan insert as a "gruppo completo".
+            """dolly|alimentatore|fuente\s+de\s+alimentaci(ó|o)n|power\s+(cord\s+)?adapter|inserto\s+ventola|gruppo\s+completo|""" +
+            """(?<=#\s?)\p{L}{0,2}\d{3,}|""" +
+            // Cross-border sanding consumables: ES lija / banda de revestimiento, IT carta·nastro
+            // abrasiv*, FR bande abrasive / papier de verre, NL schuurpapier / schuurband.
+            """papel\s+de\s+lija|banda\s+de\s+revestimiento|bandas?\s+abrasivas?|""" +
+            """carta\s+abrasiva|nastr[oi]\s+abrasiv[oi]|disc[oh]i?\s+abrasiv[oi]|""" +
+            """bande\s+abrasive|papier\s+de\s+verre|schuurpapier|schuurband)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // An abrasive grit code ("P240", "P100 grain") is a consumable's spec, never a machine's — a
+    // language-agnostic tell that catches a sanding belt/sheet whatever tongue names it.
+    private val abrasiveGrit = Regex("""\bP(?:40|60|80|100|120|150|180|220|240|320|400)\b""")
+
+    private fun isConsumableFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
+        // The query is really after the consumable itself ("schleifpapier ...") — keep those.
+        if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
+        // A sanding sheet has no capacity: "Patriot P400 4TB" and "Patriot P320 2 TB" are drives.
+        if (abrasiveGrit.containsMatchIn(listing.title) && sizesIn(listing.title).isEmpty()) return true
+        // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
+        val match = consumableNoun.find(listing.title) ?: return false
+        // Under a vehicle a bare "Schalter" is its gearbox: "MAN TGE 3.140 / L2H2, 6 Gang Schalter".
+        if (match.value.equals("schalter", ignoreCase = true) && namesAVehicle(queryText)) return false
+        val before = listing.title.take(match.range.first)
+        return !comesWith.containsMatchIn(before) && !saidAboutTheDevice(before, parsed)
+    }
+
+    // An ad seeking the thing, or seeking a person to do it, rather than offering one for sale. The
+    // agent noun a compound search also looks under ("Parkettschleifer") is both a machine and the
+    // tradesman who works it, so a job posting reads as a match on words alone.
+    private val wantedOrJobAd = Regex(
+        """(^|\s)(suche|suchen|gesucht|gesuchte?r?)\b|\bwerde\s+teil\b|""" +
+            """\(?\s*[mwd]\s*[/|]\s*[mwd]\s*[/|]\s*[mwd]\s*\)?|""" +
+            """\b(stellenangebot|stellenanzeige|minijob|aushilfe|festanstellung|""" +
+            """wanted|looking\s+for|gezocht|cercasi|se\s+busca|recherche\s+un)\b|""" +
+            // A size a buyer sets as the least they will take: "Pixel 9 oder 10 Pro XL mind. 256GB".
+            """\bmind(\.|estens)\s*\d+\s?(gb|tb)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isWantedOrJobAd(listing: Listing, queryText: String): Boolean {
+        if (wantedOrJobAd.containsMatchIn(queryText)) return false
+        return wantedOrJobAd.containsMatchIn(listing.title)
+    }
+
+    // Several vehicles at one price for all of them, said only in the text: a Kleinanzeigen "VW
+    // Crafter" at 27,000 € read "2 FAHRZEUGE ZUM SONDERPREIS ... Beide Fahrzeuge zusammen".
+    private val severalVehicles = Regex(
+        """\b(zwei|drei|vier|beide|[2-9])\s+(fahrzeuge|transporter|autos|wagen|busse)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val onePriceForAll = Regex(
+        """\b(paketpreis|nur\s+zusammen|zusammen\s+(zu|für|fuer)|als\s+paket)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Whether an ad's text sells several vehicles at the one price it asks. */
+    fun sellsSeveralVehiclesAtOnePrice(listing: Listing): Boolean {
+        val text = listing.description ?: return false
+        return severalVehicles.containsMatchIn(text) && onePriceForAll.containsMatchIn(text)
+    }
+
+    /**
+     * Whether the search is a part number and nothing else: written in digits, seven at least, with
+     * no more than a letter or two among them ("16131179011", "16 13 1 179 011", "A9018900065").
+     * A model code is no part number: "WH-1000XM5" names headphones a case is sold for.
+     */
+    /** Whether [listing] is the part [code] names: its title prints the number, or is described the
+     *  way the listings printing it describe the part ([PartDescriptions.describes]). */
+    private fun isThePart(listing: Listing, code: String, short: String?, descriptions: PartDescriptions?): Boolean {
+        val compact = listing.title.lowercase().replace(NON_ALNUM, "")
+        if (code in compact || (short != null && short in compact)) return true
+        return descriptions?.describes(compact) == true
+    }
+
+    /** The part number a search is, compacted, with BMW's seven digit form of it; null for a
+     *  search that is not a part number alone. */
+    fun partNumberOf(query: SearchQuery): Pair<String, String?>? {
+        val parsed = parseQuery(query)
+        if (!isAPartNumber(parsed)) return null
+        val code = parsed.positiveTokens.joinToString("").replace(NON_ALNUM, "").lowercase()
+        return code to code.takeLast(7).takeIf { code.length == 11 && code.all(Char::isDigit) }
+    }
+
+    private fun isAPartNumber(parsed: ParsedQuery): Boolean {
+        val tokens = parsed.positiveTokens.takeIf { it.isNotEmpty() } ?: return false
+        val compact = tokens.joinToString("").replace(NON_ALNUM, "")
+        return compact.count(Char::isDigit) >= 7 && compact.count(Char::isLetter) <= 2
+    }
+
+    fun filter(
+        listings: List<Listing>,
+        query: SearchQuery,
+        blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+        answerComplete: Boolean = true,
+    ): List<Listing> = partition(listings, query, blockedDealers, answerComplete).kept
+
+    /**
+     * Whether the listing's own title carries any word of the search.
+     *
+     * Keeping a listing and interrupting someone about it are different bars. Where a market's
+     * sellers write none of the words searched for — a search for the part number CT32G4SFD832A,
+     * which eBay's sellers never print — nothing can be required of a title and the market's own
+     * search is the only judge, so every listing it returned is kept and shown. That is fine on a
+     * screen someone chose to open, and wrong in a notification: seven alerts went out for 8 GB and
+     * 16 GB modules, a SK hynix stick and a Supermicro ECC board, each announced as the Crucial
+     * 32 GB module being watched for.
+     */
+    fun carriesAWordOfTheSearch(listing: Listing, query: SearchQuery): Boolean =
+        score(listing, parseQuery(query)) > 0.0
+
+    /** Whether the search names a vehicle, model-without-make included ("sprinter 314"). Read
+     *  from the live make/model taxonomy rather than from a word list, and asking whether any make
+     *  builds the model rather than which one: Sprinter is a Mercedes-Benz van and a Toyota
+     *  saloon, and either way a box of brake pads is not what was searched for. */
+    private fun namesAVehicle(queryText: String): Boolean =
+        CarQueryResolver.resolve(queryText) != null || CarQueryResolver.namesAKnownModel(queryText)
+
+    /** What a market sent, split into what the search keeps and what it drops, each drop carrying
+     *  the reason it was dropped. [filter] is the kept half; the dropped half is what the app shows
+     *  when someone asks what the search removed.
+     *
+     *  A listing from a dealer the user blocked goes first and under its own reason, whatever else
+     *  could be said about it: who they buy from is their decision, and the dealer's name is what
+     *  they need to see to take it back. */
+    fun partition(
+        listings: List<Listing>,
+        query: SearchQuery,
+        blockedDealers: List<BlockedDealer> = UserStateStore.blockedDealers(),
+        /** False for the part of an answer streamed so far, of which nobody can tell yet that none
+         *  of its listings will print a model code asked for alone. */
+        answerComplete: Boolean = true,
+    ): Partitioned {
+        val asParsed = parseQuery(query)
+        val namesOnePart = isAPartNumber(asParsed)
+        // A part number is one code however it is spaced: "16 13 1 179 011" is the same part a title
+        // writes as "16131179011", and five short numbers looked for as words of their own are in
+        // none of its titles.
+        val partCode = if (namesOnePart) asParsed.positiveTokens.joinToString("").replace(NON_ALNUM, "").lowercase() else null
+        // BMW numbers its parts in eleven digits, main group, subgroup and the part's own seven
+        // ("16 13 1 179 011"), and sellers write the seven alone as well: "Abdeckung Neu 1179011"
+        // is the same cover, and was dropped as off target.
+        val shortPartCode = partCode?.takeLast(7)?.takeIf { partCode.length == 11 && partCode.all(Char::isDigit) }
+        val partDescriptions = partCode?.let { PartDescriptions.learn(listings + PartNumberReference.known(it), it, shortPartCode) }
+        val partPhrasings = partDescriptions?.phrasings.orEmpty()
+        // One model code alone ("IB-3740-C31") is matched loosely by some markets' own search, and
+        // where no listing of an answer prints it, nothing is required of that answer's titles.
+        val namesOneModel = partCode == null && asParsed.orGroups.isEmpty() &&
+            asParsed.positiveTokens.singleOrNull()?.let { isAModelCode(it) } == true
+        val parsed = if (partCode == null) asParsed else {
+            val code = partCode
+            val short = shortPartCode
+            // Many listings of the part do not print its number at all; the ones that do say how
+            // the part is described, and a listing described that way is the part too.
+            val described = partPhrasings
+            val names = listOfNotNull(listOf(code), short?.let { listOf(it) }) + described
+            asParsed.copy(positiveTokens = listOf(code), orGroups = if (names.size == 1) emptyList() else names)
+        }
+        val dropped = mutableListOf<DroppedListing>()
+        // What an offer of this search typically costs, for telling a placeholder from a price.
+        val middle = listings.map { it.effectivePrice.amount }.filter { it > 0 }.sorted().let { if (it.isEmpty()) 0L else it[it.size / 2] }
+        val listings = listings.filter { listing ->
+            val dealer = blockedDealers.blocking(listing)
+            if (dealer != null) {
+                dropped += DroppedListing(listing, DropReason.BLOCKED_DEALER, dealer.name)
+                return@filter false
+            }
+            val reason = when {
+                !hasSanePrice(listing) -> DropReason.IMPLAUSIBLE_PRICE
+                isATokenPrice(listing, middle) -> DropReason.NO_REAL_PRICE
+                isWantedOrJobAd(listing, query.text) -> DropReason.WANTED_AD
+                isRentalOffer(listing, query.text) -> DropReason.RENTAL
+                // A part number names one part, and whatever that part is, it is the thing asked
+                // for: every listing of the BMW cover 16131179011 was dropped as an accessory for
+                // calling itself "Abdeckung". The rules below tell a thing from what is sold for it,
+                // which a search for the part itself has no use for.
+                namesOnePart && PartDescriptions.printsAnotherNumber(listing.title, partCode!!, shortPartCode) -> DropReason.OFF_TARGET
+                // Exactly: the number, or the model and two of the part's words, each in full. A
+                // share of a description's words is how a Motorola "Moto E30 … Back Cover" passed
+                // as the E30's fuel breather cover.
+                namesOnePart && !isThePart(listing, partCode!!, shortPartCode, partDescriptions) -> DropReason.OFF_TARGET
+                namesOnePart -> null
+                namesOneModel && score(listing, asParsed) <= 0.0 && namesAnotherModel(listing.title, query.text) -> DropReason.OFF_TARGET
+                isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
+                isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
+                isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
+                takesTheSizeAsked(listing, parsed) -> DropReason.ACCESSORY
+                leavesOutWhatWasAsked(listing, parsed) -> DropReason.ACCESSORY
+                // A part off the vehicle, named without a "für": a trim strip, a sill plate, a
+                // wheel bolt, an OEM number. Only for a search that names a vehicle — a model
+                // without its make is not enough to send a search to the car sites, but it is
+                // enough to know that a box of brake pads is not what was asked for. Elsewhere a
+                // long number in a title is an ordinary part number and means nothing.
+                namesAVehicle(query.text) && !CarFilterEngine.isPartQuery(query.text) &&
+                    CarFilterEngine.namesAVehiclePart(listing) -> DropReason.ACCESSORY
+                isOneOfSeveralSizes(listing, parsed) -> DropReason.ONE_OF_SEVERAL_SIZES
+                isConsumableFor(listing, parsed, query.text) -> DropReason.CONSUMABLE
+                else -> null
+            }
+            if (reason != null) dropped += DroppedListing(listing, reason)
+            reason == null
+        }
+        // Which of the words searched for a listing has to carry, decided per word rather than for
+        // the search as a whole.
+        //
+        // A word with a number in it is a size or a model code — 2TB, M.2, S25 — and asking for one
+        // is asking for that one, so it is always required. A word of letters alone is a category
+        // word, and whether it can be required is read off the market's own answer: Idealo lists
+        // "Lexar NM620 2TB M.2" and never writes "SSD", so requiring that word threw away the very
+        // drives asked for, while Vinted answers "grigri" with the word in nearly every title, so a
+        // listing without it is the odd one out. Where nothing can be required, the market's own
+        // search is the only judge there is, and it already ran.
+        fun shareCarrying(token: String): Double {
+            if (listings.isEmpty()) return 0.0
+            val t = token.lowercase().replace(NON_ALNUM, "")
+            if (t.isEmpty()) return 1.0
+            val plain = parsed.plainVowels[t]
+            return listings.count { listing ->
+                val text = "${listing.title} ${listing.description ?: ""}"
+                // A short word is looked for as a word of its own, the way it is matched: "m2"
+                // inside "nm790" is the model number of a different drive, not the slot.
+                if (t.length <= 2) {
+                    normalize(text.lowercase()).split(" ").any { it.replace(NON_ALNUM, "") == t }
+                } else {
+                    normalize(text.lowercase()).replace(NON_ALNUM, "").let { it.contains(t) || plain != null && it.contains(plain) }
+                }
+            }.toDouble() / listings.size
+        }
+        // Aliases are alternate phrasings of the whole search, scored as competing wholes, so only a
+        // plain token list is narrowed this way.
+        val asked = if (parsed.orGroups.isNotEmpty()) parsed else {
+            val required = parsed.positiveTokens.filter { token ->
+                // A size and a bare number are what a search cannot be talked out of: 2TB is not
+                // 1TB, and a Sprinter 314 is not a Sprinter 316 and certainly not a book with
+                // "Sprinter" in its title. A word carrying letters as well as digits is a form
+                // factor or a trim as often as a model — "M.2" is on half the drives that have one
+                // — so those follow the market's own answer like any other word.
+                isASize(token) || token.all { it.isDigit() } || isADecimal(token) || isACompound(token) || (isAModelCode(token) && (parsed.positiveTokens.size > 1 || !answerComplete || shareCarrying(token) > 0.0)) ||
+                    shareCarrying(token) >= WORDS_ARE_WRITTEN
+            }
+            // A requirement made only of words the whole answer carries decides nothing. Asked for
+            // a Volkswagen Crafter, mobile.de answered with thirty-four Volkswagen Tiguans:
+            // "crafter" is written by none of them, so it was dropped from the requirement, and
+            // every Tiguan then matched the one word left perfectly. Where that is the shape of an
+            // answer, the word the answer does not write is exactly the word that has to be
+            // required — it is the only one that can tell the thing from what came instead.
+            // A market that simply omits a category word is a different shape: there the other
+            // words of the search are not universal either, since they name the thing.
+            val decidesNothing = required.isNotEmpty() &&
+                required.all { shareCarrying(it) >= EVERY_LISTING_SAYS_IT }
+            val telling = if (!decidesNothing) emptyList() else
+                parsed.positiveTokens.filter { it !in required && shareCarrying(it) < EVERY_LISTING_SAYS_IT }
+            parsed.copy(positiveTokens = required + telling)
+        }
+        val sellersWriteTheseWords = asked.positiveTokens.isNotEmpty() || asked.orGroups.isNotEmpty()
+        // A size is not a search on its own. Where only the size could be required, a listing still
+        // has to carry some other word of the search, as long as this market's sellers write those
+        // words at all: Vinted answers "4TB NVMe" with hard disks and memory cards that share
+        // nothing with it but "4TB". A market that never writes them (Idealo does not write "SSD"
+        // under a drive) leaves its listings to its own search, as every other rule here does.
+        val beyondTheSize = parsed.positiveTokens.filterNot { isASize(it) }
+        val onlyTheSizeRequired = parsed.orGroups.isEmpty() && beyondTheSize.isNotEmpty() &&
+            beyondTheSize.size < parsed.positiveTokens.size &&
+            asked.positiveTokens.all { isASize(it) } &&
+            beyondTheSize.any { shareCarrying(it) > 0.0 }
+
+
+        val implied = impliedWords(listings, parsed, query.text)
+        // Where the answer writes a word of the search, a listing carrying none, itself or
+        // implied by its model, is what the market guessed: marked, to be shown after the rest.
+        // Measured on 35 searches, 89% of such listings were something else (Playmobil for
+        // "Dusch-WC", postcards of "Bourdon" for "lägler hummel") and 7% the thing under another
+        // name, so none is hidden.
+        val carrying = listings.filter { score(it, parsed, implied[it.id].orEmpty()) > 0.0 || writesAWordOf(it, parsed) }.map { it.id }.toSet()
+        val kept = listings.mapNotNull { listing ->
+            // A word the reader blocked is their own decision, and is reported as that rather than
+            // as something the market got wrong, naming the word so the reader can check it.
+            blockedWord(listing, asked)?.let { word ->
+                dropped += DroppedListing(listing, DropReason.BLOCKED_WORD, word)
+                return@mapNotNull null
+            }
+            val s = score(listing, asked, implied[listing.id].orEmpty())
+            if (s < 0) {
+                dropped += DroppedListing(listing, DropReason.NOT_A_SINGLE_OFFER)
+                return@mapNotNull null
+            }
+            // A listing has to carry the search well enough, and only where the market's own answer
+            // shows these are words its sellers write. Where they are not, the market's search is
+            // the only judge there is, and it already ran.
+            if (sellersWriteTheseWords && s < ENOUGH_OF_THE_SEARCH) {
+                dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                return@mapNotNull null
+            }
+            if (onlyTheSizeRequired && score(listing, parsed.copy(positiveTokens = beyondTheSize), implied[listing.id].orEmpty()) == 0.0) {
+                dropped += DroppedListing(listing, DropReason.OFF_TARGET)
+                return@mapNotNull null
+            }
+            // Only once the words are judged: the listings of other sizes are part of the answer
+            // the words are read off, and taken out first they changed which words this market
+            // writes, so the 2TB drives asked for lost to a "decides nothing" rule.
+            if (statesAnotherSize(listing, parsed)) {
+                dropped += DroppedListing(listing, DropReason.ANOTHER_SIZE)
+                return@mapNotNull null
+            }
+            (if (carrying.isNotEmpty() && listing.id !in carrying) listing.copy(offQuery = true) else listing) to s
+        }.sortedByDescending { it.second }.map { it.first }
+        recordModelEvidence(kept, parsed)
+        return Partitioned(kept, dropped)
+    }
+
+    /** Whether the listing's text holds a word of the search as written, spacing aside, or a
+     *  long word's stem ("parkettschleif" of "parkettschleifmaschine" in "Parkettschleifer"). */
+    private fun writesAWordOf(listing: Listing, parsed: ParsedQuery): Boolean {
+        val text = normalize("${listing.title} ${listing.description ?: ""}".lowercase())
+        val compact = text.replace(NON_ALNUM, "")
+        return (parsed.positiveTokens + parsed.orGroups.flatten()).any { token ->
+            val t = token.lowercase().replace(NON_ALNUM, "")
+            when {
+                t.isEmpty() -> false
+                t.length <= 2 -> text.split(" ").any { it.replace(NON_ALNUM, "") == t }
+                else -> compact.contains(t) || t.length >= 10 && compact.contains(t.take(8))
+            }
+        }
+    }
+
+    /**
+     * The words of the search each listing is shown to be by the rest of the market's answer.
+     *
+     * A seller names the product and leaves out what everyone knows it is: "Samsung 990 PRO SSD
+     * 1TB" is an NVMe drive and an M.2 one, and a search for "1TB NVMe" or "4TB M.2" threw it out
+     * for not saying so. Other sellers in the same answer do say so: where most of the listings
+     * carrying the same model word ("990", "sn850x", "p310") also carry the word searched for, a
+     * listing with that model word carries it too. A spec word ("2280", "gen4") is on SATA drives
+     * as much as on NVMe ones and names no product, so it shows nothing.
+     */
+    private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery, queryText: String): Map<String, Set<String>> {
+        val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
+            .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
+        if (words.isEmpty() || listings.isEmpty()) return emptyMap()
+        // A vehicle's model names its make: a private seller writes "Crafter 2.0 TDI" and never
+        // "Volkswagen", and carrying one of two words such an ad was hidden from a Volkswagen
+        // Crafter search. A title naming another make as well is a list of models ("Sprinter /
+        // Crafter / Transit") and implies nothing.
+        val car = CarQueryResolver.resolve(queryText)?.takeIf { it.modelSlug != null }
+        val ownMake = car?.makeSlug?.replace("-", "")
+        val modelWord = car?.modelSlug?.let(::normalizeToken)?.takeIf { it in words }
+        val makeWords = if (modelWord == null) emptyList() else
+            words.filter { CarQueryResolver.makeSpellings(it)?.firstOrNull() == ownMake }
+        fun namesAnotherMake(title: String) = normalize(title.lowercase()).split(" ").any { t ->
+            t.length >= 2 && CarQueryResolver.makeSpellings(t)?.firstOrNull().let { it != null && it != ownMake }
+        }
+        val evidence = ModelWordEvidence.installed
+        val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
+        val carries = words.associateWith { w -> listings.map { score(it, single(w)) == 1.0 } }
+        val modelWordsOf = listings.map { modelWords(it.title) }
+        val carriers = HashMap<String, MutableList<Int>>()
+        modelWordsOf.forEachIndexed { i, ws -> ws.forEach { carriers.getOrPut(it) { mutableListOf() } += i } }
+        val result = HashMap<String, Set<String>>()
+        listings.forEachIndexed { i, listing ->
+            val title = " " + normalize(listing.title.lowercase()) + " "
+            val shown = words.filter { w ->
+                !carries.getValue(w)[i] && CONTRARY[w].orEmpty().none { title.contains(" $it ") } && modelWordsOf[i].any { m ->
+                    val others = carriers.getValue(m).filter { it != i }
+                    val here = others.size >= MODEL_EVIDENCE_LISTINGS &&
+                        others.count { carries.getValue(w)[it] }.toDouble() / others.size >= MODEL_EVIDENCE_SHARE
+                    // An answer too small to show it is judged by what the other answers showed.
+                    here || evidence?.shows(m, w) == true
+                }
+            }
+            // A rental carries the search's own word for renting ("mieten") however its title
+            // names the machine: the market stated it is hired out.
+            val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
+            val made = if (modelWord != null && carries.getValue(modelWord)[i] && !namesAnotherMake(listing.title))
+                makeWords.filter { !carries.getValue(it)[i] } else emptyList()
+            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty()) result[listing.id] = (shown + rented + made).toSet()
+        }
+        return result
+    }
+
+    /**
+     * What the listings a search kept show about their model words, for the answers too small to
+     * show it themselves. Only the kept ones: Vinted answered "lägler hummel" with Goebel's Hummel
+     * figurines, and learned from them, figurine 187 made a Festool sander sold with a "SYS3 M 187"
+     * Systainer a Hummel in every later answer.
+     */
+    private fun recordModelEvidence(kept: List<Listing>, parsed: ParsedQuery) {
+        val evidence = ModelWordEvidence.installed ?: return
+        val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
+            .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
+        if (words.isEmpty() || kept.isEmpty()) return
+        val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
+        evidence.record(
+            listingModels = kept.associate { it.id to modelWords(it.title) },
+            carried = kept.associate { l -> l.id to words.filter { score(l, single(it)) == 1.0 }.toSet() },
+            words = words,
+        )
+    }
+
+    /**
+     * Whether [title] names a model of its own that is not the one [typed]. A market's own search
+     * matches a model code loosely, and where no listing of its answer prints the code nothing can
+     * be required of the titles: Back Market answered "IB-3740-C31" with an I-Tec "C31HDMIDPDOCKPD"
+     * dock, eBay answered "IB-3805-C31" with ICY BOX's IB-287-C31 and IB-1817M-C31 cases, and Amazon
+     * answered "IB-3640SU3" with an ORICO 6626C3-C dock and an HP PC with an i5-7400T. A title naming
+     * no model at all ("Crucial 32GB DDR4 3200 SO-DIMM") is still left to the market's search, and a
+     * code written shorter ("IB-3740-C" for the IB-3740-C31) is the same model.
+     */
+    private fun namesAnotherModel(title: String, typed: String): Boolean {
+        val code = normalize(typed.lowercase()).replace(NON_ALNUM, "")
+        fun another(c: String) = c != code && !code.startsWith(c) && !c.startsWith(code) && code !in c
+        // A shorter code numbered as the one searched for is a model beside it too: refurbed
+        // answered "RN12H" with a Zebra dock "für XSLATE R12", whose "R12" is too short to read as
+        // a code of its own.
+        val digits = code.filter(Char::isDigit)
+        val sameNumber = digits.isNotEmpty() && normalize(title.lowercase()).split(" ").map { it.replace(NON_ALNUM, "") }.any { w ->
+            w.length >= 3 && w.any(Char::isLetter) && w.filter(Char::isDigit) == digits && another(w)
+        }
+        return sameNumber || modelCodesIn(title).any(::another)
+    }
+
+    /** The model codes a title prints: a word of letters and digits joined by hyphens ("IB-287-C31",
+     *  "6626C3-C") or written as one ("CT16G4SFD832A", "STKL2000400"), with two digits at least, and
+     *  not a spec written the same way ("DDR4-3200", "PC4-25600", "USB3-0"). */
+    private fun modelCodesIn(title: String): List<String> =
+        MODEL_CODE.findAll(title).map { it.value.lowercase().replace(NON_ALNUM, "") }
+            .filter { c ->
+                c.length >= 5 && c.count(Char::isDigit) >= 2 && c.any(Char::isLetter) &&
+                    !SPEC_CODE.containsMatchIn(c) && !isASize(c)
+            }.toList()
+
+    private val MODEL_CODE = Regex("""\b[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)+\b|\b(?=[\p{L}\p{N}]*\p{L})(?=[\p{L}\p{N}]*\p{N})[\p{L}\p{N}]{6,}\b""")
+
+    /** Words that state a spec in the shape of a model code: memory and bus generations, speeds. */
+    private val SPEC_CODE = Regex("""^(lp)?ddr\d|^pc\d|^cl\d|^\d+rx\d|^\d+pins?$|^usb|^sata|^pcie|^gen\d|^m2|^nvme|^wifi|^bt\d|^hdmi\d|^\d+(gb|tb|mb|mhz|ghz|mm|cm|w|v|mah)""")
+
+    /** The words in a title that can name a model: a number of three or four digits not led by a zero ("990"), or
+     *  letters and digits together, three or more of them ("sn850x", "p310", "nm790"). Two are a
+     *  form factor or a lane count ("M.2", "x4"), which SATA drives carry as well. Sizes are what
+     *  was asked, not which product it is. */
+    private fun modelWords(title: String): Set<String> {
+        val words = normalize(gluedThousands(title.lowercase())).split(" ")
+        // A share is no model either: "100% Gezond" made an M.2 SATA drive an NVMe one, by the
+        // "100% health" the NVMe drives beside it were sold with.
+        val shares = PERCENTAGE.findAll(title).map { it.groupValues[1] }.toSet()
+        return words.filterIndexed { i, w ->
+            w !in shares &&
+            w.any { it.isDigit() } && w.all { it.isLetterOrDigit() } &&
+                // A number led by a zero is a part number's revision ("1FM101-002", "718292-001"),
+                // shared by drives of every kind; no product is named 002.
+                (if (w.all { it.isDigit() }) w.length in 3..4 && w[0] != '0' else w.length >= 3) &&
+                !isASize(w) && sizeInGigabytes(w) == null && !specWord.matches(w) && !countWord.matches(w) && !isAYear(w) &&
+                // A decimal is a version or a generation ("PCIe 3.0", "USB 3.2", "NASware 3.0"),
+                // which drives of every kind print: "3p0" made a WD Red hard disk an NVMe drive by
+                // the "PCIe 3.0" of the NVMe drives beside it.
+                !isADecimal(w) &&
+                // A number with its unit after it is a size written apart: "2000go" reads as
+                // "2000 gb", and taken for a model number like "990" it made a 3.5" hard disk an
+                // M.2 drive, because most listings saying 2000 GB were.
+                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in SIZE_UNITS) &&
+                // A count or a measure written apart is no model either: "Lim 300 Stück" made a
+                // Hummel figurine a Lägler, by the 300 the sanders' "300 mm" drums share.
+                !(w.all { it.isDigit() } && words.getOrNull(i + 1) in COUNT_OR_MEASURE)
+        }.toSet()
+    }
+
+    private val SIZE_UNITS = setOf("gb", "tb", "mb", "go", "to", "gib", "tib")
+
+    private val PERCENTAGE = Regex("""(\d+)\s*%""")
+
+    /** Words that make the number before them a count or a measure. */
+    private val COUNT_OR_MEASURE = setOf(
+        "stuck", "stueck", "stk", "st", "pcs", "pieces", "teile", "teilig", "pack", "x",
+        "mm", "cm", "m", "km", "kg", "g", "w", "watt", "kw", "v", "volt", "ps", "l", "liter", "zoll", "inch", "jahre", "jahr", "h",
+    )
+
+    /** A year a thing was built or a season it is for names no product: three "Lägler Hummel BJ
+     *  2024" made a box of "Match Attax Euro 2024" football cards a Hummel by its "2024". */
+    private fun isAYear(word: String): Boolean =
+        word.length == 4 && word.all { it.isDigit() } && word.toInt() in 1950..(java.time.Year.now().value + 1)
+
+    /** How many of a thing, or how big, which names no product: a "3er-Set" of brushes is not a
+     *  "3er-Parkettschleifset", and "120x40" mm says nothing of what it measures. */
+    private val countWord = Regex("""\d+(er|x|fach|teilig|tlg|stk|stueck|pcs|pc|pack|pk|set)|\d+x\d+""")
+
+    /** Words a title states a spec in rather than names a product with: a card length, a bus
+     *  generation, a lane count. A SATA drive is "M.2 2280" as much as an NVMe one is. */
+    private val specWord = Regex("""22(30|42|60|80|110)|gen\d|pcie\d|pci\d|ddr\d|usb\d\w*|3d""")
+
+    /** Words of a search a title rules out by naming the alternative: a drive sold as "M.2 SATA"
+     *  is not the NVMe one, however many NVMe drives share its model words. */
+    private val CONTRARY = mapOf("nvme" to listOf("sata"))
+
+    /** Other listings that have to share a model word before it says anything about this one. */
+    private const val MODEL_EVIDENCE_LISTINGS = 2
+
+    /** The share of those that have to carry the word searched for. */
+    private const val MODEL_EVIDENCE_SHARE = 0.6
+
+    /**
+     * Whether the listing carries what a compound the search names is made of.
+     *
+     * German writes one thing as one word and then splits it back apart across a list:
+     * "Parkett-, Bodenschleifmaschine von Scheer" is a Parkettschleifmaschine, and matching the
+     * glued spelling finds neither half of it. The leading part is what separates it from the
+     * novels a market returns that merely end in "-maschine", so that is what is compared. A word
+     * too short to be built of parts has none to compare, and is matched whole like any other.
+     */
+    /** From this many characters a word is built of parts rather than being one. */
+    private const val COMPOUND_LENGTH = 10
+
+    /** The shortest last part of a compound that stands for it: "gehaeuse", "maschine". */
+    private const val COMPOUND_HEAD_LENGTH = 6
+
+    /** The leading part compared, long enough to name the thing the compound is about. */
+    private const val STEM_LENGTH = 7
+
+    /**
+     * Whether the word is a size: digits glued to a unit, as a listing writes one.
+     *
+     * A size is the one part of a search that cannot be traded away — 2TB is not 1TB, and a market
+     * whose answer is full of other sizes is answering about other things. Every other word, model
+     * codes included, is required only where the market's own answer writes it: half the drives on
+     * Vinted and Ricardo never write "M.2" and are M.2 drives, and asking for the words they leave
+     * out lost the very listings searched for.
+     */
+    private fun isASize(token: String): Boolean {
+        val t = token.lowercase().replace(NON_ALNUM, "")
+        return unitSuffixes.any { unit ->
+            t.endsWith(unit) && t.dropLast(unit.length).let { pre ->
+                pre.isNotEmpty() && pre.all { it.isDigit() || it == 'x' }
+            }
+        }
+    }
+
+    /**
+     * Whether the word is a model number: six characters or more, letters and digits mixed
+     * ("MG09ACA18TE", "ST16000NM000J", "WD80EZAZ"). It names one product, so a listing without it is
+     * not that product however many other words it shares: asked for a Toshiba MG09ACA18TE, Vinted
+     * answered with Toshiba remote controls and televisions, and every one of them passed on
+     * "Toshiba" because no title in the answer wrote the number. Required beside other words, since
+     * those are what such listings pass on, and alone wherever a listing of the answer writes it:
+     * eBay answered "MG09ACA18TE" with MG car parts. A market that files it as a field and never
+     * prints it (Geizhals) is left to its own search. A shorter code names a model
+     * line where it has two letters and two digits at least ("MG09", "SN770", "RX580"): asked for
+     * a Toshiba MG09, Vinted answered with the same remote controls. Codes with one digit ("M.2",
+     * "S25", "DDR4", "USB3", "Gen4") are a slot, a phone generation or a standard, written out of as
+     * many titles as into them, and are left to the market's own answer.
+     */
+    private fun isAModelCode(token: String): Boolean {
+        val t = token.replace(NON_ALNUM, "")
+        if (isASize(t) || t.none { it.isLetter() } || t.none { it.isDigit() }) return false
+        // A letter before a number of three or more digits names a model as surely: "D4-320" is
+        // TerraMaster's four-bay box, and read as no code at all it required nothing, so eBay's
+        // Diablo 4 items and D-rings stood as the cheapest of it.
+        return t.length >= MODEL_CODE_LENGTH || (t.count { it.isLetter() } >= 2 && t.count { it.isDigit() } >= 2) ||
+            t.count { it.isDigit() } >= 3
+    }
+
+    private const val MODEL_CODE_LENGTH = 6
+
+    /** A decimal as [normalize] joins it ("3.5" is "3p5"): a measure, required like any number. */
+    private fun isADecimal(token: String): Boolean = DECIMAL.matches(token)
+    private val DECIMAL = Regex("""\d+p\d+""")
+
+    /** Whether the word is a compound naming one thing: letters enough of them that nobody types
+     *  it meaning a category. "Parkettschleifmaschine" is a machine for parquet and nothing else,
+     *  so a market answering it with sanding belts has not answered — while "laptop" is a word its
+     *  sellers can leave out of a laptop's title, and is judged on the answer instead. Matched
+     *  through its leading part, so a compound written apart still counts. */
+    private fun isACompound(token: String): Boolean =
+        token.length >= COMPOUND_LENGTH && token.all { it.isLetter() }
+
+    /** The share of a market's answer that has to carry a word of the search before a listing
+     *  without one is treated as the exception rather than the rule. Half: measured against the two
+     *  answers this decides between — Vinted for "grigri" carries the word in 46 of 48, eBay for a
+     *  category word carries it in about half, and a market that ran the search and returned
+     *  mostly other things still sits well above nothing. */
+    private const val WORDS_ARE_WRITTEN = 0.5
+
+    /** How much of a multi-word search a listing has to carry: three of four words, four of five. */
+    private const val ENOUGH_OF_THE_SEARCH = 0.76
+
+    /** From this share of a market's answer upwards, a word says nothing about which listing in it
+     *  is the thing searched for. */
+    private const val EVERY_LISTING_SAYS_IT = 0.95
+
+    /**
+     * Whether a market answered a different question than the one asked: it returned a page of
+     * listings and not one of them carries a word from the search.
+     *
+     * Measured on the two cases this exists for. reBuy answers "grigri" with "Grün ist die Heide"
+     * and "Mosaik (Grundkurs)" — six listings, none containing the word, because the site dropped
+     * the search and served its own shelf. eBay Italy answers "2tb m.2 ssd" with a hundred drives
+     * and five exact matches: it ran the search, and those five are real.
+     *
+     * So the line is at nothing, not at a share. A market that ran the search and mostly missed is
+     * handled listing by listing like every other market; one that never ran it has nothing to
+     * filter, since what it sent is about something else entirely.
+     */
+    fun answeredSomethingElse(
+        listings: List<Listing>,
+        query: SearchQuery,
+        askedInItsOwnLanguage: Boolean = true,
+    ): String? {
+        // A market asked in a language it does not search cannot carry the words back, and its
+        // answer is judged listing by listing like any other rather than thrown away whole.
+        if (!askedInItsOwnLanguage) return null
+        val parsed = parseQuery(query)
+        val tokens = (parsed.positiveTokens + parsed.orGroups.flatten())
+            .map { it.lowercase().replace(NON_ALNUM, "") }
+            .filter { it.length >= 3 }
+        if (tokens.isEmpty() || listings.size < MIN_ANSWER_TO_JUDGE) return null
+        val matching = listings.count { listing ->
+            // Folded like the search's words were, umlauts included: a title's "Festplattengehäuse"
+            // is the search's "festplattengehaeuse".
+            val text = normalize("${listing.title} ${listing.description ?: ""}".lowercase()).replace(NON_ALNUM, "")
+            tokens.any { text.contains(it) }
+        }
+        if (matching > 0) return null
+        val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
+        return "${listings.size} results, not one carrying a word of the search (sample: $sample)"
+    }
+
+    /** Below this, an answer is too small to tell a market that ignored the search from one that
+     *  genuinely had nothing close. */
+    private const val MIN_ANSWER_TO_JUDGE = 5
+
+    /** The two halves of [partition]: what the search shows, and what it removed. */
+    data class Partitioned(val kept: List<Listing>, val dropped: List<DroppedListing>)
+
+    /**
+     * Detects a result set the platform returned without applying the query: many listings,
+     * almost none containing any query token. Happens when a site silently ignores an
+     * unsupported search parameter and serves its default feed (e.g. AutoScout24 `?query=`).
+     * Returns a human-readable report, or null when the results look genuine.
+     *
+     * A one-word query is judged too, on whether the word itself appears anywhere in the listing
+     * rather than on [score]: a market that returns nothing containing the word did not search for
+     * it. eBay answered "grigri" with grey folders and belt buckles, having matched the French
+     * "gris"; reBuy answered it with "Grieche sucht Griechin". The one-in-five floor is what keeps
+     * a genuine answer safe — a market where a ThinkPad X1 comes back for "laptop" still has plenty
+     * of listings that do say laptop, and stays.
+     */
+    fun irrelevanceReport(listings: List<Listing>, query: SearchQuery): String? {
+        val parsed = parseQuery(query)
+        val tokenCount = parsed.positiveTokens.size + parsed.orGroups.size
+        if (tokenCount < 1 || listings.size < 5) return null
+        val matching = if (tokenCount == 1) {
+            val token = (parsed.positiveTokens.firstOrNull() ?: parsed.orGroups.firstOrNull()?.firstOrNull())
+                ?.lowercase()?.replace(NON_ALNUM, "") ?: return null
+            if (token.length < 3) return null
+            listings.count { listing ->
+                "${listing.title} ${listing.description ?: ""}".lowercase()
+                    .replace(NON_ALNUM, "").contains(token)
+            }
+        } else {
+            listings.count { score(it, parsed) > 0.0 }
+        }
+        if (matching.toDouble() / listings.size >= 0.2) return null
+        val sample = listings.take(5).joinToString("; ") { it.title.take(60) }
+        return "${listings.size} results, only $matching contain query tokens — search likely ignored (sample: $sample)"
+    }
+
+    /**
+     * A word of a search and the other names sellers write it under. [searchedAs] are written as
+     * sellers write them, so a market can be asked with them; [alsoMatched] are the inflections and
+     * spellings a title is also read for, which asking a market with would only repeat. [either]
+     * where every name is the word itself in both directions, so a search typed with one of the
+     * names is offered the others too.
+     */
+    private class OtherNames(
+        val word: String,
+        val searchedAs: List<String>,
+        val alsoMatched: List<String> = emptyList(),
+        val either: Boolean = false,
+    ) {
+        /** Every name as a normalized title carries it. */
+        val matched: List<String> by lazy { (searchedAs + alsoMatched).map { normalize(it.lowercase()) }.distinct() }
+    }
+
+    /** Words of a search a title can carry under another name, keyed by the normalized word. Only
+     *  names that always mean the word: PCIe on an M.2 drive is the NVMe protocol, while "M.2" alone
+     *  is not, since M.2 SATA drives exist. */
+    private val WRITTEN_AS = mapOf(
+        "nvme" to OtherNames("NVMe", listOf("PCIe"), listOf("pci e", "pci express", "pcie3", "pcie4", "pcie5")),
+        // Geizhals names a drive by its slot and bus and never calls it an SSD: "Lexar NM790 1TB,
+        // M.2 2280 / M-Key / PCIe 4.0 x4". Only a drive is keyed for M.2 storage or speaks NVMe.
+        "ssd" to OtherNames("SSD", listOf("NVMe"), listOf("m key", "solid state")),
+        // A make written out by some sellers and by its initials by others.
+        "wd" to OtherNames("WD", listOf("Western Digital"), listOf("wd black", "wd blue"), either = true),
+        // A drive enclosure named by the drive's English initials: "4-Bay HDD Gehäuse".
+        "festplattengehaeuse" to OtherNames(
+            "Festplattengehäuse", listOf("HDD Gehäuse", "Festplatten Gehäuse"), listOf("hdd case", "hdd enclosure"), either = true,
+        ),
+        // A drive bay as German shops count them: pearl's "4-fach-Festplattengehäuse", MediaMarkt's
+        // "4 Einschübe", others' "4 Schächte" or "4 Slots" are the 4-Bay asked for.
+        "bay" to OtherNames(
+            "Bay", listOf("fach", "Einschübe", "Schächte", "Slots"),
+            listOf("bays", "einschub", "einschueben", "schacht", "schaechten", "slot"), either = true,
+        ),
+    )
+
+    /**
+     * The search with one of its words written under another name sellers use for it, one search per
+     * name: "4 bay festplattengehäuse" is also "4 fach festplattengehäuse" and "4 Einschübe
+     * festplattengehäuse". A market answering only titles that carry every word misses the shops
+     * counting bays as Einschübe, which the filter keeps once they are asked for. A word is swapped
+     * where it, or one hyphenated part of it, is the word itself; the rest stays as typed.
+     */
+    fun otherNamings(text: String): List<String> {
+        val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return words.indices.flatMap { i ->
+            val parts = words[i].split('-')
+            parts.indices.flatMap { p ->
+                val typed = normalize(parts[p].lowercase()).replace(" ", "")
+                val names = WRITTEN_AS[typed]
+                    ?: WRITTEN_AS.values.firstOrNull { it.either && typed in it.matched }
+                    ?: return@flatMap emptyList()
+                (listOf(names.word) + names.searchedAs)
+                    .filter { normalize(it.lowercase()).replace(" ", "") != typed }
+                    .map { name ->
+                        val word = parts.toMutableList().apply { this[p] = name }.joinToString("-")
+                        words.toMutableList().apply { this[i] = word }.joinToString(" ")
+                    }
+            }
+        }.distinctBy { it.lowercase() }
+    }
+
+    // Model variant qualifier tokens that must appear adjacent to their preceding query token.
+    // "Samsung Galaxy S25 FE ultra sauber" must NOT match "Samsung Galaxy S25 Ultra" query.
+    // "ii"/"iii" = Roman numeral version markers (e.g. "Z6 III", "Mark II") — prevents "Nikon Z6 II"
+    // from matching "Nikon Z6 III" query because "III" appears in the Tamron 28-75 f/2.8 III lens name.
+    private val MODEL_QUALIFIER_SUFFIXES = setOf("ultra", "max", "plus", "mini", "pro", "lite", "ii", "iii")
+
+    // All pattern lists use pre-normalized strings (lowercase, umlauts replaced, hyphens as spaces)
+    private fun normalize(text: String): String {
+        // Convert decomposed Unicode (NFD, e.g. "a" + combining diaeresis) to composed NFC
+        // so that umlaut replacements like "ä"→"ae" work on titles from all crawlers.
+        val nfc = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFC)
+        return nfc
+            // A dotted capital I ("İPhone", typed on a Turkish keyboard) lowercases to an i with a
+            // combining dot, which the symbol strip below would turn into "i phone".
+            .replace("̇", "").replace("İ", "i")
+            // Sellers write the make's word apart and the model's qualifiers together or swapped:
+            // "I Phone", "I-Phone", "Iphon", "Ipfon 11 ProMax", "iPhone 11 max pro" are all the 11 Pro Max.
+            .replace(Regex("""\bi[\s-]*(phone|phon|pfon|fon)\b""", RegexOption.IGNORE_CASE), "iphone")
+            .replace(Regex("""\bi[\s-]+pad\b""", RegexOption.IGNORE_CASE), "ipad")
+            .replace(Regex("""(pro)(max)\b""", RegexOption.IGNORE_CASE), "$1 $2")
+            // A unit written out: "512 Gigabyte" and "256 giga" are 512 GB and 256 GB.
+            .replace(Regex("""(\d)\s*(gigabytes?|gigas?)\b""", RegexOption.IGNORE_CASE), "$1 gb")
+            .replace(Regex("""(\d)\s*terabytes?\b""", RegexOption.IGNORE_CASE), "$1 tb")
+            .replace(Regex("""(\d)\s+max\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro max")
+            // "Pixel 9 XL Pro" is the 9 Pro XL, in the order a seller happened to write it.
+            .replace(Regex("""(\d)\s+xl\s+pro\b""", RegexOption.IGNORE_CASE), "$1 pro xl")
+            // A letter, a period, a digit is one word in the thing's own name: "M.2", "V.2".
+            // Joined before periods become spaces, so a title's "M.2" and a query's "m.2" end up
+            // in the same shape ("m2") — split, the title says "m 2" and the query token "m2"
+            // never matches it, which dropped every M.2 drive on every market.
+            .replace(Regex("""\b([a-z])\.(\d)""", RegexOption.IGNORE_CASE), "$1$2")
+            // A decimal is one word the same way: the query's "3.5" became "35" while a title's
+            // "3.5 Zoll" and "2.5/3.5“" split into "3" and "5", and every 3.5-inch enclosure was
+            // off target. Joined with a letter, so it is a measure of its own rather than a model
+            // generation that has to follow the word before it ("Switch 2"). Not before a unit,
+            // where the size is read off the raw title instead.
+            .replace(Regex("""(?<![\d.,])(\d)[.,](\d)(?![\d.,]|\s*(tb|gb|mb|kb)\b)""", RegexOption.IGNORE_CASE), "$1p$2")
+            .replace(".", " ")  // Strip period (e.g. "Hüllen." → "Huellen", "z.B." → "z B")
+            .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            // French/Spanish accents (Vinted DE, Marktplaats, etc.)
+            .replace("é", "e").replace("è", "e").replace("ê", "e").replace("ë", "e")
+            .replace("à", "a").replace("â", "a").replace("á", "a")
+            .replace("ç", "c")
+            .replace("ô", "o").replace("ó", "o")
+            .replace("ù", "u").replace("û", "u").replace("ú", "u")
+            .replace("î", "i").replace("ï", "i").replace("í", "i")
+            // French storage notation: "256 Go" → "256 gb" (so French listings match "256gb" query token)
+            .replace(Regex("(\\d+)\\s*go\\b", RegexOption.IGNORE_CASE), "$1 gb")
+            // "+" after a digit = "plus" model suffix (e.g. S24+, Galaxy+, 6+)
+            // Only after digits to avoid "Wie Neu+" → "neuplus"
+            .replace(Regex("(\\d)\\+"), "$1 plus")
+            // Strip remaining "+" as space (e.g. "Pro+" → "Pro", "+sub+era" → "sub era")
+            .replace("+", " ")
+            // Model variant suffixes directly attached to numbers (e.g. "S24FE" → "S24 FE", "6pro" → "6 pro")
+            // Separates so tokens can word-match them
+            .replace(Regex("(\\d)(fe)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("(\\d)(ti)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("(\\d)(pro)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            .replace(Regex("(\\d)(a)\\b", RegexOption.IGNORE_CASE), "$1 $2")
+            // Strip "12/512GB" and "12 / 512 GB" style RAM/storage combos before slash expansion
+            .replace(Regex("\\d+\\s*/\\s*\\d+\\s*(?:gb|tb|mb)", RegexOption.IGNORE_CASE), "")
+            .replace("-", " ").replace("_", " ").replace("/", " ").replace("|", " ").replace("*", " ")
+            .replace("!", "").replace("?", "").replace("[", "").replace("]", "")
+            .replace("(", "").replace(")", "")
+            // Convert inch symbols after digits to "zoll" so decimal screen sizes (7,9" / 10,9'')
+            // are handled by the titleNormStripped screen-size strip (e.g. "7 9 zoll" → stripped).
+            .replace(Regex("(\\d)\""), "$1 zoll")   // 7,9" → 7,9 zoll
+            .replace(Regex("(\\d)''"), "$1 zoll")  // 7,9'' → 7,9 zoll
+            .replace("\"", "").replace(",", " ").replace("'", " ").replace("`", "")
+            // Strip any remaining non-letter/non-digit characters (emojis, decorative symbols like ❗✅⚡)
+            // These can prevent KILL_IF_STARTS from matching (e.g. "❗SUCHE❗" escapes "suche " pattern)
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            // A count of drive slots, in every way sellers write it: "4-Bay", "4Bay", "4-fach",
+            // "4fach", "4 Schacht", "4 Einschübe". Only "4 Bay" matched a search for a 4-bay
+            // enclosure, and a TerraMaster "4bay Gehäuse" and a Fantec "4-fach Festplattengehäuse"
+            // were thrown off it.
+            .replace(Regex("""\b(\d{1,2})\s*(bays?|fach|schacht|schaechte|einschuebe|einschub)\b"""), "$1 bay")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    /** Short words that lead into a count rather than being the first half of a model name. */
+    private val COUNT_LEAD_WORDS = setOf("lot", "set", "ca", "je", "mit", "und", "für", "fur", "for", "of", "the", "von", "à", "par", "per", "con", "met", "en", "et", "and")
+
+    private val PLACEHOLDER_TITLES = setOf(
+        "neues angebot", "new listing", "nieuw", "nouveau",
+    )
+
+    /** Words that name the act of selling rather than the thing sold. A title made only of these
+     *  says nothing about what is on offer. */
+    private val SALE_WORDS = setOf(
+        "verkaufe", "verkauf", "biete", "angebot", "neu", "neues", "gebraucht", "zu", "verkaufen",
+        "privatverkauf", "sale", "offer", "new", "used", "listing", "artikel", "top", "gut",
+    )
+
+    /**
+     * A title that names nothing being sold.
+     *
+     * Counting words decided this before, and a one-word title was taken for a placeholder: four
+     * Kleinanzeigen ads titled exactly "Parkettschleifmaschine" were dropped from a search for a
+     * Parkettschleifmaschine. What makes a title empty is that every word in it is about selling,
+     * not how many words there are.
+     */
+    private fun isPlaceholderTitle(titleNorm: String, words: List<String>): Boolean {
+        if (PLACEHOLDER_TITLES.any { titleNorm == normalize(it) }) return true
+        val naming = words.filter { it.length > 1 && it !in SALE_WORDS && it.any { c -> c.isLetter() } }
+        return naming.isEmpty()
+    }
+}
+

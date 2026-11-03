@@ -1,8 +1,8 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.RelevanceFilter
-import io.github.tieo.arbay.crawler.VehicleTextParser
-import io.github.tieo.arbay.crawler.area
+import io.github.tieo.arbay.relevance.RelevanceFilter
+import io.github.tieo.arbay.relevance.VehicleTextParser
+import io.github.tieo.arbay.markets.area
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DropReason
 import io.github.tieo.arbay.model.Listing

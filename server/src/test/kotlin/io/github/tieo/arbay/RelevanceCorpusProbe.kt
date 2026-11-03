@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.ModelWordEvidence
-import io.github.tieo.arbay.crawler.RelevanceFilter
+import io.github.tieo.arbay.relevance.ModelWordEvidence
+import io.github.tieo.arbay.relevance.RelevanceFilter
 import io.github.tieo.arbay.model.CrawlerEventType
 import io.github.tieo.arbay.model.CrawlerSearchEvent
 import io.github.tieo.arbay.model.Listing

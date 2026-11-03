@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.plugins
 
 import io.github.tieo.arbay.chat.Chat
-import io.github.tieo.arbay.crawler.SavedSearchMonitor
+import io.github.tieo.arbay.monitoring.SavedSearchMonitor
 import io.github.tieo.arbay.repo.ListingRepo
 import io.github.tieo.arbay.repo.ProductRepo
 import io.github.tieo.arbay.routes.archiveRoutes

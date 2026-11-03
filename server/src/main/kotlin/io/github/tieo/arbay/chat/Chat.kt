@@ -18,7 +18,7 @@ import io.github.tieo.arbay.model.Purchase
 import io.github.tieo.arbay.model.PurchaseRequest
 import io.github.tieo.arbay.model.ShippingOption
 import io.github.tieo.arbay.model.offerWithin
-import io.github.tieo.arbay.crawler.KleinanzeigenCosts
+import io.github.tieo.arbay.judging.KleinanzeigenCosts
 import io.github.tieo.arbay.model.SendRequest
 import io.github.tieo.arbay.model.SignInAsk
 import io.github.tieo.arbay.model.SignInInput
@@ -392,7 +392,7 @@ object Chat {
         val site = neulandSite(link.market)
         if (site != null && !link.payment && io.github.tieo.arbay.neuland.NeulandSign.askAgain(site, "Arbay, for your ${link.market.displayName} account")) return true
         val what = if (link.payment) sidecarFor(link.market).call("status")["payment"]?.str() ?: "the payment service" else link.market.displayName
-        return io.github.tieo.arbay.crawler.Ntfy.send(
+        return io.github.tieo.arbay.monitoring.Ntfy.send(
             title = "$what needs you to sign in",
             message = if (link.payment) "${link.market.displayName} pays with $what, which has signed Arbay out. Tap to sign in." else "Tap to sign in to ${link.market.displayName} again.",
             click = link.appLink(),

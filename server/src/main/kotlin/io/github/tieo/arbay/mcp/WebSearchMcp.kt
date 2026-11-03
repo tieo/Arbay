@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.mcp
 
-import io.github.tieo.arbay.crawler.ImageResult
-import io.github.tieo.arbay.crawler.WebSearch
+import io.github.tieo.arbay.markets.ImageResult
+import io.github.tieo.arbay.markets.WebSearch
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -18,7 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * A search of the web on any words, over MCP at /web-mcp: the search engines Arbay asks for its web
- * market ([io.github.tieo.arbay.crawler.SearchEngines]), offered on their own, apart from Arbay's
+ * market ([io.github.tieo.arbay.markets.SearchEngines]), offered on their own, apart from Arbay's
  * tools for buying and selling.
  */
 class WebSearchMcp(private val http: HttpClient, private val base: String) {

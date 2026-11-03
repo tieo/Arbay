@@ -32,7 +32,7 @@ fun Route.listingRoutes(repo: ListingRepo) {
         get("/views") {
             val ids = call.queryParameters["ids"]?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }
                 ?: throw BadRequestException("Missing ids")
-            call.respond(io.github.tieo.arbay.crawler.ViewCounts.of(ids))
+            call.respond(io.github.tieo.arbay.judging.ViewCounts.of(ids))
         }
 
         get("/price-history") {

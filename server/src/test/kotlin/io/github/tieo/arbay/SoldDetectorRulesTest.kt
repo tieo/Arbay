@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.SoldDetector
+import io.github.tieo.arbay.judging.SoldDetector
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

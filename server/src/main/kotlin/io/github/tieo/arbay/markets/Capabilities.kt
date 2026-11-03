@@ -1,0 +1,167 @@
+package io.github.tieo.arbay.markets
+
+import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.judging.PhotoPrints
+
+/**
+ * What a market can do, said out loud.
+ *
+ * `Crawler` has one method, so every difference between 27 markets is invisible to everything
+ * outside the crawler itself: that only eBay knows which listings sold, that only Kleinanzeigen
+ * prints related searches, that two markets in thirty can say when an ad was posted, that
+ * AutoScout24 filters at the source while Marktplaats must be filtered afterwards. The app cannot
+ * ask, so it cannot tell the person either — which is why a search shows no age for most listings
+ * and no reason for a market returning nothing.
+ *
+ * Each capability below is an interface a crawler implements when it genuinely has it. Nothing is
+ * inherited by default: a market that does not declare a capability does not have it, and the code
+ * can be asked rather than read.
+ */
+
+/** Fetches more than the first page of results. A market that does not implement this returns one
+ *  page, which for TruckScout24 and willhaben was true by accident rather than by design. */
+interface FetchesEveryPage {
+    /** Pages this market will fetch at most, before the search's own limit applies. */
+    val pageLimit: Int get() = Int.MAX_VALUE
+}
+
+/**
+ * Asks the market for its offers cheapest first and caps the price at the source, so a search with
+ * a price ceiling reads the whole band between its prices ([wholePriceBand]) and a list cut short
+ * anywhere loses only the dearest offers. Read in the market's own relevance order instead, the
+ * first pages held a different mix of offers on every run, and an offer the search had always
+ * matched turned up as new, or went missing, as the mix moved.
+ */
+interface SortsByPrice
+
+/**
+ * Reads an ad's whole photo gallery with its page ([io.github.tieo.arbay.model.ListingDetail.photos]),
+ * so [PhotoPrints] can find the ad's photos in other ads. A page read before galleries were, or
+ * whose photos the market has since replaced, is read again.
+ */
+interface ReadsGalleries
+
+/** Starts a search at any page asked for, so the listings past the first pages can be fetched with
+ *  a search of their own. A market that does not declare this answers every page with its first. */
+interface StartsAtAnyPage
+
+/** Turns vehicle criteria into the market's own URL parameters, so filtering happens at the source
+ *  rather than over what came back. Which criteria differs per market, and saying so lets the app
+ *  explain why a filter narrowed one market's results and not another's. */
+interface FiltersAtTheSource {
+    /** The criteria this market applies itself. Everything else is filtered afterwards. */
+    val nativeCriteria: Set<Criterion>
+
+    enum class Criterion { YEAR, MILEAGE, PRICE, POWER, GEARBOX, FUEL, BODY, CONDITION, SELLER }
+}
+
+/** Answers with listings that have already sold, which is what makes a price history possible.
+ *  Only eBay does, across every market crawled. */
+interface HasSoldListings
+
+/** Sells by auction, so a price on one of its listings may be the bid so far rather than what the
+ *  thing costs. eBay and ricardo do; on every other market crawled, every listing is sold at the
+ *  price it states, which is why a market that does not declare this says so on its listings
+ *  instead of leaving the question open. */
+interface SellsByAuction
+
+/** Prints the searches it considers related to the one asked — its own vocabulary for the thing,
+ *  which is where query expansion gets its terms. Only Kleinanzeigen does. */
+interface SuggestsRelatedSearches
+
+/** Says when an ad was posted, so its age can be shown. Two markets of twenty-seven do. */
+interface KnowsListingAge
+
+/** Says where the thing is, so a distance can be measured from the searcher. */
+interface KnowsLocation
+
+/** Carries specs on the detail page that the result card omits — power, gearbox, doors, emission
+ *  class — worth one extra fetch when a filter needs a field the card does not carry. */
+interface HasDetailSpecs
+
+/** Reads several ads in one go for less than one at a time. mobile.de's pages open only in a real
+ *  browser that has passed its bot check, which costs a browser start and a challenge per session,
+ *  so its ads are read together in one session rather than each in its own. */
+interface ReadsAdsTogether {
+    /** What each ad's page says, by listing id; an ad that could not be read is missing. */
+    suspend fun fetchDetails(listings: List<io.github.tieo.arbay.model.Listing>): Map<String, io.github.tieo.arbay.model.ListingDetail>
+}
+
+/** Says on an ad's own page whether the ad is still up, paused or deleted. Read fresh every time,
+ *  never from the detail cache: it changes while the ad page itself stays the same. */
+interface KnowsAdState {
+    /** The ad's state now, or null when its page could not be read or does not say. */
+    suspend fun adState(url: String): io.github.tieo.arbay.model.AdState?
+
+    /** The ad's state, price and shipping now, read off one fetch of its page. */
+    suspend fun adNow(url: String): io.github.tieo.arbay.model.AdNow? =
+        adState(url)?.let { io.github.tieo.arbay.model.AdNow(state = it) }
+}
+
+/** What an ad says, for putting one like it up for sale: [photos] are the addresses of its pictures
+ *  in the order it shows them, [attributes] the details its seller picked, by the label the market
+ *  shows them under. */
+data class AdCopy(
+    val title: String,
+    val description: String,
+    val categoryId: String,
+    val attributes: Map<String, String>,
+    val photos: List<String>,
+)
+
+/** Reads an ad whole, photos included, so the user can sell the same thing on the same market. */
+interface CopiesAds {
+    /** The ad behind [url], or null when its page could not be read. */
+    suspend fun adCopy(url: String): AdCopy?
+
+    /** One of the ad's photos at the largest size the market serves. */
+    suspend fun photo(url: String): ByteArray
+}
+
+/** Lists prices in a currency other than the euro, so amounts must be converted before they are
+ *  compared or shown. */
+interface PricesInOwnCurrency {
+    val listingCurrency: io.github.tieo.arbay.model.Currency
+}
+
+/** Everything known about a market, gathered from what its crawler declares. Built by asking the
+ *  crawler, never by writing a list by hand, so it cannot fall out of step with the code. */
+data class MarketCapabilities(
+    val paginates: Boolean,
+    val pageLimit: Int?,
+    val nativeCriteria: Set<FiltersAtTheSource.Criterion>,
+    val soldListings: Boolean,
+    val relatedSearches: Boolean,
+    val listingAge: Boolean,
+    val location: Boolean,
+    val detailSpecs: Boolean,
+    val currency: io.github.tieo.arbay.model.Currency?,
+) {
+    companion object {
+        fun of(crawler: Crawler): MarketCapabilities = MarketCapabilities(
+            paginates = crawler is FetchesEveryPage,
+            pageLimit = (crawler as? FetchesEveryPage)?.pageLimit?.takeIf { it != Int.MAX_VALUE },
+            nativeCriteria = (crawler as? FiltersAtTheSource)?.nativeCriteria ?: emptySet(),
+            soldListings = crawler is HasSoldListings,
+            relatedSearches = crawler is SuggestsRelatedSearches,
+            listingAge = crawler is KnowsListingAge,
+            location = crawler is KnowsLocation,
+            detailSpecs = crawler is HasDetailSpecs,
+            currency = (crawler as? PricesInOwnCurrency)?.listingCurrency,
+        )
+    }
+}
+
+/** Whether this market can answer the question at all, so the app can say "this market cannot tell
+ *  you when the ad was posted" instead of leaving the field blank without explanation. */
+fun Crawler.can(capability: Class<*>): Boolean = capability.isInstance(this)
+
+/** Whether a search asks for something this market cannot do — a sold-listing search sent to a
+ *  market with no sold listings returns nothing, and silence is indistinguishable from a block. */
+fun Crawler.cannotAnswer(query: SearchQuery): String? = when {
+    query.soldOnly && this !is HasSoldListings ->
+        "${platformId.displayName} does not publish what sold"
+    query.startPage > 1 && this !is StartsAtAnyPage ->
+        "${platformId.displayName} answers with its first page only"
+    else -> null
+}

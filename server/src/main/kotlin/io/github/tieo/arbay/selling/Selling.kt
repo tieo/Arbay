@@ -4,9 +4,9 @@ import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.chat.Kleinanzeigen
 import io.github.tieo.arbay.neuland.MarketAccount
 import io.github.tieo.arbay.chat.ChatFailure
-import io.github.tieo.arbay.crawler.CopiesAds
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.KnowsAdState
+import io.github.tieo.arbay.markets.CopiesAds
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.KnowsAdState
 import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.AdDraft
 import io.github.tieo.arbay.model.AdPriceType
@@ -330,11 +330,11 @@ object Selling {
 
     /** The post form a draft failed on, as an error snapshot to read afterwards. */
     private fun keepFailedPage(draft: AdDraft, detail: JsonObject, error: Exception) {
-        io.github.tieo.arbay.crawler.ErrorSnapshotStore.capture(
+        io.github.tieo.arbay.markets.ErrorSnapshotStore.capture(
             platform = "KLEINANZEIGEN_SELLING",
             query = draft.id,
             error = RuntimeException("${error.message}; the form held: ${detail["form"] ?: ""}"),
-            errorType = io.github.tieo.arbay.crawler.ErrorType.PARSE_ERROR,
+            errorType = io.github.tieo.arbay.markets.ErrorType.PARSE_ERROR,
             url = null,
             fetchStage = "post_ad",
             html = null,

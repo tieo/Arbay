@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.repeatedTitleReport
+import io.github.tieo.arbay.markets.repeatedTitleReport
 import io.github.tieo.arbay.model.*
 import kotlin.time.Clock
 import kotlin.test.Test

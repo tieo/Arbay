@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.KleinanzeigenCosts
+import io.github.tieo.arbay.judging.KleinanzeigenCosts
 import io.github.tieo.arbay.model.BuyerProtection
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.Shipping

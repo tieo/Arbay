@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.WebCrawler
+import io.github.tieo.arbay.markets.WebCrawler
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Money
 import kotlin.test.Test
@@ -39,13 +39,13 @@ class WebMarketTest {
     @Test
     fun `a site given up on stays given up until it gets a recipe`() {
         val site = "given-up-test.de"
-        io.github.tieo.arbay.crawler.SiteGaps.giveUp(site)
+        io.github.tieo.arbay.markets.SiteGaps.giveUp(site)
         try {
-            assertTrue(io.github.tieo.arbay.crawler.SiteGaps.isGivenUp(site))
+            assertTrue(io.github.tieo.arbay.markets.SiteGaps.isGivenUp(site))
         } finally {
-            io.github.tieo.arbay.crawler.SiteGaps.takeBack(site)
+            io.github.tieo.arbay.markets.SiteGaps.takeBack(site)
         }
-        assertFalse(io.github.tieo.arbay.crawler.SiteGaps.isGivenUp(site))
+        assertFalse(io.github.tieo.arbay.markets.SiteGaps.isGivenUp(site))
     }
 
     @Test

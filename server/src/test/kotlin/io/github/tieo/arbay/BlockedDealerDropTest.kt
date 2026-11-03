@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.RelevanceFilter
+import io.github.tieo.arbay.relevance.RelevanceFilter
 import io.github.tieo.arbay.model.BlockedDealer
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DropReason

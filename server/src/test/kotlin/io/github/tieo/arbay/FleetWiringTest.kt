@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.cannotAnswer
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.cannotAnswer
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.PlatformId

@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CarFilterEngine
+import io.github.tieo.arbay.relevance.CarFilterEngine
 import io.github.tieo.arbay.model.VanSize
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
@@ -339,7 +339,7 @@ class CarFilterEngineTest {
         val bareCode = carListing("c", PlatformId.KLEINANZEIGEN, "Volkswagen Crafter 35 2.0 TDI Trendline L3H2 Aut.")
         val superHigh = carListing("s", PlatformId.KLEINANZEIGEN, "VW Crafter 35 Kastenwagen L4H4 TDI 4MOTION")
         val kept = CarFilterEngine.apply(
-            listOf(mediumHigh, longWheelbase, bareCode, superHigh).map { io.github.tieo.arbay.crawler.VehicleTextParser.enrich(it) },
+            listOf(mediumHigh, longWheelbase, bareCode, superHigh).map { io.github.tieo.arbay.relevance.VehicleTextParser.enrich(it) },
             filters,
         )
         assertEquals(listOf("KLEINANZEIGEN:m", "KLEINANZEIGEN:c"), kept.map { it.id })
@@ -444,7 +444,7 @@ class CarFilterEngineTest {
     private fun verified(
         firstRegYear: Int? = null, mileageKm: Int? = null,
         powerKw: Int? = null, gearbox: Transmission? = null,
-    ) = io.github.tieo.arbay.crawler.VehicleTextParser.verifiedByPresence(
+    ) = io.github.tieo.arbay.relevance.VehicleTextParser.verifiedByPresence(
         VehicleInfo(firstRegYear = firstRegYear, mileageKm = mileageKm, powerKw = powerKw, gearbox = gearbox),
     )
 

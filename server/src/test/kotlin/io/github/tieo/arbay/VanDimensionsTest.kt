@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.VanDimensions
+import io.github.tieo.arbay.relevance.VanDimensions
 import io.github.tieo.arbay.model.VanSize
 import kotlin.test.Test
 import kotlin.test.assertEquals

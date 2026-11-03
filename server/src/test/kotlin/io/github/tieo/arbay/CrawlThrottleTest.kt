@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CrawlThrottle
+import io.github.tieo.arbay.markets.CrawlThrottle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

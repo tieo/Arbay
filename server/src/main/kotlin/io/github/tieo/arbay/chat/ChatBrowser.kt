@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.chat
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.crawler.killTree
+import io.github.tieo.arbay.tools.killTree
 import io.github.tieo.arbay.model.PlatformId
 import java.io.BufferedReader
 import java.io.BufferedWriter

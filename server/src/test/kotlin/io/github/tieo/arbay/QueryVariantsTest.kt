@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.QueryVariants
+import io.github.tieo.arbay.relevance.QueryVariants
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

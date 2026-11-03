@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.Rentals
-import io.github.tieo.arbay.crawler.markRented
+import io.github.tieo.arbay.relevance.Rentals
+import io.github.tieo.arbay.relevance.markRented
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketGroup

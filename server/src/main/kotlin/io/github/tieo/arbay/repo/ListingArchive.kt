@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.repo
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.markets.CrawlerRegistry
 import io.github.tieo.arbay.model.Listing
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -97,11 +97,11 @@ object ListingArchive {
         listingsDir.mkdirs()
         File(listingsDir, "${listing.id}.json").writeTextAtomically(json.encodeToString(archived))
         log.debug("Archived {} ({} of {} images saved)", listing.id, localNames.size, listing.imageUrls.size)
-        io.github.tieo.arbay.crawler.PhotoPrints.recordAsync(listing, localNames.firstOrNull()?.let { File(dir, it) })
+        io.github.tieo.arbay.judging.PhotoPrints.recordAsync(listing, localNames.firstOrNull()?.let { File(dir, it) })
     }
 
-    /** Prints the first photo of every listing archived before photos were printed ([io.github.tieo.arbay.crawler.PhotoPrints]). */
-    fun printArchive() = io.github.tieo.arbay.crawler.PhotoPrints.backfill(listingsDir, imagesDir) { f ->
+    /** Prints the first photo of every listing archived before photos were printed ([io.github.tieo.arbay.judging.PhotoPrints]). */
+    fun printArchive() = io.github.tieo.arbay.judging.PhotoPrints.backfill(listingsDir, imagesDir) { f ->
         json.decodeFromString<Listing>(f.readText())
     }
 

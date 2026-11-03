@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.classifier
 
 import io.github.tieo.arbay.DataDir
-import io.github.tieo.arbay.crawler.CrawlerRegistry
+import io.github.tieo.arbay.markets.CrawlerRegistry
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.NewMatch
 import io.github.tieo.arbay.model.NotificationSettings

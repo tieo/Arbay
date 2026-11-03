@@ -8,6 +8,7 @@ import io.github.tieo.arbay.model.SortMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import io.github.tieo.arbay.markets.QueryResultCache
 
 class QueryResultCacheKeyTest {
     private val base = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES, carFilters = CarFilters())

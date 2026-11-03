@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.SavedSearchMonitor
+import io.github.tieo.arbay.monitoring.SavedSearchMonitor
 import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.LiveKind
 import io.github.tieo.arbay.model.TrackedProduct
@@ -37,7 +37,7 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
         get("/alerts") {
             val after = call.request.queryParameters["after"]?.toLongOrNull() ?: 0L
             val wait = (call.request.queryParameters["waitSeconds"]?.toIntOrNull() ?: 0).coerceIn(0, 60)
-            call.respond(io.github.tieo.arbay.crawler.AlertFeed.after(after, kotlin.time.Duration.parse("${wait}s")))
+            call.respond(io.github.tieo.arbay.monitoring.AlertFeed.after(after, kotlin.time.Duration.parse("${wait}s")))
         }
         // The saved search was opened, so what was waiting in it has been seen.
         post("/{id}/opened") {
@@ -55,7 +55,7 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             val wishes = product.searchQuery.productWishes?.takeUnless { it.isEmpty }
                 ?: throw BadRequestException("Product $id weighs no models")
             call.respond(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                io.github.tieo.arbay.crawler.ModelLikeness.measure(product.searchQuery, wishes)
+                io.github.tieo.arbay.relevance.ModelLikeness.measure(product.searchQuery, wishes)
             })
         }
 
@@ -66,7 +66,7 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             val wishes = product.searchQuery.productWishes?.takeUnless { it.models.isEmpty() }
                 ?: return@get call.respond(emptyList<io.github.tieo.arbay.model.PhotoModelRecord>())
             call.respond(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                io.github.tieo.arbay.crawler.ModelLikeness.records(product.searchQuery, wishes)
+                io.github.tieo.arbay.relevance.ModelLikeness.records(product.searchQuery, wishes)
             })
         }
 
@@ -78,7 +78,7 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             val model = call.receive<io.github.tieo.arbay.model.ModelCheck>().model
             val names = product.searchQuery.productWishes?.models.orEmpty().map { it.name }
             if (model != null && model !in names) throw BadRequestException("$model is none of ${names.joinToString()}")
-            io.github.tieo.arbay.crawler.ModelGuesses.check(listingId, model)
+            io.github.tieo.arbay.relevance.ModelGuesses.check(listingId, model)
             call.respond(HttpStatusCode.NoContent)
         }
 

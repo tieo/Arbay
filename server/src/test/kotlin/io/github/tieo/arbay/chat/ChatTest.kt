@@ -1,6 +1,6 @@
 package io.github.tieo.arbay.chat
 
-import io.github.tieo.arbay.crawler.KleinanzeigenCosts
+import io.github.tieo.arbay.judging.KleinanzeigenCosts
 import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.offerWithin
 import kotlin.test.Test

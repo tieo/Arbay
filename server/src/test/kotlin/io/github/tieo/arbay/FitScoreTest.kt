@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CarFilterEngine
-import io.github.tieo.arbay.crawler.FitScore
+import io.github.tieo.arbay.relevance.CarFilterEngine
+import io.github.tieo.arbay.judging.FitScore
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Drivetrain

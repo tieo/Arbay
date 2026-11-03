@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.BlockCooldown
-import io.github.tieo.arbay.crawler.ErrorType
+import io.github.tieo.arbay.markets.BlockCooldown
+import io.github.tieo.arbay.markets.ErrorType
 import io.github.tieo.arbay.model.PlatformId
 import kotlin.test.Test
 import kotlin.test.assertFalse

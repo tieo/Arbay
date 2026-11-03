@@ -24,7 +24,7 @@ fun Application.configureStatusPages() {
         }
         // A market turning a fetch away is the market's answer, not the server failing: said as
         // such, with its reason, rather than as an internal error.
-        exception<io.github.tieo.arbay.crawler.CrawlerBlockedException> { call, cause ->
+        exception<io.github.tieo.arbay.markets.CrawlerBlockedException> { call, cause ->
             call.respondText(
                 "The market refused: ${cause.message ?: cause.errorType.name}",
                 status = HttpStatusCode.BadGateway,

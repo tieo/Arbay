@@ -1,7 +1,7 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.SellsByAuction
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.SellsByAuction
 import io.github.tieo.arbay.model.PlatformId
 import kotlin.test.Test
 import kotlin.test.assertFalse

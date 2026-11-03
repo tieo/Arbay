@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.CarQueryResolver
+import io.github.tieo.arbay.relevance.CarQueryResolver
 import kotlin.test.*
 
 class CarQueryResolverTest {

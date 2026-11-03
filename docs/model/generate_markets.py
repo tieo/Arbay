@@ -15,7 +15,7 @@ HERE = pathlib.Path(__file__).parent
 DUMP = HERE / "markets.json"
 OUT = HERE / "sdoc" / "04-markets.sdoc"
 
-# One capability object per interface in server/.../crawler/Capabilities.kt. The flags come from the
+# One capability object per interface in server/.../markets/Capabilities.kt. The flags come from the
 # dump; only the wording lives here.
 CAPABILITIES = [
     ("CAP-PAGES", "Fetches every page", "FetchesEveryPage", "paginates",

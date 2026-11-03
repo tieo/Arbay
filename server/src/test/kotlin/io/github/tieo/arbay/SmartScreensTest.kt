@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.SmartScreens
+import io.github.tieo.arbay.judging.SmartScreens
 import io.github.tieo.arbay.model.DriveVerdict
 import kotlin.test.Test
 import kotlin.test.assertEquals

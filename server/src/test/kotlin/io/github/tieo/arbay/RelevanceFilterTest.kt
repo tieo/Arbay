@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.RelevanceFilter
+import io.github.tieo.arbay.relevance.RelevanceFilter
 import io.github.tieo.arbay.model.*
 import kotlin.time.Clock
 import kotlin.test.Test
@@ -1053,14 +1053,14 @@ class RelevanceFilterTest {
     @Test
     fun `a compound is searched shorter only by a last part sellers write alone`() {
         val seen = setOf(" gehäuse", " schleifmaschine", " maschine")
-        val background = io.github.tieo.arbay.crawler.QueryVariants.TermBackground { t -> if (t.lowercase() in seen) 0.01 else 0.0 }
-        assertEquals(listOf("4 bay gehäuse"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("4 bay festplattengehäuse", background))
-        assertEquals(listOf("schleifmaschine lägler"), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("parkettschleifmaschine lägler", background))
-        assertEquals(emptyList(), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("festplattengehäuse", background))
+        val background = io.github.tieo.arbay.relevance.QueryVariants.TermBackground { t -> if (t.lowercase() in seen) 0.01 else 0.0 }
+        assertEquals(listOf("4 bay gehäuse"), io.github.tieo.arbay.relevance.QueryVariants.compoundHeads("4 bay festplattengehäuse", background))
+        assertEquals(listOf("schleifmaschine lägler"), io.github.tieo.arbay.relevance.QueryVariants.compoundHeads("parkettschleifmaschine lägler", background))
+        assertEquals(emptyList(), io.github.tieo.arbay.relevance.QueryVariants.compoundHeads("festplattengehäuse", background))
         // A model names one product; its long word is a make. Live, "terramaster d4-320" was
         // searched as "master d4-320".
-        val master = io.github.tieo.arbay.crawler.QueryVariants.TermBackground { t -> if (t == " master") 0.01 else 0.0 }
-        assertEquals(emptyList(), io.github.tieo.arbay.crawler.QueryVariants.compoundHeads("terramaster d4-320", master))
+        val master = io.github.tieo.arbay.relevance.QueryVariants.TermBackground { t -> if (t == " master") 0.01 else 0.0 }
+        assertEquals(emptyList(), io.github.tieo.arbay.relevance.QueryVariants.compoundHeads("terramaster d4-320", master))
     }
 
     @Test
@@ -1122,15 +1122,15 @@ class RelevanceFilterTest {
     fun `what a search threw away teaches nothing about the next answer`() {
         // Vinted, live, answered "lägler hummel" with Goebel's Hummel figurines. Learned from, the
         // figurine 187 made eBay Italy's Festool sander with a "SYS3 M 187" Systainer a Hummel.
-        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
-        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        val evidence = io.github.tieo.arbay.relevance.ModelWordEvidence(null)
+        io.github.tieo.arbay.relevance.ModelWordEvidence.installed = evidence
         try {
             val hummel = SearchQuery(text = "lägler hummel", aliases = listOf("levigatrice hummel"), category = MarketGroup.GENERAL)
             RelevanceFilter.filter((1..8).map { listing("Goebel Hummel Figur 187 Sammlung Nummer $it") }, hummel)
             val festool = listing("Levigatrice FESTOOL RTSC 400-Basic (Solo corpo + Systainer SYS3 M 187)", 35181)
             assertEquals(emptyList(), RelevanceFilter.filter(listOf(festool), hummel))
         } finally {
-            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+            io.github.tieo.arbay.relevance.ModelWordEvidence.installed = null
         }
     }
 
@@ -1138,15 +1138,15 @@ class RelevanceFilterTest {
     fun `a count or a measure written apart is no model word`() {
         // eBay DE, live: "Lim 300 Stück" made a limited Hummel figurine a Lägler, by the 300 the
         // machines' 300 mm drums share.
-        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
-        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        val evidence = io.github.tieo.arbay.relevance.ModelWordEvidence(null)
+        io.github.tieo.arbay.relevance.ModelWordEvidence.installed = evidence
         try {
             val hummel = SearchQuery(text = "lägler hummel", aliases = listOf("hummel bandschleifmaschine"), category = MarketGroup.GENERAL)
             RelevanceFilter.filter((1..8).map { listing("Lägler Hummel Bandschleifmaschine Walze 300 mm Nummer $it") }, hummel)
             val figurine = listing("Gr. Hummel Figur 2288 Geburtstagsreigen Lim 300 Stück Weltweit", 249990)
             assertEquals(emptyList(), RelevanceFilter.filter(listOf(figurine), hummel))
         } finally {
-            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+            io.github.tieo.arbay.relevance.ModelWordEvidence.installed = null
         }
     }
 
@@ -1154,8 +1154,8 @@ class RelevanceFilterTest {
     fun `a small answer is judged by what the other answers showed`() {
         // Ricardo, live, for "4TB M.2": its 990 PROs did not write "M.2", and an answer of a few
         // listings cannot show that a 990 is one. The bigger answers before it did.
-        val evidence = io.github.tieo.arbay.crawler.ModelWordEvidence(null)
-        io.github.tieo.arbay.crawler.ModelWordEvidence.installed = evidence
+        val evidence = io.github.tieo.arbay.relevance.ModelWordEvidence(null)
+        io.github.tieo.arbay.relevance.ModelWordEvidence.installed = evidence
         try {
             val big = (1..12).map { listing("Samsung 990 PRO 4TB M.2 NVMe Nummer $it") } +
                 (1..12).map { listing("Kingston NV3 4TB M.2 2280 Angebot $it") } +
@@ -1172,7 +1172,7 @@ class RelevanceFilterTest {
             assertTrue("Samsung 990 Pro 4000 GB" in kept, kept.toString())
             assertTrue(kept.none { it.contains("MX500") || it.contains("IronWolf") }, kept.toString())
         } finally {
-            io.github.tieo.arbay.crawler.ModelWordEvidence.installed = null
+            io.github.tieo.arbay.relevance.ModelWordEvidence.installed = null
         }
     }
 

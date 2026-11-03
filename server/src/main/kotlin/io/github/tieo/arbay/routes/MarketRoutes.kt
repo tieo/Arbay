@@ -1,7 +1,7 @@
 package io.github.tieo.arbay.routes
 
-import io.github.tieo.arbay.crawler.CrawlerRegistry
-import io.github.tieo.arbay.crawler.MarketCapabilities
+import io.github.tieo.arbay.markets.CrawlerRegistry
+import io.github.tieo.arbay.markets.MarketCapabilities
 import io.github.tieo.arbay.model.MarketCapability
 import io.github.tieo.arbay.model.PlatformId
 import io.ktor.server.response.*

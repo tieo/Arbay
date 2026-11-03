@@ -1,6 +1,6 @@
 package io.github.tieo.arbay
 
-import io.github.tieo.arbay.crawler.Translator
+import io.github.tieo.arbay.relevance.Translator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
