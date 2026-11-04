@@ -1,0 +1,139 @@
+talDisklnfo9.4.4x64
+Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut
+17℃
+D:
+TOSHIBA HDWD110:1000,2 GB
+ntzustand Firmware MS2OA8R0
+Seriennummer X9N000000
+Gut Schnittstelle Serial ATA Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 3369mal
+Temperatu Laufwerksbuchstaben D: Betriebsstunden 5022 Std.
+StandardATA8-ACS|ATA8-ACSversion4
+7℃
+Eigenschaften S.M.A.R.T,APM,NCO,Streaming,GPL
+ID Parametername Aktueller..... Schlechte... Grenzwert Rohwerte
+01 Lesefehlerrate 100 100 16 000000000000
+02 Datendurchsatz-Leistung 100 100 54 000000000000
+03 Mittlere Anlaufzeit 113 113 24 000400CA00CB
+04 Start/Stopp-Zyklen derSpindel 66 66 0 00000000152D
+05 Wiederzugewiesene Sektoren 100 100 000000000000
+07 Suchfehler 100 100 67 000000000000
+08 Gute der Suchoperationen 100 100 20 000000000000
+100 100 0 00000000139E
+09 Betriebsstunden 100 100 60 000000000000
+OA Misslungene Spindelanlaufe 100 100 0 000000000D29
+OC Gerate-Einschaltvorgange 96 96 00000000152D
+CO Ausschaltungsabbruche 96 96 00000000152D
+C1 Laden/Entladen-Zyklen 253 253 0028000E0011
+C2 Temperatur 100 100 0 000000000000
+C4 Wiederzuweisungsereignisse 100 100 0 000000000000
+C5 Aktuell ausstehendeSektoren 100 100 0 000000000000
+C6 Nichtkorrigierbare Sektoren 200 200 0 000000000000
+C7 UltraDMA-CRC-Fehler
+9 Elemente 1 Element ausgewahlt
+
+talDisklnfo9.4.4x64
+Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut
+17℃
+D:
+TOSHIBA HDWD110:1000,2 GB
+ntzustand Firmware MS2OA8R0
+Seriennummer X9N000000
+Gut Schnittstelle Serial ATA Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 3369mal
+Temperatu Laufwerksbuchstaben D: Betriebsstunden 5022 Std.
+StandardATA8-ACS|ATA8-ACSversion4
+7℃
+Eigenschaften S.M.A.R.T,APM,NCO,Streaming,GPL
+ID Parametername Aktueller..... Schlechte... Grenzwert Rohwerte
+01 Lesefehlerrate 100 100 16 000000000000
+02 Datendurchsatz-Leistung 100 100 54 000000000000
+03 Mittlere Anlaufzeit 113 113 24 000400CA00CB
+04 Start/Stopp-Zyklen derSpindel 66 66 0 00000000152D
+05 Wiederzugewiesene Sektoren 100 100 000000000000
+07 Suchfehler 100 100 67 000000000000
+08 Gute der Suchoperationen 100 100 20 000000000000
+100 100 0 00000000139E
+09 Betriebsstunden 100 100 60 000000000000
+OA Misslungene Spindelanlaufe 100 100 0 000000000D29
+OC Gerate-Einschaltvorgange 96 96 00000000152D
+CO Ausschaltungsabbruche 96 96 00000000152D
+C1 Laden/Entladen-Zyklen 253 253 0028000E0011
+C2 Temperatur 100 100 0 000000000000
+C4 Wiederzuweisungsereignisse 100 100 0 000000000000
+C5 Aktuell ausstehendeSektoren 100 100 0 000000000000
+C6 Nichtkorrigierbare Sektoren 200 200 0 000000000000
+C7 UltraDMA-CRC-Fehler
+9 Elemente 1 Element ausgewahlt
+
+talDisklnfo9.4.4x64
+Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut
+17℃
+D:
+TOSHIBA HDWD110:1000,2 GB
+ntzustand Firmware MS2OA8R0
+Seriennummer X9N000000
+Gut Schnittstelle Serial ATA Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 3369mal
+Temperatu Laufwerksbuchstaben D: Betriebsstunden 5022 Std.
+StandardATA8-ACS|ATA8-ACSversion4
+7℃
+Eigenschaften S.M.A.R.T,APM,NCO,Streaming,GPL
+ID Parametername Aktueller..... Schlechte... Grenzwert Rohwerte
+01 Lesefehlerrate 100 100 16 000000000000
+02 Datendurchsatz-Leistung 100 100 54 000000000000
+03 Mittlere Anlaufzeit 113 113 24 000400CA00CB
+04 Start/Stopp-Zyklen derSpindel 66 66 0 00000000152D
+05 Wiederzugewiesene Sektoren 100 100 000000000000
+07 Suchfehler 100 100 67 DO0000000000
+08 Gute der Suchoperationen 100 100 20 000000000000
+100 100 0 00000000139E
+09 Betriebsstunden 100 100 60 DO0000000000
+OA Misslungene Spindelanlaufe 100 100 0 000000000D29
+OC Gerate-Einschaltvorgange 96 96 00000000152D
+CO Ausschaltungsabbruche 96 96 00000000152D
+C1 Laden/Entladen-Zyklen 253 253 0028000E0011
+C2 Temperatur 100 100 0 000000000000
+C4 Wiederzuweisungsereignisse 100 100 0 000000000000
+C5 Aktuell ausstehendeSektoren 100 100 0 000000000000
+C6 Nichtkorrigierbare Sektoren 200 200 0 000000000000
+C7 UltraDMA-CRC-Fehler
+9 Elemente 1 Element ausgewahlt
+
+talDisklnfo9.4.4x64
+Bearbeiten Optionen Ansicht Festplatte Hilfe Sprache(Language)
+Gut
+17℃
+D:
+TOSHIBA HDWD110:1000,2 GB
+ntzustand Firmware MS2OA8R0
+Seriennummer X9N000000
+Gut Schnittstelle Serial ATA Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 3369mal
+Temperatu Laufwerksbuchstaben D: Betriebsstunden 5022 Std.
+StandardATA8-ACS|ATA8-ACSversion4
+7℃
+Eigenschaften S.M.A.R.T,APM,NCO,Streaming,GPL
+ID Parametername Aktueller..... Schlechte... Grenzwert Rohwerte
+01 Lesefehlerrate 100 100 16 000000000000
+02 Datendurchsatz-Leistung 100 100 54 000000000000
+03 Mittlere Anlaufzeit 113 113 24 D00400CA00CB
+04 Start/Stopp-Zyklen derSpindel 66 66 0 00000000152D
+05 Wiederzugewiesene Sektoren 100 100 D00000000000
+07 Suchfehler 100 100 67 DO0000000000
+08 Gute der Suchoperationen 100 100 20 000000000000
+100 100 0 00000000139E
+09 Betriebsstunden 100 100 60 DQ0000000000
+OA Misslungene Spindelanlaufe 100 100 0 000000000D29
+OC Gerate-Einschaltvorgange 96 96 00000000152D
+CO Ausschaltungsabbruche 96 96 00000000152D
+C1 Laden/Entladen-Zyklen 253 253 0028000E0011
+C2 Temperatur 100 100 0 000000000000
+C4 Wiederzuweisungsereignisse 100 100 0 000000000000
+C5 Aktuell ausstehendeSektoren 100 100 0 000000000000
+C6 Nichtkorrigierbare Sektoren 200 200 0 000000000000
+C7 UltraDMA-CRC-Fehler
+9 Elemente 1 Element ausgewahlt

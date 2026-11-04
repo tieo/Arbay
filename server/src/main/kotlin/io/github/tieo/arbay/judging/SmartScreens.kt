@@ -123,9 +123,6 @@ object SmartScreens {
     private val smartctlFailed = Regex("""self-assessment\s+test\s+result:\s*FAILED""", RegexOption.IGNORE_CASE)
     private val daysAndHours = Regex("""(?i)(\d{1,4})\s*(tag\(e\)|tage?|days?)\W{0,3}\s*(\d{1,2})\s*(stunde|hour)""")
 
-    /** A raw value as CrystalDiskInfo shows it in hex, standing alone on its line's end. */
-    private val hexValue = Regex("""\b[0-9A-FOQ]{10,16}\s*$""", RegexOption.MULTILINE)
-
     /** Between the texts of a photo's readings, where it was read more than once. */
     private const val PASS_BREAK = "\n\u000C\n"
 
@@ -156,6 +153,8 @@ object SmartScreens {
         val table: Long? = null,
         /** A flash drive's screen, which has no pending sectors to count. */
         val solidState: Boolean = false,
+        /** A table read one row off its names, whose counts are no drive's. */
+        val shifted: Boolean = false,
     )
 
     /**
@@ -172,14 +171,18 @@ object SmartScreens {
     fun parse(texts: List<String>, photo: Int): SmartReading? {
         val seen = texts.mapNotNull { see(it) }.ifEmpty { return null }
         fun <T> agreed(values: List<T?>): T? = values.filterNotNull().distinct().singleOrNull()
-        // A count above zero says the drive fails, so it has to be read the same by every reading;
-        // a zero is taken from any reading no other contradicts.
-        val counts = Attribute.entries.mapNotNull { a ->
+        // A count above zero says the drive fails, so every reading that read it has to read it the
+        // same, and of more than one reading at least two have to have read it; a zero is taken from
+        // any reading no other contradicts. A reading that left the row unread is no witness against
+        // it: RapidOCR read a reported uncorrectable 0x83 three times and once as E80000000000.
+        // A table one reading finds read a row off its names is a row off in every reading: one whose
+        // power-on row was misread has nothing left to show it by.
+        val counts = if (seen.any { it.shifted }) emptyMap() else Attribute.entries.mapNotNull { a ->
             val all = seen.map { it.counts[a] }
             // How much spare and wear an NVMe drive shows is no count of faults: any one reading of it
             // no other contradicts is taken.
             val levels = a in setOf(Attribute.SPARE, Attribute.SPARE_THRESHOLD, Attribute.USED)
-            agreed(all)?.takeIf { levels || it == 0L || all.all { v -> v == it } }?.let { a to it }
+            agreed(all)?.takeIf { levels || it == 0L || seen.size == 1 || all.count { v -> v != null } >= 2 }?.let { a to it }
         }.toMap()
         // A value at its threshold is read off a whole row that passed its own check (current at or
         // above worst), and a reading at the larger size can lose a row the first one had, so a
@@ -336,7 +339,7 @@ object SmartScreens {
         val shifted = !nvmeScreen && header != null && header > 0 && tableHours != null &&
             asTableReadsIt(header) != tableHours && (tableHours * 2 < header || tableHours > header * 70)
         val believed = if (shifted) emptyMap() else counts
-        return Seen(believed, failing, word, header ?: tableHours, header, tableHours, solidState.containsMatchIn(text))
+        return Seen(believed, failing, word, header ?: tableHours, header, tableHours, solidState.containsMatchIn(text), shifted)
     }
 
     /** The raw value ending an NVMe row, or null where the OCR left none to read. */
@@ -432,8 +435,10 @@ object SmartScreens {
     @Serializable
     private data class Read(val url: String, val text: String?)
 
-    // Each reader keeps its own texts: what Tesseract read as no screen at all, RapidOCR reads again.
-    private val cacheFile = DataDir.file(if (PhotoText.screenReaderPresent) "smart_screens_rapid.json" else "smart_screens_text.json")
+    // Each reader keeps its own texts: what Tesseract read as no screen at all, RapidOCR reads again,
+    // and what RapidOCR read with its direction classifier, which turned digits over, it reads again
+    // without.
+    private val cacheFile = DataDir.file(if (PhotoText.screenReaderPresent) "smart_screens_upright.json" else "smart_screens_text.json")
     private val cache: MutableMap<String, String?> = LinkedHashMap<String, String?>().apply {
         cacheFile.readStore(log) { json.decodeFromString<List<Read>>(it) }?.forEach { put(it.url, it.text) }
     }
@@ -490,13 +495,10 @@ object SmartScreens {
      *  is a photo read that shows no screen. */
     private fun known(url: String): Result<String?>? {
         val known = synchronized(cache) { if (url in cache) Result.success(cache[url]) else null } ?: return null
-        // A text read once where a better parser now finds a screen in it is read again: Tesseract
-        // reads every screen a second time at twice the size, RapidOCR a table of hex values a
-        // second time from its column alone.
-        val readOnce = known.getOrNull()?.let { text ->
-            PASS_BREAK !in text && see(text) != null &&
-                (!PhotoText.screenReaderPresent || hexValue.findAll(text).count() >= 3)
-        } == true
+        // A text read once, as every photo is that shows no screen, is read again at twice the size
+        // where a better parser now finds a screen in it. RapidOCR reads a photo once, so this is
+        // Tesseract's alone.
+        val readOnce = !PhotoText.screenReaderPresent && known.getOrNull()?.let { PASS_BREAK !in it && see(it) != null } == true
         return known.takeUnless { readOnce }
     }
 
@@ -505,8 +507,8 @@ object SmartScreens {
         val text = runCatching { fetch(fullSize(url)) }.getOrNull()?.let { bytes ->
             // A photo that shows a SMART screen is read a second time at twice the size, and a
             // count is believed only where both readings agree: Tesseract reads a slashed zero as
-            // 0 at one size and 9 at another. RapidOCR reads a hex column a second time itself,
-            // from a crop of it, which costs a fraction of reading the whole photo again.
+            // 0 at one size and 9 at another. RapidOCR takes some five seconds a photo, which a
+            // second reading would double, so its one reading stands.
             ocr(bytes, 1.0)?.let { first ->
                 if (PhotoText.screenReaderPresent || see(first) == null) first
                 else listOfNotNull(first, ocr(bytes, 2.0)).joinToString(PASS_BREAK)

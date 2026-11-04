@@ -1,0 +1,31 @@
+CrystalDisklnfo 9.8.0x64
+File Edit Function Theme Disk Help Language
+Good Caution Good Good
+29°C 22C 23°℃ 33°℃
+C: D: E: G:
+INTELSSDPEKNW020T8:2048,4GB
+Health Status Firmware002C Total Host Reads 51838GB
+Serial NumberBTNH00000000000C Total Host Writes 63272GB
+Good
+InterfaceUSB(NVMExpress) Rotation Rate ..-(SSD)
+94% Transfer Mode Power On Count 7894count
+Temperature Drive Letter G: Power On Hours 24518hours
+Standard NVM Express1.3
+33C
+FeaturesS.M.A.R.T.,TRIM,VolatileWriteCache
+ID Attribute Name Raw Values
+01 Critical Warning 00000000000000
+02 CompositeTemperature 00000000000132
+03 Available Spare 00000000000064
+04 Available SpareThreshold 000000000000OA
+05 Percentage Used 00000000000006
+06 Data Units Read 000000067AD28A
+07 Data Units Written 00000007E8B485 ehi
+08 Host Read Commands 00000042C11FF3
+09 Host Write Commands 0000008AF4888C
+OA Controller Busy Time 0000000000DA89
+OB Power Cycles 00000000001ED6
+OC Power On Hours 00000000005FC6
+OD Unsafe Shutdowns 0000000000048D
+OE Media andData Integrity Errors 00000000000000
+OF Numberof Error Information Log Entries 00000000000000

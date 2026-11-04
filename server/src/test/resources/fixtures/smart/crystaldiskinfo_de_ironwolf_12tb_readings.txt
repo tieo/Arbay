@@ -1,0 +1,115 @@
+ST12000VN0007-2GS116 : 12000,1 GB
+Gesamtzustand Firmware SC60
+Seriennummer ZJV00000
+Vorsicht Schnittstelle UASP(Serial ATA) Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 8mal
+ktuelleTemperatt Laufwerksbuchstaben Betriebsstunden 3579Std.
+Standard ACS-3|ACS-3Revision5
+27 °C
+Eigenschaften S.M.A.R.T.,NCQ,Streaming,GPL
+ID Parametername ktuellerWertchtesterWert Grenzwert Rohwerte
+01 Lesefehlerrate 76 51 44 00000240CA64
+03 Mittlere Anlaufzeit 88 88 0 000000000000
+04 Start/Stopp-Zyklen der Spindel 100 100 20 0000000000OA
+05 WiederzugewieseneSektoren 88 88 10 00000000B9A0
+07 Suchfehler 80 60 45 000005C5D649
+09 Betriebsstunden 96 96 0 000000000DFB
+OA MisslungeneSpindelanlaufe 100 100 97 000000000000
+OC Gerate-Einschaltvorgange 100 100 20 000000000008
+? BB GemeldeteunkorrigierbareFehler 1 1 0 000000000083
+BC Befehlszeituberschreitung 100 100 0 000000000000
+BE Luftstromtemperatur 73 54 40 00001B1B001B
+CO Ausschaltungsabbruche 100 100 0 000000000087
+C1 Laden/Entladen-Zyklen 100 100 0 00000000009B
+C2 Temperatur 27 46 0 00130000001B
+C3 Hardware-ECCwiederhergestellt 1 1 0 00000240CA64
+C5 AktuellausstehendeSektoren 100 100 0 000000000000
+C6 NichtkorrigierbareSektoren 100 100 0 000000000000
+C7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+
+ST12000VN0007-2GS116 : 12000,1 GB
+Gesamtzustand Firmware SC60
+Seriennummer ZJV00000
+Vorsicht Schnittstelle UASP(Serial ATA) Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 8mal
+ktuelleTemperatt Laufwerksbuchstaben Betriebsstunden 3579Std.
+Standard ACS-3|ACS-3Revision5
+27 °C
+Eigenschaften S.M.A.R.T.,NCQ,Streaming,GPL
+ID Parametername ktuellerWertchtesterWert Grenzwert Rohwerte
+01 Lesefehlerrate 76 51 44 00000240CA64
+03 Mittlere Anlaufzeit 88 88 0 000000000000
+04 Start/Stopp-Zyklen der Spindel 100 100 20 00000000000A
+05 WiederzugewieseneSektoren 88 88 10 00000000B9A0
+07 Suchfehler 80 60 45 000005C5D649
+09 Betriebsstunden 96 96 0 000000000DFB
+OA MisslungeneSpindelanlaufe 100 100 97 000000000000
+OC Gerate-Einschaltvorgange 100 100 20 800000000000
+? BB GemeldeteunkorrigierbareFehler 1 1 0 E80000000000
+BC Befehlszeituberschreitung 100 100 0 000000000000
+BE Luftstromtemperatur 73 54 40 00001B1B001B
+CO Ausschaltungsabbruche 100 100 0 000000000087
+C1 Laden/Entladen-Zyklen 100 100 0 00000000009B
+C2 Temperatur 27 46 0 00130000001B
+C3 Hardware-ECCwiederhergestellt 1 1 0 00000240CA64
+C5 AktuellausstehendeSektoren 100 100 0 000000000000
+C6 NichtkorrigierbareSektoren 100 100 0 000000000000
+C7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+
+ST12000VN0007-2GS116 : 12000,1 GB
+Gesamtzustand Firmware SC60
+Seriennummer ZJV00000
+Vorsicht Schnittstelle UASP(Serial ATA) Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 8mal
+ktuelleTemperatt Laufwerksbuchstaben Betriebsstunden 3579Std.
+Standard ACS-3|ACS-3Revision5
+27 °C
+Eigenschaften S.M.A.R.T.,NCQ,Streaming,GPL
+ID Parametername ktuellerWertchtesterWert Grenzwert Rohwerte
+01 Lesefehlerrate 76 51 44 00000240CA64
+03 Mittlere Anlaufzeit 88 88 0 000000000000
+04 Start/Stopp-Zyklen der Spindel 100 100 20 00000000000A
+05 WiederzugewieseneSektoren 88 88 10 00000000B9A0
+07 Suchfehler 80 60 45 000005C5D649
+09 Betriebsstunden 96 96 0 000000000DFB
+OA MisslungeneSpindelanlaufe 100 100 97 000000000000
+OC Gerate-Einschaltvorgange 100 100 20 800000000000
+? BB GemeldeteunkorrigierbareFehler 1 1 0 000000000083
+BC Befehlszeituberschreitung 100 100 0 000000000000
+BE Luftstromtemperatur 73 54 40 00001B1B001B
+CO Ausschaltungsabbruche 100 100 0 000000000087
+C1 Laden/Entladen-Zyklen 100 100 0 860000000000
+C2 Temperatur 27 46 0 00130000001B
+C3 Hardware-ECCwiederhergestellt 1 1 0 00000240CA64
+C5 AktuellausstehendeSektoren 100 100 0 000000000000
+C6 NichtkorrigierbareSektoren 100 100 0 000000000000
+C7 UltraDMA-CRC-Fehler 200 200 0 000000000000
+
+ST12000VN0007-2GS116 : 12000,1 GB
+Gesamtzustand Firmware SC60
+Seriennummer ZJV00000
+Vorsicht Schnittstelle UASP(Serial ATA) Drehzahl 7200RPM
+Ubertragungsmodus SATA/600|SATA/600 Eingeschaltet 8mal
+ktuelleTemperatt Laufwerksbuchstaben Betriebsstunden 3579Std.
+Standard ACS-3|ACS-3Revision5
+27 °C
+Eigenschaften S.M.A.R.T.,NCQ,Streaming,GPL
+ID Parametername ktuellerWertchtesterWert Grenzwert Rohwerte
+01 Lesefehlerrate 76 51 44 00000240CA64
+03 Mittlere Anlaufzeit 88 88 0 000000000000
+04 Start/Stopp-Zyklen der Spindel 100 100 20 00000000000A
+05 WiederzugewieseneSektoren 88 88 10 00000000B9A0
+07 Suchfehler 80 60 45 000005C5D649
+09 Betriebsstunden 96 96 0 000000000DFB
+OA MisslungeneSpindelanlaufe 100 100 97 000000000000
+OC Gerate-Einschaltvorgange 100 100 20 800000000000
+? BB GemeldeteunkorrigierbareFehler 1 1 0 000000000083
+BC Befehlszeituberschreitung 100 100 0 000000000000
+BE Luftstromtemperatur 73 54 40 00001B1B001B
+CO Ausschaltungsabbruche 100 100 0 000000000087
+C1 Laden/Entladen-Zyklen 100 100 0 860000000000
+C2 Temperatur 27 46 0 00130000001B
+C3 Hardware-ECCwiederhergestellt 1 1 0 00000240CA64
+C5 AktuellausstehendeSektoren 100 100 0 000000000000
+C6 NichtkorrigierbareSektoren 100 100 0 000000000000
+C7 UltraDMA-CRC-Fehler 200 200 0 000000000000

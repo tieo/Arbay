@@ -267,9 +267,9 @@ class SmartScreensTest {
 
     @Test
     fun `a one byte NVMe value read larger than a byte is a misread, not a worn out drive`() {
-        // The photo shows an Intel 660p at 94 % health: 6 % used and 100 % spare, which the OCR of
-        // the whole photo read as 90000000000000 and 9000000000000.
-        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_en_nvme_intel660p_column").first(), 1))
+        // The photo shows an Intel 660p at 94 % health: 6 % used and 100 % spare, which RapidOCR with
+        // its direction classifier read turned over, as 90000000000000 and 9000000000000.
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_en_nvme_intel660p_turned"), 1))
         assertTrue(r.verdict != DriveVerdict.FAILING, r.toString())
         assertNull(r.wearUsed)
         assertNull(r.spareLeft)
@@ -277,11 +277,31 @@ class SmartScreensTest {
     }
 
     @Test
-    fun `the hex column read again on its own gives the values the whole photo misread`() {
-        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_en_nvme_intel660p_column"), 1))
+    fun `an NVMe screen read upright gives its wear and spare`() {
+        val r = assertNotNull(SmartScreens.parse(text("crystaldiskinfo_en_nvme_intel660p_upright"), 1))
         assertEquals(DriveVerdict.CLEAN, r.verdict, r.toString())
         assertEquals(6, r.wearUsed)
         assertEquals(100, r.spareLeft)
         assertEquals(24_518L, r.powerOnHours)
+    }
+
+    @Test
+    fun `a reading that left a count unread is no witness against the readings that read it`() {
+        // An IronWolf 12TB shows 131 reported uncorrectable errors (0x83); one of four readings read
+        // the row as E80000000000.
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_de_ironwolf_12tb_readings"), 1))
+        assertEquals(DriveVerdict.FAILING, r.verdict, r.toString())
+        assertEquals(131L, r.uncorrectable)
+        assertEquals(47_520L, r.reallocated)
+    }
+
+    @Test
+    fun `a table one reading finds a row off its names is believed from no reading`() {
+        // A Toshiba HDWD110 at 5022 hours whose power-on row holds 0 and the row above it 0x139E;
+        // two readings misread the power-on row as DO0000000000 and could not tell the shift.
+        val r = assertNotNull(SmartScreens.parse(readings("crystaldiskinfo_de_toshiba_1tb_shifted_readings"), 1))
+        assertEquals(DriveVerdict.UNREADABLE, r.verdict, r.toString())
+        assertNull(r.reallocated)
+        assertEquals(5_022L, r.powerOnHours)
     }
 }
