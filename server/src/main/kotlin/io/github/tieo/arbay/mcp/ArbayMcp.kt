@@ -114,7 +114,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private val ANSWER_WITHIN = 40.seconds
     /** How long a search asked to be complete waits for its slowest market, the web's search
      *  engines and shop pages, before answering with what it has. */
-    private val COMPLETE_WITHIN = 5.minutes
+    private val COMPLETE_WITHIN = 8.minutes
+    /** How often a search waiting for every market says how far it is. */
+    private val PROGRESS_EVERY = 20.seconds
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
@@ -142,6 +144,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         val listings: MutableList<Listing> = java.util.Collections.synchronizedList(mutableListOf())
         val problems: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         val searching: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        /** Every market asked, and those that have answered or failed: the rest wait for a crawl slot. */
+        val asked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        val answered: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         /** Per market: what it sent that the search removed, with the reason for each. */
         val dropped = java.util.concurrent.ConcurrentHashMap<String, List<DroppedListing>>()
         /** Per market: how many offers each reason removed, over all of them, where [dropped] holds some. */
@@ -152,6 +157,18 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         /** Set while the server's crawl throttle has it waiting for a free slot. */
         @Volatile var queued: String? = null
         lateinit var job: Job
+
+        /** Waits for every market, up to [COMPLETE_WITHIN], saying every [PROGRESS_EVERY] how many
+         *  have answered, so the client keeps the call open. */
+        suspend fun awaitAll() {
+            val progress = kotlinx.coroutines.currentCoroutineContext()[McpProgress]
+            val until = kotlin.time.TimeSource.Monotonic.markNow() + COMPLETE_WITHIN
+            while (job.isActive && until.hasNotPassedNow()) {
+                if (withTimeoutOrNull(PROGRESS_EVERY) { job.join() } != null) break
+                progress?.report("${answered.size} of ${asked.size.coerceAtLeast(answered.size)} markets answered" +
+                    searching.takeIf { it.isNotEmpty() }?.let { "; searching ${it.sorted().joinToString(", ")}" }.orEmpty())
+            }
+        }
 
         suspend fun describe(args: JsonObject): String {
             val q = saved?.searchQuery
@@ -199,7 +216,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 }
                 if (job.isActive) appendLine(
                     (queued?.let { "Queued: $it. It starts when a running search finishes." }
-                        ?: "Still searching: ${searching.joinToString(", ").ifEmpty { "the markets have not answered yet" }}.") +
+                        ?: ("Still searching: ${searching.joinToString(", ").ifEmpty { "the markets have not answered yet" }}." +
+                            (asked - searching - answered).takeIf { it.isNotEmpty() }?.let { " Waiting for a crawl slot: ${it.sorted().joinToString(", ")}." }.orEmpty())) +
                         " Call search with search_id=$id for the rest.",
                 )
             }
@@ -258,9 +276,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     val event = runCatching { json.decodeFromString<CrawlerSearchEvent>(line) }.getOrNull() ?: continue
                     val market = event.platformName.ifEmpty { event.platform }
                     when (event.type) {
+                        CrawlerEventType.SEARCH_STARTED -> run.asked += event.markets
                         CrawlerEventType.PLATFORM_STARTED -> run.searching += market
-                        CrawlerEventType.PLATFORM_DONE -> run.searching -= market
-                        CrawlerEventType.PLATFORM_ERROR -> { run.searching -= market; run.problems += "$market: ${event.error ?: event.errorType}" }
+                        CrawlerEventType.PLATFORM_DONE -> { run.searching -= market; run.answered += market }
+                        CrawlerEventType.PLATFORM_ERROR -> { run.searching -= market; run.answered += market; run.problems += "$market: ${event.error ?: event.errorType}" }
                         else -> {}
                     }
                     // A market's final answer replaces what it streamed while still paging.
@@ -380,7 +399,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // A tool call has a time limit of its own, and a search on a busy server can take
             // minutes: waiting for every market lost the whole answer to that limit. What has
             // arrived goes back, the rest keeps coming in, and the next call picks it up.
-            withTimeoutOrNull(if (args.bool("complete") == true) COMPLETE_WITHIN else ANSWER_WITHIN) { run.job.join() }
+            if (args.bool("complete") == true) run.awaitAll() else withTimeoutOrNull(ANSWER_WITHIN) { run.job.join() }
             run.describe(args)
         }
 

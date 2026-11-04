@@ -86,7 +86,9 @@ object NeulandOffers {
         val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
             .getOrElse { throw unreadablePage(siteName, "Neuland's answer is not an offer list", answer.toString(), it as? Exception) }
         val now = Clock.System.now()
-        val listings = list.offers.filter { o -> kinds == null || o.kind == null || o.kind in kinds }.map { o ->
+        // An offer in a currency Arbay does not know is left out rather than read as euros.
+        val listings = list.offers.filter { o -> kinds == null || o.kind == null || o.kind in kinds }.mapNotNull { o ->
+            val price = o.price.money() ?: return@mapNotNull null
             val auctionOnly = o.auction?.let { !it.buyNow } == true
             Listing(
                 id = "${platform.name}:${o.id}",
@@ -94,7 +96,7 @@ object NeulandOffers {
                 externalId = o.id,
                 url = o.url,
                 title = o.title,
-                price = o.price.money(),
+                price = price,
                 priceUpTo = o.priceUpTo?.money(),
                 sold = o.sold,
                 soldToOffer = o.offerAccepted,
@@ -255,20 +257,22 @@ object NeulandOffers {
             stock = read.stock,
             moreInStock = read.moreInStock,
             conditionNote = read.conditionNote,
-            coupon = read.coupon?.let { io.github.tieo.arbay.model.Coupon(it.price.money(), it.code, it.terms) },
+            coupon = read.coupon?.let { c -> c.price.money()?.let { io.github.tieo.arbay.model.Coupon(it, c.code, c.terms) } },
         )
     }
 
     /** Every seller of the offer at [url], cheapest delivered first; none where the site lists none. */
     suspend fun sellers(url: String): List<SellerOffer> =
         json.decodeFromString(ListSerializer(NeulandSeller.serializer()), Neuland.offers("offers/sellers?url=${url.encodeURLParameter()}"))
-            .map { SellerOffer(it.seller, it.price.money(), it.shipping?.money(), it.url, it.delivery) }
+            .mapNotNull { s -> s.price.money()?.let { SellerOffer(s.seller, it, s.shipping?.money(), s.url, s.delivery) } }
 
     /** A delivery charge as Arbay's shipping, free where it is nothing. */
     fun delivery(cost: Money) = if (cost.amount == 0L) Shipping(cost = cost, free = true) else Shipping(cost = cost)
 
     @Serializable private data class NeulandMoney(val cents: Long, val currency: String) {
-        fun money() = Money(cents, Currency.entries.firstOrNull { it.name == currency } ?: Currency.EUR)
+        /** The amount in its own currency; none for a currency Arbay does not know, which is never
+         *  taken for euros. */
+        fun money(): Money? = Currency.entries.firstOrNull { it.name == currency }?.let { Money(cents, it) }
     }
     @Serializable private data class NeulandSeller(val seller: String, val price: NeulandMoney, val shipping: NeulandMoney? = null, val url: String? = null, val delivery: io.github.tieo.arbay.model.Delivery? = null)
     @Serializable private data class NeulandOffer(

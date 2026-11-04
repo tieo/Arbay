@@ -744,6 +744,7 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     type = CrawlerEventType.SEARCH_STARTED,
                     platform = "",
                     totalPlatforms = platforms.size,
+                    markets = platforms.map { it.displayName },
                 )
                 write(json.encodeToString(startEvent) + "\n")
                 flush()

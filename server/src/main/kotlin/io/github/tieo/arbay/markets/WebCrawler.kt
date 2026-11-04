@@ -99,10 +99,10 @@ class WebCrawler : Crawler {
      *  crawls itself (a comparison site linking an eBay item) is that market's offer, which its
      *  own crawler reads better. */
     private fun listingsOf(offers: List<ShopOffer>, now: kotlin.time.Instant): List<Listing> =
-        offers.map { it.copy(url = withoutSession(unproxied(behindAffiliateLink(it.url)))) }.filter { it.inStock && !coveredElsewhere(it.url) }.map { o ->
+        offers.map { it.copy(url = withoutSession(unproxied(behindAffiliateLink(it.url)))) }.filter { it.inStock && !coveredElsewhere(it.url) }.mapNotNull { o ->
             val domain = SiteRecipes.domainOf(o.url)
-            val price = o.price.money()
-            val coupon = o.coupon?.let { io.github.tieo.arbay.model.Coupon(it.price.money(), it.code, it.terms) }
+            val price = o.price.money() ?: return@mapNotNull null
+            val coupon = o.coupon?.let { c -> c.price.money()?.let { io.github.tieo.arbay.model.Coupon(it, c.code, c.terms) } }
             val rentPer = o.rentPer?.let(::rentPeriod)
             Listing(
                 id = "${platformId.name}:${idOf(o.url, o.title)}",
@@ -116,11 +116,12 @@ class WebCrawler : Crawler {
                 coupon = coupon,
                 saleType = if (rentPer != null || hiredOut(o)) io.github.tieo.arbay.model.SaleType.RENT else null,
                 rentPer = rentPer,
-                rentRates = o.rentRates.mapNotNull { r -> rentPeriod(r.period)?.let { io.github.tieo.arbay.model.RentRate(it, r.price.money()) } },
+                rentRates = o.rentRates.mapNotNull { r -> rentPeriod(r.period)?.let { p -> r.price.money()?.let { io.github.tieo.arbay.model.RentRate(p, it) } } },
                 condition = o.condition?.let(::condition),
                 imageUrls = listOfNotNull(o.image),
                 seller = Seller(name = o.seller ?: domain, type = SellerType.BUSINESS, url = "https://$domain"),
                 shipping = o.shipping?.money()?.let { Shipping(cost = it, free = it.amount == 0L) },
+                delivery = o.delivery,
                 gtin = o.gtin,
                 mpn = o.mpn,
                 scrapedAt = now,
@@ -198,7 +199,9 @@ class WebCrawler : Crawler {
 
     @kotlinx.serialization.Serializable
     internal data class Amount(val cents: Long, val currency: String) {
-        fun money() = io.github.tieo.arbay.model.Money(cents, io.github.tieo.arbay.model.Currency.entries.firstOrNull { it.name == currency } ?: io.github.tieo.arbay.model.Currency.EUR)
+        /** The amount in its own currency; none for a currency Arbay does not know, which is never
+         *  taken for euros. */
+        fun money(): io.github.tieo.arbay.model.Money? = io.github.tieo.arbay.model.Currency.entries.firstOrNull { it.name == currency }?.let { io.github.tieo.arbay.model.Money(cents, it) }
     }
 
     @kotlinx.serialization.Serializable
@@ -212,7 +215,8 @@ class WebCrawler : Crawler {
     internal data class ShopOffer(
         val title: String, val price: Amount, val url: String, val condition: String? = null,
         @kotlinx.serialization.SerialName("in_stock") val inStock: Boolean = true,
-        val image: String? = null, val shipping: Amount? = null, val gtin: String? = null, val mpn: String? = null,
+        val image: String? = null, val shipping: Amount? = null, val delivery: io.github.tieo.arbay.model.Delivery? = null,
+        val gtin: String? = null, val mpn: String? = null,
         val seller: String? = null,
         @kotlinx.serialization.SerialName("rent_per") val rentPer: String? = null,
         @kotlinx.serialization.SerialName("rent_rates") val rentRates: List<Rate> = emptyList(),

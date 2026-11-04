@@ -31,6 +31,9 @@ data class CrawlerSearchEvent(
     val suggestedTerms: List<SuggestedTerm> = emptyList(),
     val fetchStage: String? = null,
     val totalPlatforms: Int = 0,
+    // On SEARCH_STARTED, every market the search asks, by name: a market still waiting for a crawl
+    // slot has sent nothing yet, and is named as waiting rather than left out.
+    val markets: List<String> = emptyList(),
     val completedPlatforms: Int = 0,
     val hasMore: Boolean = false,
     val nextPage: Int = 0,
