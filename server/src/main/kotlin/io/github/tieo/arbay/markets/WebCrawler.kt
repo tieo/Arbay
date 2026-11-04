@@ -67,11 +67,18 @@ class WebCrawler : Crawler {
                 }
             }.awaitAll()
         }
+        // A learned site's own search that a block turned away is asked once more, after the rest:
+        // alza.de's refused one run and answered the next, its offer missing from the first.
+        val again = found.zip(pages).filter { (url, page) -> url in searches && page.outcome == Outcome.BLOCKED }.map { (url, _) ->
+            (withCrawlLimitOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT))
+                .also { emitPartialResults(shownOnce.keep(listingsOf(it.offers, now))) }
+        }
         val outcomes = pages.groupingBy { it.outcome }.eachCount()
         log.info("Web: '{}' read {} pages: {} with offers, {} guessed, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
             words, pages.size, outcomes[Outcome.OFFERS] ?: 0, outcomes[Outcome.GUESSED] ?: 0, outcomes[Outcome.NOTHING_SOLD] ?: 0, outcomes[Outcome.UNREADABLE] ?: 0,
             outcomes[Outcome.BLOCKED] ?: 0, outcomes[Outcome.TIMED_OUT] ?: 0, pages.sumOf { it.offers.size })
-        return listingsOf(pages.flatMap { it.offers }, now)
+        if (again.isNotEmpty()) log.info("Web: '{}' asked {} blocked site searches again: {} with offers", words, again.size, again.count { it.outcome == Outcome.OFFERS })
+        return listingsOf((pages + again).flatMap { it.offers }, now)
     }
 
     /**

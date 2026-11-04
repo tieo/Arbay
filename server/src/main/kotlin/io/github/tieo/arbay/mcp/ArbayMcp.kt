@@ -1237,7 +1237,7 @@ internal fun io.github.tieo.arbay.model.Delivery.describe(): String {
         from != null && to != null && from != to -> "$from – $to"
         to != null -> if (from == null) "by $to" else "on $to"
         from != null -> "from $from"
-        span != null && span.size == 2 -> if (span[0] == span[1]) "in ${span[0]} days" else "in ${span[0]}–${span[1]} days"
+        span != null && span.size == 2 -> if (span[0] == span[1]) "in ${span[0]} day${if (span[0] == 1) "" else "s"}" else "in ${span[0]}–${span[1]} days"
         else -> words
     }
 }
