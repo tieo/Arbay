@@ -1301,11 +1301,12 @@ object RelevanceFilter {
 
 
         val implied = impliedWords(listings, parsed, query.text)
-        // Where the answer writes a word of the search, a listing carrying none, itself or
-        // implied by its model, is what the market guessed: marked, to be shown after the rest.
-        // Measured on 35 searches, 89% of such listings were something else (Playmobil for
-        // "Dusch-WC", postcards of "Bourdon" for "lägler hummel") and 7% the thing under another
-        // name, so none is hidden.
+        // A listing carrying no word of the search, itself or implied by its model, is what the
+        // market guessed: marked, to be shown after the rest. Measured on 35 searches, 89% of such
+        // listings were something else (Playmobil for "Dusch-WC", postcards of "Bourdon" for
+        // "lägler hummel") and 7% the thing under another name, so none is hidden. An answer none of
+        // whose listings writes a word is all guessed: refurbed answered "lägler profit" with
+        // ThinkPads L14 and "Dusch-WC" with baby bath sets.
         val carrying = listings.filter { score(it, parsed, implied[it.id].orEmpty()) > 0.0 || writesAWordOf(it, parsed) }.map { it.id }.toSet()
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
@@ -1337,7 +1338,7 @@ object RelevanceFilter {
                 dropped += DroppedListing(listing, DropReason.ANOTHER_SIZE)
                 return@mapNotNull null
             }
-            (if (carrying.isNotEmpty() && listing.id !in carrying) listing.copy(offQuery = true) else listing) to s
+            (if (listing.id !in carrying) listing.copy(offQuery = true) else listing) to s
         }.sortedByDescending { it.second }.map { it.first }
         recordModelEvidence(kept, parsed)
         return Partitioned(kept, dropped)

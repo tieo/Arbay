@@ -60,6 +60,18 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `an answer none of whose listings writes a word of the search is marked whole`() {
+        // refurbed's answer to "lägler profit".
+        val kept = search("lägler profit", listOf(
+            listing("Lenovo ThinkPad L14 G2 | i3-1115G4 | 14\""),
+            listing("Lenovo ThinkPad L490 | i7-8565U | 14\""),
+            listing("iPad Pro (2016) | 9.7\""),
+        ))
+        assertEquals(3, kept.size)
+        assertTrue(kept.all { it.offQuery }, kept.map { it.title to it.offQuery }.toString())
+    }
+
+    @Test
     fun `filters out placeholder titles`() {
         val results = search("WH-1000XM5", listOf(
             listing("Neues Angebot"),
