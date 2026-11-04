@@ -132,6 +132,18 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a camper named as one use of a closed van leaves it a closed van`() {
+        // Goch: a plain Kasten with a wood-lined hold and shelves, headed as fit for either use.
+        assertNotNull(fit(van(title = "VW Crafter Handwerker / Camper Auto")))
+        assertNotNull(fit(van(title = "VW Crafter Kasten ideal als Camper")))
+        assertNotNull(fit(van(title = "VW Crafter 177 PS Basis für Camperausbau")))
+        assertNotNull(fit(van(title = "VW Crafter Hochdach, Ausbau möglich")))
+        assertNull(fit(van(title = "VW Crafter Camper")))
+        assertNull(fit(van(title = "VW Crafter Kastenwagen Camper Ausbau")))
+        assertNull(fit(van(title = "VW Crafter Wohnmobil / Camper")))
+    }
+
+    @Test
     fun `a dealer's text sent as one line is no headline`() {
         // TruckScout24 sends a Cloppenburg dealer's equipment and terms as a single line; the retrofits
         // it offers ("Nachrüstung einer LBW (Ladebordwand)") are not the van's body.

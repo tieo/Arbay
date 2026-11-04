@@ -61,6 +61,17 @@ object FitScore {
     private val workshopFitOut = Regex(
         """(?i)(werkstatt|regal|sortimo|w(?:ü|ue)rth|bott|orsy|aluca)[\s-]*ausbau""",
     )
+    // A camper named as one use a closed van can be put to, "VW Crafter Handwerker / Camper Auto"
+    // (a plain Kasten with a wood-lined hold), "ideal als Camper", "Basis für Camperausbau",
+    // "Ausbau möglich": the van is still closed. A camper named alone is a conversion.
+    private val camperAsAUse = Regex(
+        """(?i)(handwerker|werkstatt|gewerbe|transporter|kasten(wagen)?|lieferwagen|umzug)\w*\s*(/|oder|&|\+|und)\s*(camper|wohnmobil|womo)\w*""" +
+            """|(camper|wohnmobil|womo)\w*\s*(/|oder|&|\+|und)\s*(handwerker|werkstatt|gewerbe|transporter|kasten(wagen)?|lieferwagen|umzug)""" +
+            """|(ideal|perfekt|geeignet|bestens)\s+(als|f(ü|ue)r|zum)\s+((einen|den|ein)\s+)?(camper|wohnmobil|womo|ausbau)\w*""" +
+            """|basis\s+(f(ü|ue)r\s+)?(((einen|den|ein)\s+)?(camper|wohnmobil|womo|ausbau)\w*)""" +
+            """|(camper|wohnmobil)?[\s-]*ausbau\s+m(ö|oe)glich""",
+    )
+
     // "Nur an Gewerbe", "nur Export", "Verkauf ausschließlich für Export oder an Gewerbetreibende";
     // the buyer named, so a van "nur gewerblich genutzt" stays in.
     private val tradeOnly = Regex(
@@ -103,7 +114,7 @@ object FitScore {
         // A mobile.de card's title is only make and model; the seller's headline opens the text.
         val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()} ${CarFilterEngine.vehicleKind(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
-        if (wantsAVan && notAClosedVan.containsMatchIn(workshopFitOut.replace(headline, " "))) return null
+        if (wantsAVan && notAClosedVan.containsMatchIn(camperAsAUse.replace(workshopFitOut.replace(headline, " "), " "))) return null
         if (tradeOnly.containsMatchIn(text)) return null
         // Another ad's photos in this one: the van shown is not the one sold.
         if (listing.photosAlsoIn.isNotEmpty()) return null
