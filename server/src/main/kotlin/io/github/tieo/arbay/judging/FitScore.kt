@@ -260,6 +260,26 @@ object FitScore {
     }
 
     /** The model of [wishes] that [text], [folded] already, names, the one worth most where several are. */
+    /**
+     * The [text] without the run of search words a seller closes an ad with, each on a line of its
+     * own: "Parkett schleifen / Dielen schleifen / Schleifmaschine / Lägler / Hummel" under a Zentra
+     * names what the ad wants to be found by, not the machine. Three such lines or more of at most
+     * three words and no sentence mark make the run; a text that is all such lines is the text.
+     * Of 379 cached sander ads, 19 closed with a run and one named a wanted model only there.
+     */
+    private val SPACES = Regex("""\s+""")
+    private val SENTENCE_MARK = Regex("[.,:;!?]")
+
+    internal fun withoutTags(text: String): String {
+        val lines = text.trimEnd().lines()
+        fun tag(line: String) = line.isBlank() || line.trim().let { it.length <= 40 && it.split(SPACES).size <= 3 && !SENTENCE_MARK.containsMatchIn(it) }
+        var start = lines.size
+        while (start > 0 && tag(lines[start - 1])) start--
+        val run = lines.drop(start).count { it.isNotBlank() }
+        val before = lines.take(start)
+        return if (run >= 3 && before.any { it.isNotBlank() }) before.joinToString("\n") else text
+    }
+
     internal fun namedModel(text: String, wishes: ProductWishes): io.github.tieo.arbay.model.ModelWish? =
         wishes.models.filter { m -> m.words.any { says(text, it) } }.maxByOrNull { it.worth }
 
@@ -285,6 +305,7 @@ object FitScore {
         val title = folded(listing.title)
         val text = folded(raw)
         if (wishes.ruledOutWords.any { says(text, it) }) return null
+        val stated = folded("${listing.title}\n${withoutTags(listing.description.orEmpty())}")
 
         // The model a title names counts in full; one only the text names may be a comparison or
         // a mention ("Schleifpapier passt auch für Hummel"), and counts a little less. A model worth
@@ -294,7 +315,7 @@ object FitScore {
             val namedInTitle = models.filter { m -> m.words.any { says(title, it) } }
             val inTitle = namedInTitle.maxByOrNull { it.worth }
             if (inTitle != null && inTitle.worth <= 0.0) return null
-            val inText = models.filter { m -> m.worth > 0 && m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+            val inText = models.filter { m -> m.worth > 0 && m.words.any { says(stated, it) } }.maxByOrNull { it.worth }
             val told = guessed?.invoke(listing)
             // Someone looked and said which it is, or that it is none of them: that outranks its words.
             if (told?.how == ModelGuess.CHECKED && told.model == ModelGuess.NONE_OF_THEM) return null

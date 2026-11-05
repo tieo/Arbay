@@ -119,7 +119,7 @@ object ModelGuesses {
     /** The model the ad's full text names, read from its page. */
     private suspend fun fromText(l: Listing, wishes: ProductWishes): ModelGuess? {
         val text = detail(l)?.description ?: return null
-        return FitScore.namedModel(FitScore.folded(text), wishes)?.let { ModelGuess(it.name, "the ad's text", 0.9, sure = true) }
+        return FitScore.namedModel(FitScore.folded(FitScore.withoutTags(text)), wishes)?.let { ModelGuess(it.name, "the ad's text", 0.9, sure = true) }
     }
 
     /** The model printed on the machine or its type plate in the ad's photos. */

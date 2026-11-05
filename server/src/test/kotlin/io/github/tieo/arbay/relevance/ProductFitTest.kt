@@ -67,6 +67,17 @@ class ProductFitTest {
     }
 
     @Test
+    fun `a model named only in the search words closing the ad is not stated`() {
+        // KA 3561535204: a Zentra, its text closing with the words it wants to be found by.
+        val zentra = assertNotNull(fit(ad("Zentra Parkettschleifmaschine", 450,
+            "Gebrauchte Zentra Parkettschleifmaschine.\nMotor läuft top.\nStandort ist 53426\n\nParkett schleifen\nDielen schleifen\nSchleifmaschine\nWalzenschleifer\nLägler\nHummel")))
+        assertTrue(!zentra.parts.single { it.wish == FitWish.MODEL }.known, "${zentra.parts}")
+        // A text made only of short lines says what the machine is.
+        val short = assertNotNull(fit(ad("Parkettschleifmaschine", 700, "Lägler Profit\nguter Zustand\nmit Walze")))
+        assertEquals("Lägler PROFIT (in the text)", short.parts.single { it.wish == FitWish.MODEL }.note)
+    }
+
+    @Test
     fun `a model that would not do rules out an ad naming only it, not one that brings it along`() {
         assertNull(fit(ad("Randschleifmaschine Parkettschleifmaschine Lägler Flip", 615)))
         val withEdge = assertNotNull(fit(ad("Hummel Parkettschleifmaschine + ELAN Randschleifer + Zubehör", 2500)))
