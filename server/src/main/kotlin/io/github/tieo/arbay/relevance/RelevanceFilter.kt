@@ -885,7 +885,7 @@ object RelevanceFilter {
         // Ersatzohrpolster — so the head noun is matched wherever the word ends, not only where it
         // stands alone. The other languages a cross-border search reaches name them plainly.
         """(?U)\w*(h(ü|ue)llen?|hoes(jes?)?|etuis?|taschen?|akkus?|batterien?|ladeger(ä|ae)t|kabel|netzteil|""" +
-            """polster|kopfband|halterung|st(ä|ae)nder|schutzfolien?|displayschutz|kameraschutz|(panzer|schutz)gl(a|ä)s(er)?|reparatur(set)?|""" +
+            """polster|kopfband|halterung|st(ä|ae|a)nder|schutzfolien?|displayschutz|kameraschutz|(panzer|schutz)gl(a|ä)s(er)?|reparatur(set)?|""" +
             """ersatzteile?|platine|mainboard|geh(ä|ae)use|abdeckung|""" +
             // What a drive is put into rather than the drive: a search for a 2 TB M.2 came back led
             // by six enclosures at €9, each of them carrying "M.2", "SSD" and "2TB" because that is
@@ -898,6 +898,11 @@ object RelevanceFilter {
             """\b(ear\s?pads?|headband|pcb|repair\s?kit|coques?|bo(î|i)tes?|housses?|custodi(a|e)|fundas?|""" +
             """(é|e)tuis?|(back|flip|book|hard|soft)?covers?|case|charger|enclosure|caddy|docking\s?station|""" +
             """screen\s?protectors?|praxisbuch|handbuch|anleitung|""" +
+            // What a small device is stood, hung or racked on, sold under its name: "USW-Flex-Mini
+            // Switch Stander", "Flex Mini Wall Mount Bracket", "19 Zoll Rackmontage Panel 1 HE
+            // Ubiquiti UniFi USW-Flex-Mini Switch". A rack-mount switch is a switch, so only the
+            // panel, kit or bracket counts.
+            """brackets?|wall\s?mounts?|rackmontage\s?panel|rack\s?mount(ing)?\s?(kit|panel|ears?|bracket)|""" +
             // A box sold empty: "Emty Box!!", "leere OVP", "nur Karton".
             """(empty|emty|leere?)\s+(box|karton|ovp|verpackung)|nur\s+(die\s+)?(box|karton|ovp)|""" +
             // Brands that make nothing but cases and glass for the phones they name.
@@ -942,6 +947,9 @@ object RelevanceFilter {
     private val forWhat = Regex("""^\s*(f(ü|ue)r|for|pour|per|para|voor)\b""", RegexOption.IGNORE_CASE)
     private val boardNoun = Regex("""(?i)\w*(platine|mainboard|pcb)""")
     private val newBoard = Regex("""(?i)\b(neue[sm]?|new)\s*$""")
+
+    /** Where a mount or stand is put. */
+    private val placement = Regex("""(?i)table|desk|wall|ceiling|floor|tisch|wand|decke|boden""")
 
     private val comesWith = Regex("""(\b(mit|inkl\.?|inklusive|incl\.?|including|with|und|sowie|plus|and)|\+|&)\s*([\p{L}\d]+[\s-]+){0,3}$""", RegexOption.IGNORE_CASE)
 
@@ -990,7 +998,13 @@ object RelevanceFilter {
         // is a dock for both, which at €29 stood as the cheapest 32 TB drive.
         comesWith.find(before)?.let { with ->
             val head = before.take(with.range.first)
-            if (firstTokenPosition(head, parsed.positiveTokens) != null || saidAboutTheDevice(head, parsed)) return false
+            // Unless the word before it is the first half of the same accessory: "Table and Wall
+            // Mount Bracket" is one mount for both, as "Tisch- und Wandhalterung" is. A word, not a
+            // price ("120.- & Handyhülle") or a model's part ("I-Plus").
+            val halfOfTheNoun = head.trimEnd().substringAfterLast(' ').let { w ->
+                placement.matches(w) || w.length >= 4 && w.endsWith("-") && w.dropLast(1).all { it.isLetter() }
+            }
+            if (!halfOfTheNoun && (firstTokenPosition(head, parsed.positiveTokens) != null || saidAboutTheDevice(head, parsed))) return false
         }
         return !saidAboutTheDevice(before, parsed)
     }

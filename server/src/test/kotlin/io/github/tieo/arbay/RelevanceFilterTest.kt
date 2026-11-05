@@ -85,6 +85,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `stands, brackets and rack panels made for a switch are its accessories`() {
+        val stands = listOf(
+            "reisings3dprinting Ubiquiti UniFi USW-Flex-Mini Switch Stander",
+            "Ubiquiti UniFi USW-Flex-Mini Switch Ständer",
+            "Ubiquiti USW-Flex Mini Table and Wall Mount Wall Mount Bracket White",
+            "10 Zoll, 19 Zoll Rackmontage Panel 1 HE Ubiquiti UniFi USW-Flex-Mini Switch",
+        )
+        val kept = search("Ubiquiti Flex Mini", (stands + "Ubiquiti UniFi Switch Flex Mini USW-Flex-Mini").map { listing(it) })
+        assertEquals(listOf("Ubiquiti UniFi Switch Flex Mini USW-Flex-Mini"), kept.map { it.title })
+        // A price or a model's part ending in a hyphen is no first half of a noun.
+        assertEquals(1, search("iphone 11", listOf(listing("iPhone 11  für 120.- & Handyhülle dazu"))).size)
+        assertEquals(1, search("Festool ETS 150", listOf(listing("Festool ETS 150/3 EQ I-Plus 576072 Akku-Exzenterschleifer"))).size)
+    }
+
+    @Test
     fun `an answer none of whose listings writes a word of the search is marked whole`() {
         // refurbed's answer to "lägler profit".
         val kept = search("lägler profit", listOf(
