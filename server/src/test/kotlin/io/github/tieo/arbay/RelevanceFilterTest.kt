@@ -85,6 +85,20 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a decimal number in a title carries no model number`() {
+        // Kaufland's answer to "Pixel 9 Pro XL 256 GB": the "9" of "16,9 cm" is no Pixel 9. Among
+        // a web answer of many shops, where few titles write "Pixel", the number is what is required.
+        val kept = search("Pixel 9 Pro XL 256 GB", (1..4).map { listing("Samsung Galaxy S24 Ultra 256 GB Titan $it") } + listOf(
+            listing("POCO X5 Pro 5G, 16,9 cm (6.67\"), 8 GB, 256 GB, 108 MP, Android 13, Schwarz"),
+            listing("Google Pixel 9 Pro XL , 17,3 cm (6.8\"), 16 GB, 256 GB, 50 MP, Android 14, Weiß"),
+        ))
+        assertTrue(kept.none { it.title.startsWith("POCO") && !it.offQuery }, kept.map { it.title to it.offQuery }.toString())
+        val nine = RelevanceFilter.parseQuery(SearchQuery(text = "9", category = MarketGroup.GENERAL))
+        assertEquals(0.0, RelevanceFilter.score(listing("POCO X5 Pro 5G, 16,9 cm (6.67\"), 8 GB, 256 GB"), nine))
+        assertTrue(RelevanceFilter.score(listing("Google Pixel 9 Pro XL, 17,3 cm"), nine) > 0.0)
+    }
+
+    @Test
     fun `stands, brackets and rack panels made for a switch are its accessories`() {
         val stands = listOf(
             "reisings3dprinting Ubiquiti UniFi USW-Flex-Mini Switch Stander",

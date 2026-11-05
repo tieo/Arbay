@@ -1828,6 +1828,10 @@ object RelevanceFilter {
             // generation that has to follow the word before it ("Switch 2"). Not before a unit,
             // where the size is read off the raw title instead.
             .replace(Regex("""(?<![\d.,])(\d)[.,](\d)(?![\d.,]|\s*(tb|gb|mb|kb)\b)""", RegexOption.IGNORE_CASE), "$1p$2")
+            // A measure is one word whatever its digits: split, a screen's "16,9 cm" carried the
+            // "9" of a search for the Pixel 9 Pro XL, and "16.8 cm" the "8" of the Pixel 8. Only
+            // before its unit, since a model number is written with a dot too ("GBH 2.28").
+            .replace(Regex("""(?<![\d.,])(\d+)[.,](\d+)(?=\s*(?:(?:cm|mm|m|zoll|inch|kg)\b|["”″]))""", RegexOption.IGNORE_CASE), "$1p$2")
             .replace(".", " ")  // Strip period (e.g. "Hüllen." → "Huellen", "z.B." → "z B")
             .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
             // French/Spanish accents (Vinted DE, Marktplaats, etc.)
