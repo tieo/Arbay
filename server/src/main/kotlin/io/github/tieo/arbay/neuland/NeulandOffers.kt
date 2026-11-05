@@ -81,6 +81,9 @@ object NeulandOffers {
         val answer = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
         } catch (e: Neuland.Refusal) {
+            // A page Neuland read and could not make out comes with the refusal, kept in the snapshot.
+            val page = (e.answer["html"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            if (page != null) throw unreadablePage(siteName, e.message ?: "the page did not read", page)
             throw io.github.tieo.arbay.markets.CrawlerBlockedException("$siteName: ${e.message}", e.errorType())
         }
         val list = runCatching { json.decodeFromJsonElement(OfferList.serializer(), answer) }
