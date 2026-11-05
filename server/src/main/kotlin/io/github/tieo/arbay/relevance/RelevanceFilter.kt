@@ -1308,6 +1308,21 @@ object RelevanceFilter {
         // whose listings writes a word is all guessed: refurbed answered "lägler profit" with
         // ThinkPads L14 and "Dusch-WC" with baby bath sets.
         val carrying = listings.filter { score(it, parsed, implied[it.id].orEmpty()) > 0.0 || writesAWordOf(it, parsed) }.map { it.id }.toSet()
+        // Of three words or more, one alone is a guess as well, unless it is a model code, which names
+        // the thing by itself ("IB-3740-C31"): reBuy's "Flex und Flo" school books for "Ubiquiti Flex
+        // Mini", burner parts and Blanco sinks writing "III" for "Sony A7 III", other cameras writing
+        // "Sony". On the 36 recorded searches this moved 243 offers last, 2 of them the thing (an
+        // "Alpha 7 III" that never writes "A7").
+        // Only words that name something count: "Urinal mit Deckel" is two of them.
+        val naming = parsed.positiveTokens.filter { it !in FUNCTION_WORDS }
+        val oneWordOfMany = if (parsed.orGroups.isNotEmpty() || naming.size < 3) emptySet() else
+            listings.filter { listing ->
+                val carried = naming.filter { token ->
+                    val alone = parsed.copy(positiveTokens = listOf(token), orGroups = emptyList())
+                    score(listing, alone, implied[listing.id].orEmpty()) > 0.0 || writesAWordOf(listing, alone)
+                }
+                carried.size == 1 && !isAModelCode(carried.single())
+            }.map { it.id }.toSet()
         val kept = listings.mapNotNull { listing ->
             // A word the reader blocked is their own decision, and is reported as that rather than
             // as something the market got wrong, naming the word so the reader can check it.
@@ -1338,7 +1353,7 @@ object RelevanceFilter {
                 dropped += DroppedListing(listing, DropReason.ANOTHER_SIZE)
                 return@mapNotNull null
             }
-            (if (listing.id !in carrying) listing.copy(offQuery = true) else listing) to s
+            (if (listing.id !in carrying || listing.id in oneWordOfMany) listing.copy(offQuery = true) else listing) to s
         }.sortedByDescending { it.second }.map { it.first }
         recordModelEvidence(kept, parsed)
         return Partitioned(kept, dropped)
@@ -1844,6 +1859,8 @@ object RelevanceFilter {
     }
 
     /** Short words that lead into a count rather than being the first half of a model name. */
+    /** Words that join the names in a search and name nothing themselves. */
+    private val FUNCTION_WORDS = setOf("mit", "und", "ohne", "für", "fur", "von", "oder", "with", "without", "and", "for", "of", "the", "or", "con", "senza", "per", "avec", "sans", "pour", "et", "met", "zonder", "voor", "en")
     private val COUNT_LEAD_WORDS = setOf("lot", "set", "ca", "je", "mit", "und", "für", "fur", "for", "of", "the", "von", "à", "par", "per", "con", "met", "en", "et", "and")
 
     private val PLACEHOLDER_TITLES = setOf(

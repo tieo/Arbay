@@ -60,6 +60,31 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `one word of three is marked unless it is a model code`() {
+        // reBuy's answer to "Ubiquiti Flex Mini": school books, nearly all of them writing "Flex",
+        // so that is the one word its sellers are held to, and every book carries it.
+        val books = listOf(
+            "Flex und Flo 1. Themenheft Addieren und Subtrahieren", "Flex und Flo 2. Themenheft Multiplizieren",
+            "Flex und Flora Sprachbuch 2", "Flex und Flora Heft Lesen 3", "Das Zahlenbuch 2. Schülerbuch",
+        )
+        val kept = search("Ubiquiti Flex Mini", books.map { listing(it) })
+        // The book writing none of the words is off target, as before.
+        assertEquals(books.filter { "Flex" in it }.toSet(), kept.map { it.title }.toSet())
+        assertTrue(kept.all { it.offQuery }, kept.map { it.title to it.offQuery }.toString())
+        val code = search("ICY BOX IB-3740-C31", listOf(
+            listing("ICY BOX IB-3740-C31 4-fach Gehäuse"),
+            listing("Externes Festplattengehäuse mit 4 Einschüben IB-3740-C31"),
+        ))
+        assertTrue(code.none { it.offQuery }, code.map { it.title to it.offQuery }.toString())
+        // "mit" names nothing: two words, and one of them carried is not a guess.
+        val two = search("Urinal mit Deckel", listOf(
+            listing("Urinal mit Deckel weiß"),
+            listing("LAUFEN VAL Urinal schwarz matt"),
+        ))
+        assertTrue(two.none { it.offQuery }, two.map { it.title to it.offQuery }.toString())
+    }
+
+    @Test
     fun `an answer none of whose listings writes a word of the search is marked whole`() {
         // refurbed's answer to "lägler profit".
         val kept = search("lägler profit", listOf(
