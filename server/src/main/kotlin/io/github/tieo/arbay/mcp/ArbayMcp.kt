@@ -113,10 +113,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
      *  the tool call's own time limit, which a search on a busy server outlasted. */
     private val ANSWER_WITHIN = 40.seconds
     /** How long a search asked to be complete waits for its slowest market, the web's search
-     *  engines and shop pages, before answering with what it has. */
+     *  engines and shop pages, before answering with what it has. The call sends nothing meanwhile:
+     *  its client must allow it this long (Claude Code: the server's "timeout" in its MCP
+     *  settings, 600000 for arbay, past its 300 s default). */
     private val COMPLETE_WITHIN = 8.minutes
-    /** How often a search waiting for every market says how far it is. */
-    private val PROGRESS_EVERY = 20.seconds
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
@@ -157,18 +157,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         /** Set while the server's crawl throttle has it waiting for a free slot. */
         @Volatile var queued: String? = null
         lateinit var job: Job
-
-        /** Waits for every market, up to [COMPLETE_WITHIN], saying every [PROGRESS_EVERY] how many
-         *  have answered, so the client keeps the call open. */
-        suspend fun awaitAll() {
-            val progress = kotlinx.coroutines.currentCoroutineContext()[McpProgress]
-            val until = kotlin.time.TimeSource.Monotonic.markNow() + COMPLETE_WITHIN
-            while (job.isActive && until.hasNotPassedNow()) {
-                if (withTimeoutOrNull(PROGRESS_EVERY) { job.join() } != null) break
-                progress?.report("${answered.size} of ${asked.size.coerceAtLeast(answered.size)} markets answered" +
-                    searching.takeIf { it.isNotEmpty() }?.let { "; searching ${it.sorted().joinToString(", ")}" }.orEmpty())
-            }
-        }
 
         suspend fun describe(args: JsonObject): String {
             val q = saved?.searchQuery
@@ -399,7 +387,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // A tool call has a time limit of its own, and a search on a busy server can take
             // minutes: waiting for every market lost the whole answer to that limit. What has
             // arrived goes back, the rest keeps coming in, and the next call picks it up.
-            if (args.bool("complete") == true) run.awaitAll() else withTimeoutOrNull(ANSWER_WITHIN) { run.job.join() }
+            withTimeoutOrNull(if (args.bool("complete") == true) COMPLETE_WITHIN else ANSWER_WITHIN) { run.job.join() }
             run.describe(args)
         }
 
