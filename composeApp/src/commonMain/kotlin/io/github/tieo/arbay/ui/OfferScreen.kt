@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ShoppingCart
+import io.github.tieo.arbay.model.checkoutShop
+import io.github.tieo.arbay.model.checkoutSite
 import io.github.tieo.arbay.model.euroText
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -187,7 +189,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
                 if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
-                if (listing.platformId == PlatformId.VINTED_DE && !isArchived) VintedCheckout(session, listing)
+                if (checkoutSite(listing.url) != null && !isArchived) ShopCheckout(session, listing)
                 if (!isArchived) listing.seller?.let { seller ->
                     if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) {
                         OutlinedButton(onClick = { session.listings.blockDealer(listing); nav.back() }, modifier = Modifier.fillMaxWidth()) {
@@ -422,9 +424,10 @@ private fun SellerButton(session: Session, listing: Listing) {
     mark?.let { Muted(it) }
 }
 
-/** Buying a Vinted offer outright: its checkout read first, then paid at the total it showed. */
+/** Buying an offer outright at its shop's own checkout: read first, then paid at the total it showed. */
 @Composable
-private fun VintedCheckout(session: Session, listing: Listing) {
+private fun ShopCheckout(session: Session, listing: Listing) {
+    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
     val checkout by session.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id }
     val purchase = here?.purchase
@@ -432,20 +435,20 @@ private fun VintedCheckout(session: Session, listing: Listing) {
         here?.working == true -> Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Busy(); HGap()
-                Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading Vinted's checkout", style = MaterialTheme.typography.bodyMedium)
+                Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading $shop's checkout", style = MaterialTheme.typography.bodyMedium)
             }
         }
         purchase?.paid == true -> Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary); HGap()
-                Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}", style = MaterialTheme.typography.bodyMedium)
+                Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}" + (purchase.order?.let { ", order $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        purchase != null && !purchase.buyable -> Muted("Vinted no longer offers to buy it")
+        purchase != null && !purchase.buyable -> Muted("$shop no longer offers to buy it")
         purchase != null -> Panel {
             CheckoutLine("Item", purchase.itemEur)
-            CheckoutLine("Vinted fee", purchase.feeEur)
-            CheckoutLine("Shipping to the door", purchase.shippingEur)
+            purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
+            CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
             CheckoutLine("Total", purchase.totalEur, total = true)
             purchase.payment?.let { Muted("Payment: $it") }
             purchase.problem?.let { Muted(it) }
@@ -454,7 +457,7 @@ private fun VintedCheckout(session: Session, listing: Listing) {
             }
         }
         else -> OutlinedButton(onClick = { session.chat.readCheckout(listing) }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.ShoppingCart, null, Modifier.size(18.dp)); HGap(); Text("Buy on Vinted")
+            Icon(Icons.Outlined.ShoppingCart, null, Modifier.size(18.dp)); HGap(); Text("Buy on $shop")
         }
     }
     here?.error?.let { Muted(it) }

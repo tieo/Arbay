@@ -131,7 +131,23 @@ data class ChatSettings(
     val allInBySearch: Map<String, Double> = emptyMap(),
     /** Delivery to the user's own address rather than to a parcel shop. */
     val toDoor: Boolean = true,
+    /** Where a shop's checkout delivers to a pickup point, the point the user picks up from. */
+    val pickup: PickupPoint? = null,
+    /** The user's own address and phone, for a shop's invoice. */
+    val buyer: BuyerAddress? = null,
 )
+
+/**
+ * A pickup point a shop delivers to: [near] is what the shop's map of points is searched for,
+ * [address] the point's address as shops list it, [kind] what the shop calls it ("Packstation"),
+ * and [postnummer] the DHL customer number a Packstation delivers to.
+ */
+@Serializable
+data class PickupPoint(val near: String, val address: String, val kind: String, val postnummer: String? = null)
+
+/** The user's own address and phone, as an invoice carries them; [phone] as dialled at home. */
+@Serializable
+data class BuyerAddress(val name: String, val street: String, val zip: String, val city: String, val phone: String)
 
 /**
  * What delivery costs the buyer, given the [shipping] an ad states; null when it ships without
@@ -217,7 +233,35 @@ data class Purchase(
     val paid: Boolean = false,
     val problem: String? = null,
     val picture: String? = null,
+    /** The delivery the checkout chose, in the shop's words ("DHL-Box - Packstation"). */
+    val delivery: String? = null,
+    /** The order's number, as the shop's confirmation states it. */
+    val order: String? = null,
+    /** Whether the shop's order button was pressed: the order may stand, paid or not. */
+    val placed: Boolean = false,
 )
+
+/**
+ * The shop whose own checkout Arbay buys an offer at [url] through, as Neuland names it: Vinted's,
+ * and alza's for its product pages. Null where it buys at none.
+ */
+fun checkoutSite(url: String): String? {
+    val rest = url.removePrefix("https://").takeIf { it != url } ?: return null
+    val host = rest.substringBefore('/').substringBefore('?')
+    val path = "/" + rest.substringAfter('/', "").substringBefore('?')
+    return when {
+        host == "www.vinted.de" && path.startsWith("/items/") -> "vinted.de"
+        host == "www.alza.de" && Regex("^/[^/]+-d[0-9]+\\.htm$").matches(path) -> "alza.de"
+        else -> null
+    }
+}
+
+/** A shop [checkoutSite] names, as the user knows it. */
+fun checkoutShop(site: String): String = when (site) {
+    "vinted.de" -> "Vinted"
+    "alza.de" -> "alza"
+    else -> site
+}
 
 /** A market's buyer protection, as the buyer pays for it: a fixed part and a share of the price. */
 @Serializable

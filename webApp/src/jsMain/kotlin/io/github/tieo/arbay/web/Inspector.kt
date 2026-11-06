@@ -15,6 +15,8 @@ import io.github.tieo.arbay.ImportRules
 import io.github.tieo.arbay.comparablePrice
 import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.AUCTION_LEAD_CHOICES
+import io.github.tieo.arbay.model.checkoutShop
+import io.github.tieo.arbay.model.checkoutSite
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ModelWish
@@ -600,7 +602,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
                 }
             }
             if (!isArchived) SellerAction(app, route, listing)
-            if (!isArchived && listing.platformId == PlatformId.VINTED_DE) BuyAction(app, listing)
+            if (!isArchived && checkoutSite(listing.url) != null) BuyAction(app, listing)
             if (!isArchived) listing.seller?.let { seller ->
                 if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) QuietButton("Block ${seller.shownName}", Glyph.No) {
                     app.listings.blockDealer(listing)
@@ -609,7 +611,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             }
         }
 
-        if (!isArchived && listing.platformId == PlatformId.VINTED_DE) Checkout(app, listing)
+        if (!isArchived && checkoutSite(listing.url) != null) Checkout(app, listing)
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
@@ -767,17 +769,19 @@ private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
 
 /** An auction runs out whether or not the page is open, so the useful thing is to be told a chosen
  *  stretch before it does, while a bid can still be made. */
-/** Opens a Vinted offer's checkout, read first; shown until one is open for this offer. */
+/** Opens an offer's checkout at its shop, read first; shown until one is open for this offer. */
 @Composable
 private fun BuyAction(app: WebApp, listing: Listing) {
+    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
     val checkout by app.chat.checkout.collectAsState()
     if (checkout?.listingId == listing.id) return
-    QuietButton("Buy on Vinted", Glyph.Cart) { app.chat.readCheckout(listing) }
+    QuietButton("Buy on $shop", Glyph.Cart) { app.chat.readCheckout(listing) }
 }
 
-/** A Vinted offer's checkout as Arbay read it, paid at the total it showed. */
+/** An offer's checkout at its shop as Arbay read it, paid at the total it showed. */
 @Composable
 private fun Checkout(app: WebApp, listing: Listing) {
+    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
     val checkout by app.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id } ?: return
     val purchase = here.purchase
@@ -785,16 +789,16 @@ private fun Checkout(app: WebApp, listing: Listing) {
         when {
             here.working -> Div({ classes("inline-form") }) {
                 Busy()
-                Span { Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading Vinted's checkout") }
+                Span { Text(if (here.paying) "Paying ${purchase?.totalEur?.let(::euroText).orEmpty()}" else "Reading $shop's checkout") }
             }
             purchase?.paid == true -> Div({ classes("inline-form") }) {
-                Icon(Glyph.Check); Span { Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}") }
+                Icon(Glyph.Check); Span { Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}" + (purchase.order?.let { ", order $it" } ?: "")) }
             }
-            purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text("Vinted no longer offers to buy it") }
+            purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text("$shop no longer offers to buy it") }
             purchase != null -> {
                 CheckoutLine("Item", purchase.itemEur)
-                CheckoutLine("Vinted fee", purchase.feeEur)
-                CheckoutLine("Shipping to the door", purchase.shippingEur)
+                purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
+                CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
                 CheckoutLine("Total", purchase.totalEur, total = true)
                 purchase.payment?.let { P({ classes("muted", "small") }) { Text("Payment: $it") } }
                 purchase.problem?.let { P({ classes("muted", "small") }) { Text(it) } }

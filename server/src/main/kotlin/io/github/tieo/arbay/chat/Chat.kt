@@ -277,16 +277,19 @@ object Chat {
     }
 
     /**
-     * Buys a Vinted item at its checkout with the account's saved payment method, delivered to the
-     * door; paid only with [PurchaseRequest.pay] and a total within [PurchaseRequest.allInEur],
-     * otherwise the checkout is only read and left unpaid.
+     * Buys an item at its shop's own checkout ([checkoutSite]: Vinted, alza) with the account's
+     * saved payment, Vinted's delivered to the door, alza's to the user's pickup point
+     * ([ChatSettings.pickup]) for the user's address ([ChatSettings.buyer]); paid only with
+     * [PurchaseRequest.pay] and a total within [PurchaseRequest.allInEur], otherwise the checkout is
+     * only read and left unpaid.
      */
     suspend fun buy(request: PurchaseRequest): Purchase {
-        val host = runCatching { java.net.URI(request.url).host }.getOrNull()
-        if (host != "www.vinted.de") throw ChatFailure("Arbay buys at Vinted's checkout only, not at $host", signedOut = false)
-        var bought = checkout(request)
+        val site = io.github.tieo.arbay.model.checkoutSite(request.url)
+            ?: throw ChatFailure("Arbay buys at Vinted's and alza's checkouts only, not at ${request.url}", signedOut = false)
+        require(request.allInEur.isFinite() && request.allInEur > 0) { "an all-in limit of ${request.allInEur} €" }
+        var bought = checkout(site, request)
         // PayPal signed out: signed in again with the kept password, the buy is made once more.
-        if (bought.paymentSignedOut && reloginPayment()) bought = checkout(request)
+        if (bought.paymentSignedOut && reloginPayment()) bought = checkout(site, request)
         return Purchase(
             buyable = bought.buyable,
             itemEur = bought.item?.eur(),
@@ -297,26 +300,53 @@ object Chat {
             paid = bought.paid,
             problem = bought.problem,
             picture = bought.picture,
+            delivery = bought.delivery,
+            order = bought.order,
+            placed = bought.placed,
         ).also {
-            if (it.paid) log.info("Bought {} for {} €", request.url, it.totalEur)
+            if (it.paid) log.info("Bought {} for {} € (order {})", request.url, it.totalEur, it.order)
         }
     }
 
-    /** Vinted's checkout of [request]'s listing in Neuland's account browser, as it stood. */
-    private suspend fun checkout(request: PurchaseRequest): NeulandPurchase {
+    /** [site]'s checkout of [request]'s item in Neuland's account browser, as it stood. */
+    private suspend fun checkout(site: String, request: PurchaseRequest): NeulandPurchase {
+        val shop = io.github.tieo.arbay.model.checkoutShop(site)
         val body = kotlinx.serialization.json.buildJsonObject {
             put("url", JsonPrimitive(request.url))
+            // A double limit becomes whole cents once, here; Neuland works in cents from then on.
             put("mostCents", JsonPrimitive(kotlin.math.round(request.allInEur * 100).toLong()))
             put("pay", JsonPrimitive(request.pay))
+            if (site == "alza.de") put("order", alzaOrder())
         }
         val answer = try {
-            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/vinted.de", body, limitS = 200)
+            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = 200)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
             // Signed out of Vinted: the user is asked to sign the account browser in, on the phone.
-            if (e.signedOut) askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
-            throw ChatFailure("Vinted's checkout: ${e.message}", signedOut = e.signedOut)
+            if (e.signedOut && site == "vinted.de") askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
+            throw ChatFailure("$shop's checkout: ${e.message}", signedOut = e.signedOut)
         }
         return checkoutJson.decodeFromJsonElement(NeulandPurchase.serializer(), answer)
+    }
+
+    /** The order alza's checkout delivers: to the user's pickup point, for the user's address. */
+    private fun alzaOrder(): kotlinx.serialization.json.JsonObject {
+        val pickup = settings.pickup ?: throw ChatFailure("alza delivers to a pickup point, and none is set (chat settings: pickup)", signedOut = false)
+        val buyer = settings.buyer ?: throw ChatFailure("alza's invoice needs the buyer's address, and none is set (chat settings: buyer)", signedOut = false)
+        return kotlinx.serialization.json.buildJsonObject {
+            put("pickup", kotlinx.serialization.json.buildJsonObject {
+                put("near", JsonPrimitive(pickup.near))
+                put("address", JsonPrimitive(pickup.address))
+                put("kind", JsonPrimitive(pickup.kind))
+                pickup.postnummer?.let { put("postnummer", JsonPrimitive(it)) }
+            })
+            put("buyer", kotlinx.serialization.json.buildJsonObject {
+                put("name", JsonPrimitive(buyer.name))
+                put("street", JsonPrimitive(buyer.street))
+                put("zip", JsonPrimitive(buyer.zip))
+                put("city", JsonPrimitive(buyer.city))
+                put("phone", JsonPrimitive(buyer.phone))
+            })
+        }
     }
 
     private val checkoutJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -338,6 +368,9 @@ object Chat {
         val problem: String? = null,
         @kotlinx.serialization.SerialName("payment_signed_out") val paymentSignedOut: Boolean = false,
         val picture: String? = null,
+        val delivery: String? = null,
+        val order: String? = null,
+        val placed: Boolean = false,
     )
 
     /** When each sign-in was last asked for on the phone, so a run of failed buys sends one push. */
@@ -443,7 +476,10 @@ object Chat {
 
     fun settings(): ChatSettings = settings
 
-    fun updateSettings(new: ChatSettings): ChatSettings = synchronized(settingsFile) {
+    fun updateSettings(asked: ChatSettings): ChatSettings = synchronized(settingsFile) {
+        // An app built before the pickup point and the buyer's address sends settings without them,
+        // which would forget them.
+        val new = asked.copy(pickup = asked.pickup ?: settings.pickup, buyer = asked.buyer ?: settings.buyer)
         settings = new
         Live.changed(LiveKind.CHAT)
         runCatching { settingsFile.writeTextAtomically(json.encodeToString(new)) }

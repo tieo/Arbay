@@ -862,20 +862,21 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "checkout",
-            "Read what buying a Vinted offer outright costs at Vinted's checkout, signed in to the user's Vinted account: item, " +
-                "Vinted's buyer protection fee, shipping to the door, total and the saved payment method. Pays nothing.",
-            props = { string("listing_id", "A Vinted offer id from search", required = true) },
+            "Read what buying an offer outright costs at its shop's own checkout, signed in to the user's account there: Vinted " +
+                "(item, buyer protection fee, shipping to the door) or alza (item, delivery to the user's pickup point); total and " +
+                "the saved payment method. alza's is read to its last step before ordering. Orders and pays nothing.",
+            props = { string("listing_id", "A Vinted or alza offer id from search", required = true) },
         ) { args -> purchase(args.str("listing_id")!!, Double.MAX_VALUE, pay = false) }
 
         tool(
             "buy",
-            "Buy a Vinted offer outright, as the user approved: at Vinted's checkout, delivered to the door, paid with the " +
-                "account's saved payment method. Refused before paying if the total would pass the all-in limit; counts as " +
-                "bought only once Vinted no longer offers to pay.",
+            "Buy an offer outright, as the user approved, at its shop's own checkout: Vinted's delivered to the door, alza's to " +
+                "the user's pickup point, paid with the account's saved payment (PayPal). Refused before ordering if the total " +
+                "would pass the all-in limit; counts as bought only once the shop confirms it.",
             destructive = true,
             props = {
-                string("listing_id", "A Vinted offer id from search", required = true)
-                number("all_in_eur", "Most the user pays, fee and shipping included", required = true)
+                string("listing_id", "A Vinted or alza offer id from search", required = true)
+                number("all_in_eur", "Most the user pays, fee and shipping included, in euros (12.48 for 12,48 €)", required = true)
             },
         ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true) }
 
@@ -1144,7 +1145,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     /** [id]'s checkout read, or bought within [allInEur] with [pay]. */
     private suspend fun purchase(id: String, allInEur: Double, pay: Boolean): String {
         val l = offer(id) ?: return "Unknown offer; search first."
-        if (l.platformId != io.github.tieo.arbay.model.PlatformId.VINTED_DE) return "Arbay buys outright only on Vinted; this offer is on ${l.platformId.displayName}."
+        if (io.github.tieo.arbay.model.checkoutSite(l.url) == null) return "Arbay buys outright only at Vinted's and alza's checkouts; this offer is at ${l.url}."
         val r = http.post("$base/api/chat/buy") {
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay)))
@@ -1212,7 +1213,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 }
 
-/** A Vinted checkout in words: what it adds up to, and whether it was paid or why not. */
 /** When a thing arrives, in a reader's words: the days the market names ("by Fri 6 Nov", "Tue 10 –
  *  Thu 12 Nov"), or its span of days ("in 2–3 days"), else the market's own words. */
 internal fun io.github.tieo.arbay.model.Delivery.describe(): String {
@@ -1249,11 +1249,11 @@ internal fun io.github.tieo.arbay.model.BidReview.describe(): String = when {
 }
 
 internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
-    !buyable -> "Vinted no longer offers to buy it."
+    !buyable -> "The shop no longer offers to buy it."
     else -> listOfNotNull(
-        if (paid) "Paid." else "Not paid.",
+        if (paid) "Paid" + (order?.let { ", order $it." } ?: ".") else if (placed) "ORDER PLACED, not paid: check it in the shop's account." else "Not paid.",
         problem,
-        "item ${itemEur ?: "?"} € + Vinted fee ${feeEur ?: "?"} € + shipping ${shippingEur ?: "?"} € = ${totalEur ?: "?"} €",
+        "item ${itemEur ?: "?"} €" + (feeEur?.let { " + fee $it €" } ?: "") + " + ${delivery ?: "shipping"} ${shippingEur ?: "?"} € = ${totalEur ?: "?"} €",
         payment?.let { "payment: $it" },
     ).joinToString(" · ")
 }

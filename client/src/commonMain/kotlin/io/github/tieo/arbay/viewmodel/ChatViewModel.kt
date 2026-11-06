@@ -244,14 +244,14 @@ class ChatViewModel(
     fun dismissError() { _error.value = null }
 
     private val _checkout = MutableStateFlow<CheckoutState?>(null)
-    /** The Vinted checkout on screen, for one offer at a time. */
+    /** The shop checkout on screen, for one offer at a time. */
     val checkout: StateFlow<CheckoutState?> = _checkout.asStateFlow()
 
-    /** Reads what buying [listing] outright at Vinted's checkout adds up to; pays nothing. */
+    /** Reads what buying [listing] outright at its shop's checkout adds up to; pays nothing. */
     fun readCheckout(listing: Listing) = runCheckout(listing, PurchaseRequest(listing.url, Double.MAX_VALUE))
 
     /**
-     * Pays for [listing] at Vinted's checkout, up to the total the user was shown: a checkout that
+     * Pays for [listing] at its shop's checkout, up to the total the user was shown: a checkout that
      * has come to more since is refused by the server before paying.
      */
     fun pay(listing: Listing) {
@@ -286,7 +286,7 @@ class ChatViewModel(
     }
 }
 
-/** A Vinted checkout for the offer [listingId]: what it read, and whether a read or a payment is [working]. */
+/** A shop checkout for the offer [listingId]: what it read, and whether a read or a payment is [working]. */
 data class CheckoutState(
     val listingId: String,
     val purchase: Purchase? = null,
