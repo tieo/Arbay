@@ -453,6 +453,18 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a number tagged in a title of hashtags is no part number`() {
+        // Kleinanzeigen, live, for the Crafter watch: a box van titled in hashtags was dropped as a
+        // consumable, its "#360" camera read as a spare part's number.
+        val van = listing("Volkswagen Crafter 35 TDI 2.0TDI L4H3 #Koffer #360 Cam #PDC", 1259000)
+        val found = RelevanceFilter.partition(listOf(van), SearchQuery(text = "Volkswagen Crafter", category = MarketGroup.VEHICLES))
+        assertEquals(listOf(van.title), found.kept.map { it.title }, "${found.dropped}")
+        // A spare part's number keeps its "#" where nothing else in the title is tagged.
+        val drum = listing("Hummel Drum #P161 - OEM - BRAND NEW - Lagler Hummel Drum", 68470)
+        assertEquals(emptyList(), RelevanceFilter.filter(listOf(drum), SearchQuery(text = "lägler hummel", category = MarketGroup.GENERAL)))
+    }
+
+    @Test
     fun `a machine named by its maker or by what it is is the machine, and a namesake is not`() {
         // Live answers for "lägler hummel": Vinted and eBay list Goebel's Hummel figurines and Hummel
         // football shirts, while Kleinanzeigen and 2dehands sell the sander without naming Lägler.

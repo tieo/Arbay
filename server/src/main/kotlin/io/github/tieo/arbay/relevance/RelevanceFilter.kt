@@ -1061,13 +1061,20 @@ object RelevanceFilter {
     // language-agnostic tell that catches a sanding belt/sheet whatever tongue names it.
     private val abrasiveGrit = Regex("""\bP(?:40|60|80|100|120|150|180|220|240|320|400)\b""")
 
+    // A title written in hashtags tags its features with "#": "Crafter 35 TDI L4H3 #Koffer #360
+    // Cam #PDC" was dropped as a spare part numbered 360. A dealer's "Drum #P161" has no tag beside it.
+    private val hashtagWord = Regex("""#\p{L}{3,}""")
+
+    private fun MatchResult.isATag(title: String): Boolean =
+        title.take(range.first).trimEnd().endsWith('#') && hashtagWord.containsMatchIn(title)
+
     private fun isConsumableFor(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         // The query is really after the consumable itself ("schleifpapier ...") — keep those.
         if (consumableNoun.containsMatchIn(queryText) || abrasiveGrit.containsMatchIn(queryText)) return false
         // A sanding sheet has no capacity: "Patriot P400 4TB" and "Patriot P320 2 TB" are drives.
         if (abrasiveGrit.containsMatchIn(listing.title) && sizesIn(listing.title).isEmpty()) return true
         // "mit Zubehör", "+ Zubehör": what comes with the machine, said about the machine.
-        val match = consumableNoun.find(listing.title) ?: return false
+        val match = consumableNoun.findAll(listing.title).firstOrNull { !it.isATag(listing.title) } ?: return false
         // Under a vehicle a bare "Schalter" is its gearbox: "MAN TGE 3.140 / L2H2, 6 Gang Schalter".
         if (match.value.equals("schalter", ignoreCase = true) && namesAVehicle(queryText)) return false
         val before = listing.title.take(match.range.first)
