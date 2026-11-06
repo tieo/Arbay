@@ -14,6 +14,7 @@ import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.NotificationSubfilter
 import io.github.tieo.arbay.model.Condition
+import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.learning
 import io.github.tieo.arbay.model.SavedSearchStatus
@@ -232,13 +233,8 @@ class SavedSearchMonitor(
         val now = if (copies == l.photosAlsoIn) l else l.copy(photosAlsoIn = copies)
         if (copies.isNotEmpty()) return now.copy(matchScore = null, fit = emptyList())
         val q = product?.searchQuery ?: return now
-        val things = q.productWishes?.takeUnless { it.isEmpty }
-        val soft = product.fitAlert.softDriveHours
-        // A search with neither a vehicle's nor a thing's wishes has no fit to weigh again.
-        val fit = when {
-            things != null -> FitScore.score(now, things, FitScore.priceEur(now), soft)
-            else -> FitScore.score(now, q.toCarFilters() ?: return now, FitScore.priceEur(now), soft)
-        } ?: return now.copy(matchScore = null, fit = emptyList())
+        val fit = FitScore.forSearch(now, q, product.fitAlert.softDriveHours)
+            ?: return now.copy(matchScore = null, fit = emptyList())
         // A description of the ideal vehicle counts half, as in the search, and is kept as it was read.
         val described = now.fit.firstOrNull { it.wish == FitWish.DESCRIPTION }?.let { it.points / it.of }
             ?: return now.copy(matchScore = fit.score, fit = fit.parts)
@@ -638,7 +634,8 @@ class SavedSearchMonitor(
         val scores = bestCopyEach(
             shown.values.mapNotNull { l ->
                 val fit = if (things != null) FitScore.score(l, things, FitScore.priceEur(l), settings.softDriveHours)
-                    else FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)
+                    else if (q.category == MarketGroup.VEHICLES) FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)
+                    else null
                 fit?.let { l to it }
             },
         ) { it.score }

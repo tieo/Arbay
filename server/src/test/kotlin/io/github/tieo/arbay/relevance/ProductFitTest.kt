@@ -4,6 +4,8 @@ import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.ModelWish
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
@@ -56,6 +58,22 @@ class ProductFitTest {
         assertNull(fit(ad("Lägler Hummel", 900, "Anschluss 400 V")))
         assertNotNull(fit(ad("Lägler Hummel", 900, "230 Volt, kein Drehstrom nötig")))
         assertNull(fit(ad("Lägler Hummel", 900).copy(condition = Condition.PARTS_ONLY)))
+    }
+
+    @Test
+    fun `a search for a thing without wishes is weighed by none, a vehicle search by its criteria`() {
+        val drive = ad("Mushkin Vortex 2TB NVMe SSD", 45)
+        val ssd = SearchQuery(text = "2tb nvme", category = MarketGroup.GENERAL, maxPrice = Money(160_00, Currency.EUR))
+        assertNull(FitScore.forSearch(drive, ssd, 4.0))
+        assertNotNull(FitScore.forSearch(ad("Lägler Hummel", 900), ssd.copy(productWishes = sanders), 4.0))
+        val crafter = SearchQuery(text = "vw crafter", category = MarketGroup.VEHICLES, maxPrice = Money(30_000_00, Currency.EUR))
+        assertNotNull(FitScore.forSearch(ad("VW Crafter", 25_000), crafter, 4.0))
+    }
+
+    @Test
+    fun `an offer its text says is sold broken has no fit, one taken from a broken machine has`() {
+        assertNull(fit(ad("Lägler Hummel", 300, "Läuft nicht mehr an, daher ausdrücklich als defekt an Bastler abzugeben.")))
+        assertNotNull(fit(ad("Lägler Hummel", 900, "Walze aus einer defekten Maschine ausgebaut und eingesetzt, läuft einwandfrei.")))
     }
 
     @Test

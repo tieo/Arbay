@@ -10,6 +10,9 @@ import io.github.tieo.arbay.model.FitPart.Companion.NOT_STATED
 import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SellerType
+import io.github.tieo.arbay.model.MarketGroup
+import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.toCarFilters
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import io.github.tieo.arbay.relevance.ModelGuess
@@ -298,6 +301,7 @@ object FitScore {
     ): Fit? {
         val raw = "${listing.title}\n${listing.description.orEmpty()}"
         if (listing.condition == Condition.PARTS_ONLY) return null
+        if (Condition.soldAsDefective(listing.title, listing.description)) return null
         if (tradeOnly.containsMatchIn(raw)) return null
         if (listing.photosAlsoIn.isNotEmpty()) return null
         val stars = listing.seller?.rating
@@ -376,6 +380,19 @@ object FitScore {
             other.id != listing.id && oPrice <= price && oKw >= kw && oKm <= km && newer >= 0 &&
                 (oPrice < price || oKw > kw || oKm < km || newer > 0)
         }
+    }
+
+    /**
+     * The fit of [listing] to the search [query] as the watch weighs it again: by the thing's wishes
+     * where the search names them, by the vehicle's criteria where it is a vehicle search, and not
+     * at all otherwise. A 2 TB SSD search carrying only a price band was weighed as a vehicle, air
+     * conditioning among its wishes, and two drives sold as defective headed its new offers at 89 %.
+     */
+    fun forSearch(listing: Listing, query: SearchQuery, softDriveHours: Double): Fit? {
+        val price = priceEur(listing)
+        query.productWishes?.takeUnless { it.isEmpty }?.let { return score(listing, it, price, softDriveHours) }
+        if (query.category != MarketGroup.VEHICLES) return null
+        return score(listing, query.toCarFilters() ?: return null, price, softDriveHours)
     }
 
     /** The landed price in euros, as the rest of the app compares prices. */
