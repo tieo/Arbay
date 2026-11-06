@@ -423,11 +423,15 @@ object CarFilterEngine {
 
     /** Whether [pattern] names a part in [title] anywhere but as one more item of an equipment list:
      *  "Crafter Kasten 35 Mittellang, AHK, Dachträger" and "2.0 TDI HD VA Navi, AHK, Frontscheibe"
-     *  are vans listing what they come with, a roof rack and a new windscreen among it. */
+     *  are vans listing what they come with, a roof rack and a new windscreen among it. A title
+     *  listing its extras each after a "+" lists equipment whatever the items are: "e-Crafter
+     *  Kasten MR 35.8 kWh +Wärmepumpe +CCS" was dropped as a pump. */
     private fun namedOutsideEquipment(pattern: Regex, title: String): Boolean =
         pattern.findAll(title).any { match ->
             val before = title.substring(0, match.range.first)
-            before.trimEnd().lastOrNull()?.let { it in ",*/+|." } != true || !equipmentItem.containsMatchIn(before)
+            val wordStart = before.indexOfLast { !it.isLetter() && it != '-' } + 1
+            val inPlusList = title.substring(0, wordStart).trimEnd().endsWith('+') && title.count { it == '+' } >= 2
+            !inPlusList && (before.trimEnd().lastOrNull()?.let { it in ",*/+|." } != true || !equipmentItem.containsMatchIn(before))
         }
 
     /** An OEM part number, which is what a parts seller titles a part with and what a whole

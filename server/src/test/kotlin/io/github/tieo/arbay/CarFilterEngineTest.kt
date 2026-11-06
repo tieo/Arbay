@@ -417,10 +417,12 @@ class CarFilterEngineTest {
             "Volkswagen Crafter 30 2.0 TDI HD VA Navi, AHK, Frontscheibe",
             "MAN TGE 3.140 / L2H2, 6 Gang Schalter – Bj. 2018 Crafter",
             "Volkswagen Crafter Kasten 2.0 TDI 35 L2H1 Autom. DACHTRÄGER",
+            // Kleinanzeigen, 2026-11-06: an electric Crafter's extras, each after a "+".
+            "Volkswagen e-Crafter Kasten MR 35.8 kWh +Wärmepumpe +CCS",
         ).forEach { title ->
             assertFalse(CarFilterEngine.namesAVehiclePart(carListing("ka", PlatformId.KLEINANZEIGEN, title, vehicle = VehicleInfo())), title)
         }
-        listOf("Dachträger VW Crafter", "VW Crafter Frontscheibe neu", "Fensterheberschalter VW Crafter", "VW Crafter 2.0 TDI Bj. 2018 Dachträger").forEach { title ->
+        listOf("Dachträger VW Crafter", "VW Crafter Frontscheibe neu", "Fensterheberschalter VW Crafter", "VW Crafter 2.0 TDI Bj. 2018 Dachträger", "Wärmepumpe VW e-Crafter + Kabel").forEach { title ->
             assertTrue(CarFilterEngine.namesAVehiclePart(carListing("kp", PlatformId.KLEINANZEIGEN, title, vehicle = VehicleInfo())), title)
         }
     }
