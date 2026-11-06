@@ -42,9 +42,11 @@ object SellersWords {
     // MwSt.", "Preis zzgl. 19% MwSt". A net figure of its own ("Ihr Nettopreis 20.672 €" under a
     // gross asking price of 23,900 €) is no such statement, and an export price ("Export Preis
     // netto: 15.950,- E") is a net price for another buyer.
-    // A Dutch dealer's "prijzen zijn ex. BTW" says the same of every price in the ad.
+    // A Dutch dealer's "prijzen zijn ex. BTW" says the same of every price in the ad, and an
+    // Austrian one's "Alle Preise sind NETTO und FIXPREISE!" too.
     private val priceCalledNet = Regex(
-        """(?<!export\W{0,3})\b(?:preis|netto)\W{0,3}(?:netto\W{0,3})?(?:zzgl\.?|zuzüglich)\s*(?:\d+\s*%\s*)?mwst|(?<!export\W{0,3})\b$EX_VAT""",
+        """(?<!export\W{0,3})\b(?:preis|netto)\W{0,3}(?:netto\W{0,3})?(?:zzgl\.?|zuzüglich)\s*(?:\d+\s*%\s*)?mwst|(?<!export\W{0,3})\b$EX_VAT|""" +
+            """\b(?:alle\s+)?preise?\s+(?:sind|ist|verstehen\s+sich)\s+(?:alle\s+)?netto\b""",
         RegexOption.IGNORE_CASE,
     )
     // A net amount written out: "netto: 15.950,-", "Nettopreis 20.672 €", "15.950 € netto",
@@ -61,6 +63,19 @@ object SellersWords {
     private val statedManual = Regex("""\bgetriebe\W{0,6}(?:\d-gang-)?schaltgetriebe\b|\b\d-gang-schaltgetriebe\b""", RegexOption.IGNORE_CASE)
     private val statedAutomatic = Regex("""\bgetriebe\W{0,6}(?:\d-gang-)?automatik|\b\d-gang-automatik|\bautomatikgetriebe\b|\bdsg\b""", RegexOption.IGNORE_CASE)
 
+    // Damage the text states outright: "Das Fahrzeug hat einen leichtenSeitenschaden!", "Unfallwagen",
+    // "Fahrzeug mit Beschädigungen siehe Bilder". Denied or repaired it is none: "kein Unfallschaden",
+    // "Unfallschaden: Nein", "Unfallschaden: Unfallfrei", "Reparierter Unfallschaden", "Hagelschaden
+    // fachgerecht behoben".
+    private val statedDamage = Regex(
+        """(?<!kein\s)(?<!keine\s)(?<!keinen\s)(?<!ohne\s)(?<!nicht\s)(?<!repariert\w{0,3}\s)(?<!behoben\w{0,3}\s)(?:""" +
+            // Run into the word before it as typed: "einen leichtenSeitenschaden".
+            """(?:unfall|seiten|front|heck|hagel|blech|karosserie)schaden|\bunfall(?:fahrzeug|wagen|auto)|""" +
+            """\bfahrzeug\s+mit\s+(?:besch(?:ä|ae)digungen|sch(?:ä|ae)den))\b""" +
+            """(?!\W{0,3}(?:nein|keine?n?|(?:unfall)?frei|behoben|repariert|instand\w*|beseitigt|fachgerecht|wurde))""",
+        RegexOption.IGNORE_CASE,
+    )
+
     private fun number(s: String) = s.replace(Regex("""[.\s]"""), "").toIntOrNull()
 
     /** [apply] over the ad's whole text where its page was read before, since a card's snippet
@@ -73,7 +88,16 @@ object SellersWords {
 
     fun apply(listing: Listing): Listing {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
-        return listing.withStatedPrice(text).withStatedMileage(text).withStatedGearbox(text).withGrossPrice(text)
+        return listing.withStatedPrice(text).withStatedMileage(text).withStatedGearbox(text).withStatedDamage(text).withGrossPrice(text)
+    }
+
+    /** Damage the text states where the form says the vehicle is whole: an Amstetten Crafter at
+     *  15,000 € was "used" on AutoScout24, and its text said "Das Fahrzeug hat einen leichten
+     *  Seitenschaden! Preis ohne Schaden: 21.000 €". */
+    private fun Listing.withStatedDamage(text: String): Listing {
+        val v = vehicle ?: return this
+        if (v.condition == io.github.tieo.arbay.model.VehicleCondition.DAMAGED || !statedDamage.containsMatchIn(text)) return this
+        return copy(vehicle = v.copy(condition = io.github.tieo.arbay.model.VehicleCondition.DAMAGED, verified = v.verified - VehicleField.CONDITION))
     }
 
     // An amount in euros as the text writes it: "56.999€ VB", "52.000 €", "24900 Euro".

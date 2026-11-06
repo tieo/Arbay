@@ -49,6 +49,30 @@ Laufleistung: 297000"""
     }
 
     @Test
+    fun `every price called net in the ad makes the asking price net`() {
+        // AutoScout24 Amstetten, live 2026-11-06: "Preis ohne Schaden: 21.000 € NETTO ... Alle Preise sind NETTO".
+        val read = SellersWords.apply(van("Preis ohne Schaden: 21.000 € NETTO\n\nWICHTIG:\nAlle Preise sind NETTO und FIXPREISE!", euros = 15_000, km = 130_000))
+        assertEquals(15_000_00, read.netPrice?.amount)
+        assertEquals(17_850_00, read.price.amount)
+    }
+
+    @Test
+    fun `damage the text states makes the vehicle damaged, denied or repaired it does not`() {
+        val damaged = io.github.tieo.arbay.model.VehicleCondition.DAMAGED
+        fun condition(text: String) = SellersWords.apply(van(text, km = 130_000).let { it.copy(vehicle = it.vehicle!!.copy(condition = io.github.tieo.arbay.model.VehicleCondition.USED)) }).vehicle?.condition
+        // Live: AutoScout24 Amstetten, Kleinanzeigen Ahlen and a Kühlkasten Crafter.
+        assertEquals(damaged, condition("Das Fahrzeug hat einen leichtenSeitenschaden!\n\nAuf Wunsch kann das Fahrzeug auch ohne Schaden erworben werden."))
+        assertEquals(damaged, condition("Fahrzeug mit Beschädigungen siehe Bilder - Festpreis - Verkauf nur an Gewerbekunden"))
+        assertEquals(damaged, condition("Volkswagen Crafter 2022 Kühlkasten Unfallschaden 53.000km"))
+        assertEquals(damaged, condition("Hoch + Lang ! Klimaanlage ! UNFALLFAHRZEUG ! Rückfahrkamera"))
+        // Kleinanzeigen form lines and a repaired one, live.
+        listOf("Antriebsart: Frontantrieb\nUnfallschaden: Unfallfrei\nZul. Gesamtgewicht: 3500", "Gebrauchtfahrzeug\nReparierter Unfallschaden\nHubraum: 1968 cm³",
+            "Kein Unfallwagen, scheckheftgepflegt", "Unfallschaden: Nein", "Hagelschaden fachgerecht behoben").forEach { text ->
+            assertEquals(io.github.tieo.arbay.model.VehicleCondition.USED, condition(text), text)
+        }
+    }
+
+    @Test
     fun `a thing priced net gets the buyer's VAT once, however often its text is read`() {
         // Kleinanzeigen Nordenstadt, live 2026-11-03: a rental firm's used floor sander.
         val sander = van("2 Stk vorrätig !!! Kann auch einzeln erworben werden.\n\nPreis: 650,00€ Netto zzgl. MwSt !!!\n(Verhandlungsbasis)", euros = 650, km = null)
