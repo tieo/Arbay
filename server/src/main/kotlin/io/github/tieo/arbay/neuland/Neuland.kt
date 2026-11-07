@@ -13,6 +13,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpMethod
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -78,6 +80,31 @@ object Neuland {
                 this.method = method
                 if (body != null) { contentType(ContentType.Application.Json); setBody(body) }
                 timeout { requestTimeoutMillis = 30_000 }
+            }
+            response.status.value to response.bodyAsText()
+        }.onFailure { log.warn("Neuland {}: {}", path, it.message) }.getOrNull()
+    }
+
+    /** Bytes Neuland answers at [path] (a tab's picture); a [Refusal] where it answers an error. */
+    suspend fun bytes(path: String, limitS: Long = 60): ByteArray {
+        val base = base ?: throw Refusal(0, "Neuland is not set up (NEULAND_URL)", JsonObject(emptyMap()))
+        val response = runCatching { client.get("$base/$path") { timeout { requestTimeoutMillis = limitS * 1000 } } }
+            .getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message}", JsonObject(emptyMap())) }
+        if (response.status.isSuccess()) return response.readRawBytes()
+        val text = response.bodyAsText()
+        val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: JsonObject(emptyMap())
+        throw Refusal(response.status.value, o["error"]?.jsonPrimitive?.contentOrNull ?: response.status.toString(), o)
+    }
+
+    /** Bytes posted to Neuland at [path] as they came (a file for a form), its answer handed back as it went. */
+    suspend fun passOnBytes(path: String, bytes: ByteArray): Pair<Int, String>? {
+        val base = base ?: return null
+        return runCatching {
+            val response = client.request("$base/$path") {
+                this.method = HttpMethod.Post
+                contentType(ContentType.Application.OctetStream)
+                setBody(bytes)
+                timeout { requestTimeoutMillis = 120_000 }
             }
             response.status.value to response.bodyAsText()
         }.onFailure { log.warn("Neuland {}: {}", path, it.message) }.getOrNull()

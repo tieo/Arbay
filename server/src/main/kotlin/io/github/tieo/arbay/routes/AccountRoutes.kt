@@ -4,6 +4,7 @@ import io.github.tieo.arbay.neuland.Neuland
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingCall
@@ -55,4 +56,20 @@ private suspend fun RoutingCall.passOn(method: HttpMethod, path: String, body: S
     val (status, answer) = Neuland.passOn(method, path, body)
         ?: return respondText("""{"error":"Neuland is not reachable"}""", ContentType.Application.Json, HttpStatusCode.BadGateway)
     respondText(answer, ContentType.Application.Json, HttpStatusCode.fromValue(status))
+}
+
+/**
+ * A file for a form being filled in through Neuland ([io.github.tieo.arbay.mcp.BrowserMcp]): the
+ * request's body kept for the form session's file fields under `name`, until the session ends.
+ */
+fun Route.formFileRoutes() {
+    post("/api/forms/{session}/files") {
+        val session = call.parameters["session"].orEmpty()
+        val name = call.request.queryParameters["name"].orEmpty()
+        if (session.isEmpty() || !session.all { it.isLetterOrDigit() }) return@post call.respondText("no such form session", status = HttpStatusCode.NotFound)
+        val bytes = call.receive<ByteArray>()
+        val (status, text) = Neuland.passOnBytes("forms/$session/files?name=${java.net.URLEncoder.encode(name, Charsets.UTF_8)}", bytes)
+            ?: return@post call.respondText("Neuland did not answer", status = HttpStatusCode.BadGateway)
+        call.respondText(text, ContentType.Application.Json, HttpStatusCode.fromValue(status))
+    }
 }

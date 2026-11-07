@@ -41,6 +41,9 @@ fun Route.mcpRoutes(selfUrl: String, http: HttpClient = loopbackClient()) {
     // A search of the web on its own, so a session researching something sees no shopping tools.
     val web = io.github.tieo.arbay.mcp.WebSearchMcp(http, selfUrl)
     mcpEndpoint("/web-mcp") { web.server() }
+    // Forms on any site filled in through Neuland's browsers, on their own as the web search is.
+    val browser = io.github.tieo.arbay.mcp.BrowserMcp()
+    mcpEndpoint("/browser-mcp") { browser.server() }
 }
 
 /** One MCP server at [path], a server of [server]'s tools answering each request. */
