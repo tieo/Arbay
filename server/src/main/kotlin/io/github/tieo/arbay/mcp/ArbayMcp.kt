@@ -395,7 +395,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "offer_details", "The seller's full description and details of one offer from a search.",
             props = { string("listing_id", "An offer id from search", required = true) },
         ) { args ->
-            val l = args.str("listing_id")?.let { offer(it) } ?: return@tool "Unknown offer; search first."
+            val kept = args.str("listing_id")?.let { offer(it) } ?: return@tool "Unknown offer; search first."
+            // Whether the ad is up and what it asks are read now, where the market says them: the
+            // kept listing may be from a search days old, and a Kleinanzeigen drive cut from 175 €
+            // to 155 € still read as 175 € here.
+            val (state, now) = adNow(kept)
+            val l = now?.price?.takeIf { it.currency == kept.price.currency }?.let { kept.copy(price = it) } ?: kept
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
@@ -404,7 +409,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // that has nothing more to say: with the server offline every ad read that way.
             if (!detail.status.isSuccess()) return@tool head + "\nArbay could not read the ad page: " + detail.bodyAsText().ifBlank { detail.status.toString() }
             // A page that gives nothing may be an ad taken down, so whether it is up is still read.
-            if (detail.status.value == 204) return@tool head + "\n" + adNowLine(l) + "The market gave no more than this."
+            if (detail.status.value == 204) return@tool head + "\n" + state + "The market gave no more than this."
             // A detail carries a vehicle block for every listing; for anything but a vehicle it is
             // all empty and only buries the description, so it is left out.
             val body = runCatching { json.parseToJsonElement(detail.bodyAsText()) as JsonObject }.getOrNull()
@@ -417,9 +422,6 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val pageHead = (if (pageShipping != null) l.copy(shipping = pageShipping) else l).line() + l.fitLine()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
-            // The details are the page as Arbay last read it, kept for weeks; whether the ad is up
-            // is read now, where the market says it, so a sold van does not read as on offer.
-            val state = adNowLine(l)
             // The seller's account age and badges decide whether an offer can be trusted, so they
             // are said in words rather than left inside the page's details.
             val seller = (body["seller"] as? JsonObject)?.let {
@@ -1020,15 +1022,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         else json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText())
     }.getOrNull()
 
-    /** Whether the ad is up, for offer_details: read now, not checkable on this market, or a read that failed and why. */
-    private suspend fun adNowLine(l: Listing): String = runCatching {
+    /** Whether the ad is up, for offer_details, in words (read now, not checkable on this market, or a
+     *  read that failed and why), with what the page said when it was read. */
+    private suspend fun adNow(l: Listing): Pair<String, io.github.tieo.arbay.model.AdNow?> = runCatching {
         val r = http.get("$base/api/crawler/listing-state") { parameter("url", l.url); parameter("platform", l.platformId.name) }
         when {
-            r.status.value == 204 -> "Ad now: not checked on this market. "
-            !r.status.isSuccess() -> "Ad now: could not be read (${r.bodyAsText().ifBlank { r.status.toString() }}). "
-            else -> "Ad now: ${json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText()).state} (read just now). "
+            r.status.value == 204 -> "Ad now: not checked on this market. " to null
+            !r.status.isSuccess() -> "Ad now: could not be read (${r.bodyAsText().ifBlank { r.status.toString() }}). " to null
+            else -> json.decodeFromString(io.github.tieo.arbay.model.AdNow.serializer(), r.bodyAsText()).let { "Ad now: ${it.state} (read just now). " to it }
         }
-    }.getOrElse { "Ad now: could not be read (${it.message}). " }
+    }.getOrElse { "Ad now: could not be read (${it.message}). " to null }
 
     private suspend fun pageShipping(l: Listing): io.github.tieo.arbay.model.Shipping? = runCatching {
         val r = http.get("$base/api/crawler/listing-detail") { parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id) }
