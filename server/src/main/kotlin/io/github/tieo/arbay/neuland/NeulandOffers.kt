@@ -219,6 +219,8 @@ object NeulandOffers {
         /** What the seller says of the condition, apart from the description. */
         val conditionNote: String? = null,
         val coupon: io.github.tieo.arbay.model.Coupon? = null,
+        /** When the auction ends, to the second, where the page runs a timer for it. */
+        val endsAt: kotlin.time.Instant? = null,
     )
 
     /** What the page of the offer at [url] tells beyond its card, read by Neuland. */
@@ -261,6 +263,7 @@ object NeulandOffers {
             moreInStock = read.moreInStock,
             conditionNote = read.conditionNote,
             coupon = read.coupon?.let { c -> c.price.money()?.let { io.github.tieo.arbay.model.Coupon(it, c.code, c.terms) } },
+            endsAt = read.ends?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
         )
     }
 
@@ -382,6 +385,7 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("more_in_stock") val moreInStock: Boolean = false,
         @kotlinx.serialization.SerialName("condition_note") val conditionNote: String? = null,
         val coupon: NeulandCoupon? = null,
+        val ends: String? = null,
     )
     @Serializable private data class NeulandCoupon(val price: NeulandMoney, val code: String? = null, val terms: String? = null)
     @Serializable private data class NeulandAuction(

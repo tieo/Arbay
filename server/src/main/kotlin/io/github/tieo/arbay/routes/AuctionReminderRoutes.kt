@@ -30,7 +30,11 @@ fun Route.auctionBidRoutes() {
     route("/api/auctions/bids") {
         get { call.respond(AuctionBids.all()) }
         post {
-            val request = call.receive<AuctionBidRequest>()
+            val asked = call.receive<AuctionBidRequest>()
+            // A search card's time left drops the minutes ("Noch 1 T 4 Std"); the item page's timer
+            // names the end to the second, so the bid goes out in the auction's real last seconds.
+            val exact = runCatching { io.github.tieo.arbay.neuland.NeulandOffers.detail(asked.url, "eBay").endsAt }.getOrNull()
+            val request = exact?.let { asked.copy(endsAt = it) } ?: asked
             val bid = runCatching { AuctionBids.ask(request) }.getOrElse { throw BadRequestException(it.message ?: "no bid") }
             call.respond(bid)
         }
