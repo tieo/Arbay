@@ -399,7 +399,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             // Whether the ad is up and what it asks are read now, where the market says them: the
             // kept listing may be from a search days old, and a Kleinanzeigen drive cut from 175 €
             // to 155 € still read as 175 € here.
-            val (state, now) = adNow(kept)
+            val (state, now) = adNowSaid(kept)
             val l = now?.price?.takeIf { it.currency == kept.price.currency }?.let { kept.copy(price = it) } ?: kept
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
@@ -1024,7 +1024,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     /** Whether the ad is up, for offer_details, in words (read now, not checkable on this market, or a
      *  read that failed and why), with what the page said when it was read. */
-    private suspend fun adNow(l: Listing): Pair<String, io.github.tieo.arbay.model.AdNow?> = runCatching {
+    private suspend fun adNowSaid(l: Listing): Pair<String, io.github.tieo.arbay.model.AdNow?> = runCatching {
         val r = http.get("$base/api/crawler/listing-state") { parameter("url", l.url); parameter("platform", l.platformId.name) }
         when {
             r.status.value == 204 -> "Ad now: not checked on this market. " to null
