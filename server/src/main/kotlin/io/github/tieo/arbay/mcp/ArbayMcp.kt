@@ -904,7 +904,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             },
         ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = true) }
 
-        tool("auction_bids", "The bids set up on auctions: waiting for the end, placed, ended, skipped or not placed, and why.") {
+        tool("auction_bids", "The bids set up on auctions: waiting for the end, placed, ended and not yet settled, lost, won, skipped or not placed, and why. An ended bid blocks every later one until eBay shows it lost or won.") {
             getJson<List<io.github.tieo.arbay.model.AuctionBid>>("/api/auctions/bids").joinToString("\n") { it.describe() }.ifEmpty { "No bids." }
         }
 

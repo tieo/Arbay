@@ -25,8 +25,10 @@ data class AuctionBid(
     val placedAt: Instant? = null,
     /** What eBay said once the bid was confirmed, in its words. */
     val outcome: String? = null,
-    /** Why it was not placed. */
+    /** Why it was not placed, or why its auction's outcome is not settled. */
     val problem: String? = null,
+    /** When the outcome of its ended auction was last asked of eBay. */
+    val checkedAt: Instant? = null,
 )
 
 enum class AuctionBidState {
@@ -40,8 +42,13 @@ enum class AuctionBidState {
     NOT_PLACED,
     /** Its turn came while another bid stood, or after the auction had ended. */
     SKIPPED,
-    /** The auction it was placed on has ended. */
+    /** The auction it was placed on has ended and its outcome is not settled yet; it blocks every
+     *  later bid, as it may have been won. */
     ENDED,
+    /** Its auction ended without it winning, as eBay's lists show: the next bid may go out. */
+    LOST,
+    /** Its auction was won: it is among the account's purchases on eBay, and no later bid goes out. */
+    WON,
     CANCELLED,
 }
 

@@ -116,6 +116,50 @@ object AuctionBids {
         return neuland(url, maxEur, allInEur, place = false, at = null)
     }
 
+    /** How long after an auction's end its outcome is first asked, and how long between asks. */
+    val SETTLE_AFTER: Duration = 2.minutes
+    val SETTLE_EVERY: Duration = 10.minutes
+
+    /**
+     * Settles one ended auction's bid through Neuland, which frees bidding only once eBay shows the
+     * auction ended, the account bidding on nothing and the item not among its purchases: a bid
+     * eBay lists among the purchases was won and keeps every later bid from going out; any other
+     * answer leaves it ended, asked again later. Not while a bid is about to open, as the look holds
+     * the account browser.
+     */
+    internal suspend fun settle(now: Instant = Clock.System.now()) {
+        val ended = synchronized(bids) {
+            if (bids.any { it.state == AuctionBidState.PLACING || (it.state == AuctionBidState.WAITING && it.endsAt - OPEN_BEFORE - 10.minutes <= now) }) return
+            bids.firstOrNull { it.state == AuctionBidState.ENDED && it.endsAt + SETTLE_AFTER <= now && (it.checkedAt?.let { at -> at + SETTLE_EVERY <= now } ?: true) }
+        } ?: return
+        val item = itemOf(ended.url) ?: return
+        val (state, problem) = try {
+            Neuland.request(io.ktor.http.HttpMethod.Post, "bids/ebay.de/$item/lost", limitS = 400)
+            outcome(null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Neuland.Refusal) {
+            outcome(e)
+        }
+        synchronized(bids) {
+            val i = bids.indexOfFirst { it.listingId == ended.listingId && it.state == AuctionBidState.ENDED }
+            if (i >= 0) {
+                bids[i] = bids[i].copy(state = state, problem = problem, checkedAt = now)
+                persist()
+            }
+        }
+        log.info("Bid on {} settled: {}{}", ended.url, state, problem?.let { " ($it)" } ?: "")
+    }
+
+    /** What Neuland's answer to settling a bid as lost makes of it: settled is lost, a refusal naming
+     *  the item among the purchases is won, anything else (still running, the lists unread, no
+     *  answer) leaves it ended with the reason. */
+    internal fun outcome(refusal: Neuland.Refusal?): Pair<AuctionBidState, String?> = when {
+        refusal == null -> AuctionBidState.LOST to null
+        refusal.status == 409 && refusal.message.orEmpty().contains("it was won") -> AuctionBidState.WON to null
+        else -> AuctionBidState.ENDED to "not settled: ${refusal.message}"
+    }
+
     /** Places the bids whose time has come; called every few seconds. */
     suspend fun tick(now: Instant = Clock.System.now()) {
         val due = synchronized(bids) {
@@ -132,7 +176,7 @@ object AuctionBids {
                 return
             }
             // An ended auction may have been won: its bid blocks the next until it is settled.
-            val standing = bids.firstOrNull { it.state == AuctionBidState.PLACING || it.state == AuctionBidState.PLACED || it.state == AuctionBidState.ENDED }
+            val standing = bids.firstOrNull { it.state == AuctionBidState.PLACING || it.state == AuctionBidState.PLACED || it.state == AuctionBidState.ENDED || it.state == AuctionBidState.WON }
             val at = bids.indexOf(next)
             if (standing != null) {
                 bids[at] = next.copy(state = AuctionBidState.SKIPPED, problem = "the bid on ${standing.url} stood when its turn came")
@@ -177,6 +221,7 @@ object AuctionBids {
         }
         while (true) {
             try {
+                settle()
                 tick()
             } catch (e: CancellationException) {
                 throw e

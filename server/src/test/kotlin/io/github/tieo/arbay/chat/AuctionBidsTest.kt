@@ -70,6 +70,22 @@ class AuctionBidsTest {
         AuctionBids.ask(request(third, now + 20.minutes), now + 12.minutes)
         AuctionBids.tick(now + 18.minutes + 30.seconds)
         assertEquals(AuctionBidState.SKIPPED, AuctionBids.all().single { it.listingId == "EBAY_DE:$third" }.state)
+        // Its outcome asked of a Neuland that does not answer: still ended, blocking, with the reason.
+        AuctionBids.settle(now + 30.minutes)
+        val ended = AuctionBids.all().single { it.listingId == "EBAY_DE:$first" }
+        assertEquals(AuctionBidState.ENDED, ended.state)
+        assert(ended.problem.orEmpty().startsWith("not settled: Neuland")) { ended.problem.orEmpty() }
+    }
+
+    @Test
+    fun `an ended auction is lost only where Neuland settled it, won where eBay lists it bought`() {
+        assertEquals(AuctionBidState.LOST to null, AuctionBids.outcome(null))
+        val won = io.github.tieo.arbay.neuland.Neuland.Refusal(409, "not settled: ebay.de lists 123456789 among the purchases: it was won", kotlinx.serialization.json.JsonObject(emptyMap()))
+        assertEquals(AuctionBidState.WON, AuctionBids.outcome(won).first)
+        val running = io.github.tieo.arbay.neuland.Neuland.Refusal(409, "not settled: the auction 123456789 is still running", kotlinx.serialization.json.JsonObject(emptyMap()))
+        assertEquals(AuctionBidState.ENDED, AuctionBids.outcome(running).first)
+        val unread = io.github.tieo.arbay.neuland.Neuland.Refusal(404, "no bid on 123456789 at ebay.de is kept", kotlinx.serialization.json.JsonObject(emptyMap()))
+        assertEquals(AuctionBidState.ENDED, AuctionBids.outcome(unread).first, "a bid Neuland keeps no record of is settled by a person")
     }
 
     @Test
