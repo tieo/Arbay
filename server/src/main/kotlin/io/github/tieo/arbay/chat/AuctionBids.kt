@@ -124,27 +124,40 @@ object AuctionBids {
      * Settles one ended auction's bid through Neuland, which frees bidding only once eBay shows the
      * auction ended, the account bidding on nothing and the item not among its purchases: a bid
      * eBay lists among the purchases was won and keeps every later bid from going out; any other
-     * answer leaves it ended, asked again later. Not while a bid is about to open, as the look holds
-     * the account browser.
+     * answer leaves it ended, asked again later. A bid not placed is settled the same way once its
+     * auction is over, as Neuland keeps one whose check of eBay's list after it did not read. Not
+     * while a bid is about to open, as the look holds the account browser.
      */
     internal suspend fun settle(now: Instant = Clock.System.now()) {
         val ended = synchronized(bids) {
             if (bids.any { it.state == AuctionBidState.PLACING || (it.state == AuctionBidState.WAITING && it.endsAt - OPEN_BEFORE - 10.minutes <= now) }) return
-            bids.firstOrNull { it.state == AuctionBidState.ENDED && it.endsAt + SETTLE_AFTER <= now && (it.checkedAt?.let { at -> at + SETTLE_EVERY <= now } ?: true) }
+            bids.firstOrNull {
+                it.endsAt + SETTLE_AFTER <= now && (it.checkedAt?.let { at -> at + SETTLE_EVERY <= now } ?: true) &&
+                    (it.state == AuctionBidState.ENDED || (it.state == AuctionBidState.NOT_PLACED && !it.cleared))
+            }
         } ?: return
         val item = itemOf(ended.url) ?: return
-        val (state, problem) = try {
+        val refusal = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "bids/ebay.de/$item/lost", limitS = 400)
-            outcome(null)
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Neuland.Refusal) {
-            outcome(e)
+            e
         }
+        val (state, problem) = outcome(refusal)
         synchronized(bids) {
-            val i = bids.indexOfFirst { it.listingId == ended.listingId && it.state == AuctionBidState.ENDED }
+            val i = bids.indexOfFirst { it.listingId == ended.listingId && it.state == ended.state }
             if (i >= 0) {
-                bids[i] = bids[i].copy(state = state, problem = problem, checkedAt = now)
+                bids[i] = when {
+                    ended.state == AuctionBidState.ENDED -> bids[i].copy(state = state, problem = problem, checkedAt = now)
+                    // A bid not placed may still be kept by Neuland, where checking eBay's list after
+                    // it did not read; kept, it holds every later bid back. Settled, or none kept, it
+                    // is done; listed among the purchases, it was won after all.
+                    state == AuctionBidState.WON -> bids[i].copy(state = AuctionBidState.WON, checkedAt = now)
+                    state == AuctionBidState.LOST || refusal?.status == 404 -> bids[i].copy(cleared = true, checkedAt = now)
+                    else -> bids[i].copy(checkedAt = now)
+                }
                 persist()
             }
         }

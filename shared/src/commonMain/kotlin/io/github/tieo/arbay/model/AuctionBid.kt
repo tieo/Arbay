@@ -29,6 +29,8 @@ data class AuctionBid(
     val problem: String? = null,
     /** When the outcome of its ended auction was last asked of eBay. */
     val checkedAt: Instant? = null,
+    /** For a bid not placed: Neuland keeps nothing of it, so it holds no later bid back. */
+    val cleared: Boolean = false,
 )
 
 enum class AuctionBidState {
