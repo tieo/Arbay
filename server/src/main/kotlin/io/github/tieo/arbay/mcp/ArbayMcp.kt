@@ -341,7 +341,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Every offer a saved search found since it was last opened, as the watch found it, with its price, link and when the watch found it, then every offer it already knew that has come down in price since. Opens nothing, so they stay new.",
             props = {
                 string("saved_search_id", "The saved search", required = true)
-                integer("within_hours", "Only the offers the watch found in this many last hours")
+                integer("within_hours", "Only the offers the watch found, and the price cuts it saw, in this many last hours")
             },
         ) { args ->
             val id = args.str("saved_search_id")!!
@@ -358,7 +358,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             (if (found.isEmpty()) "Nothing new in this saved search$window."
             else "${found.size} new$window, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
                 .joinToString("\n") { l -> l.line(foundAt[l.id]) }) +
-                priceDropLines(status)
+                priceDropLines(status, since)
         }
 
         tool(
@@ -1262,11 +1262,15 @@ internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
 }
 
 /** A line per offer of a saved search's status that came down in price since it was last opened,
- *  biggest cut first, from the price before the first cut to the price now. */
-private fun priceDropLines(status: JsonObject?): String =
-    (status?.get("priceDrops") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.joinToString("") { d ->
-        "\n  price drop: ${d.str("listingId")} ${d.str("title")} ${d.num("fromEur")?.toLong()} € → ${d.num("toEur")?.toLong()} € ${d.str("url")}"
-    }
+ *  biggest cut first, from the price before the first cut to the price now, each with how long
+ *  ago its last cut was. Given [since], only the offers cut since then. */
+private fun priceDropLines(status: JsonObject?, since: Instant? = null): String =
+    (status?.get("priceDrops") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { d ->
+        val at = d.str("at")?.let(Instant::parse)
+        if (since != null && (at == null || at < since)) return@mapNotNull null
+        "\n  price drop: ${d.str("listingId")} ${d.str("title")} ${d.num("fromEur")?.toLong()} € → ${d.num("toEur")?.toLong()} €" +
+            (at?.let { " · cut ${hoursAgo(it.toEpochMilliseconds())}" } ?: "") + " ${d.str("url")}"
+    }.joinToString("")
 
 /** How long ago an epoch-millisecond time was, in whole hours: "5 h ago". */
 private fun hoursAgo(millis: Long) = "${(Clock.System.now().toEpochMilliseconds() - millis) / 3_600_000L} h ago"
