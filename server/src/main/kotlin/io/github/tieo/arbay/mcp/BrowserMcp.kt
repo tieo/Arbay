@@ -201,37 +201,41 @@ class BrowserMcp {
         }
         tool(
             "form_card_fill",
-            "Types the user's payment card into the checkout the tab shows, after the user allowed it on their phone (NeuAuth) seeing the amount and where the card goes. You give the amount; Neuland finds the card's fields, also inside a payment provider's iframe, and the card never reaches you, a read or a record. Refused when the page does not show that amount, when it is more than Neuland may pay, or when the card's fields cannot be told apart. Pressing pay stays yours, and the bank asks the user to confirm the charge. Waits up to 4 minutes; still waiting then, call it again with session and ask.",
+            "Types the user's payment card into the checkout the tab shows, with nobody asked: Neuland finds the card's fields itself, a payment provider's frame included, and the card never reaches you, a read, a record or a picture. Refused when the amount is above Neuland's limit, the page does not show it, or the fields cannot be told apart. Nothing is paid until the page's pay button is pressed; a 3-D Secure step then waits for the user's C24 app, and form_read names it as bank_check while the tab waits. Once charged, report it with form_card_charged.",
             destructive = true,
             props = {
                 string("session", "The session", required = true)
-                integer("amount_cents", "What the payment comes to, in cents: 3900 for 39,00 €")
-                string("merchant", "Who is paid, as the user knows them; the page's host when left out")
-                string("asker", "Who asks and for what, in a few words")
+                integer("amount_cents", "What the payment comes to, in cents: 3900 for 39,00 €", required = true)
                 string("tab", "The tab, by its id; the held tab when left out")
-                string("ask", "The id of an ask still waiting, as an earlier call answered it: waits for it again instead of asking anew")
             },
         ) { args ->
             val session = args.text("session")
-            val ask = args.text("ask") ?: run {
-                val body = buildJsonObject {
-                    put("amount_cents", args["amount_cents"]?.jsonPrimitive?.longOrNull ?: throw IllegalArgumentException("a new ask names its amount_cents"))
-                    args.text("merchant")?.let { put("merchant", it) }
-                    args.text("asker")?.let { put("asker", it) }
-                    args.text("tab")?.let { put("tab", it) }
-                }
-                Neuland.request(HttpMethod.Post, "forms/$session/card", body, limitS = 60).jsonObject.text("ask")
-                    ?: throw IllegalStateException("Neuland gave the ask no id")
+            val body = buildJsonObject {
+                put("amount_cents", args["amount_cents"]?.jsonPrimitive?.longOrNull ?: throw IllegalArgumentException("name the amount_cents"))
+                args.text("tab")?.let { put("tab", it) }
             }
-            val answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=240", limitS = 260).jsonObject
-            when (answer.text("state")) {
-                "typed" -> "The card is typed in (${(answer["filled"] as? JsonArray)?.joinToString(", ") { it.jsonPrimitive.content }}). Nothing is paid until the pay button is pressed and the bank's confirmation given."
-                "failed" -> "NOT typed in: ${answer.text("error")}"
-                "refused" -> "The user refused it."
-                "called-off" -> "The user called it off."
-                "timed-out" -> "The user did not answer within 10 minutes."
-                else -> "Still waiting for the user. Call form_card_fill again with session \"$session\" and ask \"$ask\" to wait on."
+            val answer = Neuland.request(HttpMethod.Post, "forms/$session/card", body, limitS = 120).jsonObject
+            "The card is typed in at ${answer.text("card_at")} (${(answer["filled"] as? JsonArray)?.joinToString(", ") { it.jsonPrimitive.content }}). Nothing is paid until the pay button is pressed."
+        }
+        tool(
+            "form_card_charged",
+            "Tells the user on their phone that the card was charged: the one push of a purchase, sent after the page confirmed the payment. Taken once per card typed in the session, and only for the amount it was typed in for.",
+            destructive = true,
+            props = {
+                string("session", "The session", required = true)
+                integer("amount_cents", "What was charged, in cents", required = true)
+                string("merchant", "Who was paid, as the user knows them", required = true)
+                string("what", "What was bought, with the order number where there is one", required = true)
+            },
+        ) { args ->
+            val session = args.text("session")
+            val body = buildJsonObject {
+                put("amount_cents", args["amount_cents"]?.jsonPrimitive?.longOrNull ?: throw IllegalArgumentException("name the amount_cents"))
+                put("merchant", args.text("merchant") ?: throw IllegalArgumentException("name the merchant"))
+                put("what", args.text("what") ?: throw IllegalArgumentException("name what was bought"))
             }
+            Neuland.request(HttpMethod.Post, "forms/$session/card/charged", body, limitS = 30)
+            "The user is told."
         }
         tool(
             "form_close",
