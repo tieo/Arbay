@@ -368,6 +368,19 @@ class VehicleTextParserTest {
     }
 
     @Test
+    fun `the unit before the figure on its own line labels the mileage`() {
+        // Kleinanzeigen, live: a 185,000 km Crafter kept by a search for at most 150,000 km.
+        assertEquals(185_000, VehicleTextParser.parse("VW Crafter Baujahr 2019 VW Crafter\nBj 07.06.19\nKm 185000")?.mileageKm)
+        assertEquals(185_000, VehicleTextParser.parse("VW Crafter\nKM 185.000")?.mileageKm)
+    }
+
+    @Test
+    fun `a figure after the unit inside a sentence is not the mileage`() {
+        assertEquals(30, VehicleTextParser.parse("VW Crafter, Abholung in 30 km 25000 Euro")?.mileageKm)
+        assertEquals(85_000, VehicleTextParser.parse("VW Crafter 85.000 km 2019")?.mileageKm)
+    }
+
+    @Test
     fun `dated services and oil changes name no registration year`() {
         val history = VehicleTextParser.parse(
             "Volkswagen Crafter Kasten 35 mittellang Hochdach FWD Kamera Servicehistorie:\n1. Service am 03.11.2021 bei 19.339 Km\n" +

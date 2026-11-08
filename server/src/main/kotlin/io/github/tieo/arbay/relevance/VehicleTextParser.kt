@@ -34,6 +34,12 @@ object VehicleTextParser {
         """\b(?:(?:km|kilometer|lauf)[\s-]?(?:stand|leistung)\b[ \u00a0]*[:.]?|(?:km|kilometer)[ \u00a0]*:)[ \u00a0]*(?:ca\.?[ \u00a0]*)?([0-9]{1,3}(?:[. \u00a0][0-9]{3})+|[0-9]{4,7})(?![0-9])""",
         RegexOption.IGNORE_CASE,
     )
+    // The unit before the figure with no colon: a seller's own line of facts, "Bj 07.06.19\nKm 185000".
+    // Only as a whole line, since mid-sentence the figure after "km" belongs to what follows the
+    // distance ("185.000 km 2019", "30 km 25000 Euro").
+    private val unitFirstLineMileageRegex = Regex(
+        """(?im)^[ \t\-*•]*(?:km|kilometer)[ \t]+([0-9]{1,3}(?:[. ][0-9]{3})+|[0-9]{4,7})[ \t]*$""",
+    )
     // The digit lookbehind stops a longer figure's tail from posing as power ("1.200 PS" is
     // not a 200 PS engine, "503.661 km" not a 661 PS one).
     private val kwRegex = Regex("""(?<![\d.,])([0-9]{2,3})\s?kw\b""", RegexOption.IGNORE_CASE)
@@ -285,7 +291,8 @@ object VehicleTextParser {
             .filterNot { engineSizeArtifactRegex.matches(it.groupValues[1].trim()) }
             .filterNot { annualKmSuffixRegex.containsMatchIn(text.substring(it.range.last + 1)) }
             .map { it.groupValues[1] }
-        val labelBefore = labeledMileageRegex.findAll(text).map { it.groupValues[1] }
+        val labelBefore = labeledMileageRegex.findAll(text).map { it.groupValues[1] } +
+            unitFirstLineMileageRegex.findAll(text).map { it.groupValues[1] }
         val serviceLog = serviceLogMileageRegex.findAll(text).map { it.groupValues[1] }
         val inThousands = thousandsKmRegex.findAll(text).map { m ->
             (m.groupValues[1].toInt() * 1000 + (m.groupValues[2].toIntOrNull() ?: 0) * 100).toString()
