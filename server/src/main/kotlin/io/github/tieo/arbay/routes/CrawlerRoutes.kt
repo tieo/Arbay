@@ -575,6 +575,9 @@ fun Route.crawlerRoutes(listingRepo: ListingRepo) {
                     platform.name.startsWith("EBAY") &&
                         (it.shipping == null || (io.github.tieo.arbay.markets.DetailCache.ageMs(id) ?: 0) > EBAY_PAGE_FRESH_MS)
                 }
+                // Vinted's seller, photos and condition were read only once its page was read in the
+                // browser; a page read before, without its seller, is read again.
+                ?.takeUnless { platform.name.startsWith("VINTED") && it.seller == null }
                 // So is the page of a market whose gallery is read, where it was read without one a day ago or more.
                 ?.takeUnless { crawler is io.github.tieo.arbay.markets.ReadsGalleries && io.github.tieo.arbay.markets.DetailCache.galleryDue(id) }
                 ?.let { return@get call.respond(it.priced()) }
