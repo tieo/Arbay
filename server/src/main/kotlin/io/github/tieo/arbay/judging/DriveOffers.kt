@@ -52,8 +52,12 @@ object DriveOffers {
 
     private fun isDriveSearch(query: SearchQuery) = looksLikeADriveSearch(query.positiveText) || query.aliases.any(::looksLikeADriveSearch)
 
-    /** Whether the offer is for a drive, not the case, caddy or cable a drive search also finds. */
-    private fun isDrive(l: Listing) = looksLikeADrive(l.title) || DriveText.capacityOfWords(l.title) != null
+    /** Whether the offer is for a drive, not the case, caddy or cable a drive search also finds, or
+     *  the shoe called "14 TB". */
+    internal fun isDrive(l: Listing): Boolean {
+        val model = DriveText.models(l.title).isNotEmpty()
+        return model || (looksLikeADrive(l.title) && !DriveText.namesAnAccessory(l.title))
+    }
 
     private fun want(l: Listing, crawler: Crawler) {
         if (l.condition == Condition.PARTS_ONLY) return
@@ -111,7 +115,9 @@ object DriveOffers {
         val cents = if (unclear) null else centsPerGb(l, unit, capacity)
         val hdd = iface != DriveInterface.NVME && !Regex("""\bssd\b""", RegexOption.IGNORE_CASE).containsMatchIn(l.title)
         val family = model?.let(DriveLife::familyOf) ?: DriveLife.familyOfLine(l.title)
-        val life = if (hdd && health2 != DriveVerdict.FAILING) hours?.let { DriveLife.expected(family, it) } else null
+        // Failure records are of named makers' drives, so a no-name "18 TB" is nothing they can speak for.
+        val known = model != null || DriveText.namesAMaker(l.title)
+        val life = if (hdd && known && health2 != DriveVerdict.FAILING) hours?.let { DriveLife.expected(family, it) } else null
         return DriveFacts(
             capacityGb = capacity, model = model, driveInterface = iface, recording = recording,
             external = DriveText.externalOf(l.title, model), powerOnHours = hours, hoursFrom = from,
@@ -163,11 +169,11 @@ object DriveOffers {
         }
     }
 
-    /** Whether this machine has no room for more: more waiting to run than it has cores, or too little
+    /** Whether this machine has no room for more: more than twice its cores waiting to run (its browsers alone keep it above one per core), or too little
      *  memory left. The queue can wait; a home server deep in swap misses its bids. */
     internal fun machineBusy(): Boolean {
         val load = java.lang.management.ManagementFactory.getOperatingSystemMXBean().systemLoadAverage
-        if (load > Runtime.getRuntime().availableProcessors()) return true
+        if (load > 2 * Runtime.getRuntime().availableProcessors()) return true
         val available = runCatching {
             java.io.File("/proc/meminfo").readLines().first { it.startsWith("MemAvailable:") }.filter(Char::isDigit).toLong() / 1024
         }.getOrNull() ?: return false

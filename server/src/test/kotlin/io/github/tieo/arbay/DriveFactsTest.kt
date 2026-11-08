@@ -205,6 +205,29 @@ class DriveFactsTest {
     }
 
     @Test
+    fun only_a_drive_is_read_as_one() {
+        assertFalse(DriveOffers.isDrive(offer("Nike KD 14 TB Rojo Universitario 2021 Talla 7.5", 80)))
+        assertFalse(DriveOffers.isDrive(offer("Estuche de disco duro externo de 18 TB para SATA HDD USB3.0", 12)))
+        assertTrue(DriveOffers.isDrive(offer("Toshiba MG10ACA20TE 20TB in OWC Mercury Elite Pro Gehäuse", 550)))
+        assertTrue(DriveOffers.isDrive(offer("18TB Festplatte 3,5 Zoll", 300)))
+    }
+
+    @Test
+    fun broken_is_read_in_the_markets_languages_and_a_denial_is_not_broken() {
+        assertEquals(DriveVerdict.FAILING, facts(offer("Seagate Exos X18 ST16000NM000J - 16TB defectuoso SMART", 90)).health)
+        assertEquals(DriveVerdict.FAILING, facts(offer("Toshiba MG08 16TB pour pièces", 90)).health)
+        assertNull(facts(offer("Toshiba MG08 16TB nicht defekt", 90)).health)
+    }
+
+    @Test
+    fun a_choice_of_sizes_is_no_size_and_a_no_name_drive_has_no_records() {
+        assertNull(DriveText.capacityOfWords("16/18TB Desktop HDD Memory Center"))
+        val noName = facts(offer("18TB Desktop HDD Memory Center originalverpackt", 135, 0))
+        assertEquals(0, noName.powerOnHours)
+        assertNull(noName.lifeHours)
+    }
+
+    @Test
     fun what_things_sold_for_is_median_and_quartiles_of_working_single_drives_with_shipping() {
         fun sold(title: String, euros: Long, type: SaleType = SaleType.FIXED_PRICE, condition: Condition = Condition.USED, hidden: Boolean = false, id: Long = euros) =
             offer(title, euros, 500, PlatformId.EBAY_DE, condition, type).copy(id = "EBAY_DE:$id", sold = true, soldToOffer = hidden)

@@ -58,7 +58,7 @@ data class DriveHealthAsk(val listingId: String, val title: String, val photos: 
 // The case is ignored through the option rather than an inline (?i), which the browser's
 // JavaScript regular expressions refuse.
 private val driveWords = Regex(
-    """\b(hdd|ssd|nvme|festplatten?|hard\s?(disk|drive)s?|harddisk|disque\s+dur|disco\s+duro|""" +
+    """\b(hdd|ssd|nvme|festplatten?|hard\s?(disk|drive)s?|harddisk|disque\s+dur|disco\s+duro|disco\s+rigido|harde\s+schijf|""" +
         """exos|ironwolf|ultrastar|skyhawk|barracuda|wd\s?(red|purple|gold|blue|black|green)|caviar|mg(0[4-9]|10)\w*|""" +
         // Titles that name the drive by its line or model number alone: "Western Digital DC HC510
         // 10TB … HUH721010ALE604", "ST8000DM004", "WD80EZAZ".

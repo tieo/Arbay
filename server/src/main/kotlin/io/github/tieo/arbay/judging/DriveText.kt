@@ -44,8 +44,21 @@ object DriveText {
 
     private val SIZE = Regex("""(?<![\d.,])(\d{1,3}(?:[.,]\d{1,2})?)\s?(TB|GB|Terabyte|Gigabyte)(?![/\w])""", RegexOption.IGNORE_CASE)
 
-    /** Gigabytes the words state, or null where they state none or several ("250 GB - 16 TB"). */
+    private val SIZE_CHOICE = Regex("""\b\d{1,3}\s*/\s*\d{1,3}\s?(TB|GB)\b""", RegexOption.IGNORE_CASE)
+
+    private val MAKER = Regex("""\b(seagate|western\s*digital|wd|wdc|toshiba|hgst|hitachi|samsung|crucial|kingston|sandisk|lexar|intel|micron|sk\s?hynix|kioxia|adata|corsair|exos|ironwolf|ultrastar|skyhawk|barracuda)\b""", RegexOption.IGNORE_CASE)
+
+    /** Whether the words name who made the drive. */
+    fun namesAMaker(text: String): Boolean = MAKER.containsMatchIn(text)
+
+    private val ACCESSORY = Regex("""\b(geh[äa]use|enclosure|estuche|carcasa|bo[iî]tier|custodia|docking|dockingstation|adapter|adaptador|caddy|kabel|cable|halterung|einbaurahmen)\b""", RegexOption.IGNORE_CASE)
+
+    /** Whether the title sells something for a drive rather than a drive. */
+    fun namesAnAccessory(title: String): Boolean = ACCESSORY.containsMatchIn(title)
+
+    /** Gigabytes the words state, or null where they state none or several ("250 GB - 16 TB", "16/18TB"). */
     fun capacityOfWords(text: String): Int? {
+        if (SIZE_CHOICE.containsMatchIn(text)) return null
         val found = SIZE.findAll(text).map { m ->
             val n = m.groupValues[1].replace(',', '.').toDouble()
             val unit = m.groupValues[2].lowercase()
@@ -143,7 +156,7 @@ object DriveText {
     fun saysNew(text: String): Boolean = NEW.containsMatchIn(text)
 
     private val BAD = Regex("""\bsmart\W+(vorsicht|caution|schlecht|bad)\b""", RegexOption.IGNORE_CASE)
-    private val BROKEN = Regex("""(?<!nicht\s)(?<!keine\s)(?<!kein\s)(?<!ohne\s)\bdefekt\w*\b""", RegexOption.IGNORE_CASE)
+    private val BROKEN = Regex("""(?<!nicht\s)(?<!keine\s)(?<!kein\s)(?<!ohne\s)(?<!no\s)(?<!non\s)(?<!not\s)\b(defekt\w*|kaputt\w*|defectuos[oa]s?|averiad[oa]s?|difettos[oa]|guast[oa]|d[ée]fectueu\w*|en\s+panne|for\s+parts|para\s+piezas|pour\s+pi[èe]ces|per\s+ricambi)\b""", RegexOption.IGNORE_CASE)
 
     /** The seller's own word that the drive is failing, in the title or anywhere as a SMART status. */
     fun saysFailing(title: String, text: String): String? =

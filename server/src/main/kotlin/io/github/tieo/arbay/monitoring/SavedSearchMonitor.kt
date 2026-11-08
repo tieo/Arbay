@@ -827,7 +827,12 @@ class SavedSearchMonitor(
             saveFrontNoted()
             return
         }
-        val wanted = found.filter { l -> l.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && l.drive?.let(product.driveFront::wants) == true }
+        // Worth a push only where its health is shown: new, or a SMART screenshot read as clean.
+        val wanted = found.filter { l ->
+            l.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && l.drive?.let { d ->
+                product.driveFront.wants(d) && (d.health == io.github.tieo.arbay.model.DriveVerdict.CLEAN || d.hoursFrom == io.github.tieo.arbay.model.DriveHoursFrom.NEW)
+            } == true
+        }
         val front = wanted.driveFront()
         val news = wanted.filter { it.id in front && it.id !in noted && it.drive?.pageRead == true && it.drive?.photosPending == 0 }
             .sortedBy { it.drive?.centsPerGb }
