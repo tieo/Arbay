@@ -98,38 +98,17 @@ object Chat {
                 delay(5_000)
             }
         }
-        scope.launch {
-            while (true) {
-                delay(3_600_000)
-                runCatching { checkPaymentDaily() }.onFailure { log.warn("Payment check failed: {}", it.message) }
-            }
-        }
     }
-
-    private val paymentCheckFile = DataDir.file("payment_check.txt")
 
     /** The payment service Vinted's checkout hands over to, as Neuland signs in to it. */
     private const val PAYMENT_SITE = "paypal.com"
 
-
-    /**
-     * Once a day, whether the payment service Vinted's checkout hands over to still knows Neuland's
-     * account browser, signing in again with the password Neuland keeps where it does not: a buy
-     * that meets a signed-out PayPal loses the offer while the user is asked. The last check's time
-     * is kept on disk, as the server restarts more often than once a day.
-     */
-    private suspend fun checkPaymentDaily() {
-        val last = paymentCheckFile.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() ?: 0
-        if (System.currentTimeMillis() - last < 24 * 3_600_000L) return
-        paymentCheckFile.writeText(System.currentTimeMillis().toString())
-        val signedIn = runCatching { io.github.tieo.arbay.neuland.NeuAuth.standing(PAYMENT_SITE).signedIn }.getOrNull() ?: return
-        if (!signedIn) reloginPayment()
-    }
-
     /**
      * Signs Neuland's account browser in to the payment service again with the password Neuland
      * keeps, the user confirming in the PayPal app; where Neuland keeps none, the user is asked on
-     * the phone. True when it is signed in.
+     * the phone. True when it is signed in. Asked only when a buy meets a signed-out PayPal: its web
+     * session does not last a day, so keeping it signed in ahead of a buy only asked the user for an
+     * approval every day.
      */
     suspend fun reloginPayment(): Boolean {
         if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted")) return true
