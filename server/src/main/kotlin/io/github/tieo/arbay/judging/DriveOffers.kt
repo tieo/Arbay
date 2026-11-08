@@ -164,6 +164,8 @@ object DriveOffers {
                 }
                 if (next == null) { delay(5_000); continue }
                 readOne(next)
+                // Each page takes a tab of Neuland's browsers, which are held to 4 GB beside every search.
+                delay(PAGE_GAP_MS)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -173,11 +175,11 @@ object DriveOffers {
         }
     }
 
-    /** Whether this machine has no room for more: more than twice its cores waiting to run (its browsers alone keep it above one per core), or too little
+    /** Whether this machine has no room for more: more than one and a half times its cores waiting to run (its browsers alone keep it above one per core), or too little
      *  memory left. The queue can wait; a home server deep in swap misses its bids. */
     internal fun machineBusy(): Boolean {
         val load = java.lang.management.ManagementFactory.getOperatingSystemMXBean().systemLoadAverage
-        if (load > 2 * Runtime.getRuntime().availableProcessors()) return true
+        if (load > 1.5 * Runtime.getRuntime().availableProcessors()) return true
         val available = runCatching {
             java.io.File("/proc/meminfo").readLines().first { it.startsWith("MemAvailable:") }.filter(Char::isDigit).toLong() / 1024
         }.getOrNull() ?: return false
@@ -185,6 +187,7 @@ object DriveOffers {
     }
 
     private const val MIN_FREE_MB = 2_000L
+    private const val PAGE_GAP_MS = 20_000L
 
     private suspend fun readOne(w: Wanted) {
         val l = w.listing
