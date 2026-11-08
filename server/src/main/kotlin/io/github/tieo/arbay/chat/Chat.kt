@@ -111,7 +111,7 @@ object Chat {
      * approval every day.
      */
     suspend fun reloginPayment(): Boolean {
-        if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted")) return true
+        if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted", waitS = SILENT_SIGN_IN_S, push = false)) return true
         log.warn("PayPal sign-in for Vinted did not come through")
         askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         return false
@@ -268,7 +268,7 @@ object Chat {
         require(request.allInEur.isFinite() && request.allInEur > 0) { "an all-in limit of ${request.allInEur} €" }
         var bought = checkout(site, request)
         // PayPal signed out: signed in again with the kept password, the buy is made once more.
-        if (bought.paymentSignedOut && reloginPayment()) bought = checkout(site, request)
+        if (request.pay && bought.paymentSignedOut && reloginPayment()) bought = checkout(site, request)
         return Purchase(
             buyable = bought.buyable,
             itemEur = bought.item?.eur(),
@@ -288,7 +288,7 @@ object Chat {
     }
 
     /** [site]'s checkout of [request]'s item in Neuland's account browser, as it stood. */
-    private suspend fun checkout(site: String, request: PurchaseRequest): NeulandPurchase {
+    private suspend fun checkout(site: String, request: PurchaseRequest, signedInAgain: Boolean = false): NeulandPurchase {
         val shop = io.github.tieo.arbay.model.checkoutShop(site)
         val body = kotlinx.serialization.json.buildJsonObject {
             put("url", JsonPrimitive(request.url))
@@ -300,8 +300,13 @@ object Chat {
         val answer = try {
             io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = 200)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
-            // Signed out of Vinted: the user is asked to sign the account browser in, on the phone.
-            if (e.signedOut && site == "vinted.de") askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
+            // Signed out of Vinted, on the way to a real purchase: signed in again with what Neuland
+            // keeps, nothing on the phone unless that fails. Only reading a checkout asks nobody.
+            if (e.signedOut && site == "vinted.de" && request.pay && !signedInAgain) {
+                if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain("vinted.de", "Arbay, to buy at Vinted", waitS = SILENT_SIGN_IN_S, through = "google.com", push = false))
+                    return checkout(site, request, signedInAgain = true)
+                askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
+            }
             throw ChatFailure("$shop's checkout: ${e.message}", signedOut = e.signedOut)
         }
         return checkoutJson.decodeFromJsonElement(NeulandPurchase.serializer(), answer)
@@ -351,6 +356,9 @@ object Chat {
         val order: String? = null,
         val placed: Boolean = false,
     )
+
+    /** How long a sign-in from what Neuland keeps may take before the user is asked on the phone. */
+    private const val SILENT_SIGN_IN_S = 90
 
     /** When each sign-in was last asked for on the phone, so a run of failed buys sends one push. */
     private val signInAsked = java.util.concurrent.ConcurrentHashMap<io.github.tieo.arbay.model.SignInLink, Long>()

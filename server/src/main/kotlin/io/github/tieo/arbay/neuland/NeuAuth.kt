@@ -30,7 +30,7 @@ object NeuAuth {
      * site's "Weiter mit Google") takes that account where Neuland knows none of the site's own yet.
      * False where Neuland knows no account (the app then asks for it) or did not take the request.
      */
-    suspend fun askAgain(site: String, asker: String, withKept: Boolean = false, through: String? = null): Boolean {
+    suspend fun askAgain(site: String, asker: String, withKept: Boolean = false, through: String? = null, push: Boolean = true): Boolean {
         val known = Neuland.passOn(HttpMethod.Get, "accounts", null)?.second ?: return false
         val accounts = runCatching { Json.parseToJsonElement(known) }.getOrNull()
             ?.let { (it as? JsonObject)?.get("accounts") as? JsonObject }
@@ -42,6 +42,7 @@ object NeuAuth {
             put("browser", JsonPrimitive(BROWSER))
             put("asker", JsonPrimitive(asker))
             if (withKept) put("again", JsonPrimitive(true))
+            if (!push) put("push", JsonPrimitive(false))
         }
         val (status, _) = Neuland.passOn(HttpMethod.Post, "sign-ins", body.toString()) ?: return false
         return status in 200..299
@@ -49,10 +50,12 @@ object NeuAuth {
 
     /**
      * Signs the account browser in to [site] again with the password Neuland keeps, waiting up to
-     * [waitS] for the user's confirmation on their phone. True once it is signed in.
+     * [waitS] for the user's confirmation on their phone. True once it is signed in. Without [push]
+     * nothing is sent to the phone: a sign-in the kept password carries through alone leaves the
+     * user undisturbed.
      */
-    suspend fun signInAgain(site: String, asker: String, waitS: Int = 150): Boolean {
-        if (!askAgain(site, asker, withKept = true)) return false
+    suspend fun signInAgain(site: String, asker: String, waitS: Int = 150, through: String? = null, push: Boolean = true): Boolean {
+        if (!askAgain(site, asker, withKept = true, through = through, push = push)) return false
         val until = System.currentTimeMillis() + waitS * 1000L
         while (System.currentTimeMillis() < until) {
             kotlinx.coroutines.delay(5_000)
