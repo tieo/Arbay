@@ -88,10 +88,10 @@ fun AdDraft.problem(): String? = when {
 
 /** The ad in a line: posted or not, and its price. */
 fun AdDraft.saleLine(): String = listOfNotNull(
-    if (postedAdId != null) "Posted" else "Draft",
+    if (takenDownAt != null) "Taken down" else if (postedAdId != null) "Posted" else "Draft",
     if (priceType == AdPriceType.GIVE_AWAY) priceType.label else priceEur?.let { "$it € ${if (priceType == AdPriceType.NEGOTIABLE) "VB" else ""}".trim() },
     if (shipping) null else "pickup only",
-    if (postedAdId != null && repostEveryDays != null) "up again every ${repostEveryDays} days" else null,
+    if (postedAdId != null && takenDownAt == null && repostEveryDays != null) "up again every ${repostEveryDays} days" else null,
 ).joinToString(" · ")
 
 /** How often a posted ad goes up again; null leaves it as posted. */
