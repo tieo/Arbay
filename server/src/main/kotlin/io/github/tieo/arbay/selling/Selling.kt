@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.selling
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.withLock
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.chat.Kleinanzeigen
 import io.github.tieo.arbay.neuland.MarketAccount
@@ -167,6 +169,7 @@ object Selling {
      */
     suspend fun update(changed: AdDraft, send: Boolean = true): Pair<AdDraft, JsonObject?> {
         val old = draft(changed.id) ?: throw SellingFailure("No draft ${changed.id}")
+        if (old.takenDownAt != null) throw SellingFailure("This ad was taken down")
         val adId = old.postedAdId ?: throw SellingFailure("This ad is not posted yet")
         if (changed.photos != old.photos || changed.attributes != old.attributes)
             throw SellingFailure("A posted ad's photos and details stay as posted")
@@ -277,7 +280,39 @@ object Selling {
      * the minute between and never down at all. Only an ad still up: one the user took down or
      * marked reserved is sold or nearly so, and putting it up again would sell it twice.
      */
-    suspend fun repostDue(now: kotlin.time.Instant = Clock.System.now()) {
+    suspend fun repostDue(now: kotlin.time.Instant = Clock.System.now()) = marketTurn.withLock { repostDueNow(now) }
+
+    /** One change to a posted ad at a time, so an ad taken down is not put up again meanwhile. */
+    private val marketTurn = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * Takes the posted ad off Kleinanzeigen for good and keeps the draft as taken down, which nothing
+     * puts up again. The ad's own page is read before and after: an ad already gone needs no delete,
+     * and one whose page still shows it up after the delete is not taken down.
+     */
+    suspend fun takeDown(id: String): AdDraft = marketTurn.withLock {
+        val draft = synchronized(drafts) { drafts.firstOrNull { it.id == id } } ?: throw SellingFailure("No draft $id")
+        draft.takenDownAt?.let { return@withLock draft }
+        val adId = draft.postedAdId ?: throw SellingFailure("This ad is not posted yet")
+        val page = CrawlerRegistry.crawlerFor(PlatformId.KLEINANZEIGEN) as? io.github.tieo.arbay.markets.KnowsAdState
+        suspend fun state() = page?.let { runCatching { it.adState("https://www.kleinanzeigen.de/s-anzeige/$adId") }.getOrNull() }
+        if (state() != io.github.tieo.arbay.model.AdState.DELETED) {
+            val deleted = try {
+                Kleinanzeigen.on { delete(adId) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw SellingFailure("Kleinanzeigen did not take the ad down: ${e.message}")
+            }
+            if (!deleted) throw SellingFailure("Kleinanzeigen did not take the ad down")
+            val after = state()
+            if (after == io.github.tieo.arbay.model.AdState.LIVE) throw SellingFailure("Kleinanzeigen still shows the ad as up")
+        }
+        keep(id) { it.copy(takenDownAt = Clock.System.now(), repostProblem = null) }
+        synchronized(drafts) { drafts.first { it.id == id } }
+    }
+
+    private suspend fun repostDueNow(now: kotlin.time.Instant) {
         val due = synchronized(drafts) { drafts.filter { d -> d.postedAdId != null && (d.nextRepost()?.let { it <= now } ?: false) } }
         for (draft in due) {
             val oldId = draft.postedAdId ?: continue

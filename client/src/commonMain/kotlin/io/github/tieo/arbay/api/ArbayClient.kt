@@ -371,6 +371,9 @@ class ArbayClient(
             setBody(io.github.tieo.arbay.model.RepostEvery(everyDays))
         }.body()
 
+    suspend fun takeDownAd(id: String): io.github.tieo.arbay.model.AdDraft =
+        client.post("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}/take-down").body()
+
     suspend fun postAd(id: String): io.github.tieo.arbay.model.PostAdResult =
         client.post("$baseUrl/api/selling/drafts/${id.encodeURLPathPart()}/post").body()
 

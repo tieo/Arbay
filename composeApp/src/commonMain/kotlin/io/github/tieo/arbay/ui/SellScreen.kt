@@ -125,7 +125,20 @@ fun SellScreen(session: Session, draftId: String) {
                 OutlinedTextField(d.description, { sell.change(d.copy(description = it)) }, Modifier.fillMaxWidth(), label = { Text("Text") }, minLines = 8)
             }
             item { PriceFields(d) { sell.change(it) } }
-            item { Repost(d) { sell.repostWeekly(it) } }
+            if (d.takenDownAt == null) item { Repost(d) { sell.repostWeekly(it) } }
+            item {
+                if (d.takenDownAt != null) Muted("Taken down")
+                else if (posted) {
+                    var sure by remember(d.id) { mutableStateOf(false) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (!sure) androidx.compose.material3.OutlinedButton(onClick = { sure = true }) { Text("Take down") }
+                        else {
+                            androidx.compose.material3.OutlinedButton(onClick = { sure = false; sell.takeDown() }) { Text("Take down for good") }
+                            androidx.compose.material3.TextButton(onClick = { sure = false }) { Text("Keep it up") }
+                        }
+                    }
+                }
+            }
             item { Details(d, posted) { sell.change(it) } }
         }
     }

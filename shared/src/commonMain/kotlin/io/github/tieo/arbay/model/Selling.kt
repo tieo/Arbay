@@ -49,6 +49,8 @@ data class AdDraft(
     val adIdsToTakeDown: List<String> = emptyList(),
     /** Why the last time it was due it was not put up again, worded for the user. */
     val repostProblem: String? = null,
+    /** When the posted ad was taken off the market for good; it is never put up again. */
+    val takenDownAt: Instant? = null,
 )
 
 /** How often an ad is put up again unless the user says otherwise. */
@@ -56,6 +58,7 @@ const val REPOST_EVERY_DAYS = 7
 
 /** When the posted ad is put up again next, where it is. */
 fun AdDraft.nextRepost(): Instant? {
+    if (takenDownAt != null) return null
     val days = repostEveryDays ?: return null
     return postedAt?.plus(days.days)
 }

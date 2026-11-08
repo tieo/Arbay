@@ -164,6 +164,21 @@ class SellViewModel(
         }
     }
 
+    /** Takes the open posted ad off the market for good. */
+    fun takeDown() {
+        val id = _open.value?.id ?: return
+        if (rendersASample) return
+        viewModelScope.launch {
+            _busy.value = "Taking the ad down"
+            attempt {
+                val done = client.takeDownAd(id)
+                _drafts.value = _drafts.value.map { if (it.id == id) done else it }
+                _open.value = done
+            }
+            _busy.value = null
+        }
+    }
+
     /** The user's own [photos], added to the open draft in the order given. */
     fun addPhotos(photos: List<ByteArray>) {
         val id = _open.value?.id ?: return

@@ -1,12 +1,15 @@
 package io.github.tieo.arbay
 
 import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.model.nextRepost
 import io.github.tieo.arbay.selling.Selling
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+
+private fun io.github.tieo.arbay.model.AdDraft.nextRepostOrNull() = nextRepost()
 
 class SellingBlankTest {
     @Test
@@ -30,5 +33,13 @@ class SellingBlankTest {
         assertFalse(old.exists())
         assertTrue(fresh.exists())
         Selling.delete(draft.id)
+    }
+
+    @Test
+    fun `an ad taken down is never due to go up again`() {
+        val now = kotlin.time.Clock.System.now()
+        val posted = io.github.tieo.arbay.model.AdDraft(id = "x", categoryId = "173", title = "t", description = "d", postedAdId = "1", postedAt = now, repostEveryDays = 7)
+        assertTrue(posted.nextRepostOrNull() != null)
+        assertEquals(null, posted.copy(takenDownAt = now).nextRepostOrNull())
     }
 }

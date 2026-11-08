@@ -159,8 +159,19 @@ fun SellPane(app: WebApp, draftId: String) {
             Chip("Pickup only", !d.shipping) { sell.change(d.copy(shipping = false, buyNow = false)) }
             if (d.shipping) Chip("Direkt kaufen", d.buyNow) { sell.change(d.copy(buyNow = !d.buyNow)) }
         }
-        Switch("Put up again every week", d.repostEveryDays != null) { sell.repostWeekly(it) }
+        if (d.takenDownAt == null) Switch("Put up again every week", d.repostEveryDays != null) { sell.repostWeekly(it) }
         repostState(d)?.let { P({ classes("muted", "small") }) { Text(it) } }
+        if (d.takenDownAt != null) P({ classes("muted", "small") }) { Text("Taken down") }
+        else if (posted && busy == null) {
+            var sure by remember(d.id) { mutableStateOf(false) }
+            Div({ classes("actions") }) {
+                if (!sure) QuietButton("Take down") { sure = true }
+                else {
+                    QuietButton("Take down for good") { sure = false; sell.takeDown() }
+                    QuietButton("Keep it up") { sure = false }
+                }
+            }
+        }
         if (d.attributes.isNotEmpty()) {
             H3({ classes("group-title") }) { Text("Details") }
             Div({ classes("sale-details") }) { d.attributes.forEach { (label, value) -> DetailField(d, label, value, posted) { sell.change(it) } } }

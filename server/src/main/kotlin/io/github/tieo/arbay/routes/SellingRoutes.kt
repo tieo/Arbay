@@ -48,6 +48,8 @@ fun Route.sellingRoutes() {
                 if (send) call.respond(kept) else call.respond(answer ?: JsonObject(emptyMap()))
             }
         }
+        // The posted ad taken off the market for good, and the draft kept as taken down.
+        post("/{id}/take-down") { call.selling { call.respond(Selling.takeDown(call.id())) } }
         post("/{id}/post") { call.selling { call.respond(Selling.post(call.id()).first) } }
         // Putting the posted ad up again gone through without posting or taking anything down.
         post("/{id}/try-repost") { call.selling { call.respond(Selling.tryRepost(call.id())) } }

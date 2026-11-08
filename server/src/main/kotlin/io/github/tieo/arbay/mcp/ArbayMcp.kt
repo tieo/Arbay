@@ -1030,6 +1030,17 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
+            "take_down_ad",
+            "Take a posted ad off Kleinanzeigen for good, as when the thing is sold: deletes it on the market, reads its page to confirm, and keeps the draft as taken down so it is never put up again. An ad already gone is only marked.",
+            destructive = true,
+            props = { string("id", "The draft of the posted ad", required = true) },
+        ) { args ->
+            val r = http.post("$base/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}/take-down")
+            if (!r.status.isSuccess()) return@tool "Not taken down: ${r.bodyAsText()}"
+            json.decodeFromString(AdDraft.serializer(), r.bodyAsText()).describe()
+        }
+
+        tool(
             "new_ad",
             "Start a blank ad of the user's own for sale, with a title and Kleinanzeigen's category number (173 is Handy & Telefon); text, price and details follow with change_ad and photos with add_ad_photo. Nothing is posted.",
             props = {
@@ -1442,7 +1453,7 @@ private fun JsonObject.strs(k: String) = (this[k] as? JsonArray).orEmpty().mapNo
 /** An offer as its dialog added it up, in one line. */
 private fun AdDraft.describe(): String = listOfNotNull(
     "$id: $title",
-    postedUrl()?.let { "posted: $it" } ?: problem()?.let { "not ready: $it" } ?: "ready to post",
+    takenDownAt?.let { "taken down $it" } ?: postedUrl()?.let { "posted: $it" } ?: problem()?.let { "not ready: $it" } ?: "ready to post",
     if (repostEveryDays == null) "stays as posted" else "goes up again every $repostEveryDays days" + (nextRepost()?.let { ", next $it" } ?: " once posted"),
     repostProblem,
     "price: ${priceEur?.let { "$it €" } ?: "none"} ${priceType.label}" + (if (shipping) ", ships" else ", pickup only") + (if (buyNow) ", Direkt kaufen" else ""),
