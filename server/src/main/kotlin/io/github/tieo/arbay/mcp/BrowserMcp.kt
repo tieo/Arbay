@@ -22,6 +22,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 /**
@@ -47,7 +48,7 @@ class BrowserMcp {
             to the ID card's eID client is answered by Neuland itself: the user allows it and types the PIN on
             their phone, and the tab goes on by itself; read it until it has. A password or code only the user
             knows goes in with form_ask_secret: the user types it on their phone and Neuland types it into the
-            field, so it never reaches you. A file for a file field is
+            field, so it never reaches you; the user's payment card goes in with form_card_fill. A file for a file field is
             uploaded first, its content as the body of a POST to /api/forms/<session>/files?name=<name> on the
             server this MCP is on (its address without /browser-mcp, with the same Authorization header), and
             then named in form_set's files. Every action keeps the page (HTML, picture, log) on the server.
@@ -196,6 +197,40 @@ class BrowserMcp {
                 "called-off" -> "The user called it off."
                 "timed-out" -> "The user did not answer within 10 minutes."
                 else -> "Still waiting for the user. Call form_ask_secret again with session \"$session\" and ask \"$ask\" to wait on."
+            }
+        }
+        tool(
+            "form_card_fill",
+            "Types the user's payment card into the checkout the tab shows, after the user allowed it on their phone (NeuAuth) seeing the amount and where the card goes. You give the amount; Neuland finds the card's fields, also inside a payment provider's iframe, and the card never reaches you, a read or a record. Refused when the page does not show that amount, when it is more than Neuland may pay, or when the card's fields cannot be told apart. Pressing pay stays yours, and the bank asks the user to confirm the charge. Waits up to 4 minutes; still waiting then, call it again with session and ask.",
+            destructive = true,
+            props = {
+                string("session", "The session", required = true)
+                integer("amount_cents", "What the payment comes to, in cents: 3900 for 39,00 €")
+                string("merchant", "Who is paid, as the user knows them; the page's host when left out")
+                string("asker", "Who asks and for what, in a few words")
+                string("tab", "The tab, by its id; the held tab when left out")
+                string("ask", "The id of an ask still waiting, as an earlier call answered it: waits for it again instead of asking anew")
+            },
+        ) { args ->
+            val session = args.text("session")
+            val ask = args.text("ask") ?: run {
+                val body = buildJsonObject {
+                    put("amount_cents", args["amount_cents"]?.jsonPrimitive?.longOrNull ?: throw IllegalArgumentException("a new ask names its amount_cents"))
+                    args.text("merchant")?.let { put("merchant", it) }
+                    args.text("asker")?.let { put("asker", it) }
+                    args.text("tab")?.let { put("tab", it) }
+                }
+                Neuland.request(HttpMethod.Post, "forms/$session/card", body, limitS = 60).jsonObject.text("ask")
+                    ?: throw IllegalStateException("Neuland gave the ask no id")
+            }
+            val answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=240", limitS = 260).jsonObject
+            when (answer.text("state")) {
+                "typed" -> "The card is typed in (${(answer["filled"] as? JsonArray)?.joinToString(", ") { it.jsonPrimitive.content }}). Nothing is paid until the pay button is pressed and the bank's confirmation given."
+                "failed" -> "NOT typed in: ${answer.text("error")}"
+                "refused" -> "The user refused it."
+                "called-off" -> "The user called it off."
+                "timed-out" -> "The user did not answer within 10 minutes."
+                else -> "Still waiting for the user. Call form_card_fill again with session \"$session\" and ask \"$ask\" to wait on."
             }
         }
         tool(
