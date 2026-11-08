@@ -18,7 +18,12 @@ import kotlinx.serialization.json.JsonPrimitive
 fun Route.sellingRoutes() {
     route("/api/selling/drafts") {
         get { call.respond(Selling.drafts()) }
-        post { call.selling { call.respond(Selling.fromListing(call.receive<NewAdDraft>().listingId)) } }
+        post {
+            call.selling {
+                val asked = call.receive<NewAdDraft>()
+                call.respond(asked.listingId?.let { Selling.fromListing(it) } ?: Selling.blank(asked.title.orEmpty(), asked.categoryId.orEmpty()))
+            }
+        }
         get("/{id}") { call.respond(Selling.draft(call.id()) ?: throw NotFoundException("No draft ${call.id()}")) }
         put("/{id}") {
             val draft = call.receive<AdDraft>()

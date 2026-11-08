@@ -95,6 +95,17 @@ object Selling {
         return draft
     }
 
+    /** A blank ad of the user's own in Kleinanzeigen's category [categoryId]. */
+    fun blank(title: String, categoryId: String): AdDraft {
+        if (title.isBlank()) throw SellingFailure("An ad needs a title")
+        if (categoryId.isBlank() || !categoryId.all(Char::isDigit)) throw SellingFailure("An ad needs Kleinanzeigen's category number")
+        val now = Clock.System.now()
+        val draft = AdDraft(id = "d${now.toEpochMilliseconds()}", categoryId = categoryId, title = title.trim(), description = "", createdAt = now)
+        synchronized(drafts) { drafts += draft }
+        persist()
+        return draft
+    }
+
     /** [image] as the draft's last photo, upright, at most [MAX_PHOTO_SIDE] on its longer side. */
     fun addPhoto(id: String, image: ByteArray): AdDraft {
         val name = synchronized(drafts) {
@@ -133,8 +144,19 @@ object Selling {
             drafts[drafts.indexOf(old)] = next
             next
         }
+        removeUnusedPhotos(now)
         persist()
         return now
+    }
+
+    /** A photo left out of a draft cannot be put back, so its file goes. One written within the last
+     *  hour is left alone: it may be a photo still being added. */
+    private fun removeUnusedPhotos(draft: AdDraft) {
+        if (!draft.id.isSafeName()) return
+        val hourAgo = System.currentTimeMillis() - 60 * 60 * 1000
+        DataDir.file("selling/${draft.id}").listFiles().orEmpty()
+            .filter { it.isFile && it.nameWithoutExtension !in draft.photos && it.lastModified() < hourAgo }
+            .forEach { it.delete() }
     }
 
     /**

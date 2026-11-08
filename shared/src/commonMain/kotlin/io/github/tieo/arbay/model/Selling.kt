@@ -97,7 +97,13 @@ data class RepostEvery(val everyDays: Int?)
 
 /** What a draft starts from: an ad the user bought from, by its Arbay listing id. */
 @Serializable
-data class NewAdDraft(val listingId: String)
+data class NewAdDraft(
+    /** The Kleinanzeigen ad to copy; null for a blank ad of the user's own. */
+    val listingId: String? = null,
+    val title: String? = null,
+    /** Kleinanzeigen's category number, for a blank ad. */
+    val categoryId: String? = null,
+)
 
 /** What posting answered: the draft as it now stands, and what went wrong when it did. */
 @Serializable

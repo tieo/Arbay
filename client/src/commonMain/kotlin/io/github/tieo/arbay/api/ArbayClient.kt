@@ -329,6 +329,13 @@ class ArbayClient(
             setBody(io.github.tieo.arbay.model.NewAdDraft(listingId))
         }.body()
 
+    /** A blank ad of the user's own. */
+    suspend fun newBlankAdDraft(title: String, categoryId: String): io.github.tieo.arbay.model.AdDraft =
+        client.post("$baseUrl/api/selling/drafts") {
+            contentType(ContentType.Application.Json)
+            setBody(io.github.tieo.arbay.model.NewAdDraft(title = title, categoryId = categoryId))
+        }.body()
+
     suspend fun changeAdDraft(draft: io.github.tieo.arbay.model.AdDraft): io.github.tieo.arbay.model.AdDraft =
         client.put("$baseUrl/api/selling/drafts/${draft.id.encodeURLPathPart()}") {
             contentType(ContentType.Application.Json)

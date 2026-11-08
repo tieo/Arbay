@@ -1,5 +1,9 @@
 package io.github.tieo.arbay.web
 
+import org.jetbrains.compose.web.dom.Form
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import io.github.tieo.arbay.results.repostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,9 +36,29 @@ import org.jetbrains.compose.web.dom.TextArea
 fun ForSaleList(app: WebApp, openId: String?) {
     val drafts by app.sell.drafts.collectAsState()
     LaunchedEffect(Unit) { app.sell.load() }
-    if (drafts.isEmpty()) return
+    var adding by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
     Div({ classes("outbox") }) {
         H3({ classes("group-title") }) { Text("For sale") }
+        QuietButton("New ad", Glyph.Tag, pressed = adding) { adding = !adding }
+        if (adding) Form(attrs = {
+            classes("change-search")
+            addEventListener("submit") { event ->
+                event.preventDefault()
+                if (title.isNotBlank() && category.isNotBlank()) app.sell.startBlank(title, category) { id -> adding = false; title = ""; category = ""; Router.replace(Route.Sell(id)) }
+            }
+        }) {
+            Label(attrs = { classes("field") }) {
+                Span({ classes("field-label") }) { Text("Title") }
+                Input(InputType.Text) { classes("control"); value(title); onInput { title = it.value } }
+            }
+            Label(attrs = { classes("field") }) {
+                Span({ classes("field-label") }) { Text("Kleinanzeigen category number") }
+                Input(InputType.Text) { classes("control"); value(category); onInput { category = it.value.filter(Char::isDigit) } }
+            }
+            PrimaryButton("Start", enabled = title.isNotBlank() && category.isNotBlank()) {}
+        }
     }
     Div({ classes("rows") }) {
         drafts.forEach { d ->

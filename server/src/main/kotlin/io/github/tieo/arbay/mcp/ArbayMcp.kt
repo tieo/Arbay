@@ -1030,6 +1030,47 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
 
         tool(
+            "new_ad",
+            "Start a blank ad of the user's own for sale, with a title and Kleinanzeigen's category number (173 is Handy & Telefon); text, price and details follow with change_ad and photos with add_ad_photo. Nothing is posted.",
+            props = {
+                string("title", "The ad's title", required = true)
+                string("category_id", "Kleinanzeigen's category number", required = true)
+            },
+        ) { args ->
+            val r = http.post("$base/api/selling/drafts") {
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(NewAdDraft.serializer(), NewAdDraft(title = args.str("title"), categoryId = args.str("category_id"))))
+            }
+            if (!r.status.isSuccess()) return@tool "No draft: ${r.bodyAsText()}"
+            val draft = json.decodeFromString(AdDraft.serializer(), r.bodyAsText())
+            Live.show("/sell/${draft.id}")
+            draft.describe()
+        }
+
+        tool(
+            "add_ad_photo",
+            "Add one of the user's own photos to the end of a draft, from a public address or as base64. Name one of the two.",
+            props = {
+                string("id", "The draft", required = true)
+                string("photo_url", "A public http(s) address of the photo")
+                string("photo_base64", "The photo's bytes in base64")
+            },
+        ) { args ->
+            val bytes = args.str("photo_base64")?.let { runCatching { java.util.Base64.getMimeDecoder().decode(it) }.getOrNull() ?: return@tool "The base64 does not read." }
+                ?: args.str("photo_url")?.let { url ->
+                    val checked = runCatching { io.github.tieo.arbay.routes.requirePublicHttpUrl(url) }.getOrNull() ?: return@tool "That is no public web address."
+                    io.github.tieo.arbay.judging.PhotoPrints.downloadAt(checked) ?: return@tool "The photo did not arrive."
+                }
+                ?: return@tool "Name photo_url or photo_base64."
+            val r = http.post("$base/api/selling/drafts/${args.str("id")!!.encodeURLPathPart()}/photos") {
+                contentType(ContentType.Application.OctetStream)
+                setBody(bytes)
+            }
+            if (!r.status.isSuccess()) return@tool "Not added: ${r.bodyAsText()}"
+            json.decodeFromString(AdDraft.serializer(), r.bodyAsText()).describe()
+        }
+
+        tool(
             "change_ad",
             "Change an ad for sale: what is given replaces what it had. A draft is changed here; a posted ad is changed on Kleinanzeigen at once (title, text, price, price type, shipping, Direkt kaufen; its photos and details stay). Title and text only as the user worded or approved them.",
             destructive = true,

@@ -63,6 +63,19 @@ class SellViewModel(
         }
     }
 
+    /** A blank ad of the user's own; [opened] gets its id once it is made. */
+    fun startBlank(title: String, categoryId: String, opened: (String) -> Unit) {
+        if (rendersASample) return
+        viewModelScope.launch {
+            attempt {
+                val draft = client.newBlankAdDraft(title, categoryId)
+                _drafts.value = listOf(draft) + _drafts.value
+                _open.value = draft
+                opened(draft.id)
+            }
+        }
+    }
+
     fun open(id: String) {
         _drafts.value.firstOrNull { it.id == id }?.let { if (_open.value?.id != id) _open.value = it }
         if (rendersASample) return

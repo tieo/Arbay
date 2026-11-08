@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -200,8 +203,20 @@ fun ForSaleRows(session: Session) {
     val nav = LocalNavigator.current
     val drafts by session.sell.drafts.collectAsState()
     LaunchedEffect(Unit) { session.sell.load() }
-    if (drafts.isEmpty()) return
-    SectionTitle("For sale", Modifier.padding(horizontal = arbay.pad, vertical = 8.dp))
+    var adding by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
+    Row(Modifier.fillMaxWidth().padding(horizontal = arbay.pad, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        SectionTitle("For sale", Modifier.weight(1f))
+        androidx.compose.material3.TextButton(onClick = { adding = !adding }) { Text("New ad") }
+    }
+    if (adding) Column(Modifier.fillMaxWidth().padding(horizontal = arbay.pad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Title") }, singleLine = true)
+        OutlinedTextField(category, { v -> category = v.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Kleinanzeigen category number") }, singleLine = true)
+        androidx.compose.material3.Button(enabled = title.isNotBlank() && category.isNotBlank(), onClick = {
+            session.sell.startBlank(title, category) { id -> adding = false; title = ""; category = ""; nav.go(Route.Sell(id)) }
+        }) { Text("Start") }
+    }
     drafts.forEach { d ->
         Row(
             Modifier.fillMaxWidth().clickable { nav.go(Route.Sell(d.id)) }.padding(horizontal = arbay.pad, vertical = 6.dp),
