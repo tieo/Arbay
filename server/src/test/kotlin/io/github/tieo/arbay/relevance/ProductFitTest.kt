@@ -121,4 +121,48 @@ class ProductFitTest {
         val checked = assertNotNull(fit(unnamed, ModelGuess("Lägler PROFIT", ModelGuess.CHECKED, 1.0, sure = true)))
         assertEquals("Lägler PROFIT (checked)", checked.parts.first { it.wish == FitWish.MODEL }.note)
     }
+
+    private val scanners = ProductWishes(
+        models = listOf(
+            ModelWish("Otter", listOf("otter"), 1.0, idealPriceEur = 300, maxPriceEur = 450),
+            ModelWish("Otter Lite", listOf("otter lite"), 0.8, idealPriceEur = 250, maxPriceEur = 400),
+            ModelWish("Raptor", listOf("raptor"), 0.9, maxPriceEur = 650),
+        ),
+    )
+
+    @Test
+    fun `the longest model's words win, and a model named beside it still counts`() {
+        val folded = { t: String -> io.github.tieo.arbay.judging.FitScore.folded(t) }
+        val models = scanners.models
+        assertEquals(listOf("Otter Lite"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("CR-Scan Otter Lite 3D Scanner"), models).map { it.name })
+        assertEquals(setOf("Otter", "Otter Lite"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("Otter und Otter Lite"), models).map { it.name }.toSet())
+    }
+
+    private fun scanner(l: Listing, price: Double = FitScore.landedEur(l)) = FitScore.score(l, scanners, price, 4.0) { null }
+
+    @Test
+    fun `each model is priced against its own limit`() {
+        val otterAt420 = assertNotNull(scanner(ad("CR-Scan Otter 3D Scanner", 420)))
+        val liteAt420 = assertNotNull(scanner(ad("CR-Scan Otter Lite 3D Scanner", 420)))
+        val raptorAt420 = assertNotNull(scanner(ad("Creality Raptor 3D Scanner", 420)))
+        fun price(f: FitScore.Fit) = f.parts.single { it.wish == FitWish.PRICE }.points
+        assertTrue(price(liteAt420) < price(otterAt420), "420 is past the Lite's 400")
+        assertTrue(price(otterAt420) < price(raptorAt420), "420 is near the Otter's limit, far under the Raptor's")
+    }
+
+    @Test
+    fun `a shop's list of variants and a rental are not weighed`() {
+        assertNull(scanner(ad("Scanner Otter lite/Otter/Raptor Pro/Raptor", 299)))
+        assertNull(scanner(ad("Raptor 3D Scanner mieten", 45).copy(saleType = io.github.tieo.arbay.model.SaleType.RENT)))
+    }
+
+    @Test
+    fun `an offer is pushed once it is over the floor and not told of, new or not`() {
+        val scored = listOf(ad("a", 1) to fitOf(0.83), ad("b", 1) to fitOf(0.78), ad("c", 1) to fitOf(0.77))
+        fun crossed(told: Set<String>) = io.github.tieo.arbay.monitoring.SavedSearchMonitor.crossedTheFloor(scored, 0.78, told) { it }.map { it.first.title }
+        assertEquals(listOf("a", "b"), crossed(emptySet()))
+        assertEquals(listOf("b"), crossed(setOf(scored[0].first.id)))
+    }
+
+    private fun fitOf(score: Double) = FitScore.Fit(score, null, null)
 }

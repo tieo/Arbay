@@ -323,7 +323,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                             (runCatching { io.github.tieo.arbay.model.PlatformId.valueOf(name).displayName }.getOrNull() ?: name) + " (" + e.jsonPrimitive.content.take(80) + ")"
                         }
                     } ?: "") +
-                    (if (p.fitAlert.enabled) "\n  fit alert: a new offer in its top ${p.fitAlert.topN} that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
+                    (if (p.fitAlert.enabled) "\n  fit alert: each offer, once, that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
                     (p.searchQuery.productWishes?.let { "\n  " + wishesLine(it) } ?: "") +
                     p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
@@ -502,12 +502,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_from_eur", "Add an alert rule: push for finds from this landed price")
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
-                number("fit_alert_percent", "Push a new offer that fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
+                number("fit_alert_percent", "Push an offer, once, when it first fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
                 boolean("alert_on_front", "For a drive search: push a new offer that lands on the trade-off front of price per GB and expected life; false stops it. Its first run only notes what is there, so it pushes nothing")
                 number("front_min_tb", "The front alert counts drives from this size"); number("front_max_tb", "The front alert counts drives up to this size")
                 string("front_interface", "The front alert leaves out drives naming another interface: SATA, SAS or NVME"); string("front_recording", "The front alert leaves out drives naming other recording: CMR or SMR")
                 boolean("front_bare_only", "The front alert leaves out drives in a USB case")
-                string("fit_wishes", "A search for a thing (not a vehicle): what its offers are weighed by, as JSON {\"models\":[{\"name\":\"Lägler HUMMEL\",\"words\":[\"hummel\"],\"worth\":1.0}],\"idealPriceEur\":450,\"maxPriceEur\":1500,\"ruledOutWords\":[\"400 V\"],\"plusWords\":[\"Schleifbänder\"]}; worth 0 to 1, words matched whole and umlaut-blind, a ruled-out word not right after kein/ohne; {} clears")
+                string("fit_wishes", "A search for a thing (not a vehicle): what its offers are weighed by, as JSON {\"models\":[{\"name\":\"Lägler HUMMEL\",\"words\":[\"hummel\"],\"worth\":1.0,\"idealPriceEur\":800,\"maxPriceEur\":1200}],\"idealPriceEur\":450,\"maxPriceEur\":1500,\"ruledOutWords\":[\"400 V\"],\"plusWords\":[\"Schleifbänder\"]}; worth 0 to 1, a model's own idealPriceEur and maxPriceEur replace the search's for it, words matched whole and umlaut-blind with the longest model's words winning, a ruled-out word not right after kein/ohne; {} clears")
             },
         ) { args ->
             val id = args.str("id")!!
@@ -931,6 +931,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = true, purchase = args.str("purchase")) }
 
         tool(
+            "alert_decisions",
+            "Why a saved search's fit alert told of an offer or did not, newest first: pushed, beaten by another offer, judged something else, under the floor. Kept across restarts.",
+            props = { string("saved_search_id", "The saved search", required = true); integer("most", "How many (default 50)") },
+        ) { args ->
+            getJson<List<io.github.tieo.arbay.model.FitAlertDecision>>("/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/alert-decisions?most=${args.int("most") ?: 50}")
+                .joinToString("\n") { d -> "${d.at} · ${Math.round(d.score * 100)} % (floor ${Math.round(d.floor * 100)} %) · ${d.decision} · ${d.title.take(70)} · ${d.url}" }
+                .ifEmpty { "No decisions kept yet." }
+        }
+
+        tool(
             "sold_prices",
             "What a model, a drive size or any words sold for on eBay.de lately: median and quartiles with shipping, auctions against fixed prices, new, refurbished and used, by month, each with its number of sales. Name one of the three. Sales to a hidden accepted offer and parts-only offers are left out. Takes up to a few minutes the first time.",
             props = {
@@ -959,7 +969,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             (if (answer.reading) "Still asking eBay; call again in a few minutes.\n" else "") + list.joinToString("\n") { a ->
                 listOfNotNull(
                     "ends ${a.listing.auctionEndsAt}",
-                    a.expectedEndEur?.let { "expected end $it € all in (${a.expectedFrom}, ${a.expectedSales} sales)" } ?: "expected end still being read".takeIf { a.expectedPending } ?: "expected end not known",
+                    a.expectedEndEur?.let { "expected end $it € all in (${a.expectedFrom}, ${a.expectedSales} sales${if (a.expectedThin) ", thin data" else ""}" + (a.limitEur?.let { m -> ", limit $m €" } ?: "") + ")" } ?: "expected end still being read".takeIf { a.expectedPending } ?: "expected end not known",
                     a.listing.line(),
                 ).joinToString(" | ")
             }.ifEmpty { if (answer.reading) "" else "No auctions running for this search." }
@@ -1301,7 +1311,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     ) = textTool(name, description, destructive, readOnly = !destructive && name.startsWith("list") || name in READ_ONLY, props, run)
 
     private companion object {
-        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout", "try_bid", "auction_bids", "sold_prices", "auctions")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout", "try_bid", "auction_bids", "sold_prices", "auctions", "alert_decisions")
     }
 }
 
@@ -1391,7 +1401,7 @@ private fun PriceOffer.describe(): String {
 
 /** A search's fit wishes in one line: "fit wishes: Lägler HUMMEL 100 %, PROFIT 80 % · 450–1.500 € · out: 400 V · plus: Schleifbänder". */
 private fun wishesLine(w: io.github.tieo.arbay.model.ProductWishes): String = "fit wishes: " + listOfNotNull(
-    w.models.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.name} ${(it.worth * 100).roundToInt()} %" },
+    w.models.takeIf { it.isNotEmpty() }?.joinToString(", ") { m -> "${m.name} ${(m.worth * 100).roundToInt()} %" + (listOfNotNull(m.idealPriceEur, m.maxPriceEur).takeIf { p -> p.isNotEmpty() }?.joinToString("–", prefix = " (", postfix = " €)") ?: "") },
     listOfNotNull(w.idealPriceEur, w.maxPriceEur).takeIf { it.isNotEmpty() }?.joinToString("–", postfix = " €"),
     w.ruledOutWords.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "out: "),
     w.plusWords.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "plus: "),

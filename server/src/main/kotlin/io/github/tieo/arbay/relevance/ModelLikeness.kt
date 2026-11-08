@@ -35,7 +35,7 @@ object ModelLikeness {
     /** The one model [l]'s title names, where it names exactly one and its text says what kind of thing it is. */
     internal fun namedIn(l: Listing, wishes: ProductWishes, kind: Set<String>): ModelWish? {
         val title = FitScore.folded(l.title)
-        val model = wishes.models.filter { m -> m.words.any { FitScore.says(title, it) } }.singleOrNull() ?: return null
+        val model = FitScore.modelsNamed(title, wishes.models).singleOrNull() ?: return null
         val text = FitScore.folded("${l.title}\n${l.description.orEmpty()}")
         // A word the search rules out ("Superhummel") names another machine under the model's word.
         if (wishes.ruledOutWords.any { FitScore.says(text, it) }) return null

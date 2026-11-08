@@ -416,7 +416,7 @@ private fun withFit(listings: List<Listing>, query: SearchQuery, isCarQuery: Boo
     val softDriveHours = io.github.tieo.arbay.model.FitAlertSettings().softDriveHours
     val things = query.productWishes?.takeUnless { it.isEmpty }
     if (!isCarQuery && things != null) return listings.map { l ->
-        val fit = io.github.tieo.arbay.judging.FitScore.score(l, things, io.github.tieo.arbay.judging.FitScore.priceEur(l), softDriveHours)
+        val fit = io.github.tieo.arbay.judging.FitScore.score(l, things, io.github.tieo.arbay.judging.SoldPriceReader.priceToJudge(l, query), softDriveHours)
             ?: return@map l
         l.copy(matchScore = fit.score, fit = fit.parts)
     }

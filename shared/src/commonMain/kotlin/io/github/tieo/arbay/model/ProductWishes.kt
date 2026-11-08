@@ -32,7 +32,15 @@ data class ProductWishes(
 /** One model that would do: its [name], the [words] naming it in an ad (any one is enough), and
  *  [worth], the share of a perfect fit being this model gives, from 0 to 1. */
 @Serializable
-data class ModelWish(val name: String, val words: List<String>, val worth: Double)
+data class ModelWish(
+    val name: String,
+    val words: List<String>,
+    val worth: Double,
+    /** This model's own price that fits fully, landed, in place of the search's. */
+    val idealPriceEur: Int? = null,
+    /** This model's own price past which it stops fitting at all, landed, in place of the search's. */
+    val maxPriceEur: Int? = null,
+)
 
 /** A reviewer's verdict on which of a search's models an offer is; null for none of them. */
 @Serializable

@@ -398,6 +398,11 @@ private fun WishesEditor(session: Session, productId: String, wishes: ProductWis
                 onValueChangeFinished = { save(wishes.copy(models = wishes.models.map { m -> if (m.name == model.name) m.copy(worth = worth / 100.0) else m })) },
             )
             Muted(model.words.joinToString(" · "))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                fun priced(edit: (ModelWish) -> ModelWish) = save(wishes.copy(models = wishes.models.map { m -> if (m.name == model.name) edit(m) else m }))
+                EuroField(model.idealPriceEur, "Fits fully up to", Modifier.weight(1f)) { v -> priced { it.copy(idealPriceEur = v) } }
+                EuroField(model.maxPriceEur, "Fits not at all above", Modifier.weight(1f)) { v -> priced { it.copy(maxPriceEur = v) } }
+            }
         }
     }
     var draft by remember { mutableStateOf("") }

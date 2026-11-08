@@ -82,6 +82,12 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             call.respond(HttpStatusCode.NoContent)
         }
 
+        // Why this search's fit alert told of an offer or did not, newest first.
+        get("/{id}/alert-decisions") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            call.respond(io.github.tieo.arbay.judging.FitAlertLog.read(id, call.request.queryParameters["most"]?.toIntOrNull() ?: 200))
+        }
+
         // The eBay auctions running for this search, soonest end first, with what each can be
         // expected to end at; expectedPending where the sales it rests on are still being read.
         get("/{id}/auctions") {

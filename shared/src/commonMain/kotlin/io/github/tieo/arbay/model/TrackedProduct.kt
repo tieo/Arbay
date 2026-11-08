@@ -120,18 +120,31 @@ data class TrackedProduct(
  * Stuttgart"); [softDriveHours] is a drive the user would happily make, past which a fit counts for
  * less rather than not at all.
  *
- * A new offer is sent when it would rank among the [topN] best of everything the search finds right
- * now and fits at least [minScore], and never twice. The rank keeps a rich week from pushing every
- * decent offer; [minScore] is the user's own floor, any whole percent in [FIT_ALERT_PERCENT], below which
- * nothing is worth being told about however thin the market is.
+ * An offer is sent once, when it first fits at least [minScore], whether it came in new or rose
+ * over it later through a price cut. [minScore] is the user's own floor, any whole percent in
+ * [FIT_ALERT_PERCENT]. What another offer still online beats on every count is held back until it
+ * is gone.
  */
 @Serializable
 data class FitAlertSettings(
     val enabled: Boolean = false,
-    val topN: Int = 10,
     val minScore: Double = 0.6,
     val home: String? = null,
     val softDriveHours: Double = 4.0,
+)
+
+/** One decision a fit alert took on an offer. */
+@Serializable
+data class FitAlertDecision(
+    val at: kotlin.time.Instant,
+    val savedSearchId: String,
+    val searchName: String,
+    val listingId: String,
+    val title: String,
+    val url: String,
+    val score: Double,
+    val floor: Double,
+    val decision: String,
 )
 
 /** The whole percentages of a perfect fit a fit alert can be set to tell about from. Below half,

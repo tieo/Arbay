@@ -284,7 +284,29 @@ object FitScore {
     }
 
     internal fun namedModel(text: String, wishes: ProductWishes): io.github.tieo.arbay.model.ModelWish? =
-        wishes.models.filter { m -> m.words.any { says(text, it) } }.maxByOrNull { it.worth }
+        modelsNamed(text, wishes.models).maxByOrNull { it.worth }
+
+    /**
+     * The [models] that [text], [folded] already, names. A model named only inside a longer model's
+     * words is not named: "otter lite" says "otter" and is the Lite alone, while "otter und otter
+     * lite" names both.
+     */
+    internal fun modelsNamed(text: String, models: List<io.github.tieo.arbay.model.ModelWish>): List<io.github.tieo.arbay.model.ModelWish> {
+        val hits = models.mapNotNull { m ->
+            m.words.map { folded(it).trim() }.filter { it.isNotEmpty() && says(text, it) }.maxByOrNull { it.length }?.let { m to it }
+        }
+        return hits.filter { (m, word) ->
+            val longer = hits.filter { (other, its) -> other !== m && its.length > word.length && " $its ".contains(" $word ") }
+            longer.isEmpty() || says(longer.fold(text) { rest, (_, its) -> rest.replace(" $its ", " ") }, word)
+        }.map { it.first }
+    }
+
+    /** Where a model's price fits fully when only its limit is named: near the limit, which is a price
+     *  the user would pay, unlike a search's band over several models. */
+    private const val MODEL_IDEAL_SHARE = 0.8
+
+    /** How many wanted models a title names before it is a shop's list of variants at one price. */
+    private const val VARIANT_LIST = 3
 
     private val NEGATIONS = setOf("kein", "keine", "keinen", "ohne", "nicht", "no", "not", "without", "senza", "sans")
 
@@ -301,6 +323,8 @@ object FitScore {
     ): Fit? {
         val raw = "${listing.title}\n${listing.description.orEmpty()}"
         if (listing.condition == Condition.PARTS_ONLY) return null
+        // A rental is shown and never weighed: its price is for a day, not for the thing.
+        if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) return null
         if (Condition.soldAsDefective(listing.title, listing.description)) return null
         if (tradeOnly.containsMatchIn(raw)) return null
         if (listing.photosAlsoIn.isNotEmpty()) return null
@@ -315,15 +339,19 @@ object FitScore {
         // a mention ("Schleifpapier passt auch für Hummel"), and counts a little less. A model worth
         // nothing is one that would not do: an edge sander named alone is not the machine wanted,
         // while "Hummel + Elan" is the Hummel with an edge sander thrown in.
+        // The price of a title listing a shop's variants is none of theirs in particular.
+        var priced: io.github.tieo.arbay.model.ModelWish? = null
         val model = wishes.models.takeIf { it.isNotEmpty() }?.let { models ->
-            val namedInTitle = models.filter { m -> m.words.any { says(title, it) } }
+            val namedInTitle = modelsNamed(title, models)
+            if (namedInTitle.count { it.worth > 0 } >= VARIANT_LIST) return null
             val inTitle = namedInTitle.maxByOrNull { it.worth }
             if (inTitle != null && inTitle.worth <= 0.0) return null
-            val inText = models.filter { m -> m.worth > 0 && m.words.any { says(stated, it) } }.maxByOrNull { it.worth }
+            val inText = modelsNamed(stated, models).filter { it.worth > 0 }.maxByOrNull { it.worth }
             val told = guessed?.invoke(listing)
             // Someone looked and said which it is, or that it is none of them: that outranks its words.
             if (told?.how == ModelGuess.CHECKED && told.model == ModelGuess.NONE_OF_THEM) return null
             val seen = told?.let { g -> models.firstOrNull { it.name == g.model }?.let { it to g } }
+            priced = seen?.takeIf { it.second.how == ModelGuess.CHECKED }?.first ?: inTitle ?: inText ?: seen?.first
             when {
                 seen != null && seen.second.how == ModelGuess.CHECKED -> {
                     if (seen.first.worth <= 0.0) return null
@@ -339,8 +367,10 @@ object FitScore {
                 else -> Wish(null, null)
             }
         }
-        val max = wishes.maxPriceEur?.toDouble()
-        val ideal = wishes.idealPriceEur?.toDouble()
+        // A model's own limit stands alone: the search's ideal may lie above a cheaper model's limit.
+        val own = priced?.maxPriceEur?.toDouble()
+        val max = own ?: wishes.maxPriceEur?.toDouble()
+        val ideal = priced?.idealPriceEur?.toDouble() ?: if (own != null) own * MODEL_IDEAL_SHARE else wishes.idealPriceEur?.toDouble()
         val price = when {
             max != null -> Wish(linear(priceEur, ideal ?: (max * 0.25), max * 1.03), euros(priceEur))
             ideal != null -> Wish(linear(priceEur, ideal, ideal * 3), euros(priceEur))
@@ -390,9 +420,14 @@ object FitScore {
      */
     fun forSearch(listing: Listing, query: SearchQuery, softDriveHours: Double): Fit? {
         val price = priceEur(listing)
-        query.productWishes?.takeUnless { it.isEmpty }?.let { return score(listing, it, price, softDriveHours) }
+        query.productWishes?.takeUnless { it.isEmpty }?.let { return score(listing, it, landedEur(listing), softDriveHours) }
         if (query.category != MarketGroup.VEHICLES) return null
         return score(listing, query.toCarFilters() ?: return null, price, softDriveHours)
+    }
+
+    /** What the offer costs with its shipping, in euros. */
+    fun landedEur(listing: Listing): Double = listing.effectivePrice.let { p ->
+        if (p.currency == Currency.EUR) p.amount / 100.0 else ExchangeRates.convert(p.amount, p.currency.name, "EUR") / 100.0
     }
 
     /** The landed price in euros, as the rest of the app compares prices. */

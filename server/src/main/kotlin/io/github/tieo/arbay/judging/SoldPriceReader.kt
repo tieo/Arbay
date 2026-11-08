@@ -3,7 +3,9 @@ package io.github.tieo.arbay.judging
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DriveHealth
+import io.github.tieo.arbay.model.DriveInterface
 import io.github.tieo.arbay.model.DriveVerdict
+import io.github.tieo.arbay.model.ModelWish
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.LiveAuction
 import io.github.tieo.arbay.model.LiveAuctions
@@ -52,8 +54,14 @@ object SoldPriceReader {
     private val background = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /** What to look up, one of the three. */
-    data class Ask(val model: String? = null, val capacityGb: Int? = null, val words: String? = null) {
-        val key: String get() = model?.substringBefore('-') ?: capacityGb?.let { "$it GB" } ?: words!!.trim().lowercase()
+    data class Ask(
+        val model: String? = null, val capacityGb: Int? = null, val words: String? = null,
+        /** For a size: whether solid-state drives are asked, not hard disks. */
+        val ssd: Boolean = false,
+        /** For words: keeps only the sales that are what was asked. */
+        val keep: ((Listing) -> Boolean)? = null,
+    ) {
+        val key: String get() = model?.substringBefore('-') ?: capacityGb?.let { "$it GB" + if (ssd) " SSD" else "" } ?: words!!.trim().lowercase()
     }
 
     suspend fun of(ask: Ask): SoldPrices {
@@ -75,7 +83,7 @@ object SoldPriceReader {
     private suspend fun read(ask: Ask): SoldPrices {
         val words = when {
             ask.model != null -> listOf(ask.model.substringBefore('-'))
-            ask.capacityGb != null -> capacityWords(ask.capacityGb).let { listOf("$it HDD SATA", "$it Festplatte") }
+            ask.capacityGb != null -> capacityWords(ask.capacityGb).let { if (ask.ssd) listOf("$it SSD NVMe", "$it SSD") else listOf("$it HDD SATA", "$it Festplatte") }
             else -> listOf(ask.words!!.trim())
         }
         val found = LinkedHashMap<String, Listing>()
@@ -125,8 +133,8 @@ object SoldPriceReader {
         if (lotUnclear) return false
         return when {
             ask.model != null -> ask.model.substringBefore('-').let { m -> DriveText.models(l.title).any { it.substringBefore('-') == m } }
-            ask.capacityGb != null -> capacityGb == ask.capacityGb && external != true && !SSD.containsMatchIn(l.title)
-            else -> true
+            ask.capacityGb != null -> capacityGb == ask.capacityGb && external != true && SSD.containsMatchIn(l.title) == ask.ssd
+            else -> ask.keep?.invoke(l) ?: true
         }
     }
 
@@ -187,27 +195,64 @@ object SoldPriceReader {
     }
 
     private fun expectation(l: Listing, query: SearchQuery): LiveAuction {
-        val d = l.drive
+        val wishes = query.productWishes?.takeUnless { it.isEmpty }
+        val model = wishes?.let { FitScore.namedModel(FitScore.folded(l.title), it) }
         // Sold prices are of working drives, so they say nothing of what a broken one ends at.
-        if (l.condition == Condition.PARTS_ONLY || d?.health == DriveVerdict.FAILING) return LiveAuction(l)
-        val asks = listOfNotNull(
-            d?.model?.let { Ask(model = it) },
-            d?.capacityGb?.let { Ask(capacityGb = it) },
-            Ask(words = query.positiveText).takeIf { d == null },
-        )
+        if (l.condition == Condition.PARTS_ONLY || l.drive?.health == DriveVerdict.FAILING) return LiveAuction(l)
         var pending = false
-        val basis = asks.firstNotNullOfOrNull { ask ->
+        val basis = asksFor(l, query, model).firstNotNullOfOrNull { ask ->
             val sold = orStart(ask)
             if (sold == null) pending = true
-            sold?.takeIf { it.auctions.count >= ENOUGH }?.let { ask to it }
+            sold?.let { ask to it }
         }
-        val current = l.effectivePrice.amount / 100.0
+        return answered(l, basis, model, pending)
+    }
+
+    /** What an auction's end can be read from, the closest kind of sale first. */
+    private fun asksFor(l: Listing, query: SearchQuery, model: ModelWish?): List<Ask> {
+        val d = l.drive
+        val ssd = d?.driveInterface == DriveInterface.NVME || SSD.containsMatchIn(l.title)
+        return listOfNotNull(
+            d?.model?.let { Ask(model = it) },
+            d?.capacityGb?.let { Ask(capacityGb = it, ssd = ssd) },
+            model?.let { m ->
+                val wishes = query.productWishes!!
+                Ask(words = m.name, keep = { sold -> FitScore.namedModel(FitScore.folded(sold.title), wishes)?.name == m.name })
+            },
+            Ask(words = query.positiveText).takeIf { d == null && model == null },
+        )
+    }
+
+    private fun answered(l: Listing, basis: Pair<Ask, SoldPrices>?, model: ModelWish?, pending: Boolean): LiveAuction {
+        val current = FitScore.landedEur(l)
+        // Auctions of the same thing say most; failing those, what it sold for at a fixed price.
+        val spread = basis?.second?.let { if (it.auctions.count >= ENOUGH || it.all.count == 0) it.auctions else it.all }
+        val from = basis?.let { (ask, sold) -> (if (spread === sold.auctions) "auctions of " else "sales of ") + ask.key }
         return LiveAuction(
             listing = l,
-            expectedEndEur = basis?.second?.auctions?.medianEur?.let { maxOf(it, current) },
-            expectedFrom = basis?.let { "auctions of ${it.first.key}" },
-            expectedSales = basis?.second?.auctions?.count ?: 0,
-            expectedPending = basis == null && pending,
+            expectedEndEur = spread?.medianEur?.let { maxOf(it, current) },
+            expectedFrom = from.takeIf { spread?.medianEur != null },
+            expectedSales = spread?.count ?: 0,
+            expectedPending = spread?.medianEur == null && pending,
+            expectedThin = spread != null && spread.count in 1 until ENOUGH,
+            limitEur = model?.maxPriceEur,
         )
+    }
+
+    /** What the auction [l] can be expected to end at for a run nobody is waiting on: reads the sold
+     *  prices it needs, however long that takes. */
+    suspend fun expectedEnd(l: Listing, query: SearchQuery): LiveAuction {
+        val wishes = query.productWishes?.takeUnless { it.isEmpty }
+        val model = wishes?.let { FitScore.namedModel(FitScore.folded(l.title), it) }
+        val basis = asksFor(l, query, model).firstNotNullOfOrNull { ask ->
+            runCatching { of(ask) }.getOrNull()?.takeIf { it.all.count > 0 }?.let { ask to it }
+        }
+        return answered(l, basis, model, pending = false)
+    }
+
+    /** What [l] is judged at where a person is waiting: an auction at what is known of its end. */
+    fun priceToJudge(l: Listing, query: SearchQuery): Double {
+        if (l.saleType != SaleType.AUCTION) return FitScore.landedEur(l)
+        return expectation(l, query).expectedEndEur ?: FitScore.landedEur(l)
     }
 }

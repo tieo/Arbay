@@ -50,7 +50,8 @@ fun SoldPrices.rows(): List<Pair<String, String>> = listOf(
 
 /** What a running auction can be expected to end at, in the state that is known. */
 fun LiveAuction.expectedWords(): String = when {
-    expectedEndEur != null -> "Expected ${expectedEndEur!!.toInt()} € in all, from $expectedSales ${expectedFrom}"
+    expectedEndEur != null -> "Expected ${expectedEndEur!!.toInt()} € in all, from $expectedSales ${expectedFrom}" +
+        (if (expectedThin) ", few sales" else "") + (limitEur?.let { " · limit $it €" } ?: "")
     expectedPending -> "Reading what these sold for"
     else -> "Too few sales to expect a price"
 }

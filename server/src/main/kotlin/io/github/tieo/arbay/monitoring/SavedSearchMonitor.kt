@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.monitoring
 
+import io.github.tieo.arbay.judging.FitAlertLog
 import io.github.tieo.arbay.model.driveFront
 import io.github.tieo.arbay.model.summary
 import io.github.tieo.arbay.model.wants
@@ -634,10 +635,23 @@ class SavedSearchMonitor(
         // An offer naming no model is told one from its full text, its photos' print or their
         // likeness to the offers that do, before it is weighed.
         if (things != null) ModelGuesses.identify(shown.values, q, things)
+        // An auction's bid is not what it costs: each is judged at what it can be expected to end
+        // at, from sold prices of the same model, read here since nobody is waiting on this run.
+        val ends = HashMap<String, io.github.tieo.arbay.model.LiveAuction>()
+        if (things != null) shown.values.filter { it.saleType == io.github.tieo.arbay.model.SaleType.AUCTION }.forEach { l ->
+            ends[l.id] = io.github.tieo.arbay.judging.SoldPriceReader.expectedEnd(l, q)
+        }
+        // An auction nothing is known to have sold for has no price to weigh.
+        fun priceOf(l: Listing): Double? = when {
+            things == null -> FitScore.priceEur(l)
+            l.saleType == io.github.tieo.arbay.model.SaleType.AUCTION -> ends[l.id]?.expectedEndEur
+            else -> FitScore.landedEur(l)
+        }
         // What the top of the search scores today, every offer counted once.
         val scores = bestCopyEach(
             shown.values.mapNotNull { l ->
-                val fit = if (things != null) FitScore.score(l, things, FitScore.priceEur(l), settings.softDriveHours)
+                val price = priceOf(l) ?: return@mapNotNull null
+                val fit = if (things != null) FitScore.score(l, things, price, settings.softDriveHours)
                     else if (q.category == MarketGroup.VEHICLES) FitScore.score(l, wishes, FitScore.priceEur(l), settings.softDriveHours)
                     else null
                 fit?.let { l to it }
@@ -648,20 +662,42 @@ class SavedSearchMonitor(
             product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState,
             unanswered = crawled.failed.mapValues { it.value.message },
         )
-        if (firstFitRun) {
+        // Told of once each, per offer rather than per listing: one eBay item stands on every eBay site.
+        val told = FitAlertLog.told(product.id)
+        // The alert's first run, or the first since offers were told of one by one, only notes what
+        // is over the floor already: switching it on once pushed four offers at once.
+        if (firstFitRun || told == null) {
+            FitAlertLog.note(product.id, scores.filter { it.second.score >= settings.minScore }.map { offerKey(it.first.id) })
             log.info("fit alert {}: first run, {} offers learned silently", product.name, shown.size)
             return
         }
-        if (fresh == null) return
-        val bar = maxOf(settings.minScore, scores.getOrNull(settings.topN - 1)?.second?.score ?: settings.minScore)
-        val freshIds = fresh.mapTo(HashSet()) { it.id }
         val online = scores.map { it.first }
-        val worth = scores.filter { (l, fit) -> l.id in freshIds && fit.score >= bar }.filter { (l, _) ->
-            val better = FitScore.beatenBy(l, online) ?: return@filter true
-            log.info("fit alert {}: {} beaten by {}", product.name, l.url, better.url)
-            false
-        }.filterNot { (l, _) -> judgedSomethingElse(l) || offMarket(l) || noWayHere(l) }
-        log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.size, worth.size)
+        val decided = LinkedHashMap<String, Pair<Listing, String>>()
+        val crossed = crossedTheFloor(scores, settings.minScore, told, offerKey = ::offerKey)
+        val worth = crossed.filter { (l, _) ->
+            val better = FitScore.beatenBy(l, online)
+            if (better != null) { decided[l.id] = l to "beaten by ${better.url}"; return@filter false }
+            val out = when {
+                judgedSomethingElse(l) -> "judged something else"
+                offMarket(l) -> "takes buyers off the market"
+                noWayHere(l) -> "no way to get it here"
+                else -> null
+            }
+            // What its own ad says stays said, so its ad is read once. An offer that is only beaten
+            // is asked about again: the better one may go.
+            if (out != null) { decided[l.id] = l to out; FitAlertLog.note(product.id, listOf(offerKey(l.id))) }
+            out == null
+        }
+        val fit = scores.associateBy({ it.first.id }, { it.second.score })
+        val newBelow = fresh.orEmpty().filter { (fit[it.id] ?: 0.0) < settings.minScore }
+        FitAlertLog.decisions(
+            product, settings.minScore,
+            worth.map { (l, f) -> Triple(l, f.score, "pushed") } +
+                decided.values.map { (l, why) -> Triple(l, fit[l.id] ?: 0.0, why) } +
+                newBelow.map { Triple(it, fit[it.id] ?: 0.0, if (it.id in fit) "under the floor" else "ruled out by the search's wishes") },
+        )
+        if (worth.isNotEmpty()) FitAlertLog.note(product.id, worth.map { offerKey(it.first.id) })
+        log.info("fit alert {}: {} new, {} worth a message", product.name, fresh.orEmpty().size, worth.size)
         worth.forEach { (l, fit) -> log.info("  fit {}: {} · {}", "%.2f".format(fit.score), fitLine(l, fit), l.url) }
         if (worth.isEmpty()) return
         AlertFeed.record(worth.map { (l, fit) ->
@@ -669,8 +705,8 @@ class SavedSearchMonitor(
                 seq = 0, savedSearchId = product.id, searchName = product.name,
                 // A model told from photos alone is a guess until someone looks, and the reader of
                 // this feed is who looks: the verdict goes back through the check_model tool.
-                rule = "fit ${(fit.score * 100).roundToInt()} %" + (if (things == null) "" else modelUnchecked(fit)),
-                listingId = l.id, title = l.title, url = l.url, priceEur = FitScore.priceEur(l).roundToLong(), at = Clock.System.now(),
+                rule = "fit ${(fit.score * 100).roundToInt()} %" + (if (things == null) "" else modelUnchecked(fit)) + (ends[l.id]?.let(::auctionNote) ?: ""),
+                listingId = l.id, title = l.title, url = l.url, priceEur = (priceOf(l) ?: FitScore.priceEur(l)).roundToLong(), at = Clock.System.now(),
             )
         })
         // One message per run, however many made it: the best one in full, opened by a tap, and a
@@ -678,7 +714,7 @@ class SavedSearchMonitor(
         // than ntfy.sh takes in a burst (the fifth was refused with 429).
         val (best, bestFit) = worth.first()
         val title = if (worth.size == 1) "${product.name}: ${fitLine(best, bestFit)}"
-            else "${product.name}: ${worth.size} new in your top ${settings.topN}"
+            else "${product.name}: ${worth.size} over your ${(settings.minScore * 100).roundToInt()} %"
         val body = buildString {
             append(fitDetails(best, bestFit))
             worth.drop(1).take(4).forEach { (l, fit) -> append("\n· ").append(fitLine(l, fit)) }
@@ -852,6 +888,11 @@ class SavedSearchMonitor(
             .onFailure { log.error("Could not save the front alert's state: {}", it.message) }
     }
 
+    /** What an alert says of an auction's price: not its bid, and how far the estimate can be trusted. */
+    private fun auctionNote(a: io.github.tieo.arbay.model.LiveAuction): String =
+        " · auction, expected end ${a.expectedEndEur?.roundToLong()} € from ${a.expectedSales} ${a.expectedFrom}" +
+            (if (a.expectedThin) ", thin data" else "") + " · bid now ${FitScore.landedEur(a.listing).roundToLong()} €"
+
     /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */
     private fun homePoint(home: String): Pair<Double, Double>? = Geocoder.place(home)
 
@@ -896,6 +937,11 @@ class SavedSearchMonitor(
          * the last time it will see it before the bidding is over. An auction whose end is unknown
          * cannot be timed, so it waits on the bookmark with everything else.
          */
+        /** The offers at or over the [floor] that have not been told of, best first. */
+        internal fun <F : FitScore.Fit> crossedTheFloor(
+            scores: List<Pair<Listing, F>>, floor: Double, told: Set<String>, offerKey: (String) -> String,
+        ): List<Pair<Listing, F>> = scores.filter { (l, fit) -> fit.score >= floor && offerKey(l.id) !in told }.sortedByDescending { it.second.score }
+
         internal fun worthInterrupting(
             listing: Listing,
             intervalMinutes: Int,

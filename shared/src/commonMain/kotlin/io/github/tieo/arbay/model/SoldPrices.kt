@@ -41,6 +41,10 @@ data class LiveAuction(
     val expectedSales: Int = 0,
     /** The sales it rests on are still being read; asking again shortly has them. */
     val expectedPending: Boolean = false,
+    /** Too few sales to lean on: an estimate, not a market price. */
+    val expectedThin: Boolean = false,
+    /** The most the search's wishes allow for this model, landed, where they name one. */
+    val limitEur: Int? = null,
 )
 
 /** The auctions running for a saved search, as far as they have been read. */

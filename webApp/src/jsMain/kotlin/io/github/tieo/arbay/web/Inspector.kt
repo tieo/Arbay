@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.web
 
+import org.jetbrains.compose.web.dom.Label
 import io.github.tieo.arbay.model.looksLikeADriveSearch
 import io.github.tieo.arbay.model.limits
 import io.github.tieo.arbay.results.listingFoot
@@ -444,6 +445,11 @@ private fun WishesEditor(app: WebApp, productId: String, wishes: ProductWishes, 
                 Span({ classes("model-worth") }) { Text("$worth") }
                 IconButton(Glyph.Close, "Remove ${model.name}") { save(wishes.copy(models = wishes.models.filterNot { it.name == model.name })) }
                 Div({ classes("model-words") }) { Span { Text(model.words.joinToString(" · ")) } }
+                Div({ classes("inline-form") }) {
+                    fun priced(edit: (ModelWish) -> ModelWish) = save(wishes.copy(models = wishes.models.map { m -> if (m.name == model.name) edit(m) else m }))
+                    ModelPrice("Fits fully up to", model.idealPriceEur) { v -> priced { it.copy(idealPriceEur = v) } }
+                    ModelPrice("Fits not at all above", model.maxPriceEur) { v -> priced { it.copy(maxPriceEur = v) } }
+                }
             }
         }
     }
@@ -756,6 +762,20 @@ private fun ModelPick(choice: ModelChoice, checked: String?, pick: (String) -> U
         if (now == null) Option("", { selected() }) { Text(FitPart.NOT_STATED) }
         choice.models.forEach { m -> Option(m, { if (m == now) selected() }) { Text(m) } }
         Option(NONE_OF_THEM, { if (now == NONE_OF_THEM) selected() }) { Text("none of these") }
+    }
+}
+
+/** One of a model's own prices, empty where the search's own holds. */
+@Composable
+private fun ModelPrice(label: String, value: Int?, onChange: (Int?) -> Unit) {
+    Label(attrs = { classes("field") }) {
+        Span({ classes("field-label") }) { Text(label) }
+        Input(InputType.Number) {
+            classes("control")
+            attr("min", "0")
+            value(value?.toString() ?: "")
+            onChange { event -> onChange(event.value?.toString()?.toIntOrNull()?.takeIf { it > 0 }) }
+        }
     }
 }
 
