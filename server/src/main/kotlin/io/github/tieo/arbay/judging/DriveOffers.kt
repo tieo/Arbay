@@ -115,7 +115,7 @@ object DriveOffers {
         return DriveFacts(
             capacityGb = capacity, model = model, driveInterface = iface, recording = recording,
             external = DriveText.externalOf(l.title, model), powerOnHours = hours, hoursFrom = from,
-            health = health2, healthNote = note, unitPrice = unit, stock = stock, lotPriceUnclear = unclear,
+            health = health2, healthNote = note, unitPrice = unit?.takeIf { it != l.price }, stock = stock, lotPriceUnclear = unclear,
             pageRead = detail != null, photosPending = health.photosPending, centsPerGb = cents,
             lifeHours = life?.hoursLeft, failChance5y = life?.failChance5y, lifeBasis = life?.basis,
         )

@@ -503,6 +503,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
                 number("fit_alert_percent", "Push a new offer that fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
+                boolean("alert_on_front", "For a drive search: push a new offer that lands on the trade-off front of price per GB and expected life; false stops it. Its first run only notes what is there, so it pushes nothing")
+                number("front_min_tb", "The front alert counts drives from this size"); number("front_max_tb", "The front alert counts drives up to this size")
+                string("front_interface", "The front alert leaves out drives naming another interface: SATA, SAS or NVME"); string("front_recording", "The front alert leaves out drives naming other recording: CMR or SMR")
+                boolean("front_bare_only", "The front alert leaves out drives in a USB case")
                 string("fit_wishes", "A search for a thing (not a vehicle): what its offers are weighed by, as JSON {\"models\":[{\"name\":\"Lägler HUMMEL\",\"words\":[\"hummel\"],\"worth\":1.0}],\"idealPriceEur\":450,\"maxPriceEur\":1500,\"ruledOutWords\":[\"400 V\"],\"plusWords\":[\"Schleifbänder\"]}; worth 0 to 1, words matched whole and umlaut-blind, a ruled-out word not right after kein/ohne; {} clears")
             },
         ) { args ->
@@ -533,6 +537,14 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val next = p.copy(
                 autoFetch = when (every) { null -> p.autoFetch; 0 -> p.autoFetch.copy(enabled = false); else -> AutoFetchSettings(enabled = true, intervalMinutes = every) },
                 notificationSubfilters = p.notificationSubfilters.filterNot { it.id in gone } + listOfNotNull(added),
+                driveFront = p.driveFront.copy(
+                    enabled = args.bool("alert_on_front") ?: p.driveFront.enabled,
+                    minGb = args.num("front_min_tb")?.let { (it * 1000).toInt() } ?: p.driveFront.minGb,
+                    maxGb = args.num("front_max_tb")?.let { (it * 1000).toInt() } ?: p.driveFront.maxGb,
+                    driveInterface = args.str("front_interface")?.let { io.github.tieo.arbay.model.DriveInterface.valueOf(it.uppercase()) } ?: p.driveFront.driveInterface,
+                    recording = args.str("front_recording")?.let { io.github.tieo.arbay.model.DriveRecording.valueOf(it.uppercase()) } ?: p.driveFront.recording,
+                    bareOnly = args.bool("front_bare_only") ?: p.driveFront.bareOnly,
+                ),
                 fitAlert = when (fitLevel) { null -> p.fitAlert; 0.0 -> p.fitAlert.copy(enabled = false); else -> p.fitAlert.copy(enabled = true, minScore = fitLevel) },
                 name = args.str("name") ?: p.name,
                 searchQuery = p.searchQuery.copy(

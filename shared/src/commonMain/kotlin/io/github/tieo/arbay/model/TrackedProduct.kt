@@ -107,6 +107,7 @@ data class TrackedProduct(
     val autoFetch: AutoFetchSettings = AutoFetchSettings(),
     val notificationSubfilters: List<NotificationSubfilter> = emptyList(),
     val fitAlert: FitAlertSettings = FitAlertSettings(),
+    val driveFront: DriveFrontAlert = DriveFrontAlert(),
 )
 
 /**

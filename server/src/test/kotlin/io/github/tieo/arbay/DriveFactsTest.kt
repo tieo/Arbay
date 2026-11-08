@@ -6,6 +6,8 @@ import io.github.tieo.arbay.judging.DriveText
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DriveFacts
+import io.github.tieo.arbay.model.DriveFrontAlert
+import io.github.tieo.arbay.model.wants
 import io.github.tieo.arbay.model.DriveHealth
 import io.github.tieo.arbay.model.DriveHoursFrom
 import io.github.tieo.arbay.model.DriveInterface
@@ -133,8 +135,9 @@ class DriveFactsTest {
     @Test
     fun a_listed_price_stays_when_it_already_is_one_drives() {
         val d = facts(offer("Toshiba MG08ACA14TE 14TB", 309, 99), "6 Stück vorhanden, zu je 309 Euro")
-        assertEquals(30_900, d.unitPrice?.amount)
+        assertNull(d.unitPrice)
         assertEquals(6, d.stock)
+        assertTrue(abs(d.centsPerGb!! - 30_999.0 / 14_000) < 0.001)
     }
 
     @Test
@@ -197,6 +200,18 @@ class DriveFactsTest {
         assertEquals("Seagate NM001G", DriveLife.familyOf("ST14000NM001G-2KJ103"))
         assertEquals("Seagate NM001G", DriveLife.familyOfLine("Seagate Exos X16 16TB"))
         assertEquals("MG09", DriveLife.familyOfLine("Toshiba MG09 18TB"))
+    }
+
+    @Test
+    fun a_front_alert_holds_a_drive_only_against_what_it_states() {
+        val alert = DriveFrontAlert(enabled = true, minGb = 14_000, maxGb = 20_000, driveInterface = DriveInterface.SATA, recording = DriveRecording.CMR, bareOnly = true)
+        assertTrue(alert.wants(DriveFacts(capacityGb = 18_000, driveInterface = DriveInterface.SATA, recording = DriveRecording.CMR, external = false)))
+        assertTrue(alert.wants(DriveFacts(capacityGb = 18_000)))
+        assertFalse(alert.wants(DriveFacts(capacityGb = 12_000)))
+        assertFalse(alert.wants(DriveFacts()))
+        assertFalse(alert.wants(DriveFacts(capacityGb = 18_000, driveInterface = DriveInterface.SAS)))
+        assertFalse(alert.wants(DriveFacts(capacityGb = 18_000, recording = DriveRecording.SMR)))
+        assertFalse(alert.wants(DriveFacts(capacityGb = 18_000, external = true)))
     }
 
     @Test

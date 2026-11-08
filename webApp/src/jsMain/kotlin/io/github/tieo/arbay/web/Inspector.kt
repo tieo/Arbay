@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.model.looksLikeADriveSearch
+import io.github.tieo.arbay.model.limits
 import io.github.tieo.arbay.results.listingFoot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -370,6 +372,10 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         }
 
         H3 { Text("Tell me when a find is") }
+        if (looksLikeADriveSearch(bookmark.searchQuery.positiveText) || bookmark.driveFront.enabled) {
+            Switch("On the price and life front", bookmark.driveFront.enabled) { on -> app.products.updateProduct(bookmark.copy(driveFront = bookmark.driveFront.copy(enabled = on))) }
+            bookmark.driveFront.limits().takeIf { it.isNotEmpty() }?.let { P({ classes("muted", "small") }) { Text(it) } }
+        }
         // A fit is weighed from a search's wishes; a search with none has nothing to weigh.
         if (bookmark.searchQuery.weighsAFit) {
             val fit = bookmark.fitAlert

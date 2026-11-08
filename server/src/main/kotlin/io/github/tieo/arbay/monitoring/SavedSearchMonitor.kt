@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.monitoring
 
+import io.github.tieo.arbay.model.driveFront
+import io.github.tieo.arbay.model.summary
+import io.github.tieo.arbay.model.wants
 import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 import io.github.tieo.arbay.DataDir
@@ -358,6 +361,7 @@ class SavedSearchMonitor(
         found.keys.removeAll(hidden)
         val learned = learn(product, found.values, hidden)
         noteUnanswered(product.id, failed)
+        if (learned.driveFront.enabled && found.isNotEmpty()) pushNewOnTheFront(learned, found.values.toList())
         val freshListings = record(learned, found) ?: return
 
         // Named notification subfilters someone set on this search specifically — a listing can
@@ -802,6 +806,45 @@ class SavedSearchMonitor(
             Ntfy.Action(label = listOfNotNull(price(l)?.let { "%,d €".format(java.util.Locale.GERMANY, it / 100) }, l.location?.city).joinToString(" "), url = l.url)
         }
         Ntfy.send(title, body, click = best.url, tags = listOf("mag"), actions = buttons)
+    }
+
+    private val frontFile = DataDir.file("drive_front_alerts.json")
+
+    /** Per saved search, the offers its front alert has passed over or told of: what it found when
+     *  the alert was first run, then every offer it has pushed. */
+    private val frontNoted: MutableMap<String, MutableSet<String>> =
+        frontFile.readStore(log) { json.decodeFromString<Map<String, Set<String>>>(it) }?.mapValuesTo(HashMap()) { it.value.toMutableSet() } ?: HashMap()
+
+    /**
+     * Pushes the offers newly on the trade-off front of [found], once each. An offer's life rests on
+     * photos read after it is found, so it is judged on a later run than the one that found it, once
+     * its page and photos are read. The alert's first run only notes what is there.
+     */
+    private suspend fun pushNewOnTheFront(product: TrackedProduct, found: List<Listing>) {
+        val noted = synchronized(frontNoted) { frontNoted[product.id]?.toSet() }
+        if (noted == null) {
+            synchronized(frontNoted) { frontNoted[product.id] = found.mapTo(HashSet()) { it.id } }
+            saveFrontNoted()
+            return
+        }
+        val wanted = found.filter { l -> l.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && l.drive?.let(product.driveFront::wants) == true }
+        val front = wanted.driveFront()
+        val news = wanted.filter { it.id in front && it.id !in noted && it.drive?.pageRead == true && it.drive?.photosPending == 0 }
+            .sortedBy { it.drive?.centsPerGb }
+        if (news.isEmpty() || !Ntfy.configured) return
+        fun line(l: Listing) = (listOf("%,d €".format(java.util.Locale.GERMANY, l.effectivePrice.amount / 100)) + l.drive!!.summary()).joinToString(" · ")
+        val best = news.first()
+        val title = if (news.size == 1) "${product.name}: ${best.title.take(60)}" else "${product.name}: ${news.size} new on the front"
+        val body = news.take(5).joinToString("\n") { "· " + line(it) + " · " + it.title.take(40) }
+        Ntfy.send(title, body, click = best.url, tags = listOf("mag"))
+        synchronized(frontNoted) { frontNoted.getValue(product.id).addAll(news.map { it.id }) }
+        saveFrontNoted()
+        log.info("saved-search {}: {} new on the front", product.name, news.size)
+    }
+
+    private fun saveFrontNoted() = synchronized(frontNoted) {
+        runCatching { frontFile.writeTextAtomically(json.encodeToString(frontNoted.mapValues { it.value.toSet() })) }
+            .onFailure { log.error("Could not save the front alert's state: {}", it.message) }
     }
 
     /** Where home is, from "70173 Stuttgart", a postcode, or a place name. */

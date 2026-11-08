@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui
 
+import io.github.tieo.arbay.model.limits
 import io.github.tieo.arbay.results.expectedWords
 import io.github.tieo.arbay.results.factsLine
 import io.github.tieo.arbay.model.tidyTitle
@@ -464,6 +465,13 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     }
     HorizontalDivider(color = arbay.line)
     Text("Tell me when a find is", style = MaterialTheme.typography.titleMedium)
+    if (io.github.tieo.arbay.model.looksLikeADriveSearch(bookmark.searchQuery.positiveText) || bookmark.driveFront.enabled) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("On the price and life front", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Switch(bookmark.driveFront.enabled, { session.products.updateProduct(bookmark.copy(driveFront = bookmark.driveFront.copy(enabled = it))) })
+        }
+        bookmark.driveFront.limits().takeIf { it.isNotEmpty() }?.let { Muted(it) }
+    }
     // A fit is weighed from a search's wishes; a search with none has nothing to weigh.
     if (bookmark.searchQuery.weighsAFit) {
         val fit = bookmark.fitAlert

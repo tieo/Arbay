@@ -74,6 +74,41 @@ fun List<Listing>.driveFront(): Set<String> {
     }.mapTo(HashSet()) { it.first }
 }
 
+/**
+ * Tell the user about a new offer on the trade-off front of the drives a saved search is after. An
+ * offer is only held against what it states: one that says nothing of its interface still counts,
+ * one that names another does not.
+ */
+@Serializable
+data class DriveFrontAlert(
+    val enabled: Boolean = false,
+    val minGb: Int? = null,
+    val maxGb: Int? = null,
+    val driveInterface: DriveInterface? = null,
+    val recording: DriveRecording? = null,
+    val bareOnly: Boolean = false,
+)
+
+/** Whether a drive is one this alert is after; a size has to be stated to be in the range. */
+fun DriveFrontAlert.wants(d: DriveFacts): Boolean {
+    val gb = d.capacityGb
+    if ((minGb != null || maxGb != null) && gb == null) return false
+    if (minGb != null && gb!! < minGb) return false
+    if (maxGb != null && gb!! > maxGb) return false
+    if (driveInterface != null && d.driveInterface != null && d.driveInterface != driveInterface) return false
+    if (recording != null && d.recording != null && d.recording != recording) return false
+    if (bareOnly && d.external == true) return false
+    return true
+}
+
+/** What an alert is limited to, in words. */
+fun DriveFrontAlert.limits(): String = listOfNotNull(
+    if (minGb != null || maxGb != null) "${(minGb ?: 0) / 1000} to ${maxGb?.let { "${it / 1000}" } ?: "any"} TB" else null,
+    driveInterface?.label,
+    recording?.name,
+    "bare drives".takeIf { bareOnly },
+).joinToString(" · ")
+
 private val driveSizeWords = Regex("""\b\d{1,3}(?:[.,]\d)?\s?tb\b""", RegexOption.IGNORE_CASE)
 
 /** Whether a search is after a drive, so its offers are worth reading for a drive's facts. */
