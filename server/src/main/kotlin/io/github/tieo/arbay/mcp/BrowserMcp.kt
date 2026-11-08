@@ -53,7 +53,7 @@ class BrowserMcp {
             form_paypal_pay; the user's payment card goes in with form_card_fill. A file for a file field is
             uploaded first, its content as the body of a POST to /api/forms/<session>/files?name=<name> on the
             server this MCP is on (its address without /browser-mcp, with the same Authorization header), and
-            then named in form_set's files. Every action keeps the page (HTML, picture, log) on the server.
+            then named in form_set's files. A file the page has the browser save (a download link, a PDF) is listed under saved files in a read and its text comes with form_download. Every action keeps the page (HTML, picture, log) on the server.
             Nothing is paid or sent without the user's approval: a final submit, a payment or a signature is
             the user's to approve first.
         """.trimIndent(),
@@ -73,7 +73,7 @@ class BrowserMcp {
                 (args["adopt"] as? JsonArray)?.let { put("adopt", it) }
             }
             val answer = Neuland.request(HttpMethod.Post, "forms", body, limitS = 120).jsonObject
-            "Session ${answer.text("session")}\n" + tabs(answer["tabs"])
+            "Session ${answer.text("session")}\n" + tabs(answer["tabs"]) + downloads(answer["downloads"]).let { if (it.isEmpty()) "" else "\n$it" }
         }
         tool(
             "form_read",
@@ -108,6 +108,32 @@ class BrowserMcp {
             val answer = Neuland.request(HttpMethod.Post, "forms/${args.text("session")}/set", body, limitS = 60).jsonObject
             val taken = answer["taken"]?.jsonPrimitive?.booleanOrNull == true
             (if (taken) "Taken." else "NOT taken: ${answer.text("note") ?: "the page holds something else"}") + "\n" + fieldLine(answer["field"])
+        }
+        tool(
+            "form_download",
+            "The text of a file the session's pages had the browser save: an address that downloads instead of showing, a button that saves a file, a PDF shown in the tab. Waits for a file still being saved. A PDF is given as its text; a long text comes in parts, from the character next says.",
+            readOnly = true,
+            props = {
+                string("session", "The session", required = true)
+                string("name", "The file, as form_read or form_open lists it; the latest when left out")
+                number("from", "The character of its text to start at; the start when left out")
+            },
+        ) { args ->
+            val query = listOfNotNull(
+                args.text("name")?.let { "name=" + java.net.URLEncoder.encode(it, Charsets.UTF_8).replace("+", "%20") },
+                args["from"]?.jsonPrimitive?.doubleOrNull?.let { "from=${it.toLong()}" },
+            ).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+            val file = Neuland.request(HttpMethod.Get, "forms/${args.text("session")}/downloads$query", limitS = 150).jsonObject
+            buildString {
+                appendLine("${file.text("name")} | ${file.text("bytes")} bytes | ${file.text("url")}")
+                val text = file.text("text")
+                if (text == null) {
+                    append("It holds no text.")
+                } else {
+                    appendLine("Characters ${file.text("from")} of ${file.text("total")}" + (file.text("next")?.let { ", next from $it" } ?: ""))
+                    append(text)
+                }
+            }
         }
         tool(
             "form_click",
@@ -330,6 +356,12 @@ class BrowserMcp {
             "  ${t.text("tab")} (${t.text("how")}) ${t.text("title").orEmpty()} | ${t.text("url").orEmpty()}"
         }
 
+    private fun downloads(files: JsonElement?): String =
+        (files as? JsonArray).orEmpty().takeIf { it.isNotEmpty() }?.joinToString("\n", prefix = "Saved files (form_download):\n") {
+            val f = it.jsonObject
+            "  ${f.text("name")} (${f.text("state")}, ${f.text("bytes")} bytes) ${f.text("url").orEmpty()}"
+        }.orEmpty()
+
     private fun fieldLine(field: JsonElement?): String {
         val f = field as? JsonObject ?: return "  (the field no longer shows)"
         val kind = f.text("kind").orEmpty()
@@ -366,6 +398,7 @@ class BrowserMcp {
             appendLine()
         }
         appendLine(tabs(page["tabs"]))
+        downloads(page["downloads"]).takeIf { it.isNotEmpty() }?.let { appendLine(it) }
         appendLine("Text:")
         append(page.text("text").orEmpty())
     }
