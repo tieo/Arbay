@@ -1915,6 +1915,7 @@ class RelevanceFilterTest {
             listing("M.2 NVMe Duplicator Dual Bay Fast Offline Clone For SSD 2TB Recommended"),
             listing("Caja SSD M.2 SATA NVME DOBLE protocolo SATA NVME a adaptador USB 10Gbps 2TB EE. UU."),
             listing("Caja Satechi Nvme Mini SSD Transferencia Aceleración Ssd M.2 10GBPS 2TB Uso Común"),
+            listing("Gabinete SSD M.2 NVMe magnético 10 Gbps transferencia de datos 3s 2 TB expande PD4238"),
             listing("880242-001 HP 2TB 2.5\" NVMe SSD Tray Only 651699-003 ***Pulled***"),
         )
         val drives = listOf(

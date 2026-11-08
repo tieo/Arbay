@@ -907,7 +907,9 @@ object RelevanceFilter {
             """(empty|emty|leere?)\s+(box|karton|ovp|verpackung)|nur\s+(die\s+)?(box|karton|ovp)|""" +
             // Brands that make nothing but cases and glass for the phones they name.
             """spigen|otterbox|benks|nillkin|ringke|caseology|rhinoshield|dbrand|""" +
-            """bo(î|i)tier|carcasa|caja\s+externa|behuizing|adaptador|adattatore|adaptateur|""" +
+            // Spanish and Portuguese also call a drive enclosure a "gabinete": "Gabinete SSD M.2
+            // NVMe magnético 10 Gbps 2 TB" stood at 100 € among the 2 TB drives.
+            """bo(î|i)tier|carcasa|gabinetes?|caja\s+externa|behuizing|adaptador|adattatore|adaptateur|""" +
             // A station that copies one drive onto another, sold under the sizes it copies: "M.2
             // NVMe Duplicator Dual Bay Fast Offline Clone For SSD 2TB" stood at 108 € among the
             // 2 TB drives.
@@ -926,7 +928,7 @@ object RelevanceFilter {
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
     /** The nouns of [accessoryNoun] that name a box drives go into. */
-    private val driveBox = Regex("""(?i)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|caja\s+externa|behuizing)$""")
+    private val driveBox = Regex("""(?i)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|gabinetes?|caja\s+externa|behuizing)$""")
 
     /** Words only storage gear carries: a drive, its interface, its form factor, its bays. */
     private val storageGear = Regex(
