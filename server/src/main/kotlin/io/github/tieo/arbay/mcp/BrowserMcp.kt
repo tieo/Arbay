@@ -18,6 +18,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -73,7 +74,7 @@ class BrowserMcp {
         }
         tool(
             "form_read",
-            "The page a tab of the session shows: every field (id, kind, label, the question its group asks, options, value, required), the buttons and links (id, text), the errors it shows, its text, and every tab of the session.",
+            "The page a tab of the session shows, its iframes and open shadow roots included under one set of ids: every field (id, kind, label, the question its group asks, options, value, required), the buttons, links and other things that take a click (id, text), the errors it shows, its text, and every tab of the session.",
             readOnly = true,
             props = {
                 string("session", "The session", required = true)
@@ -107,18 +108,22 @@ class BrowserMcp {
         }
         tool(
             "form_click",
-            "Clicks a button or link with the mouse at a point of it the page shows uncovered, by its id or its visible text, and answers the page after (a window it opened shows under tabs).",
+            "Clicks a button, link or anything clickable with the mouse at a point of it the page shows uncovered, by its id or its visible text, or a point x, y of form_screenshot's picture for what form_read does not list. Answers the page after (a window it opened shows under tabs).",
             destructive = true,
             props = {
                 string("session", "The session", required = true)
                 string("field", "The button's or link's id from form_read")
                 string("text", "Or its visible text, exactly")
+                number("x", "Or a point of the tab's picture: its x")
+                number("y", "And its y")
                 string("tab", "The tab, by its id; the held tab when left out")
             },
         ) { args ->
             val body = buildJsonObject {
                 args.text("field")?.let { put("field", it) }
                 args.text("text")?.let { put("text", it) }
+                args["x"]?.jsonPrimitive?.doubleOrNull?.let { put("x", it) }
+                args["y"]?.jsonPrimitive?.doubleOrNull?.let { put("y", it) }
                 args.text("tab")?.let { put("tab", it) }
             }
             page(Neuland.request(HttpMethod.Post, "forms/${args.text("session")}/click", body, limitS = 90).jsonObject)
