@@ -44,7 +44,9 @@ class BrowserMcp {
             ids stay for an element, but a page may replace its elements. A window the page opens (a popup, a
             login in a new tab) is listed under tabs; pass its id as tab. A page that hands an identification
             to the ID card's eID client is answered by Neuland itself: the user allows it and types the PIN on
-            their phone, and the tab goes on by itself; read it until it has. A file for a file field is
+            their phone, and the tab goes on by itself; read it until it has. A password or code only the user
+            knows goes in with form_ask_secret: the user types it on their phone and Neuland types it into the
+            field, so it never reaches you. A file for a file field is
             uploaded first, its content as the body of a POST to /api/forms/<session>/files?name=<name> on the
             server this MCP is on (its address without /browser-mcp, with the same Authorization header), and
             then named in form_set's files. Every action keeps the page (HTML, picture, log) on the server.
@@ -150,6 +152,47 @@ class BrowserMcp {
                 args.text("tab")?.let { put("tab", it) }
             }
             page(Neuland.request(HttpMethod.Post, "forms/${args.text("session")}/key", body, limitS = 60).jsonObject)
+        }
+        tool(
+            "form_ask_secret",
+            "Asks the user on their phone (NeuAuth) for a password or a code the page wants in a field, and types what they give into it: the secret goes from the phone into the page and never to you; form_read shows the field as filled only. The user sees the title, the account, your words and the page's host; it is typed only while the tab still shows that host. Waits up to 9 minutes for the user and answers whether the page took it; still waiting then, call it again with the ask id alone.",
+            destructive = true,
+            props = {
+                string("session", "The session", required = true)
+                string("field", "The password or code field's id from form_read")
+                string("secret", "\"password\" or \"code\"; password when left out")
+                string("title", "The site as the user knows it (\"OVHcloud\"); the page's host when left out")
+                string("account", "The account it is for, as the user knows it")
+                string("hint", "For a code: where the page says it went (\"sent to p***@gmail.com\")")
+                string("asker", "Who asks and for what, in a few words (\"tldr, to cancel the VPS\")")
+                string("tab", "The tab, by its id; the held tab when left out")
+                string("ask", "An ask still waiting, by its id: waits for it again instead of asking anew")
+            },
+        ) { args ->
+            val session = args.text("session")
+            val ask = args.text("ask") ?: run {
+                val body = buildJsonObject {
+                    put("field", args.text("field") ?: throw IllegalArgumentException("a new ask names its field"))
+                    put("secret", args.text("secret") ?: "password")
+                    args.text("title")?.let { put("title", it) }
+                    args.text("account")?.let { put("account", it) }
+                    args.text("hint")?.let { put("hint", it) }
+                    args.text("asker")?.let { put("asker", it) }
+                    args.text("tab")?.let { put("tab", it) }
+                }
+                Neuland.request(HttpMethod.Post, "forms/$session/ask", body, limitS = 60).jsonObject.text("ask")
+                    ?: throw IllegalStateException("Neuland gave the ask no id")
+            }
+            // Three waits of three minutes, within the 10 minutes a client gives one call.
+            var answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=180", limitS = 200).jsonObject
+            repeat(2) { if (answer.text("state") == "waiting") answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=180", limitS = 200).jsonObject }
+            when (answer.text("state")) {
+                "typed" -> "Typed in; the page holds it.\n" + fieldLine(answer["field"])
+                "failed" -> "NOT typed in: ${answer.text("error")}\n" + fieldLine(answer["field"])
+                "called-off" -> "The user called it off."
+                "timed-out" -> "The user did not answer within 10 minutes."
+                else -> "Still waiting for the user (ask $ask): call form_ask_secret again with session and ask."
+            }
         }
         tool(
             "form_close",
