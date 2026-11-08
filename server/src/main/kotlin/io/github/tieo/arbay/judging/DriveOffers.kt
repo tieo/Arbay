@@ -79,7 +79,11 @@ object DriveOffers {
     }
 
     /** [l] as what its facts say now, for an offer kept from an earlier search. */
-    fun current(l: Listing): Listing = if (l.drive != null) attach(l) else l
+    fun current(l: Listing): Listing = when {
+        l.drive == null -> l
+        isDrive(l) -> attach(l)
+        else -> l.copy(drive = null)
+    }
 
     internal fun read(l: Listing, detail: ListingDetail?, health: DriveHealth): DriveFacts {
         val pageText = detail?.description.orEmpty()
