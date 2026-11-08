@@ -6,6 +6,7 @@ import io.github.tieo.arbay.model.DriveHealth
 import io.github.tieo.arbay.model.DriveVerdict
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.LiveAuction
+import io.github.tieo.arbay.model.LiveAuctions
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.PriceSpread
 import io.github.tieo.arbay.model.SaleType
@@ -151,12 +152,29 @@ object SoldPriceReader {
     private const val AUCTIONS_KEEP_MS = 10L * 60 * 1000
 
     /** The eBay.de auctions running for a saved search, soonest end first, each with what it can be
-     *  expected to end at. */
-    suspend fun auctionsOf(product: TrackedProduct): List<LiveAuction> {
+     *  expected to end at. The market takes minutes to answer for several words, so a list not known
+     *  yet is asked for in the background and answered as still being read. */
+    fun auctionsOf(product: TrackedProduct): LiveAuctions {
         val now = Clock.System.now()
-        val listings = auctions[product.id]?.takeIf { System.currentTimeMillis() - it.at < AUCTIONS_KEEP_MS }?.listings
-            ?: readAuctions(product.searchQuery).also { auctions[product.id] = KeptAuctions(System.currentTimeMillis(), it) }
-        return listings.filter { (it.auctionEndsAt ?: now) > now }.sortedBy { it.auctionEndsAt }.map { expectation(it, product.searchQuery) }
+        val known = auctions[product.id]
+        val fresh = known != null && System.currentTimeMillis() - known.at < AUCTIONS_KEEP_MS
+        val reading = !fresh && startAuctions(product)
+        val list = known?.listings.orEmpty().filter { (it.auctionEndsAt ?: now) > now }.sortedBy { it.auctionEndsAt }.map { expectation(it, product.searchQuery) }
+        return LiveAuctions(list, reading || "auctions ${product.id}" in inFlight)
+    }
+
+    private fun startAuctions(product: TrackedProduct): Boolean {
+        val key = "auctions ${product.id}"
+        if (inFlight.add(key)) background.launch {
+            try {
+                auctions[product.id] = KeptAuctions(System.currentTimeMillis(), turn.withLock { readAuctions(product.searchQuery) })
+            } catch (e: Exception) {
+                log.warn("Auctions of {} not read: {}", product.name, e.message)
+            } finally {
+                inFlight.remove(key)
+            }
+        }
+        return true
     }
 
     private suspend fun readAuctions(query: SearchQuery): List<Listing> {

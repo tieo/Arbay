@@ -145,7 +145,7 @@ object DriveOffers {
     suspend fun run() {
         while (true) {
             try {
-                if (AuctionBids.busySoon(15.minutes)) { delay(60_000); continue }
+                if (AuctionBids.busySoon(30.minutes) || machineBusy()) { delay(60_000); continue }
                 val next = synchronized(waiting) {
                     val best = waiting.values.minByOrNull { it.listing.drive?.centsPerGb ?: Double.MAX_VALUE } ?: return@synchronized null
                     waiting.remove(best.listing.id)
@@ -162,6 +162,19 @@ object DriveOffers {
             }
         }
     }
+
+    /** Whether this machine has no room for more: more waiting to run than it has cores, or too little
+     *  memory left. The queue can wait; a home server deep in swap misses its bids. */
+    internal fun machineBusy(): Boolean {
+        val load = java.lang.management.ManagementFactory.getOperatingSystemMXBean().systemLoadAverage
+        if (load > Runtime.getRuntime().availableProcessors()) return true
+        val available = runCatching {
+            java.io.File("/proc/meminfo").readLines().first { it.startsWith("MemAvailable:") }.filter(Char::isDigit).toLong() / 1024
+        }.getOrNull() ?: return false
+        return available < MIN_FREE_MB
+    }
+
+    private const val MIN_FREE_MB = 2_000L
 
     private suspend fun readOne(w: Wanted) {
         val l = w.listing

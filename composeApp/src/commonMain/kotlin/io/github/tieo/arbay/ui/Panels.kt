@@ -137,21 +137,23 @@ private fun AuctionsPanel(session: Session, state: ResultsState) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     var list by remember(id) { mutableStateOf<List<io.github.tieo.arbay.model.LiveAuction>?>(null) }
     var loading by remember(id) { mutableStateOf(true) }
+    var reading by remember(id) { mutableStateOf(false) }
     LaunchedEffect(id) {
         if (id == null) return@LaunchedEffect
         // The expected prices arrive as their sales are read.
         while (true) {
             val read = session.client.auctions(id)
-            if (read != null) list = read
+            if (read != null) list = read.auctions
+            reading = read?.reading == true
             loading = false
-            if (read == null || read.none { it.expectedPending }) break
+            if (read == null || (!read.reading && read.auctions.none { it.expectedPending })) break
             kotlinx.coroutines.delay(20_000)
         }
     }
     Title("Auctions")
     val known = list
     when {
-        known == null && loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading eBay's auctions") }
+        (known == null && loading) || (reading && known.isNullOrEmpty()) -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading eBay's auctions") }
         known == null -> Muted("eBay's auctions could not be read.")
         known.isEmpty() -> Muted("No auctions running for this search.")
         else -> known.forEach { a ->

@@ -953,15 +953,16 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "The eBay.de auctions running now for a saved search, soonest end first: the bid so far with shipping, when it ends, the drive's facts, and what it can be expected to end at from sold auctions of the same model or size. An expected price still being read arrives if you ask again in a few minutes.",
             props = { string("saved_search_id", "The saved search", required = true) },
         ) { args ->
-            val list = getJson<List<io.github.tieo.arbay.model.LiveAuction>>("/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/auctions")
+            val answer = getJson<io.github.tieo.arbay.model.LiveAuctions>("/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/auctions")
+            val list = answer.auctions
             list.forEach { seen[it.listing.id] = it.listing }
-            list.joinToString("\n") { a ->
+            (if (answer.reading) "Still asking eBay; call again in a few minutes.\n" else "") + list.joinToString("\n") { a ->
                 listOfNotNull(
                     "ends ${a.listing.auctionEndsAt}",
                     a.expectedEndEur?.let { "expected end $it € all in (${a.expectedFrom}, ${a.expectedSales} sales)" } ?: "expected end still being read".takeIf { a.expectedPending } ?: "expected end not known",
                     a.listing.line(),
                 ).joinToString(" | ")
-            }.ifEmpty { "No auctions running for this search." }
+            }.ifEmpty { if (answer.reading) "" else "No auctions running for this search." }
         }
 
         tool("auction_bids", "The bids set up on auctions, each with its purchase: waiting for the end, placed, ended and not yet settled, lost, won, skipped or not placed, and why. An ended bid blocks the later ones of its purchase until eBay shows it lost or won.") {

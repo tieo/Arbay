@@ -42,3 +42,11 @@ data class LiveAuction(
     /** The sales it rests on are still being read; asking again shortly has them. */
     val expectedPending: Boolean = false,
 )
+
+/** The auctions running for a saved search, as far as they have been read. */
+@Serializable
+data class LiveAuctions(
+    val auctions: List<LiveAuction> = emptyList(),
+    /** The market is still being asked; asking again shortly has them. */
+    val reading: Boolean = false,
+)

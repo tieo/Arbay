@@ -413,8 +413,8 @@ class ArbayClient(
     }
 
     /** The auctions running for a saved search, soonest end first. Null when it could not be asked. */
-    suspend fun auctions(productId: String): List<io.github.tieo.arbay.model.LiveAuction>? = orElse(null) {
-        client.get("$baseUrl/api/products/$productId/auctions").body<List<io.github.tieo.arbay.model.LiveAuction>>()
+    suspend fun auctions(productId: String): io.github.tieo.arbay.model.LiveAuctions? = orElse(null) {
+        client.get("$baseUrl/api/products/$productId/auctions").body<io.github.tieo.arbay.model.LiveAuctions>()
     }
 
     /** The ad as its page has it now, uncached: for an offer about to be written. */

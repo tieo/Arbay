@@ -58,7 +58,9 @@ object PhotoText {
         val file: File = Files.createTempFile("screen", ".png").toFile()
         return try {
             ImageIO.write(image, "png", file)
-            withTimeoutOrNull(60.seconds) { runProcess(listOf("python3", screenScript, file.absolutePath)) }
+            // Two cores at the lowest priority: left alone RapidOCR takes every core of a home server
+            // that also has to confirm last-second bids, and a long queue of ads ran it for hours.
+            withTimeoutOrNull(180.seconds) { runProcess(listOf("taskset", "-c", "0,1", "nice", "-n", "19", "python3", screenScript, file.absolutePath)) }
                 ?.takeIf { it.exitCode == 0 }?.stdout?.decodeToString()
         } finally {
             file.delete()

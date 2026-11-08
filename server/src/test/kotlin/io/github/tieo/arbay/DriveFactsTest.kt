@@ -66,6 +66,7 @@ class DriveFactsTest {
     @Test
     fun several_sizes_in_a_title_are_no_size_and_a_link_speed_is_none() {
         assertNull(DriveText.capacityOfWords("Festplatten 8TB, 10TB, 12TB"))
+        assertNull(DriveText.capacityOfWords("Festplatten 250 GB - 16 TB - USB 3.0"))
         assertEquals(18_000, DriveText.capacityOfWords("18 TB HDD SATA 6Gb/s 256 MB"))
     }
 

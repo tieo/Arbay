@@ -44,15 +44,14 @@ object DriveText {
 
     private val SIZE = Regex("""(?<![\d.,])(\d{1,3}(?:[.,]\d{1,2})?)\s?(TB|GB|Terabyte|Gigabyte)(?![/\w])""", RegexOption.IGNORE_CASE)
 
-    /** Gigabytes the words state, or null where they state none or several sizes. */
+    /** Gigabytes the words state, or null where they state none or several ("250 GB - 16 TB"). */
     fun capacityOfWords(text: String): Int? {
         val found = SIZE.findAll(text).map { m ->
             val n = m.groupValues[1].replace(',', '.').toDouble()
             val unit = m.groupValues[2].lowercase()
             (if (unit.startsWith("t")) (n * 1000).toInt() else n.toInt())
         }.toList()
-        val terabytes = found.filter { it >= 1000 }.ifEmpty { found }
-        return terabytes.distinct().singleOrNull()
+        return found.distinct().singleOrNull()
     }
 
     private val SEAGATE_SATA = setOf("NM000J", "NM001G", "NM000D", "NM003D", "NM007D", "NM0008", "NM0018", "NM0007")

@@ -152,6 +152,9 @@ object DriveLife {
 
     // ── Keeping the records current ──
 
+    /** When the records shipped with the server were read: 2026-11-08. */
+    private const val BUNDLED_AT = 1_794_096_000_000L
+
     /** Backblaze publishes the records quarterly, so a month is often enough to look. */
     private val REFRESH_EVERY = (30 * 24).hours
 
@@ -164,9 +167,9 @@ object DriveLife {
         val dir = DataDir.file("drive_life_refresh").apply { deleteRecursively(); mkdirs() }
         val jar = File(DriveLife::class.java.protectionDomain.codeSource.location.toURI()).path
         val java = File(System.getProperty("java.home"), "bin/java").path
-        val outcome = withTimeoutOrNull(3.hours) {
+        val outcome = withTimeoutOrNull(12.hours) {
             runProcess(listOf("nice", "-n", "19", java, "-Xmx256m", "-cp", jar, "io.github.tieo.arbay.judging.DriveLifeKt", dir.path))
-        } ?: error("the records took over three hours to read")
+        } ?: error("the records took over twelve hours to read")
         val out = outcome.stdout.decodeToString().trim() + " " + outcome.stderr.takeLast(500)
         val bins = File(dir, "bins.csv")
         val big = File(dir, "big_models.csv")
@@ -185,8 +188,9 @@ object DriveLife {
         while (true) {
             delay(1.hours)
             try {
-                val age = if (binsFile.exists()) System.currentTimeMillis() - binsFile.lastModified() else Long.MAX_VALUE
-                if (age > REFRESH_EVERY.inWholeMilliseconds && !AuctionBids.busySoon(3.hours)) refresh()
+                val readAt = if (binsFile.exists()) binsFile.lastModified() else BUNDLED_AT
+                val old = System.currentTimeMillis() - readAt > REFRESH_EVERY.inWholeMilliseconds
+                if (old && !AuctionBids.busySoon(6.hours) && !DriveOffers.machineBusy()) refresh()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -210,8 +214,9 @@ fun main(args: Array<String>) {
             listOf(
                 "SET home_directory='${dir.path}'",
                 "SET temp_directory='${dir.path}/tmp'",
-                "SET threads=2",
-                "SET memory_limit='3GB'",
+                "SET threads=1",
+                "SET memory_limit='1GB'",
+                "SET preserve_insertion_order=false",
                 "INSTALL httpfs", "LOAD httpfs", "INSTALL iceberg", "LOAD iceberg",
                 "CREATE SECRET bb (TYPE s3, KEY_ID '$KEY_ID', SECRET '$KEY', ENDPOINT 's3.us-west-004.backblazeb2.com', REGION 'us-west-004')",
             ).forEach { s.execute(it) }
