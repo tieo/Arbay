@@ -55,6 +55,17 @@ object AuctionBids {
      *  Without it no bid is set up. */
     internal var mostBidEur: Double? = System.getenv("ARBAY_MOST_BID_EUR")?.trim()?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
 
+    /** The most a bid may cost for a purchase the user set its own limit for, in euros, from
+     *  `ARBAY_MOST_BID_EUR_BY_PURCHASE` ("hdd-14-20tb=399,other=120"). An entry that does not read
+     *  is left out, so that purchase stays at [mostBidEur]. */
+    internal var mostBidByPurchase: Map<String, Double> = readPurchaseLimits(System.getenv("ARBAY_MOST_BID_EUR_BY_PURCHASE"))
+
+    internal fun readPurchaseLimits(text: String?): Map<String, Double> = text.orEmpty().split(',').mapNotNull { entry ->
+        val name = entry.substringBefore('=', "").trim().lowercase()
+        val euros = entry.substringAfter('=', "").trim().toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+        if (euros != null && PURCHASE_NAME.matches(name)) name to euros else null
+    }.toMap()
+
     init {
         // Every bid from before purchases were named was towards the one 2 TB SSD.
         file.readStore(log) { json.decodeFromString<List<AuctionBid>>(it) }?.let { read -> bids += read.map { if (it.purchase == null) it.copy(purchase = FIRST_PURCHASE) else it } }
@@ -74,10 +85,11 @@ object AuctionBids {
      * bid takes to open, and for an auction already asked for.
      */
     fun ask(request: AuctionBidRequest, now: Instant = Clock.System.now()): AuctionBid {
-        val most = mostBidEur ?: throw IllegalArgumentException("Arbay sets up no bid without the most a bid may cost (ARBAY_MOST_BID_EUR)")
-        require(request.allInEur.isFinite() && request.allInEur <= most) { "an all-in limit of ${request.allInEur} € passes the $most € a bid may cost" }
+        val general = mostBidEur ?: throw IllegalArgumentException("Arbay sets up no bid without the most a bid may cost (ARBAY_MOST_BID_EUR)")
         val purchase = request.purchase?.trim()?.lowercase()?.takeIf { PURCHASE_NAME.matches(it) }
             ?: throw IllegalArgumentException("a bid names its purchase in letters, digits and hyphens, the same name for every bid towards one thing")
+        val most = mostBidByPurchase[purchase] ?: general
+        require(request.allInEur.isFinite() && request.allInEur <= most) { "an all-in limit of ${request.allInEur} € passes the $most € a bid may cost for $purchase" }
         val maxCents = maxCents(request.allInEur, request.shippingEur)
             ?: throw IllegalArgumentException("an all-in limit of ${request.allInEur} € leaves nothing to bid after ${request.shippingEur} € shipping")
         require(itemOf(request.url) != null) { "${request.url} is no eBay.de item" }

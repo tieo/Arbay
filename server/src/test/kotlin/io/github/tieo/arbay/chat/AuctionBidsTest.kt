@@ -90,6 +90,29 @@ class AuctionBidsTest {
     }
 
     @Test
+    fun `a purchase with its own limit may go to it, and every other stays at the general one`() {
+        val now = Clock.System.now()
+        AuctionBids.mostBidByPurchase = AuctionBids.readPurchaseLimits("hdd-14-20tb=399")
+        try {
+            fun item() = (500_000_000_000L + (Math.random() * 1e9).toLong()).toString()
+            val big = AuctionBids.ask(request(item(), now + 10.minutes, allIn = 399.0).copy(purchase = "HDD-14-20TB"), now)
+            assertEquals(392.81, big.maxEur)
+            assertFailsWith<IllegalArgumentException> { AuctionBids.ask(request(item(), now + 10.minutes, allIn = 399.01).copy(purchase = "hdd-14-20tb"), now) }
+            assertFailsWith<IllegalArgumentException> { AuctionBids.ask(request(item(), now + 10.minutes, allIn = 39_900.0).copy(purchase = "hdd-14-20tb"), now) }
+            assertFailsWith<IllegalArgumentException> { AuctionBids.ask(request(item(), now + 10.minutes, allIn = 160.01), now) }
+            assertFailsWith<IllegalArgumentException> { AuctionBids.ask(request(item(), now + 10.minutes, allIn = 399.0).copy(purchase = "hdd-other"), now) }
+        } finally {
+            AuctionBids.mostBidByPurchase = emptyMap()
+        }
+    }
+
+    @Test
+    fun `a purchase limit that does not read leaves the purchase at the general limit`() {
+        assertEquals(mapOf("a-1" to 399.0), AuctionBids.readPurchaseLimits(" A-1 = 399 ,b=abc,c=-5,d=0,e=Infinity,f g=9,=7,h"))
+        assertEquals(emptyMap(), AuctionBids.readPurchaseLimits(null))
+    }
+
+    @Test
     fun `a bid names one purchase, kept in lower case, and goes out to Neuland with it`() {
         val now = Clock.System.now()
         val item = (200_000_000_000L + (Math.random() * 1e9).toLong()).toString()
