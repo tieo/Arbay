@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui
 
+import io.github.tieo.arbay.results.expectedWords
+import io.github.tieo.arbay.results.factsLine
+import io.github.tieo.arbay.model.tidyTitle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.outlined.Info
 import io.github.tieo.arbay.results.photoLine
@@ -111,6 +114,7 @@ fun PanelBody(session: Session, route: Route.Results, panel: Panel, state: Resul
     ) {
         when (panel) {
             Panel.PRICES -> PricesPanel(session, route, state)
+            Panel.AUCTIONS -> AuctionsPanel(session, state)
             Panel.HIDDEN -> HiddenPanel(session, route, state)
             Panel.MARKETS -> MarketsPanel(session, state)
             Panel.WORDS -> WordsPanel(session, state)
@@ -126,6 +130,41 @@ private fun Title(text: String) = Text(text, style = MaterialTheme.typography.ti
 
 /** Whether a price is good: the spread drawn large, the figures, what the thing sold for (asked
  *  only when wanted), and the cheapest offers. */
+@Composable
+private fun AuctionsPanel(session: Session, state: ResultsState) {
+    val id = state.open.bookmark?.id
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var list by remember(id) { mutableStateOf<List<io.github.tieo.arbay.model.LiveAuction>?>(null) }
+    var loading by remember(id) { mutableStateOf(true) }
+    LaunchedEffect(id) {
+        if (id == null) return@LaunchedEffect
+        // The expected prices arrive as their sales are read.
+        while (true) {
+            val read = session.client.auctions(id)
+            if (read != null) list = read
+            loading = false
+            if (read == null || read.none { it.expectedPending }) break
+            kotlinx.coroutines.delay(20_000)
+        }
+    }
+    Title("Auctions")
+    val known = list
+    when {
+        known == null && loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading eBay's auctions") }
+        known == null -> Muted("eBay's auctions could not be read.")
+        known.isEmpty() -> Muted("No auctions running for this search.")
+        else -> known.forEach { a ->
+            Column(Modifier.fillMaxWidth().clickable { uri.openUri(a.listing.url) }.padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(a.listing.title.tidyTitle(), style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                Muted(io.github.tieo.arbay.results.listingFoot(a.listing, null, null).joinToString(" · "), maxLines = 1)
+                Muted("${a.listing.effectivePrice.amount / 100} € so far · ${a.listing.bidCount ?: 0} bids", maxLines = 1)
+                Text(a.expectedWords(), style = MaterialTheme.typography.bodySmall)
+                a.listing.drive?.factsLine()?.takeIf { it.isNotEmpty() }?.let { Muted(it, maxLines = 2) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PricesPanel(session: Session, route: Route.Results, state: ResultsState) {
     val nav = LocalNavigator.current

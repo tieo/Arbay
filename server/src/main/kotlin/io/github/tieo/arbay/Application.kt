@@ -80,6 +80,8 @@ fun Application.module() {
     }
     // Bids set up on auctions are placed in each auction's last seconds.
     launch { io.github.tieo.arbay.chat.AuctionBids.run() }
+    launch { io.github.tieo.arbay.judging.DriveOffers.run() }
+    launch { io.github.tieo.arbay.judging.DriveLife.run() }
     // Start background monitor if tracking was previously enabled
     if (FreeItemProfileStore.get()?.trackingEnabled == true) {
         FreeItemMonitor.start()

@@ -216,7 +216,7 @@ class SavedSearchMonitor(
         // still in flight, since that runs in the background after a crawl.
         val product = productRepo.getById(productId)
         return ids.mapNotNull { ListingArchive.get(it) ?: listingRepo.getById(it) }
-            .map { asToday(it, product) }
+            .map { io.github.tieo.arbay.judging.DriveOffers.current(asToday(it, product)) }
     }
 
     /**
@@ -343,7 +343,7 @@ class SavedSearchMonitor(
             val judged = RelevanceFilter.partition(results.map(io.github.tieo.arbay.relevance.SellersWords::applyWithPageText), query)
             // Read by the offer judge as an opened search is, so a grigri bag charm that writes
             // the word wakes nobody about a belay device.
-            OfferJudge.judge(judged.kept, product.searchQuery.positiveText).forEach { found[it.id] = it }
+            io.github.tieo.arbay.judging.DriveOffers.found(OfferJudge.judge(judged.kept, product.searchQuery.positiveText), query, crawler).forEach { found[it.id] = it }
             judged.dropped.filter { it.reason in WHAT_THE_ITEM_IS }.forEach { notTheThing += offerKey(it.listing.id) }
         }
         // One eBay item is listed on every eBay site under its number, titled in each site's

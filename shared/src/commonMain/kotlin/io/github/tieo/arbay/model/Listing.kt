@@ -78,6 +78,8 @@ data class Listing(
     val modelScores: Map<String, Double>? = null,
     val isExploration: Boolean = false,
     val vehicle: VehicleInfo? = null,
+    /** What an offer for a drive states; null for anything else. */
+    val drive: DriveFacts? = null,
     /** Other ads, placed elsewhere or by someone else, that show one of this ad's photos. */
     val photosAlsoIn: List<PhotoCopy> = emptyList(),
 ) {

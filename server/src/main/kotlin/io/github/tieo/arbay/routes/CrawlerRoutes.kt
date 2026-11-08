@@ -136,7 +136,7 @@ private suspend fun finishedResults(
     val placed = if (query.area(io.github.tieo.arbay.repo.ImportSettingsStore.current.homeCountry) != null)
         io.github.tieo.arbay.judging.LocationEnricher.enrich(filtered, crawler) else filtered
     val (inside, outside) = outsideTheArea(placed, query)
-    val listings = withFit(withPhotoCopies(asDelivered(inside, query)), query, isCarQuery)
+    val listings = io.github.tieo.arbay.judging.DriveOffers.found(withFit(withPhotoCopies(asDelivered(inside, query)), query, isCarQuery), query, crawler)
     listings.forEach { listingRepo.upsert(it) }
     val facets = if (isCarQuery)
         CarFilterEngine.facetCounts(

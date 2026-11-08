@@ -9,10 +9,12 @@ import kotlinx.serialization.Serializable
  * chose is part of the search they saved: reopening a saved search restores it.
  */
 @Serializable
-enum class SortMode(val label: String) {
+enum class SortMode(val label: String, val forDrives: Boolean = false) {
     BEST_MATCH("Best match"),
     PRICE_ASC("Price: low to high"),
     PRICE_DESC("Price: high to low"),
     NEAREST("Nearest first"),
     NEWEST("Newest first"),
+    CENTS_PER_GB("Price per GB", forDrives = true),
+    LONGEST_LIFE("Longest expected life", forDrives = true),
 }

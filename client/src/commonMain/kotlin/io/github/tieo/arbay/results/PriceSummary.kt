@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.results
 
+import io.github.tieo.arbay.model.driveFront
 import io.github.tieo.arbay.DisplayCurrency
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
@@ -22,6 +23,8 @@ data class PriceSummary(
     /** The offers that cost the least, which the accent marks. */
     val cheapestIds: Set<String>,
     val sold: Sold?,
+    /** The drive offers nothing beats on both price per gigabyte and expected life left. */
+    val frontIds: Set<String> = emptySet(),
 ) {
     /** What the same thing went for: the middle sold price and how many sales it is taken from. */
     data class Sold(val middle: Money, val count: Int)
@@ -66,5 +69,6 @@ fun priceSummary(offers: List<Listing>, sold: List<Listing> = emptyList()): Pric
         spread = spread,
         cheapestIds = priced.takeWhile { it.second == low }.map { it.first.id }.toSet(),
         sold = medianMoney(soldAmounts, currency)?.let { PriceSummary.Sold(it, soldAmounts.size) },
+        frontIds = offers.filter { !it.sold && !it.offQuery && it.saleType != io.github.tieo.arbay.model.SaleType.AUCTION }.driveFront(),
     )
 }

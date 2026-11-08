@@ -12,7 +12,7 @@ sealed interface Source {
 
 /** A closer look at an open search, beside its results in a window or over them on a phone. */
 enum class Panel(val slug: String) {
-    PRICES("prices"), HIDDEN("hidden"), MARKETS("markets"), WORDS("words"), ALERTS("alerts"), CRITERIA("criteria"),
+    PRICES("prices"), HIDDEN("hidden"), MARKETS("markets"), WORDS("words"), ALERTS("alerts"), CRITERIA("criteria"), AUCTIONS("auctions"),
 
     /** The send window for the offers picked in the results. */
     WRITE("write");

@@ -116,6 +116,12 @@ object AuctionBids {
         return neuland(url, maxEur, allInEur, place = false, at = null)
     }
 
+    /** Whether a bid is being placed or is due within [window]: heavy work on this machine waits, since
+     *  a bid confirmed late is a bid lost. */
+    fun busySoon(window: Duration, now: Instant = Clock.System.now()): Boolean = synchronized(bids) {
+        bids.any { it.state == AuctionBidState.PLACING || (it.state == AuctionBidState.WAITING && it.endsAt - window <= now) }
+    }
+
     /** How long after an auction's end its outcome is first asked, and how long between asks. */
     val SETTLE_AFTER: Duration = 2.minutes
     val SETTLE_EVERY: Duration = 10.minutes

@@ -1,5 +1,14 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.results.listingFoot
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import io.github.tieo.arbay.model.SoldPrices
+import io.github.tieo.arbay.model.LiveAuction
+import io.github.tieo.arbay.results.rows
+import io.github.tieo.arbay.results.expectedWords
+import io.github.tieo.arbay.results.factsLine
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
@@ -107,6 +116,7 @@ private fun PanelHead(route: Route.Results, title: String) {
 fun PanelView(app: WebApp, route: Route.Results, panel: Panel, state: ResultsState) {
     when (panel) {
         Panel.PRICES -> PricesPanel(app, route, state)
+        Panel.AUCTIONS -> AuctionsPanel(app, route, state)
         Panel.HIDDEN -> HiddenPanel(app, route, state)
         Panel.MARKETS -> MarketsPanel(app, route, state)
         Panel.WORDS -> WordsPanel(app, route, state)
@@ -622,6 +632,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             state.open.bookmark?.let { app.products.checkModel(it, listing.id, model) }
         }
         DriveHealthSection(health, readingDrive)
+        SoldPricesSection(app, listing)
 
         // Every seller offering it at this address, cheapest delivered first, each a link to its offer.
         if (page.sellers.isNotEmpty()) {
@@ -739,6 +750,71 @@ private fun ModelPick(choice: ModelChoice, checked: String?, pick: (String) -> U
         if (now == null) Option("", { selected() }) { Text(FitPart.NOT_STATED) }
         choice.models.forEach { m -> Option(m, { if (m == now) selected() }) { Text(m) } }
         Option(NONE_OF_THEM, { if (now == NONE_OF_THEM) selected() }) { Text("none of these") }
+    }
+}
+
+/** What this drive sold for: looked up on asking, since the look takes the market a minute or two. */
+@Composable
+private fun SoldPricesSection(app: WebApp, listing: Listing) {
+    val drive = listing.drive?.takeIf { it.model != null || it.capacityGb != null } ?: return
+    var sold by remember(listing.id) { mutableStateOf<SoldPrices?>(null) }
+    var asking by remember(listing.id) { mutableStateOf(false) }
+    var failed by remember(listing.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    H3 { Text("Sold on eBay") }
+    val known = sold
+    when {
+        known != null -> Div({ classes("drive-health") }) {
+            Div({ classes("muted", "small") }) { Text(known.asked) }
+            known.rows().forEach { (what, figures) -> Div({ classes("drive-reading") }) { Span { Text(what) }; Span({ classes("muted", "small") }) { Text(figures) } } }
+        }
+        asking -> Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading eBay's sold offers") } }
+        else -> {
+            if (failed) Span({ classes("muted", "small") }) { Text("eBay's sold offers could not be read") }
+            QuietButton("Look up") {
+                asking = true; failed = false
+                scope.launch { sold = app.client.soldPrices(drive); failed = sold == null; asking = false }
+            }
+        }
+    }
+}
+
+/** The auctions running for this saved search, soonest end first, with what each may end at. */
+@Composable
+fun AuctionsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
+    val id = state.open.bookmark?.id
+    var list by remember(id) { mutableStateOf<List<LiveAuction>?>(null) }
+    var loading by remember(id) { mutableStateOf(true) }
+    LaunchedEffect(id) {
+        if (id == null) return@LaunchedEffect
+        // The expected prices arrive as their sales are read.
+        while (true) {
+            val read = app.client.auctions(id)
+            if (read != null) list = read
+            loading = false
+            if (read == null || read.none { it.expectedPending }) break
+            delay(20_000)
+        }
+    }
+    Div({ classes("panel") }) {
+        PanelHead(route, "Auctions")
+        val known = list
+        when {
+            known == null && loading -> Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading eBay's auctions") } }
+            known == null -> P({ classes("muted") }) { Text("eBay's auctions could not be read.") }
+            known.isEmpty() -> P({ classes("muted") }) { Text("No auctions running for this search.") }
+            else -> Div({ classes("drive-health") }) {
+                known.forEach { a ->
+                    Div({ classes("drive-reading") }) {
+                        A(a.listing.url, { attr("target", "_blank"); attr("rel", "noopener") }) { Text(a.listing.title.tidyTitle()) }
+                        Div({ classes("muted", "small") }) { Text(listingFoot(a.listing, null, null).joinToString(" · ")) }
+                        Div({ classes("muted", "small") }) { Text("${a.listing.effectivePrice.amount / 100} € so far · ${a.listing.bidCount ?: 0} bids") }
+                        Div({ classes("small") }) { Text(a.expectedWords()) }
+                        a.listing.drive?.factsLine()?.takeIf { it.isNotEmpty() }?.let { Div({ classes("muted", "small") }) { Text(it) } }
+                    }
+                }
+            }
+        }
     }
 }
 

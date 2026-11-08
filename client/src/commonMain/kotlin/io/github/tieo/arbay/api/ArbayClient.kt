@@ -405,6 +405,18 @@ class ArbayClient(
         }.body<io.github.tieo.arbay.model.DriveHealth>()
     }
 
+    /** What this drive's model, or its size where no model is written, sold for lately. Null when it could not be asked. */
+    suspend fun soldPrices(drive: io.github.tieo.arbay.model.DriveFacts): io.github.tieo.arbay.model.SoldPrices? = orElse(null) {
+        client.get("$baseUrl/api/market/sold") {
+            drive.model?.let { parameter("model", it) } ?: drive.capacityGb?.let { parameter("capacityGb", it) }
+        }.body<io.github.tieo.arbay.model.SoldPrices>()
+    }
+
+    /** The auctions running for a saved search, soonest end first. Null when it could not be asked. */
+    suspend fun auctions(productId: String): List<io.github.tieo.arbay.model.LiveAuction>? = orElse(null) {
+        client.get("$baseUrl/api/products/$productId/auctions").body<List<io.github.tieo.arbay.model.LiveAuction>>()
+    }
+
     /** The ad as its page has it now, uncached: for an offer about to be written. */
     suspend fun adNow(listing: Listing): io.github.tieo.arbay.model.AdNow? = orElse(null) {
         val response = client.get("$baseUrl/api/crawler/listing-state") {

@@ -491,6 +491,25 @@ object SmartScreens {
         return DriveHealth(readings = readings, photosRead = urls.size - pending, photosPending = pending)
     }
 
+    /** What is read already of [photos], without reading any; the rest count as pending. */
+    fun known(photos: List<String>): DriveHealth {
+        val urls = photos.take(MOST_PHOTOS)
+        var pending = 0
+        val readings = urls.mapIndexedNotNull { i, url ->
+            val text = known(url)
+            if (text == null) pending++
+            text?.getOrNull()?.let { parse(it.split(PASS_BREAK), i + 1) }
+        }
+        return DriveHealth(readings = readings, photosRead = urls.size - pending, photosPending = pending)
+    }
+
+    /** Every one of [photos] not read before, read now, however long that takes. */
+    suspend fun readAll(listingId: String, title: String, photos: List<String>, fetch: suspend (String) -> ByteArray?) {
+        if (!PhotoText.present && !PhotoText.screenReaderPresent) return
+        for (url in photos.take(MOST_PHOTOS)) reading.withLock { if (known(url) == null) readPhoto(listingId, title, url, fetch) }
+        persist()
+    }
+
     /** What the cache holds for the photo, null where it has to be read (again). A success of null
      *  is a photo read that shows no screen. */
     private fun known(url: String): Result<String?>? {
@@ -539,8 +558,15 @@ object SmartScreens {
         else -> PhotoPrints.jpegAddress(url)
     }
 
+    /** When the readings were last written: rewriting them for every ad of a long queue is the slow part. */
+    @Volatile private var persistedAt = 0L
+
     private fun persist() {
-        val all = synchronized(cache) { cache.map { (url, t) -> Read(url, t) } }.takeLast(5_000)
+        val now = System.currentTimeMillis()
+        if (now - persistedAt < 30_000) return
+        persistedAt = now
+        // Most photos show no screen and keep only their address, so this holds some 5,000 ads.
+        val all = synchronized(cache) { cache.map { (url, t) -> Read(url, t) } }.takeLast(60_000)
         runCatching { cacheFile.writeTextAtomically(json.encodeToString(all)) }
             .onFailure { log.warn("SMART readings not kept: {}", it.message) }
     }

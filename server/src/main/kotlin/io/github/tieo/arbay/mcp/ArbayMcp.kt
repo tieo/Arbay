@@ -45,6 +45,8 @@ import io.github.tieo.arbay.model.fillIn
 import io.github.tieo.arbay.model.offerFor
 import io.github.tieo.arbay.model.PriceOffer
 import io.github.tieo.arbay.model.tidyTitle
+import io.github.tieo.arbay.model.driveFront
+import io.github.tieo.arbay.model.summary
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
@@ -175,17 +177,27 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 // Vehicles carry their fit to the search as a whole and come best fit first, as in
                 // the app's "Best match"; everything else comes cheapest first.
                 // What the market guessed rather than what was asked for comes last, as in the app.
-                .sortedWith(compareBy<Listing> { it.offQuery }.thenByDescending { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
-                .take(args.int("limit") ?: 40)
+                .sortedWith(
+                    compareBy<Listing> { it.offQuery }.then(
+                        when (args.str("sort")) {
+                            "cents_per_gb" -> compareBy { it.drive?.centsPerGb ?: Double.MAX_VALUE }
+                            "life" -> compareByDescending { it.drive?.lifeHours ?: -1L }
+                            else -> compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }
+                        },
+                    ),
+                )
+            val listed = shown.take(args.int("limit") ?: 40)
             // Every offer the search found can be asked about, not only the ones listed: a search
             // read deep lists forty of a thousand.
             all.forEach { seen[it.id] = it }
             val removed = dropped.toSortedMap()
             removed.values.flatten().forEach { seen[it.listing.id] = it.listing }
-            val views = io.github.tieo.arbay.judging.ViewCounts.of(shown.map { it.id })
+            val views = io.github.tieo.arbay.judging.ViewCounts.of(listed.map { it.id })
             return buildString {
-                appendLine("${shown.size} of ${all.size} offers for \"$words\":")
-                shown.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
+                appendLine("${listed.size} of ${all.size} offers for \"$words\":")
+                listed.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
+                // Over every offer shown, listed or not: the front is what is worth weighing.
+                append(frontLines(shown.filter { it.saleType != io.github.tieo.arbay.model.SaleType.AUCTION }))
                 synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
                 // What each market sent against what the search kept, with the reasons for the
                 // rest: a filter that is wrong shows up as a market whose answer went missing.
@@ -357,7 +369,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val window = args.int("within_hours")?.let { " in the last $it h" } ?: ""
             (if (found.isEmpty()) "Nothing new in this saved search$window."
             else "${found.size} new$window, best fit first, then cheapest:\n" + found.sortedWith(compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount })
-                .joinToString("\n") { l -> l.line(foundAt[l.id]) }) +
+                .joinToString("\n") { l -> l.line(foundAt[l.id]) } + "\n" + frontLines(found.filter { it.saleType != io.github.tieo.arbay.model.SaleType.AUCTION })) +
                 priceDropLines(status, since)
         }
 
@@ -372,6 +384,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
                 string("search_id", "A search already running, to get what has arrived since")
                 integer("limit", "How many offers to list (default 40)")
+                string("sort", "For drives: cents_per_gb (cheapest per gigabyte first) or life (most expected hours left first)")
                 number("max_price_eur", "Leave out offers above this landed price. The markets are asked for nothing dearer, so a search for the cheapest reads far fewer pages")
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
@@ -904,6 +917,40 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             },
         ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = true) }
 
+        tool(
+            "sold_prices",
+            "What a model, a drive size or any words sold for on eBay.de lately: median and quartiles with shipping, auctions against fixed prices, new, refurbished and used, by month, each with its number of sales. Name one of the three. Sales to a hidden accepted offer and parts-only offers are left out. Takes up to a few minutes the first time.",
+            props = {
+                string("model", "A model number, ST18000NM000J")
+                integer("capacity_gb", "A size in gigabytes, 18000 for 18 TB; bare drives only")
+                string("words", "Anything else, as searched on eBay")
+            },
+        ) { args ->
+            val r = http.get("$base/api/market/sold") {
+                args.str("model")?.let { parameter("model", it) }
+                args.int("capacity_gb")?.let { parameter("capacityGb", it) }
+                args.str("words")?.let { parameter("words", it) }
+            }
+            if (!r.status.isSuccess()) return@tool "Could not read the sales: ${r.bodyAsText()}"
+            json.decodeFromString(io.github.tieo.arbay.model.SoldPrices.serializer(), r.bodyAsText()).describe()
+        }
+
+        tool(
+            "auctions",
+            "The eBay.de auctions running now for a saved search, soonest end first: the bid so far with shipping, when it ends, the drive's facts, and what it can be expected to end at from sold auctions of the same model or size. An expected price still being read arrives if you ask again in a few minutes.",
+            props = { string("saved_search_id", "The saved search", required = true) },
+        ) { args ->
+            val list = getJson<List<io.github.tieo.arbay.model.LiveAuction>>("/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/auctions")
+            list.forEach { seen[it.listing.id] = it.listing }
+            list.joinToString("\n") { a ->
+                listOfNotNull(
+                    "ends ${a.listing.auctionEndsAt}",
+                    a.expectedEndEur?.let { "expected end $it € all in (${a.expectedFrom}, ${a.expectedSales} sales)" } ?: "expected end still being read".takeIf { a.expectedPending } ?: "expected end not known",
+                    a.listing.line(),
+                ).joinToString(" | ")
+            }.ifEmpty { "No auctions running for this search." }
+        }
+
         tool("auction_bids", "The bids set up on auctions: waiting for the end, placed, ended and not yet settled, lost, won, skipped or not placed, and why. An ended bid blocks every later one until eBay shows it lost or won.") {
             getJson<List<io.github.tieo.arbay.model.AuctionBid>>("/api/auctions/bids").joinToString("\n") { it.describe() }.ifEmpty { "No bids." }
         }
@@ -1052,10 +1099,38 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         foundAt?.let { "found ${(Clock.System.now() - it).inWholeHours} h ago" },
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
+        drive?.driveLine(),
         matchScore?.let { "fit ${Math.round(it * 100)}%" },
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
         url,
     ).joinToString(" | ")
+
+    private fun io.github.tieo.arbay.model.SoldPrices.describe(): String {
+        fun line(name: String, s: io.github.tieo.arbay.model.PriceSpread) =
+            if (s.count == 0) "$name: no sales" else "$name: median ${s.medianEur} € (quartiles ${s.p25Eur} to ${s.p75Eur}), ${s.count} sales"
+        return listOf(
+            "Sold on eBay.de, $asked, with shipping:", line("all", all), line("auctions", auctions), line("buy now", buyNow),
+            line("new", new), line("refurbished", refurbished), line("used", used),
+        ).joinToString("\n") + "\n" + months.joinToString("\n") { line(it.month, it.spread) } +
+            "\nLeft out: $leftOutHiddenPrice sold to a hidden offer, $leftOutBroken broken or for parts, $leftOutOther other size, other drive or a lot."
+    }
+
+    /** What a drive offer states, and how far its page and photos have been read. */
+    private fun io.github.tieo.arbay.model.DriveFacts.driveLine(): String = (
+        listOfNotNull(model) + summary() +
+            listOfNotNull(
+                failChance5y?.let { "${Math.round(it * 100)} % fails in 5 y" }, lifeBasis?.let { "from $it" }, healthNote,
+                "page not read yet".takeUnless { pageRead }, "$photosPending photos being read".takeIf { photosPending > 0 },
+            )
+        ).joinToString(", ")
+
+    /** A line for each of [drives] no other offer beats on both price per GB and life left, cheapest first. */
+    private fun frontLines(drives: List<Listing>): String {
+        val front = drives.driveFront()
+        if (front.isEmpty()) return ""
+        return "Trade-off front (no other offer is both cheaper per GB and longer lived), cheapest per GB first:\n" +
+            drives.filter { it.id in front }.sortedBy { it.drive?.centsPerGb }.joinToString("\n") { "  " + it.line() } + "\n"
+    }
 
     /**
      * The price as what it is: landed where the delivery charge is known, with the item and the
@@ -1212,7 +1287,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     ) = textTool(name, description, destructive, readOnly = !destructive && name.startsWith("list") || name in READ_ONLY, props, run)
 
     private companion object {
-        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout", "try_bid", "auction_bids")
+        val READ_ONLY = setOf("whats_on_screen", "show_on_screen", "search", "offer_details", "recent_searches", "seller_account", "outbox", "draft_messages", "checkout", "try_bid", "auction_bids", "sold_prices", "auctions")
     }
 }
 

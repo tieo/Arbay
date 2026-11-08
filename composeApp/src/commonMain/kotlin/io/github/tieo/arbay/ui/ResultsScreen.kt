@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.material.icons.outlined.Schedule
+import io.github.tieo.arbay.results.columns
+import io.github.tieo.arbay.results.factsLine
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -199,6 +202,7 @@ private fun ResultsList(session: Session, route: Route.Results, state: ResultsSt
                         if (bookmark != null) DropdownMenuItem(text = { Text("Change name or words") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; changing = true })
                         if (bookmark != null) DropdownMenuItem(text = { Text("Watching and alerts") }, leadingIcon = { Icon(Icons.Outlined.Notifications, null) }, onClick = { menu = false; panel(Panel.ALERTS) })
                         if (view.isCar) DropdownMenuItem(text = { Text("Vehicle criteria") }, leadingIcon = { Icon(Icons.Outlined.DirectionsCar, null) }, onClick = { menu = false; panel(Panel.CRITERIA) })
+                        if (bookmark != null) DropdownMenuItem(text = { Text("Auctions") }, leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { menu = false; panel(Panel.AUCTIONS) })
                         DropdownMenuItem(text = { Text("Markets") }, leadingIcon = { Icon(Icons.Outlined.Storefront, null) }, onClick = { menu = false; panel(Panel.MARKETS) })
                         DropdownMenuItem(text = { Text("Words") }, leadingIcon = { Icon(Icons.Outlined.TextFields, null) }, onClick = { menu = false; panel(Panel.WORDS) })
                         DropdownMenuItem(
@@ -309,7 +313,7 @@ private fun NarrowingRow(session: Session, state: ResultsState, hiddenCount: Int
             Box {
                 Choice(sortMode.label, false, opens = true) { sortMenu = true }
                 DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }) {
-                    SortMode.entries.forEach { mode ->
+                    SortMode.entries.filter { !it.forDrives || state.narrowed.displayed.any { l -> l.drive != null } }.forEach { mode ->
                         DropdownMenuItem(text = { Text(mode.label) }, onClick = {
                             sortMenu = false
                             if (mode == SortMode.NEAREST && DevicePosition.latitude == null) locate()
@@ -406,12 +410,15 @@ private fun OfferRow(listing: Listing, state: ResultsState, picked: Boolean, mar
             Text(listing.title.tidyTitle(), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Muted((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "), maxLines = 1)
             listingFoot(listing, state.views[listing.id], state.open.foundAt[listing.id]).takeIf { it.isNotEmpty() }?.let { Muted(it.joinToString(" · "), maxLines = 1) }
+            listing.drive?.factsLine()?.takeIf { it.isNotEmpty() }?.let { Muted(it, maxLines = 2) }
             mark?.let { SellerMark(it) }
             NoteLine(listing.id)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             PriceText(listing.comparablePrice, lowest = lowest, per = listing.rentPer)
             state.open.priceDrops[listing.id]?.let { WasPrice(it.before()) }
+            listing.drive?.columns()?.forEach { Muted(it, maxLines = 1) }
+            if (listing.id in state.summary.frontIds) Text("On the front", style = MaterialTheme.typography.bodySmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
             if (listing.saleType == SaleType.AUCTION) Muted(listing.bidCount?.let { "$it bids" } ?: "auction")
             if (fresh) Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(MaterialTheme.colorScheme.primary))
         }

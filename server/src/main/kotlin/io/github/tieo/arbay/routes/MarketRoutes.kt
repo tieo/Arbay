@@ -10,6 +10,23 @@ import io.ktor.server.routing.*
 /** What each market can do, read from the crawlers themselves so the app never has to hold a copy
  *  of it that can fall out of step. */
 fun Route.marketRoutes() {
+    // What a model, a size or some words sold for on eBay.de lately. One of model, capacityGb, words.
+    get("/api/market/sold") {
+        val p = call.request.queryParameters
+        val ask = io.github.tieo.arbay.judging.SoldPriceReader.Ask(
+            model = p["model"]?.takeIf { it.isNotBlank() }?.uppercase(),
+            capacityGb = p["capacityGb"]?.toIntOrNull()?.takeIf { it > 0 },
+            words = p["words"]?.takeIf { it.isNotBlank() },
+        )
+        if (ask.model == null && ask.capacityGb == null && ask.words == null) throw io.github.tieo.arbay.plugins.BadRequestException("name a model, a size or words")
+        call.respond(io.github.tieo.arbay.judging.SoldPriceReader.of(ask))
+    }
+
+    // Reads Backblaze's drive records again now; the running table is replaced only by a usable one.
+    post("/api/market/drive-records/refresh") {
+        call.respond(mapOf("result" to io.github.tieo.arbay.judging.DriveLife.refresh()))
+    }
+
     get("/api/markets") {
         call.respond(
             PlatformId.entries.map { platform ->

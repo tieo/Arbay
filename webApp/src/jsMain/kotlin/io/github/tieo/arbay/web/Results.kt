@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.web
 
+import io.github.tieo.arbay.results.columns
+import io.github.tieo.arbay.results.factsLine
 import io.github.tieo.arbay.results.OpenSearch
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.rememberOpenSearch
@@ -190,7 +192,7 @@ private fun ResultsPanes(app: WebApp, route: Route.Results, open: OpenSearch) {
                 val hide = { (listOf(listing) + copies).forEach(vm::ban) }
                 val was = open.priceDrops[listing.id]?.before()
                 if (photos) OfferTile(app, listing, copies, listing.id == selected, lowest, was, to, picking, hide)
-                else OfferRow(app, listing, copies, listing.id == selected, lowest, was, open.foundAt[listing.id], to, picking, hide)
+                else OfferRow(app, listing, copies, listing.id == selected, lowest, listing.id in summary.frontIds, was, open.foundAt[listing.id], to, picking, hide)
             }
         }
     }
@@ -316,8 +318,10 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
                 }
             }
         }) {
-            SortMode.entries.forEach { mode -> Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) } }
+            SortMode.entries.filter { !it.forDrives || state.narrowed.displayed.any { l -> l.drive != null } }.forEach { mode -> Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) } }
         }
+
+        if (state.open.bookmark != null) QuietButton("Auctions", pressed = route.panel == Panel.AUCTIONS) { togglePanel(route, Panel.AUCTIONS) }
 
         Label(attrs = { classes("band") }) {
             BandInput(narrowed.priceRange.start, narrowed.priceMin, "Lowest price") { low ->
@@ -373,7 +377,7 @@ private fun BandInput(value: Float, trackEnd: Float, label: String, onCommit: (F
 }
 
 @Composable
-private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, was: String?, foundAt: Long?, to: Route, picking: Boolean, onHide: () -> Unit) {
+private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, active: Boolean, lowest: Boolean, front: Boolean, was: String?, foundAt: Long?, to: Route, picking: Boolean, onHide: () -> Unit) {
     Div({
         id("offer-${listing.id}")
         classes(*listOfNotNull("offer-row", "active".takeIf { active }).toTypedArray())
@@ -387,12 +391,15 @@ private fun OfferRow(app: WebApp, listing: Listing, copies: List<Listing>, activ
                     Text((listOf(sourceLabel(listing, copies)) + listingSpecs(listing).map { it.toString() }).joinToString(" · "))
                 }
                 listingFoot(listing, app.listings.views.collectAsState().value[listing.id], foundAt).takeIf { it.isNotEmpty() }?.let { foot -> Span({ classes("offer-foot") }) { Text(foot.joinToString(" · ")) } }
+                listing.drive?.factsLine()?.takeIf { it.isNotEmpty() }?.let { line -> Span({ classes("offer-foot") }) { Text(line) } }
                 SellerMarkLine(app, listing)
                 NoteLine(listing.id)
             }
             Div({ classes("offer-price") }) {
                 Price(listing.comparablePrice, lowest = lowest, per = listing.rentPer)
                 was?.let { WasPrice(it) }
+                listing.drive?.columns()?.forEach { Span({ classes("muted", "small") }) { Text(it) } }
+                if (front) Span({ classes("small", "front-mark") }) { Text("On the front") }
                 if (listing.saleType == SaleType.AUCTION) Span({ classes("muted", "small") }) { Text(listing.bidCount?.let { "$it bids" } ?: "auction") }
             }
         }

@@ -82,6 +82,14 @@ fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
             call.respond(HttpStatusCode.NoContent)
         }
 
+        // The eBay auctions running for this search, soonest end first, with what each can be
+        // expected to end at; expectedPending where the sales it rests on are still being read.
+        get("/{id}/auctions") {
+            val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
+            val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")
+            call.respond(io.github.tieo.arbay.judging.SoldPriceReader.auctionsOf(product))
+        }
+
         get("/{id}") {
             val id = call.parameters["id"] ?: throw BadRequestException("Missing id")
             val product = repo.getById(id) ?: throw NotFoundException("Product $id not found")

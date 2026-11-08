@@ -1,5 +1,8 @@
 package io.github.tieo.arbay.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import io.github.tieo.arbay.results.rows
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -207,6 +210,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     state.open.bookmark?.let { session.products.checkModel(it, listing.id, model) }
                 }
                 DriveHealthSection(health, readingDrive)
+                SoldPricesSection(session, listing)
                 SellersSection(page.sellers, ::openBrowser)
 
                 page.vehicle?.let { v ->
@@ -337,6 +341,38 @@ private fun ModelPick(choice: ModelChoice, checked: ModelPicked?, pick: (ModelPi
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             choice.models.forEach { m -> DropdownMenuItem(text = { Text(m) }, onClick = { open = false; pick(ModelPicked(m)) }) }
             DropdownMenuItem(text = { Text("none of these") }, onClick = { open = false; pick(ModelPicked(null)) })
+        }
+    }
+}
+
+/** What this drive sold for: looked up on asking, since the look takes the market a minute or two. */
+@Composable
+private fun SoldPricesSection(session: Session, listing: Listing) {
+    val drive = listing.drive?.takeIf { it.model != null || it.capacityGb != null } ?: return
+    var sold by remember(listing.id) { mutableStateOf<io.github.tieo.arbay.model.SoldPrices?>(null) }
+    var asking by remember(listing.id) { mutableStateOf(false) }
+    var failed by remember(listing.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    Gap(4.dp)
+    SectionTitle("Sold on eBay")
+    val known = sold
+    when {
+        known != null -> {
+            Muted(known.asked, style = MaterialTheme.typography.bodySmall)
+            known.rows().forEach { (what, figures) ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(what, style = MaterialTheme.typography.bodySmall)
+                    Muted(figures, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        asking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading eBay's sold offers") }
+        else -> {
+            if (failed) Muted("eBay's sold offers could not be read", style = MaterialTheme.typography.bodySmall)
+            androidx.compose.material3.OutlinedButton(onClick = {
+                asking = true; failed = false
+                scope.launch { sold = session.client.soldPrices(drive); failed = sold == null; asking = false }
+            }) { Text("Look up") }
         }
     }
 }
