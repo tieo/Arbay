@@ -3,6 +3,7 @@ package io.github.tieo.arbay
 import io.github.tieo.arbay.judging.DriveLife
 import io.github.tieo.arbay.judging.DriveOffers
 import io.github.tieo.arbay.judging.DriveText
+import io.github.tieo.arbay.judging.SoldPriceReader
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.DriveFacts
@@ -201,6 +202,25 @@ class DriveFactsTest {
         assertEquals("Seagate NM001G", DriveLife.familyOf("ST14000NM001G-2KJ103"))
         assertEquals("Seagate NM001G", DriveLife.familyOfLine("Seagate Exos X16 16TB"))
         assertEquals("MG09", DriveLife.familyOfLine("Toshiba MG09 18TB"))
+    }
+
+    @Test
+    fun what_things_sold_for_is_median_and_quartiles_of_working_single_drives_with_shipping() {
+        fun sold(title: String, euros: Long, type: SaleType = SaleType.FIXED_PRICE, condition: Condition = Condition.USED, hidden: Boolean = false, id: Long = euros) =
+            offer(title, euros, 500, PlatformId.EBAY_DE, condition, type).copy(id = "EBAY_DE:$id", sold = true, soldToOffer = hidden)
+        val offers = listOf(
+            sold("Exos 18TB ST18000NM000J", 295), sold("Exos 18TB ST18000NM000J", 315), sold("Exos 18TB ST18000NM000J", 335, SaleType.AUCTION),
+            sold("Exos 18TB ST18000NM000J", 100, hidden = true),
+            sold("Exos 18TB ST18000NM000J", 50, condition = Condition.PARTS_ONLY),
+            sold("WD Elements 18TB", 200), sold("3x Seagate Exos 18TB", 700),
+        )
+        val stats = SoldPriceReader.stats(SoldPriceReader.Ask(capacityGb = 18_000), offers)
+        assertEquals(3, stats.all.count)
+        assertEquals(320.0, stats.all.medianEur)
+        assertEquals(1, stats.auctions.count)
+        assertEquals(1, stats.leftOutHiddenPrice)
+        assertEquals(1, stats.leftOutBroken)
+        assertEquals(2, stats.leftOutOther)
     }
 
     @Test

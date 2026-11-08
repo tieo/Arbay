@@ -188,6 +188,8 @@ object SoldPriceReader {
 
     private fun expectation(l: Listing, query: SearchQuery): LiveAuction {
         val d = l.drive
+        // Sold prices are of working drives, so they say nothing of what a broken one ends at.
+        if (l.condition == Condition.PARTS_ONLY || d?.health == DriveVerdict.FAILING) return LiveAuction(l)
         val asks = listOfNotNull(
             d?.model?.let { Ask(model = it) },
             d?.capacityGb?.let { Ask(capacityGb = it) },
