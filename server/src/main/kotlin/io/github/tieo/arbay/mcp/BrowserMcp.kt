@@ -48,7 +48,9 @@ class BrowserMcp {
             to the ID card's eID client is answered by Neuland itself: the user allows it and types the PIN on
             their phone, and the tab goes on by itself; read it until it has. A password or code only the user
             knows goes in with form_ask_secret: the user types it on their phone and Neuland types it into the
-            field, so it never reaches you; the user's payment card goes in with form_card_fill. A file for a file field is
+            field, so it never reaches you; a password Neuland keeps (PayPal, Vinted, eBay, Google) goes in with
+            form_sign_in_kept, with nobody asked, and never reaches you either; PayPal's own window is paid with
+            form_paypal_pay; the user's payment card goes in with form_card_fill. A file for a file field is
             uploaded first, its content as the body of a POST to /api/forms/<session>/files?name=<name> on the
             server this MCP is on (its address without /browser-mcp, with the same Authorization header), and
             then named in form_set's files. Every action keeps the page (HTML, picture, log) on the server.
@@ -197,6 +199,49 @@ class BrowserMcp {
                 "called-off" -> "The user called it off."
                 "timed-out" -> "The user did not answer within 10 minutes."
                 else -> "Still waiting for the user. Call form_ask_secret again with session \"$session\" and ask \"$ask\" to wait on."
+            }
+        }
+        tool(
+            "form_sign_in_kept",
+            "Types the password Neuland keeps for the site the tab shows into its password field, with nobody asked: the password never reaches you, and no read, record or picture holds it. Use this before asking the user for a password. Works in the accounts browser, on the https page of the site it is kept for, in a password field, where the page names the account it is kept for (type the account in first if the site asks it on the same page). Answers which account it was. Then press the page's log-in button with form_click. In PayPal's payment window use form_paypal_pay, which signs in by itself.",
+            destructive = true,
+            props = {
+                string("session", "The session", required = true)
+                string("field", "The password field's id from form_read", required = true)
+                string("tab", "The tab, by its id; the held tab when left out")
+            },
+        ) { args ->
+            val session = args.text("session")
+            val body = buildJsonObject {
+                put("field", args.text("field") ?: throw IllegalArgumentException("name the field"))
+                args.text("tab")?.let { put("tab", it) }
+            }
+            val answer = Neuland.request(HttpMethod.Post, "forms/$session/kept", body, limitS = 60).jsonObject
+            "The password kept for ${answer.text("account")} is typed in. Press the page's log-in button."
+        }
+        tool(
+            "form_paypal_pay",
+            "Pays in PayPal's own window, the tab a shop's \"Mit PayPal zahlen\" button opened (form_read lists it under tabs): only with the user's approval of this payment. Neuland signs in with the kept password where PayPal asks, picks PayPal's app where PayPal wants a confirmation and waits up to three minutes for the user to approve there, reads the amount back, and presses pay once: only where PayPal shows exactly amount_cents with no euro amount above it and no donation ticked, and within Neuland's most for a purchase. Takes up to five minutes. Answers paid, or stopped with why nothing was paid (fix that and call again). If it says it may have been paid, never pay again; tell the user. On paid the user's phone is told, and the shop's tab goes on by itself.",
+            destructive = true,
+            props = {
+                string("session", "The session", required = true)
+                string("tab", "PayPal's window, by its id", required = true)
+                integer("amount_cents", "What the checkout comes to, in cents: 619 for 6,19 €", required = true)
+                string("merchant", "Who is paid, as the user knows them", required = true)
+                string("what", "What is bought, with an order number where there is one", required = true)
+            },
+        ) { args ->
+            val session = args.text("session")
+            val body = buildJsonObject {
+                put("tab", args.text("tab") ?: throw IllegalArgumentException("name the tab"))
+                put("amount_cents", args["amount_cents"]?.jsonPrimitive?.longOrNull ?: throw IllegalArgumentException("name the amount_cents"))
+                put("merchant", args.text("merchant") ?: throw IllegalArgumentException("name the merchant"))
+                put("what", args.text("what") ?: throw IllegalArgumentException("name what is bought"))
+            }
+            val answer = Neuland.request(HttpMethod.Post, "forms/$session/paypal", body, limitS = 330).jsonObject
+            when (answer.text("state")) {
+                "paid" -> "Paid. PayPal showed the amount and closed its window. Go on on the shop's tab."
+                else -> "Stopped, nothing was paid: ${answer.text("problem")}"
             }
         }
         tool(
