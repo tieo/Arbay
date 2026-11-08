@@ -10,6 +10,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonPrimitive
 
 class AuctionBidsTest {
     init {
@@ -19,7 +20,7 @@ class AuctionBidsTest {
     @kotlin.test.BeforeTest
     fun none() = AuctionBids.forgetAll()
     private fun request(item: String, ends: kotlin.time.Instant, allIn: Double = 160.0, shipping: Double = 6.19) =
-        AuctionBidRequest("EBAY_DE:$item", "https://www.ebay.de/itm/$item?bolp=1", "Lexar NQ790 2TB", ends, shipping, allIn)
+        AuctionBidRequest("EBAY_DE:$item", "https://www.ebay.de/itm/$item?bolp=1", "Lexar NQ790 2TB", ends, shipping, allIn, "ssd-2tb")
 
     @Test
     fun `the most a bid goes to is the all-in limit less shipping, to the cent`() {
@@ -86,6 +87,40 @@ class AuctionBidsTest {
         assertEquals(AuctionBidState.ENDED, AuctionBids.outcome(running).first)
         val unread = io.github.tieo.arbay.neuland.Neuland.Refusal(404, "no bid on 123456789 at ebay.de is kept", kotlinx.serialization.json.JsonObject(emptyMap()))
         assertEquals(AuctionBidState.ENDED, AuctionBids.outcome(unread).first, "a bid Neuland keeps no record of is settled by a person")
+    }
+
+    @Test
+    fun `a bid names one purchase, kept in lower case, and goes out to Neuland with it`() {
+        val now = Clock.System.now()
+        val item = (200_000_000_000L + (Math.random() * 1e9).toLong()).toString()
+        listOf(null, "", " ", "ssd 2tb", "ssd_2tb").forEach { name ->
+            assertFailsWith<IllegalArgumentException> { AuctionBids.ask(request(item, now + 10.minutes).copy(purchase = name), now) }
+        }
+        val bid = AuctionBids.ask(request(item, now + 10.minutes).copy(purchase = "HDD-20TB"), now)
+        assertEquals("hdd-20tb", bid.purchase)
+        val body = AuctionBids.neulandBody(bid.url, bid.maxEur, bid.allInEur, place = true, at = null, purchase = bid.purchase)
+        assertEquals("hdd-20tb", body["purchase"]?.jsonPrimitive?.content)
+        assertEquals(null, AuctionBids.neulandBody(bid.url, bid.maxEur, bid.allInEur, place = false, at = null, purchase = null)["purchase"])
+    }
+
+    @Test
+    fun `a bid standing blocks the next of its own purchase and not another's`() = runBlocking {
+        val now = Clock.System.now()
+        val first = "300000000001"
+        val sameThing = "300000000002"
+        val otherThing = "300000000003"
+        AuctionBids.ask(request(first, now + 3.minutes), now)
+        AuctionBids.ask(request(sameThing, now + 3.minutes + 10.seconds), now)
+        AuctionBids.ask(request(otherThing, now + 3.minutes + 20.seconds).copy(purchase = "hdd-20tb"), now)
+        // No Neuland answers here, so each bid that goes out may stand and counts as placed.
+        val at = now + 90.seconds
+        AuctionBids.tick(at)
+        AuctionBids.tick(at + 1.seconds)
+        AuctionBids.tick(at + 2.seconds)
+        val states = AuctionBids.all().associate { it.listingId.substringAfter(':') to it.state }
+        assertEquals(AuctionBidState.PLACED, states[first])
+        assertEquals(AuctionBidState.SKIPPED, states[sameThing])
+        assertEquals(AuctionBidState.PLACED, states[otherThing])
     }
 
     @Test

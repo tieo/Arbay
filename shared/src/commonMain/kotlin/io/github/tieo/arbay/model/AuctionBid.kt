@@ -31,6 +31,8 @@ data class AuctionBid(
     val checkedAt: Instant? = null,
     /** For a bid not placed: Neuland keeps nothing of it, so it holds no later bid back. */
     val cleared: Boolean = false,
+    /** The one thing being bought ("ssd-2tb"): one bid stands per purchase, so it can be won only once. */
+    val purchase: String? = null,
 )
 
 enum class AuctionBidState {
@@ -63,6 +65,8 @@ data class AuctionBidRequest(
     val endsAt: Instant,
     val shippingEur: Double,
     val allInEur: Double,
+    /** The one thing this is a bid for, the same name for every bid towards it. Needed to place a bid. */
+    val purchase: String? = null,
 )
 
 /**

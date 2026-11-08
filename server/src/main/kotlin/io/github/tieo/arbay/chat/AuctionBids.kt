@@ -26,9 +26,9 @@ import org.slf4j.LoggerFactory
 /**
  * Bids on eBay.de auctions, placed by Neuland in the signed-in account browser in each auction's
  * last seconds: a bid placed early only gives other bidders time to outbid it and drives the price
- * up. One bid stands at a time, so two auctions can never both be won: a bid whose turn comes while
- * another is placed and its auction not ended is skipped, and Neuland refuses one beside any bid it
- * has not settled. Every limit is checked again where the bid is placed: Neuland holds its own most
+ * up. One bid stands per purchase, so one thing can never be won twice: a bid whose turn comes while
+ * another of its purchase is placed and its auction not ended is skipped, and Neuland refuses one
+ * beside any bid of the same purchase it has not settled. Every limit is checked again where the bid is placed: Neuland holds its own most
  * a bid may cost and confirms only while eBay's review reads back the bid as asked and totals no
  * more than the user's all-in limit.
  */
@@ -45,6 +45,9 @@ object AuctionBids {
      *  early enough for eBay to take it. */
     val CONFIRM_BEFORE: Duration = 6.seconds
 
+    private const val FIRST_PURCHASE = "ssd-2tb"
+    private val PURCHASE_NAME = Regex("[a-z0-9-]+")
+
     private val bids = mutableListOf<AuctionBid>()
 
     /** The most any bid may cost with shipping, in euros (`ARBAY_MOST_BID_EUR`): Arbay's own limit,
@@ -53,7 +56,8 @@ object AuctionBids {
     internal var mostBidEur: Double? = System.getenv("ARBAY_MOST_BID_EUR")?.trim()?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
 
     init {
-        file.readStore(log) { json.decodeFromString<List<AuctionBid>>(it) }?.let { bids += it }
+        // Every bid from before purchases were named was towards the one 2 TB SSD.
+        file.readStore(log) { json.decodeFromString<List<AuctionBid>>(it) }?.let { read -> bids += read.map { if (it.purchase == null) it.copy(purchase = FIRST_PURCHASE) else it } }
     }
 
     fun all(): List<AuctionBid> = synchronized(bids) { bids.sortedBy { it.endsAt } }
@@ -72,6 +76,8 @@ object AuctionBids {
     fun ask(request: AuctionBidRequest, now: Instant = Clock.System.now()): AuctionBid {
         val most = mostBidEur ?: throw IllegalArgumentException("Arbay sets up no bid without the most a bid may cost (ARBAY_MOST_BID_EUR)")
         require(request.allInEur.isFinite() && request.allInEur <= most) { "an all-in limit of ${request.allInEur} € passes the $most € a bid may cost" }
+        val purchase = request.purchase?.trim()?.lowercase()?.takeIf { PURCHASE_NAME.matches(it) }
+            ?: throw IllegalArgumentException("a bid names its purchase in letters, digits and hyphens, the same name for every bid towards one thing")
         val maxCents = maxCents(request.allInEur, request.shippingEur)
             ?: throw IllegalArgumentException("an all-in limit of ${request.allInEur} € leaves nothing to bid after ${request.shippingEur} € shipping")
         require(itemOf(request.url) != null) { "${request.url} is no eBay.de item" }
@@ -85,9 +91,11 @@ object AuctionBids {
             maxEur = maxCents / 100.0,
             shippingEur = request.shippingEur,
             asked = now,
+            purchase = purchase,
         )
         synchronized(bids) {
             require(bids.none { it.listingId == bid.listingId && it.state in OPEN }) { "a bid on ${bid.listingId} is already set up" }
+            require(bids.none { it.purchase == purchase && it.state == AuctionBidState.WON }) { "$purchase was already won" }
             bids += bid
             persist()
         }
@@ -195,7 +203,7 @@ object AuctionBids {
                 return
             }
             // An ended auction may have been won: its bid blocks the next until it is settled.
-            val standing = bids.firstOrNull { it.state == AuctionBidState.PLACING || it.state == AuctionBidState.PLACED || it.state == AuctionBidState.ENDED || it.state == AuctionBidState.WON }
+            val standing = bids.firstOrNull { it.purchase == next.purchase && (it.state == AuctionBidState.PLACING || it.state == AuctionBidState.PLACED || it.state == AuctionBidState.ENDED || it.state == AuctionBidState.WON) }
             val at = bids.indexOf(next)
             if (standing != null) {
                 bids[at] = next.copy(state = AuctionBidState.SKIPPED, problem = "the bid on ${standing.url} stood when its turn came")
@@ -207,7 +215,7 @@ object AuctionBids {
             bids[at]
         }
         val placed = try {
-            neuland(due.url, due.maxEur, due.allInEur, place = true, at = due.endsAt - CONFIRM_BEFORE)
+            neuland(due.url, due.maxEur, due.allInEur, place = true, at = due.endsAt - CONFIRM_BEFORE, purchase = due.purchase)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -251,14 +259,18 @@ object AuctionBids {
         }
     }
 
-    private suspend fun neuland(url: String, maxEur: Double, allInEur: Double, place: Boolean, at: Instant?): BidReview {
-        val body = buildJsonObject {
-            put("url", JsonPrimitive(url))
-            put("maxCents", JsonPrimitive((maxEur * 100).roundToLong()))
-            put("mostCents", JsonPrimitive((allInEur * 100).roundToLong()))
-            put("place", JsonPrimitive(place))
-            at?.let { put("at", JsonPrimitive(it.toString())) }
-        }
+    /** What Neuland is asked for a bid; [purchase] groups the bids of which only one may stand. */
+    internal fun neulandBody(url: String, maxEur: Double, allInEur: Double, place: Boolean, at: Instant?, purchase: String?) = buildJsonObject {
+        put("url", JsonPrimitive(url))
+        put("maxCents", JsonPrimitive((maxEur * 100).roundToLong()))
+        put("mostCents", JsonPrimitive((allInEur * 100).roundToLong()))
+        put("place", JsonPrimitive(place))
+        at?.let { put("at", JsonPrimitive(it.toString())) }
+        purchase?.let { put("purchase", JsonPrimitive(it)) }
+    }
+
+    private suspend fun neuland(url: String, maxEur: Double, allInEur: Double, place: Boolean, at: Instant?, purchase: String? = null): BidReview {
+        val body = neulandBody(url, maxEur, allInEur, place, at, purchase)
         val answer = Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${NeuAuth.BROWSER}/bid/ebay.de", body, limitS = 900)
         val read = neulandJson.decodeFromJsonElement(NeulandBid.serializer(), answer)
         return BidReview(
