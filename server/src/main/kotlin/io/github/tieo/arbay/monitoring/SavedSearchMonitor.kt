@@ -398,7 +398,7 @@ class SavedSearchMonitor(
                 drive == 0L || (matchesSubfilter(l, sf, extraCents = drive) && beatsTheBestSeen(l, sf, extraCents = drive))
                     .also { if (!it) log.info("not alerting {}: collected only, {} € with the drive", l.url, (eurCents(l.landedPrice(ImportSettingsStore.current)) ?: 0) / 100 + drive / 100) }
             }
-        if (subfilterMatches.isNotEmpty()) {
+        if (subfilterMatches.isNotEmpty() && learned.alertsToPhone) {
             synchronized(pendingSubfilterMatches) {
                 subfilterMatches.take(10).forEach { (sf, l) ->
                     pendingSubfilterMatches += SubfilterMatch(
@@ -709,6 +709,7 @@ class SavedSearchMonitor(
                 listingId = l.id, title = l.title, url = l.url, priceEur = (priceOf(l) ?: FitScore.priceEur(l)).roundToLong(), at = Clock.System.now(),
             )
         })
+        if (!product.alertsToPhone) return
         // One message per run, however many made it: the best one in full, opened by a tap, and a
         // line each for the next, with buttons. Several pushes at once were both noise and more
         // than ntfy.sh takes in a burst (the fifth was refused with 429).
@@ -826,7 +827,7 @@ class SavedSearchMonitor(
      * no topic is set.
      */
     private suspend fun pushSubfilterMatches(product: TrackedProduct, matches: List<Pair<NotificationSubfilter, Listing>>) {
-        if (!Ntfy.configured) return
+        if (!product.alertsToPhone || !Ntfy.configured) return
         fun price(l: Listing) = eurCents(l.landedPrice(ImportSettingsStore.current))
         fun line(l: Listing) = listOfNotNull(
             price(l)?.let { "%,d €".format(java.util.Locale.GERMANY, it / 100) },
@@ -872,12 +873,18 @@ class SavedSearchMonitor(
         val front = wanted.driveFront()
         val news = wanted.filter { it.id in front && it.id !in noted && it.drive?.pageRead == true && it.drive?.photosPending == 0 }
             .sortedBy { it.drive?.centsPerGb }
-        if (news.isEmpty() || !Ntfy.configured) return
+        if (news.isEmpty()) return
         fun line(l: Listing) = (listOf("%,d €".format(java.util.Locale.GERMANY, l.effectivePrice.amount / 100)) + l.drive!!.summary()).joinToString(" · ")
+        AlertFeed.record(news.map { l ->
+            FoundAlert(
+                seq = 0, savedSearchId = product.id, searchName = product.name, rule = "on the front: " + l.drive!!.summary().joinToString(" · "),
+                listingId = l.id, title = l.title, url = l.url, priceEur = l.effectivePrice.amount / 100, at = Clock.System.now(),
+            )
+        })
         val best = news.first()
         val title = if (news.size == 1) "${product.name}: ${best.title.take(60)}" else "${product.name}: ${news.size} new on the front"
         val body = news.take(5).joinToString("\n") { "· " + line(it) + " · " + it.title.take(40) }
-        Ntfy.send(title, body, click = best.url, tags = listOf("mag"))
+        if (product.alertsToPhone) Ntfy.send(title, body, click = best.url, tags = listOf("mag"))
         synchronized(frontNoted) { frontNoted.getValue(product.id).addAll(news.map { it.id }) }
         saveFrontNoted()
         log.info("saved-search {}: {} new on the front", product.name, news.size)

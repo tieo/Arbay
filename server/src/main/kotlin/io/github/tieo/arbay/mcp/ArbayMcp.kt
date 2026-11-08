@@ -503,6 +503,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_up_to_eur", "Add an alert rule: push for finds up to this landed price")
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
                 number("fit_alert_percent", "Push an offer, once, when it first fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
+                boolean("alerts_to_phone", "Whether this search's alerts also push to the phone; false sends them to the alert feed alone")
                 boolean("alert_on_front", "For a drive search: push a new offer that lands on the trade-off front of price per GB and expected life; false stops it. Its first run only notes what is there, so it pushes nothing")
                 number("front_min_tb", "The front alert counts drives from this size"); number("front_max_tb", "The front alert counts drives up to this size")
                 string("front_interface", "The front alert leaves out drives naming another interface: SATA, SAS or NVME"); string("front_recording", "The front alert leaves out drives naming other recording: CMR or SMR")
@@ -546,6 +547,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     bareOnly = args.bool("front_bare_only") ?: p.driveFront.bareOnly,
                 ),
                 fitAlert = when (fitLevel) { null -> p.fitAlert; 0.0 -> p.fitAlert.copy(enabled = false); else -> p.fitAlert.copy(enabled = true, minScore = fitLevel) },
+                alertsToPhone = args.bool("alerts_to_phone") ?: p.alertsToPhone,
                 name = args.str("name") ?: p.name,
                 searchQuery = p.searchQuery.copy(
                     text = args.str("words") ?: p.searchQuery.text,
@@ -929,6 +931,22 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("purchase", "The one thing being bought, in letters, digits and hyphens: ssd-2tb, hdd-20tb. The same name for every bid towards it and never one per bid, since only one bid of a purchase can stand", required = true)
             },
         ) { args -> auctionBid(args.str("listing_id")!!, args.num("all_in_eur")!!, place = true, purchase = args.str("purchase")) }
+
+        tool(
+            "push_to_phone",
+            "Push one message to the user's phone about an offer: name the offer and what they have to decide. Interrupts them, so only for a decision that is theirs.",
+            props = {
+                string("listing_id", "The offer, an id from search or new_offers", required = true)
+                string("decide", "What the user has to decide, in a sentence with the price", required = true)
+            },
+        ) { args ->
+            val l = offer(args.str("listing_id")!!) ?: return@tool "Unknown offer; search first."
+            val r = http.post("$base/api/phone/push") {
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(io.github.tieo.arbay.model.PhonePush.serializer(), io.github.tieo.arbay.model.PhonePush(l.title.tidyTitle(), args.str("decide")!!, l.url)))
+            }
+            if (r.status.isSuccess() && r.bodyAsText().contains("true")) "Pushed to the phone." else "Not pushed: ${r.bodyAsText()}"
+        }
 
         tool(
             "alert_decisions",

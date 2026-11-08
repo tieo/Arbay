@@ -373,6 +373,7 @@ private fun AlertsPanel(app: WebApp, route: Route.Results, state: ResultsState) 
         }
 
         H3 { Text("Tell me when a find is") }
+        Switch("On my phone", bookmark.alertsToPhone) { on -> app.products.updateProduct(bookmark.copy(alertsToPhone = on)) }
         if (looksLikeADriveSearch(bookmark.searchQuery.positiveText) || bookmark.driveFront.enabled) {
             Switch("On the price and life front", bookmark.driveFront.enabled) { on -> app.products.updateProduct(bookmark.copy(driveFront = bookmark.driveFront.copy(enabled = on))) }
             bookmark.driveFront.limits().takeIf { it.isNotEmpty() }?.let { P({ classes("muted", "small") }) { Text(it) } }

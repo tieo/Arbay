@@ -13,6 +13,13 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun Route.productRoutes(repo: ProductRepo, savedSearches: SavedSearchMonitor) {
+    // A message to the phone that someone chose to send: an offer and what the user has to decide.
+    post("/api/phone/push") {
+        val push = call.receive<io.github.tieo.arbay.model.PhonePush>()
+        if (push.title.isBlank() || push.message.isBlank()) throw BadRequestException("a push names a title and what to decide")
+        call.respond(mapOf("sent" to io.github.tieo.arbay.monitoring.Ntfy.send(push.title.take(200), push.message.take(1500), click = push.url)))
+    }
+
     route("/api/products") {
         get {
             call.respond(repo.getAll())

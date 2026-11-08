@@ -108,6 +108,8 @@ data class TrackedProduct(
     val notificationSubfilters: List<NotificationSubfilter> = emptyList(),
     val fitAlert: FitAlertSettings = FitAlertSettings(),
     val driveFront: DriveFrontAlert = DriveFrontAlert(),
+    /** Whether this search's alerts reach the phone; off, they go to the alert feed alone. */
+    val alertsToPhone: Boolean = true,
 )
 
 /**
@@ -132,6 +134,10 @@ data class FitAlertSettings(
     val home: String? = null,
     val softDriveHours: Double = 4.0,
 )
+
+/** A message for the phone: what it is about, what the user has to decide, and the page to open. */
+@Serializable
+data class PhonePush(val title: String, val message: String, val url: String? = null)
 
 /** One decision a fit alert took on an offer. */
 @Serializable

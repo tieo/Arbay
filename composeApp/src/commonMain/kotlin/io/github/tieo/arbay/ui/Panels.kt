@@ -472,6 +472,10 @@ private fun AlertsPanel(session: Session, state: ResultsState) {
     }
     HorizontalDivider(color = arbay.line)
     Text("Tell me when a find is", style = MaterialTheme.typography.titleMedium)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("On my phone", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Switch(bookmark.alertsToPhone, { session.products.updateProduct(bookmark.copy(alertsToPhone = it)) })
+    }
     if (io.github.tieo.arbay.model.looksLikeADriveSearch(bookmark.searchQuery.positiveText) || bookmark.driveFront.enabled) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("On the price and life front", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
