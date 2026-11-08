@@ -135,6 +135,9 @@ class ProductFitTest {
         val folded = { t: String -> io.github.tieo.arbay.judging.FitScore.folded(t) }
         val models = scanners.models
         assertEquals(listOf("Otter Lite"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("CR-Scan Otter Lite 3D Scanner"), models).map { it.name })
+        val asSaved = listOf(ModelWish("Otter", listOf("cr-scan otter"), 1.0), ModelWish("Lite", listOf("otter lite"), 0.85))
+        assertEquals(listOf("Lite"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("Creality CR-Scan Otter Lite"), asSaved).map { it.name })
+        assertEquals(listOf("Otter"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("Creality CR-Scan Otter 3D"), asSaved).map { it.name })
         assertEquals(setOf("Otter", "Otter Lite"), io.github.tieo.arbay.judging.FitScore.modelsNamed(folded("Otter und Otter Lite"), models).map { it.name }.toSet())
     }
 
@@ -148,6 +151,13 @@ class ProductFitTest {
         fun price(f: FitScore.Fit) = f.parts.single { it.wish == FitWish.PRICE }.points
         assertTrue(price(liteAt420) < price(otterAt420), "420 is past the Lite's 400")
         assertTrue(price(otterAt420) < price(raptorAt420), "420 is near the Otter's limit, far under the Raptor's")
+    }
+
+    @Test
+    fun `a cheaper offer of a model fits better even under its ideal price`() {
+        val cheap = assertNotNull(scanner(ad("CR-Scan Otter 3D Scanner", 216)))
+        val dearer = assertNotNull(scanner(ad("CR-Scan Otter 3D Scanner B", 299)))
+        assertTrue(cheap.score > dearer.score, "${cheap.score} vs ${dearer.score}")
     }
 
     @Test

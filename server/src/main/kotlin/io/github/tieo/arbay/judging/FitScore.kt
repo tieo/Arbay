@@ -287,23 +287,39 @@ object FitScore {
         modelsNamed(text, wishes.models).maxByOrNull { it.worth }
 
     /**
-     * The [models] that [text], [folded] already, names. A model named only inside a longer model's
-     * words is not named: "otter lite" says "otter" and is the Lite alone, while "otter und otter
-     * lite" names both.
+     * The [models] that [text], [folded] already, names. A model whose words run into words naming
+     * another that goes on further is not named: "cr scan otter lite" says "cr scan otter" and is
+     * the Lite alone, while "otter und otter lite" names both.
      */
     internal fun modelsNamed(text: String, models: List<io.github.tieo.arbay.model.ModelWish>): List<io.github.tieo.arbay.model.ModelWish> {
-        val hits = models.mapNotNull { m ->
-            m.words.map { folded(it).trim() }.filter { it.isNotEmpty() && says(text, it) }.maxByOrNull { it.length }?.let { m to it }
+        val hits = models.associateWith { m -> m.words.flatMap { spans(text, it) } }.filterValues { it.isNotEmpty() }
+        return hits.filter { (m, own) ->
+            val others = hits.filterKeys { it !== m }.values.flatten()
+            own.any { s -> others.none { o -> o.first <= s.last && s.first <= o.last && (o.last > s.last || (o.last == s.last && o.first < s.first)) } }
+        }.keys.toList()
+    }
+
+    /** Where [text], [folded] already, says [phrase], not right after a "kein". */
+    private fun spans(text: String, phrase: String): List<IntRange> {
+        val p = folded(phrase).trim().takeIf { it.isNotEmpty() } ?: return emptyList()
+        val found = ArrayList<IntRange>()
+        var from = 0
+        while (true) {
+            val at = text.indexOf(" $p ", from).takeIf { it >= 0 } ?: return found
+            val before = text.substring(0, at).trimEnd().substringAfterLast(' ')
+            if (before !in NEGATIONS) found += (at + 1)..(at + p.length)
+            from = at + 1
         }
-        return hits.filter { (m, word) ->
-            val longer = hits.filter { (other, its) -> other !== m && its.length > word.length && " $its ".contains(" $word ") }
-            longer.isEmpty() || says(longer.fold(text) { rest, (_, its) -> rest.replace(" $its ", " ") }, word)
-        }.map { it.first }
     }
 
     /** Where a model's price fits fully when only its limit is named: near the limit, which is a price
      *  the user would pay, unlike a search's band over several models. */
     private const val MODEL_IDEAL_SHARE = 0.8
+
+    /** The price's share of a fit: all but a tenth of it runs out between [ideal] and [zero], and that
+     *  tenth is earned below [ideal], so a model at 216 € beats the same one at 399 € under a 400 € ideal. */
+    private fun cheaperStillCounts(price: Double, ideal: Double, zero: Double): Double =
+        if (price >= ideal) 0.9 * (linear(price, ideal, zero) ?: 0.0) else 0.9 + 0.1 * (ideal - price).coerceAtLeast(0.0) / ideal
 
     /** How many wanted models a title names before it is a shop's list of variants at one price. */
     private const val VARIANT_LIST = 3
@@ -372,8 +388,8 @@ object FitScore {
         val max = own ?: wishes.maxPriceEur?.toDouble()
         val ideal = priced?.idealPriceEur?.toDouble() ?: if (own != null) own * MODEL_IDEAL_SHARE else wishes.idealPriceEur?.toDouble()
         val price = when {
-            max != null -> Wish(linear(priceEur, ideal ?: (max * 0.25), max * 1.03), euros(priceEur))
-            ideal != null -> Wish(linear(priceEur, ideal, ideal * 3), euros(priceEur))
+            max != null -> Wish(cheaperStillCounts(priceEur, ideal ?: (max * 0.25), max * 1.03), euros(priceEur))
+            ideal != null -> Wish(cheaperStillCounts(priceEur, ideal, ideal * 3), euros(priceEur))
             else -> null
         }
         val plus = wishes.plusWords.takeIf { it.isNotEmpty() }?.let { words ->
