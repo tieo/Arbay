@@ -155,7 +155,7 @@ class BrowserMcp {
         }
         tool(
             "form_ask_secret",
-            "Asks the user on their phone (NeuAuth) for a password or a code the page wants in a field, and types what they give into it: the secret goes from the phone into the page and never to you; form_read shows the field as filled only. The user sees the title, the account, your words and the page's host; it is typed only while the tab still shows that host. Waits up to 9 minutes for the user and answers whether the page took it; still waiting then, call it again with the ask id alone.",
+            "Asks the user on their phone (NeuAuth) for a password or a code the page wants in a field, and types what they give into it: the secret goes from the phone into the page and never to you; form_read shows the field as filled only. The user sees the title, the account, your words and the page's host; it is typed only while the tab still shows that host. Waits up to 4 minutes for the user and answers whether the page took it; still waiting then, it answers the ask's id: call it again with session and ask to wait on. The user has 10 minutes from the ask.",
             destructive = true,
             props = {
                 string("session", "The session", required = true)
@@ -166,7 +166,7 @@ class BrowserMcp {
                 string("hint", "For a code: where the page says it went (\"sent to p***@gmail.com\")")
                 string("asker", "Who asks and for what, in a few words (\"tldr, to cancel the VPS\")")
                 string("tab", "The tab, by its id; the held tab when left out")
-                string("ask", "An ask still waiting, by its id: waits for it again instead of asking anew")
+                string("ask", "The id of an ask still waiting, as an earlier call answered it: waits for it again instead of asking anew")
             },
         ) { args ->
             val session = args.text("session")
@@ -183,15 +183,14 @@ class BrowserMcp {
                 Neuland.request(HttpMethod.Post, "forms/$session/ask", body, limitS = 60).jsonObject.text("ask")
                     ?: throw IllegalStateException("Neuland gave the ask no id")
             }
-            // Three waits of three minutes, within the 10 minutes a client gives one call.
-            var answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=180", limitS = 200).jsonObject
-            repeat(2) { if (answer.text("state") == "waiting") answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=180", limitS = 200).jsonObject }
+            // Answered within 4 minutes: the reverse proxy in front of the MCP ends a call after 6.
+            val answer = Neuland.request(HttpMethod.Get, "forms/$session/ask/$ask?wait=240", limitS = 260).jsonObject
             when (answer.text("state")) {
                 "typed" -> "Typed in; the page holds it.\n" + fieldLine(answer["field"])
                 "failed" -> "NOT typed in: ${answer.text("error")}\n" + fieldLine(answer["field"])
                 "called-off" -> "The user called it off."
                 "timed-out" -> "The user did not answer within 10 minutes."
-                else -> "Still waiting for the user (ask $ask): call form_ask_secret again with session and ask."
+                else -> "Still waiting for the user. Call form_ask_secret again with session \"$session\" and ask \"$ask\" to wait on."
             }
         }
         tool(
