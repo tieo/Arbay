@@ -7,9 +7,17 @@ class VintedDeCrawler : Crawler, StartsAtAnyPage, KnowsAdState {
 
     override val platformId = PlatformId.VINTED_DE
 
-    /** The seller's text off the item page, which the catalog card does not carry. */
+    /** What the item page tells beyond the catalog card: the seller's text, the photos, the
+     *  condition in Vinted's words and the seller with their reviews, which a buy is checked by. */
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
-        NeulandOffers.detail(listing.url.substringBefore("?"), "Vinted").description?.let { ListingDetail(description = it) }
+        val page = NeulandOffers.detail(listing.url.substringBefore("?"), "Vinted")
+        ListingDetail(
+            description = page.description,
+            photos = page.photos,
+            seller = page.seller,
+            sellerReviews = page.sellerReviews,
+            conditionNote = page.conditionNote,
+        ).takeIf { it.description != null || it.photos.isNotEmpty() || it.seller != null }
     } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
         null
     }
