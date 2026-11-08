@@ -205,6 +205,17 @@ class DriveFactsTest {
     }
 
     @Test
+    fun a_smart_warning_in_the_words_makes_a_drive_failing_before_any_photo_is_read() {
+        val warned = facts(offer("WD 14 TB Festplatte - WD140EDFZ - 27.443 Std. - SMART-Status: \"Vorsicht\"", 170, 500))
+        assertEquals(DriveVerdict.FAILING, warned.health)
+        assertNull(warned.lifeHours)
+        assertEquals(DriveVerdict.FAILING, facts(offer("Toshiba MG08ACA16TE", 200), "Hat 800 pending sectors und 1324 uncorrectable").health)
+        assertEquals(DriveVerdict.FAILING, facts(offer("Toshiba MG08ACA16TE", 200), "Pending Sectors: 12").health)
+        assertNull(facts(offer("Toshiba MG08ACA16TE", 200), "0 pending, 0 uncorrectable, 0 reallocated, SMART gut").health)
+        assertNull(facts(offer("Toshiba MG08ACA16TE", 200), "Keine ausstehenden Sektoren").health)
+    }
+
+    @Test
     fun only_a_drive_is_read_as_one() {
         assertFalse(DriveOffers.isDrive(offer("Nike KD 14 TB Rojo Universitario 2021 Talla 7.5", 80)))
         assertFalse(DriveOffers.isDrive(offer("Estuche de disco duro externo de 18 TB para SATA HDD USB3.0", 12)))

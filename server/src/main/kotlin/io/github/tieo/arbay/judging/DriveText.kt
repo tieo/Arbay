@@ -155,12 +155,17 @@ object DriveText {
 
     fun saysNew(text: String): Boolean = NEW.containsMatchIn(text)
 
-    private val BAD = Regex("""\bsmart\W+(vorsicht|caution|schlecht|bad)\b""", RegexOption.IGNORE_CASE)
+    private val BAD = Regex("""\bsmart(?:[\s-]*(?:status|werte?|wert|zustand))?\W{0,4}(vorsicht|caution|schlecht|bad|warnung|warning|failing|fehlerhaft)\b""", RegexOption.IGNORE_CASE)
+    private val SECTOR_WORD = """(?:pending|uncorrectable|reallocated|schwebende?|ausstehende?|unkorrigierbare?|nicht\s+korrigierbare?|wiederzugewiesene?)(?:[\s_-]*(?:sektoren|sectors?|sektor))?"""
+    private val BAD_SECTORS = listOf(
+        Regex("""\b([1-9]\d{0,5})\s*x?\s*$SECTOR_WORD""", RegexOption.IGNORE_CASE),
+        Regex("""$SECTOR_WORD\W{0,6}([1-9]\d{0,5})\b""", RegexOption.IGNORE_CASE),
+    )
     private val BROKEN = Regex("""(?<!nicht\s)(?<!keine\s)(?<!kein\s)(?<!ohne\s)(?<!no\s)(?<!non\s)(?<!not\s)\b(defekt\w*|kaputt\w*|defectuos[oa]s?|averiad[oa]s?|difettos[oa]|guast[oa]|d[ée]fectueu\w*|en\s+panne|for\s+parts|para\s+piezas|pour\s+pi[èe]ces|per\s+ricambi)\b""", RegexOption.IGNORE_CASE)
 
-    /** The seller's own word that the drive is failing, in the title or anywhere as a SMART status. */
+    /** The seller's own word that the drive is failing: broken in the title, or anywhere a SMART warning or a count of bad sectors. */
     fun saysFailing(title: String, text: String): String? =
-        BAD.find(text)?.value ?: BROKEN.find(title)?.value
+        BAD.find(text)?.value ?: BAD_SECTORS.firstNotNullOfOrNull { it.find(text)?.value } ?: BROKEN.find(title)?.value
 
     private val MONEY = """(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|eur\b|euro\b)"""
     private val PIECE = """(?:stück|stueck|stk\.?|platte|hdd|festplatte|laufwerk)"""
