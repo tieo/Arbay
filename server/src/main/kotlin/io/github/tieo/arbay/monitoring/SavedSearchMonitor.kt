@@ -475,6 +475,7 @@ class SavedSearchMonitor(
         }
         // Every offer found, not only the new ones: a cut is news about an offer already known.
         PriceDrops.update(product.id, found.values)
+        OfferHistory.live.update(product.id, found.values, synchronized(stateLock) { unanswered[product.id]?.keys.orEmpty() })
 
         val silent: Boolean
         val fresh: List<String>

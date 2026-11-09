@@ -82,6 +82,7 @@ object TopOffers {
                     o.copy(state = TopOfferState.LOST, checkedAt = now, adState = null, ruledOutBy = null, marketError = marketError)
                 rule == null -> {
                     val state = runCatching { stateOf(o) }.getOrNull()
+                    if (state != null && state != o.adState) io.github.tieo.arbay.monitoring.OfferHistory.live.ended(productId, o.listingId, state.name)
                     o.copy(state = if (state == AdState.DELETED) TopOfferState.GONE else TopOfferState.LOST, checkedAt = now, adState = state, ruledOutBy = null, marketError = null)
                 }
                 o.state == TopOfferState.RULED_OUT && o.ruledOutBy == rule -> o
