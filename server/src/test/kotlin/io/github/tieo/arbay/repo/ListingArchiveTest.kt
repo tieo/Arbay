@@ -2,6 +2,8 @@ package io.github.tieo.arbay.repo
 
 import io.github.tieo.arbay.DataDir
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.FitPart
+import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
@@ -12,6 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.serialization.json.Json
 
 class ListingArchiveTest {
 
@@ -88,5 +91,18 @@ class ListingArchiveTest {
             Thread.sleep(20)
         }
         return get()
+    }
+
+    @Test
+    fun `an archived offer takes the fit its search weighed and keeps everything else`() {
+        val dir = DataDir.file("archive/listings").apply { mkdirs() }
+        File(dir, "$id.json").writeText(Json { encodeDefaults = true }.encodeToString(Listing.serializer(), listing().copy(matchScore = 0.57, description = "kept")))
+        val parts = listOf(FitPart(FitWish.MODEL, 31.5, 35.0, "Creality CR-Scan Otter (the ad's text)"))
+        ListingArchive.refit(id, 0.73, parts)
+        val now = ListingArchive.get(id)!!
+        assertEquals(0.73, now.matchScore)
+        assertEquals(parts, now.fit)
+        assertEquals("kept", now.description)
+        ListingArchive.refit("nothing-archived-under-this", 0.73, parts)
     }
 }

@@ -81,6 +81,19 @@ object ListingArchive {
         }
     }
 
+    /**
+     * The archived copy of [id] with the fit its saved search just weighed. A card is archived before
+     * the ad's full text and photos can tell its model, so its fit stayed the one of a model not
+     * stated: a 3D scanner accessory was pushed at 73 % and its offer page said 57 %.
+     */
+    fun refit(id: String, score: Double, parts: List<io.github.tieo.arbay.model.FitPart>) {
+        val file = File(listingsDir, "${safeId(id) ?: return}.json")
+        if (!file.exists()) return
+        val archived = runCatching { json.decodeFromString<Listing>(file.readText()) }.getOrNull() ?: return
+        if (archived.matchScore == score && archived.fit == parts) return
+        file.writeTextAtomically(json.encodeToString(archived.copy(matchScore = score, fit = parts)))
+    }
+
     private suspend fun archiveNow(listing: Listing) {
         // The id becomes a directory and a file name, so it is held to the same rule as the ids
         // the lookups below accept; one that fails it is not archived rather than written astray.

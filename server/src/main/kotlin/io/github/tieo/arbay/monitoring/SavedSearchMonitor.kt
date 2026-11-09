@@ -661,6 +661,8 @@ class SavedSearchMonitor(
                 fit?.let { l to it }
             },
         ) { it.score }
+        // What an offer's page shows is the fit the alert goes by, its model told since the card came in.
+        if (things != null) scores.filter { (l, fit) -> l.matchScore != fit.score }.forEach { (l, fit) -> ListingArchive.refit(l.id, fit.score, fit.parts) }
         // Every run, quiet ones included: the best offers it ever ranked are looked for again.
         if (shown.isNotEmpty()) TopOffers.update(
             product.id, scores.map { (l, fit) -> l to fit.score }, shown.keys, ruledOut - shown.keys, TopOffers::adState,
