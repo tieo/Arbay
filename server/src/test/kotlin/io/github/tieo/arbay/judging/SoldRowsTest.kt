@@ -30,6 +30,16 @@ class SoldRowsTest {
     }
 
     @Test
+    fun `an auction that ended unsold is written only by a look at ended auctions`() {
+        val f = File.createTempFile("sold", ".jsonl").also { it.delete(); it.deleteOnExit() }
+        val rows = SoldRows(f)
+        rows.add("x", null, listOf(sale("9", sold = false)))
+        assertEquals(false, f.exists())
+        rows.add("x", null, listOf(sale("9", sold = false)), unsoldToo = true)
+        assertEquals(listOf(false), f.rows().map { it.sold })
+    }
+
+    @Test
     fun `the sweep's list skips empty lines and comments and may leave the type out`() {
         val got = SoldSweep.parse(listOf("Samsung 990 PRO 2TB | ssd", "", "# nope", "Duden Band 1"))
         assertEquals(listOf("Samsung 990 PRO 2TB" to "ssd", "Duden Band 1" to null), got.map { it.words to it.type })

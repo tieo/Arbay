@@ -71,6 +71,12 @@ object SoldPriceReader {
         return turn.withLock { fresh(ask) ?: read(ask) }
     }
 
+    /** Writes down the auctions eBay.de lists as ended for [words], the unsold ones with their start price. */
+    suspend fun recordEndedAuctions(words: String, type: String?) = turn.withLock {
+        val ended = NeulandOffers.ask("ebay.de", words, PlatformId.EBAY_DE, "eBay.de", perPage = PER_PAGE, ended = true, auctions = true).listings
+        SoldRows.live.add(words.trim().lowercase(), type, ended, unsoldToo = true)
+    }
+
     private fun fresh(ask: Ask): SoldPrices? = kept[ask.key]?.takeIf { System.currentTimeMillis() - it.at < KEEP_MS }?.sold
 
     /** What is known already; where nothing is, a look is started and null answered. */

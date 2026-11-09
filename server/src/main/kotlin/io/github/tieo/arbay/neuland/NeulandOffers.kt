@@ -55,6 +55,7 @@ object NeulandOffers {
         vehicle: VehicleQuery? = null, near: io.github.tieo.arbay.markets.SearchArea? = null, countries: List<String> = emptyList(),
         otherwise: Condition? = null, kinds: Set<String>? = null,
         sold: Boolean = false, conditions: List<String> = emptyList(), perPage: Int? = null,
+        ended: Boolean = false, auctions: Boolean = false,
     ): Answer {
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
@@ -64,6 +65,8 @@ object NeulandOffers {
             max?.let { put("maxCents", kotlinx.serialization.json.JsonPrimitive(it.amount)) }
             vehicle?.let { put("vehicle", vehicleJson.encodeToJsonElement(VehicleQuery.serializer(), it)) }
             if (sold) put("sold", kotlinx.serialization.json.JsonPrimitive(true))
+            if (ended) put("ended", kotlinx.serialization.json.JsonPrimitive(true))
+            if (auctions) put("auctions", kotlinx.serialization.json.JsonPrimitive(true))
             if (conditions.isNotEmpty()) put("conditions", kotlinx.serialization.json.JsonArray(conditions.map { kotlinx.serialization.json.JsonPrimitive(it) }))
             perPage?.let { put("perPage", kotlinx.serialization.json.JsonPrimitive(it)) }
             if (countries.isNotEmpty()) put("countries", kotlinx.serialization.json.JsonArray(countries.map { kotlinx.serialization.json.JsonPrimitive(it) }))

@@ -17,7 +17,8 @@ import org.slf4j.LoggerFactory
 /**
  * Reads the sold list of one product after another for the price model, from `sold_sweep.txt`, one
  * `search words | product type` per line, and then the auctions bid on lately, so what they ended
- * at is on record.
+ * at is on record. Each product is read twice, the sold list and the ended auctions, since only the
+ * second shows auctions that found no buyer.
  *
  * A read goes through [SoldPriceReader]'s single turn in the shared browser and the sweep leaves
  * minutes between reads, so it never competes with a watch for long; like a watch it waits while a
@@ -77,6 +78,8 @@ object SoldSweep {
         val at = current(all.size)
         val product = all[at]
         SoldPriceReader.of(SoldPriceReader.Ask(words = product.words, type = product.type))
+        delay(GAP)
+        SoldPriceReader.recordEndedAuctions(product.words, product.type)
         position.writeText("${at + 1}")
         log.info("sold sweep {}/{}: {}", at + 1, all.size, product.words)
     }

@@ -33,7 +33,10 @@ class SoldRows(private val file: File) {
         val currency: Currency,
         val saleType: SaleType? = null,
         val condition: Condition? = null,
+        /** The day it sold, or for an unsold one the day it ended. */
         val soldAt: Instant? = null,
+        /** False for an auction that ended without a bid; its price is then the start price. */
+        val sold: Boolean = true,
         /** Sold to a proposal below the price, whose amount the market hides. */
         val soldToOffer: Boolean = false,
         val bids: Int? = null,
@@ -53,14 +56,14 @@ class SoldRows(private val file: File) {
         }
     }
 
-    /** Writes the sales among [offers] that no earlier look has shown. */
+    /** Writes the sales among [offers] that no earlier look has shown, with [unsoldToo] the ones that ended unsold as well. */
     @Synchronized
-    fun add(asked: String, type: String?, offers: Collection<Listing>, now: Instant = Clock.System.now()) {
-        val rows = offers.filter { it.sold && it.id !in known }.distinctBy { it.id }.map { l ->
+    fun add(asked: String, type: String?, offers: Collection<Listing>, now: Instant = Clock.System.now(), unsoldToo: Boolean = false) {
+        val rows = offers.filter { (it.sold || unsoldToo) && it.id !in known }.distinctBy { it.id }.map { l ->
             Row(
                 readAt = now, asked = asked, type = type, offer = l.id, url = l.url, title = l.title,
                 priceCents = l.price.amount, landedCents = l.effectivePrice.amount, currency = l.price.currency,
-                saleType = l.saleType, condition = l.condition, soldAt = l.soldDate, soldToOffer = l.soldToOffer, bids = l.bidCount,
+                saleType = l.saleType, condition = l.condition, soldAt = l.soldDate, sold = l.sold, soldToOffer = l.soldToOffer, bids = l.bidCount,
                 sellerType = l.seller?.type, sellerName = l.seller?.name, sellerRating = l.seller?.rating, sellerRatings = l.seller?.reviewCount,
             )
         }
