@@ -60,6 +60,8 @@ object SoldPriceReader {
         val ssd: Boolean = false,
         /** For words: keeps only the sales that are what was asked. */
         val keep: ((Listing) -> Boolean)? = null,
+        /** What kind of product it is, written beside each sale read for the price model. */
+        val type: String? = null,
     ) {
         val key: String get() = model?.substringBefore('-') ?: capacityGb?.let { "$it GB" + if (ssd) " SSD" else "" } ?: words!!.trim().lowercase()
     }
@@ -90,6 +92,7 @@ object SoldPriceReader {
         words.forEach { w ->
             NeulandOffers.ask("ebay.de", w, PlatformId.EBAY_DE, "eBay.de", sold = true, perPage = PER_PAGE).listings.forEach { found[it.id] = it }
         }
+        SoldRows.live.add(ask.key, ask.type, found.values)
         return stats(ask, found.values.toList()).also { kept[ask.key] = Kept(System.currentTimeMillis(), it) }
     }
 

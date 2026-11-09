@@ -28,6 +28,7 @@ fun main() {
     System.setProperty("java.awt.headless", "true")
     ModelWordEvidence.install(DataDir.file("model_word_evidence.json"))
     io.github.tieo.arbay.judging.OfferJudge.install(DataDir.file("offer_verdicts.json"))
+    io.github.tieo.arbay.judging.SoldSweep.start()
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
