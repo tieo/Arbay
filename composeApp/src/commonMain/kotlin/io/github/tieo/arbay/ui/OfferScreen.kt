@@ -192,7 +192,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
                 if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
-                if (checkoutSite(listing.url) != null && !isArchived) ShopCheckout(session, listing)
+                if (checkoutSite(listing) != null && !isArchived) ShopCheckout(session, listing)
                 if (!isArchived) listing.seller?.let { seller ->
                     if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) {
                         OutlinedButton(onClick = { session.listings.blockDealer(listing); nav.back() }, modifier = Modifier.fillMaxWidth()) {
@@ -463,7 +463,7 @@ private fun SellerButton(session: Session, listing: Listing) {
 /** Buying an offer outright at its shop's own checkout: read first, then paid at the total it showed. */
 @Composable
 private fun ShopCheckout(session: Session, listing: Listing) {
-    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
+    val shop = checkoutSite(listing)?.let(::checkoutShop) ?: return
     val checkout by session.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id }
     val purchase = here?.purchase

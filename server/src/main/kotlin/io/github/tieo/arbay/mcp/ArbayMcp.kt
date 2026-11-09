@@ -892,19 +892,20 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         tool(
             "checkout",
             "Read what buying an offer outright costs at its shop's own checkout, signed in to the user's account there: Vinted " +
-                "(item, buyer protection fee, shipping to the door) or alza (item, delivery to the user's pickup point); total and " +
-                "the saved payment method. alza's is read to its last step before ordering. Orders and pays nothing.",
-            props = { string("listing_id", "A Vinted or alza offer id from search", required = true) },
+                "(item, buyer protection fee, shipping to the door), eBay.de at a fixed price (item, shipping to the saved address, a " +
+                "coupon the page shows) or alza (item, delivery to the user's pickup point); total and the payment method selected. " +
+                "alza's and eBay's are read to their last step before ordering. Orders and pays nothing.",
+            props = { string("listing_id", "A Vinted, fixed-price eBay.de or alza offer id from search", required = true) },
         ) { args -> purchase(args.str("listing_id")!!, Double.MAX_VALUE, pay = false) }
 
         tool(
             "buy",
-            "Buy an offer outright, as the user approved, at its shop's own checkout: Vinted's delivered to the door, alza's to " +
-                "the user's pickup point, paid with the account's saved payment (PayPal). Refused before ordering if the total " +
+            "Buy an offer outright, as the user approved, at its shop's own checkout: Vinted's delivered to the door, eBay.de's at " +
+                "a fixed price to the saved address, alza's to the user's pickup point, paid with the account's saved payment. Refused before ordering if the total " +
                 "would pass the all-in limit; counts as bought only once the shop confirms it.",
             destructive = true,
             props = {
-                string("listing_id", "A Vinted or alza offer id from search", required = true)
+                string("listing_id", "A Vinted, fixed-price eBay.de or alza offer id from search", required = true)
                 number("all_in_eur", "Most the user pays, fee and shipping included, in euros (12.48 for 12,48 €)", required = true)
             },
         ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true) }
@@ -1317,7 +1318,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     /** [id]'s checkout read, or bought within [allInEur] with [pay]. */
     private suspend fun purchase(id: String, allInEur: Double, pay: Boolean): String {
         val l = offer(id) ?: return "Unknown offer; search first."
-        if (io.github.tieo.arbay.model.checkoutSite(l.url) == null) return "Arbay buys outright only at Vinted's and alza's checkouts; this offer is at ${l.url}."
+        if (io.github.tieo.arbay.model.checkoutSite(l) == null) return "Arbay buys outright only at Vinted's, alza's and eBay.de's checkouts, and an auction not at all; this offer is at ${l.url}."
         val r = http.post("$base/api/chat/buy") {
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay)))

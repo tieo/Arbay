@@ -243,7 +243,7 @@ data class Purchase(
 
 /**
  * The shop whose own checkout Arbay buys an offer at [url] through, as Neuland names it: Vinted's,
- * and alza's for its product pages. Null where it buys at none.
+ * eBay.de's for its item pages, and alza's for its product pages. Null where it buys at none.
  */
 fun checkoutSite(url: String): String? {
     val rest = url.removePrefix("https://").takeIf { it != url } ?: return null
@@ -251,14 +251,26 @@ fun checkoutSite(url: String): String? {
     val path = "/" + rest.substringAfter('/', "").substringBefore('?')
     return when {
         host == "www.vinted.de" && path.startsWith("/items/") -> "vinted.de"
+        host == "www.ebay.de" && Regex("^/itm/[0-9]+$").matches(path) -> "ebay.de"
         host == "www.alza.de" && Regex("^/[^/]+-d[0-9]+\\.htm$").matches(path) -> "alza.de"
         else -> null
     }
 }
 
+/**
+ * The shop whose own checkout buys [listing] outright. An eBay address is the same whether it sells
+ * or auctions, so eBay's checkout takes only an offer known to be at a fixed price: an auction is
+ * bid on, and what is hired out is not for sale.
+ */
+fun checkoutSite(listing: Listing): String? = checkoutSite(listing.url)?.takeIf { site ->
+    if (site == "ebay.de") listing.saleType == SaleType.FIXED_PRICE
+    else listing.saleType != SaleType.AUCTION && listing.saleType != SaleType.RENT
+}
+
 /** A shop [checkoutSite] names, as the user knows it. */
 fun checkoutShop(site: String): String = when (site) {
     "vinted.de" -> "Vinted"
+    "ebay.de" -> "eBay"
     "alza.de" -> "alza"
     else -> site
 }

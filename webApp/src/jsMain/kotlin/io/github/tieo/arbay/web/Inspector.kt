@@ -625,7 +625,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
                 }
             }
             if (!isArchived) SellerAction(app, route, listing)
-            if (!isArchived && checkoutSite(listing.url) != null) BuyAction(app, listing)
+            if (!isArchived && checkoutSite(listing) != null) BuyAction(app, listing)
             if (!isArchived) listing.seller?.let { seller ->
                 if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) QuietButton("Block ${seller.shownName}", Glyph.No) {
                     app.listings.blockDealer(listing)
@@ -634,7 +634,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             }
         }
 
-        if (!isArchived && checkoutSite(listing.url) != null) Checkout(app, listing)
+        if (!isArchived && checkoutSite(listing) != null) Checkout(app, listing)
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
@@ -877,7 +877,7 @@ private fun DriveHealthSection(health: DriveHealth?, reading: Boolean) {
 /** Opens an offer's checkout at its shop, read first; shown until one is open for this offer. */
 @Composable
 private fun BuyAction(app: WebApp, listing: Listing) {
-    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
+    val shop = checkoutSite(listing)?.let(::checkoutShop) ?: return
     val checkout by app.chat.checkout.collectAsState()
     if (checkout?.listingId == listing.id) return
     QuietButton("Buy on $shop", Glyph.Cart) { app.chat.readCheckout(listing) }
@@ -886,7 +886,7 @@ private fun BuyAction(app: WebApp, listing: Listing) {
 /** An offer's checkout at its shop as Arbay read it, paid at the total it showed. */
 @Composable
 private fun Checkout(app: WebApp, listing: Listing) {
-    val shop = checkoutSite(listing.url)?.let(::checkoutShop) ?: return
+    val shop = checkoutSite(listing)?.let(::checkoutShop) ?: return
     val checkout by app.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id } ?: return
     val purchase = here.purchase

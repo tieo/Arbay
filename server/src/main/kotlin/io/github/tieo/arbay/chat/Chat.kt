@@ -100,7 +100,7 @@ object Chat {
         }
     }
 
-    /** The payment service Vinted's checkout hands over to, as Neuland signs in to it. */
+    /** The payment service the shops' checkouts hand over to, as Neuland signs in to it. */
     private const val PAYMENT_SITE = "paypal.com"
 
     /**
@@ -111,8 +111,8 @@ object Chat {
      * approval every day.
      */
     suspend fun reloginPayment(): Boolean {
-        if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay at Vinted", waitS = SILENT_SIGN_IN_S, push = false)) return true
-        log.warn("PayPal sign-in for Vinted did not come through")
+        if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(PAYMENT_SITE, "Arbay, to pay with PayPal", waitS = SILENT_SIGN_IN_S, push = false)) return true
+        log.warn("PayPal sign-in did not come through")
         askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE, payment = true))
         return false
     }
@@ -256,15 +256,15 @@ object Chat {
     }
 
     /**
-     * Buys an item at its shop's own checkout ([checkoutSite]: Vinted, alza) with the account's
-     * saved payment, Vinted's delivered to the door, alza's to the user's pickup point
+     * Buys an item at its shop's own checkout ([checkoutSite]: Vinted, eBay, alza) with the account's
+     * saved payment, Vinted's delivered to the door, eBay's to the account's saved address, alza's to the user's pickup point
      * ([ChatSettings.pickup]) for the user's address ([ChatSettings.buyer]); paid only with
      * [PurchaseRequest.pay] and a total within [PurchaseRequest.allInEur], otherwise the checkout is
      * only read and left unpaid.
      */
     suspend fun buy(request: PurchaseRequest): Purchase {
         val site = io.github.tieo.arbay.model.checkoutSite(request.url)
-            ?: throw ChatFailure("Arbay buys at Vinted's and alza's checkouts only, not at ${request.url}", signedOut = false)
+            ?: throw ChatFailure("Arbay buys at Vinted's, eBay's and alza's checkouts only, not at ${request.url}", signedOut = false)
         require(request.allInEur.isFinite() && request.allInEur > 0) { "an all-in limit of ${request.allInEur} €" }
         var bought = checkout(site, request)
         // PayPal signed out: signed in again with the kept password, the buy is made once more.
@@ -300,12 +300,18 @@ object Chat {
         val answer = try {
             io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = 200)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
-            // Signed out of Vinted, on the way to a real purchase: signed in again with what Neuland
-            // keeps, nothing on the phone unless that fails. Only reading a checkout asks nobody.
-            if (e.signedOut && site == "vinted.de" && request.pay && !signedInAgain) {
-                if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain("vinted.de", "Arbay, to buy at Vinted", waitS = SILENT_SIGN_IN_S, through = "google.com", push = false))
+            // Signed out of a market that signs in through Google, on the way to a real purchase:
+            // signed in again with what Neuland keeps, nothing on the phone unless that fails. Only
+            // reading a checkout asks nobody.
+            val market = when (site) {
+                "vinted.de" -> PlatformId.VINTED_DE
+                "ebay.de" -> PlatformId.EBAY_DE
+                else -> null
+            }
+            if (e.signedOut && market != null && request.pay && !signedInAgain) {
+                if (io.github.tieo.arbay.neuland.NeuAuth.signInAgain(site, "Arbay, to buy at $shop", waitS = SILENT_SIGN_IN_S, through = "google.com", push = false))
                     return checkout(site, request, signedInAgain = true)
-                askSignIn(io.github.tieo.arbay.model.SignInLink(PlatformId.VINTED_DE))
+                askSignIn(io.github.tieo.arbay.model.SignInLink(market))
             }
             throw ChatFailure("$shop's checkout: ${e.message}", signedOut = e.signedOut)
         }
