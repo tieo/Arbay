@@ -56,7 +56,7 @@ class SoldRows(private val file: File) {
     /** Writes the sales among [offers] that no earlier look has shown. */
     @Synchronized
     fun add(asked: String, type: String?, offers: Collection<Listing>, now: Instant = Clock.System.now()) {
-        val rows = offers.filter { it.sold && known.add(it.id) }.map { l ->
+        val rows = offers.filter { it.sold && it.id !in known }.distinctBy { it.id }.map { l ->
             Row(
                 readAt = now, asked = asked, type = type, offer = l.id, url = l.url, title = l.title,
                 priceCents = l.price.amount, landedCents = l.effectivePrice.amount, currency = l.price.currency,
@@ -66,6 +66,7 @@ class SoldRows(private val file: File) {
         }
         if (rows.isEmpty()) return
         runCatching { file.appendText(rows.joinToString("") { json.encodeToString(Row.serializer(), it) + "\n" }) }
+            .onSuccess { known += rows.map { it.offer } }
             .onFailure { log.error("could not write the sold rows: {}", it.message) }
     }
 

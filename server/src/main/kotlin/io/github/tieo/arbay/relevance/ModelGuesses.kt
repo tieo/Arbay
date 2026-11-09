@@ -97,11 +97,12 @@ object ModelGuesses {
         if (wishes.models.isEmpty()) return
         val against = key(wishes)
         fun inTitle(l: Listing) = FitScore.modelsNamed(FitScore.folded(l.title), wishes.models).isNotEmpty()
-        fun open(l: Listing) = synchronized(kept) { kept[l.id] }.let { it?.against != against || (it.guess?.how == ModelGuess.FROM_TEXT && !it.mentionRead) }
+        fun open(l: Listing) = synchronized(kept) { kept[l.id] }.let { it?.against != against || (it.guess?.how == ModelGuess.FROM_TEXT && !it.mentionRead && ModelMentions.enabled) }
         val unnamed = listings.filter { !inTitle(it) && checkOf(it.id) == null && open(it) }
             .sortedBy { FitScore.priceEur(it) }
             .take(MOST_PER_RUN)
         if (unnamed.isEmpty()) return
+        val unreadable = HashSet<String>()
         val mentions = unnamed.mapNotNull { l ->
             val text = try {
                 detail(l)?.description ?: l.description
@@ -109,12 +110,13 @@ object ModelGuesses {
                 throw e
             } catch (e: Exception) {
                 log.debug("text of {} not read: {}", l.id, e.message)
-                l.description
+                unreadable += l.id
+                null
             }
             text?.let { ModelMentions.of(l, it, wishes) }?.let { l.id to it }
         }.toMap()
         val read = ModelMentions.read(mentions.values.toList())
-        unnamed.forEach { l ->
+        unnamed.filter { it.id !in unreadable }.forEach { l ->
             val mention = mentions[l.id]
             val verdict = read[l.id]
             // With the judge on, an offer it gave no answer about stays open for the next run.
