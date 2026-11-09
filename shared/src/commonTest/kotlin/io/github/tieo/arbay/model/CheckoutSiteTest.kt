@@ -27,6 +27,20 @@ class CheckoutSiteTest {
         assertEquals("eBay", checkoutShop("ebay.de"))
     }
 
+    @Test
+    fun whatACouponTookOffIsTheGapBetweenTheLinesAndTheTotal() {
+        assertEquals(1.8, Purchase(buyable = true, itemEur = 44.99, shippingEur = 0.0, totalEur = 43.19).discountEur)
+        assertNull(Purchase(buyable = true, itemEur = 12.99, feeEur = 1.0, shippingEur = 3.49, totalEur = 17.48).discountEur)
+        assertNull(Purchase(buyable = true, itemEur = 12.99, shippingEur = null, totalEur = 10.0).discountEur)
+    }
+
+    @Test
+    fun aDiscountReadsAsOneNegativeAmount() {
+        assertEquals("-1,80 €", euroText(-1.8))
+        assertEquals("-0,05 €", euroText(-0.05))
+        assertEquals("193,39 €", euroText(193.39))
+    }
+
     private fun offer(url: String, sale: SaleType?) =
         Listing(id = "1", platformId = PlatformId.EBAY_DE, externalId = "1", url = url, title = "t", price = Money(100, Currency.EUR), scrapedAt = kotlin.time.Instant.fromEpochMilliseconds(0), saleType = sale)
 

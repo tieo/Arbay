@@ -899,11 +899,12 @@ private fun Checkout(app: WebApp, listing: Listing) {
             purchase?.paid == true -> Div({ classes("inline-form") }) {
                 Icon(Glyph.Check); Span { Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}" + (purchase.order?.let { ", order $it" } ?: "")) }
             }
-            purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text("$shop no longer offers to buy it") }
+            purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text(purchase.problem ?: "$shop no longer offers to buy it") }
             purchase != null -> {
                 CheckoutLine("Item", purchase.itemEur)
                 purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
                 CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
+                purchase.discountEur?.let { CheckoutLine("Discount", -it) }
                 CheckoutLine("Total", purchase.totalEur, total = true)
                 purchase.payment?.let { P({ classes("muted", "small") }) { Text("Payment: $it") } }
                 purchase.problem?.let { P({ classes("muted", "small") }) { Text(it) } }

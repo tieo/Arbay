@@ -480,11 +480,12 @@ private fun ShopCheckout(session: Session, listing: Listing) {
                 Text("Bought for ${purchase.totalEur?.let(::euroText).orEmpty()}" + (purchase.order?.let { ", order $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        purchase != null && !purchase.buyable -> Muted("$shop no longer offers to buy it")
+        purchase != null && !purchase.buyable -> Muted(purchase.problem ?: "$shop no longer offers to buy it")
         purchase != null -> Panel {
             CheckoutLine("Item", purchase.itemEur)
             purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
             CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
+            purchase.discountEur?.let { CheckoutLine("Discount", -it) }
             CheckoutLine("Total", purchase.totalEur, total = true)
             purchase.payment?.let { Muted("Payment: $it") }
             purchase.problem?.let { Muted(it) }

@@ -1422,11 +1422,11 @@ internal fun io.github.tieo.arbay.model.BidReview.describe(): String = when {
 }
 
 internal fun io.github.tieo.arbay.model.Purchase.describe(): String = when {
-    !buyable -> "The shop no longer offers to buy it."
+    !buyable -> problem ?: "The shop no longer offers to buy it."
     else -> listOfNotNull(
         if (paid) "Paid" + (order?.let { ", order $it." } ?: ".") else if (placed) "ORDER PLACED, not paid: check it in the shop's account." else "Not paid.",
         problem,
-        "item ${itemEur ?: "?"} €" + (feeEur?.let { " + fee $it €" } ?: "") + " + ${delivery ?: "shipping"} ${shippingEur ?: "?"} € = ${totalEur ?: "?"} €",
+        "item ${itemEur ?: "?"} €" + (feeEur?.let { " + fee $it €" } ?: "") + " + ${delivery ?: "shipping"} ${shippingEur ?: "?"} €" + (discountEur?.let { " - discount $it €" } ?: "") + " = ${totalEur ?: "?"} €",
         payment?.let { "payment: $it" },
     ).joinToString(" · ")
 }

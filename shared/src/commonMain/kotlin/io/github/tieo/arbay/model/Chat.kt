@@ -169,7 +169,10 @@ fun doorDeliveryUsed(shipping: Shipping?, toDoor: Boolean): String? {
     return "${shipping.doorBy ?: "delivery"} to the door, ${formatEuroCents(door.amount)} instead of ${shipping.cost?.let { formatEuroCents(it.amount) } ?: "?"} to a parcel shop"
 }
 
-private fun formatEuroCents(cents: Long): String = "${cents / 100},${(cents % 100).toString().padStart(2, '0')} €"
+private fun formatEuroCents(cents: Long): String {
+    val whole = kotlin.math.abs(cents)
+    return "${if (cents < 0) "-" else ""}${whole / 100},${(whole % 100).toString().padStart(2, '0')} €"
+}
 
 /** An amount in euro as a German price reads: "193,39 €". */
 fun euroText(eur: Double): String = formatEuroCents(kotlin.math.round(eur * 100).toLong())
@@ -239,7 +242,14 @@ data class Purchase(
     val order: String? = null,
     /** Whether the shop's order button was pressed: the order may stand, paid or not. */
     val placed: Boolean = false,
-)
+) {
+    /** What the shop took off the lines to reach the total, such as a coupon's amount; null where nothing was or a line is unread. */
+    val discountEur: Double?
+        get() {
+            val cents = kotlin.math.round((itemEur ?: return null) * 100 + (feeEur ?: 0.0) * 100 + (shippingEur ?: return null) * 100 - (totalEur ?: return null) * 100).toLong()
+            return if (cents > 0) cents / 100.0 else null
+        }
+}
 
 /**
  * The shop whose own checkout Arbay buys an offer at [url] through, as Neuland names it: Vinted's,
