@@ -144,6 +144,20 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a closed van offered for a conversion yet to be done leaves it a closed van, in Dutch too`() {
+        // Leerdam: a closed L2H2 Bestelbus whose opening line recommends it for a later conversion.
+        assertNotNull(fit(van(
+            title = "Volkswagen Crafter 35 2.0 TDI 140pk L3H3 (L2H2) DSG-Automaat Navi/Cam",
+            description = "Deze 140pk sterke Crafter 35 2.0 TDI L3H3 (voorheen L2H2) Comfortline is van 10-2021! Ideaal voor ombouw naar buscamper en al voorzien van o.a.:\n\nAirconditioning",
+        )))
+        assertNotNull(fit(van(title = "VW Crafter Kasten geschikt voor ombouw tot camper")))
+        assertNotNull(fit(van(title = "VW Crafter Kasten ideal für den Umbau zum Wohnmobil")))
+        assertNull(fit(van(title = "VW Crafter buscamper")))
+        assertNull(fit(van(title = "VW Crafter omgebouwd tot camper")))
+        assertNull(fit(van(title = "VW Crafter Umbau zum Camper fertig")))
+    }
+
+    @Test
     fun `a dealer's text sent as one line is no headline`() {
         // TruckScout24 sends a Cloppenburg dealer's equipment and terms as a single line; the retrofits
         // it offers ("Nachrüstung einer LBW (Ladebordwand)") are not the van's body.

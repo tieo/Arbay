@@ -66,11 +66,13 @@ object FitScore {
     )
     // A camper named as one use a closed van can be put to, "VW Crafter Handwerker / Camper Auto"
     // (a plain Kasten with a wood-lined hold), "ideal als Camper", "Basis für Camperausbau",
-    // "Ausbau möglich": the van is still closed. A camper named alone is a conversion.
+    // "Ausbau möglich", the Dutch dealers' "ideaal voor ombouw naar buscamper": the van is still
+    // closed. A camper named alone is a conversion.
     private val camperAsAUse = Regex(
         """(?i)(handwerker|werkstatt|gewerbe|transporter|kasten(wagen)?|lieferwagen|umzug)\w*\s*(/|oder|&|\+|und)\s*(camper|wohnmobil|womo)\w*""" +
             """|(camper|wohnmobil|womo)\w*\s*(/|oder|&|\+|und)\s*(handwerker|werkstatt|gewerbe|transporter|kasten(wagen)?|lieferwagen|umzug)""" +
-            """|(ideal|perfekt|geeignet|bestens)\s+(als|f(ü|ue)r|zum)\s+((einen|den|ein)\s+)?(camper|wohnmobil|womo|ausbau)\w*""" +
+            """|(ideal|ideaal|perfekt|perfect|geeignet|geschikt|bestens)\s+(als|f(ü|ue)r|zum|voor)\s+((einen|den|ein|een|de)\s+)?""" +
+            """((umbau|ombouw)\s+(zum?|zur|naar|tot)\s+((einem|einen|een)\s+)?)?(bus)?(camper|wohnmobil|womo|ausbau)\w*""" +
             """|basis\s+(f(ü|ue)r\s+)?(((einen|den|ein)\s+)?(camper|wohnmobil|womo|ausbau)\w*)""" +
             """|(camper|wohnmobil)?[\s-]*ausbau\s+m(ö|oe)glich""",
     )
