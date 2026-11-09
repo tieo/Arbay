@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import io.github.tieo.arbay.judging.FitScore
+import io.github.tieo.arbay.judging.ModelMentions
 import io.github.tieo.arbay.judging.PhotoFactChecks
 import io.github.tieo.arbay.judging.PhotoPrints
 import io.github.tieo.arbay.judging.PhotoText
@@ -29,6 +30,10 @@ data class ModelGuess(val model: String, val how: String, val confidence: Double
     companion object {
         const val FROM_PHOTOS = "its photos look like one"
         const val CHECKED = "checked"
+        const val FROM_TEXT = "the ad's text"
+
+        /** The ad's text names a wanted model, and what is sold was read to be something else. */
+        const val ONLY_MENTIONED = "only mentioned in its text"
 
         /** The model of a [CHECKED] offer that is none of the search's: not a machine wanted at all. */
         const val NONE_OF_THEM = ""
@@ -58,7 +63,7 @@ object ModelGuesses {
     private val file = DataDir.file("model_guesses.json")
 
     @Serializable
-    private data class Kept(val guess: ModelGuess? = null, val against: String)
+    private data class Kept(val guess: ModelGuess? = null, val against: String, val mentionRead: Boolean = false)
 
     private val kept: MutableMap<String, Kept> = file.readStore(log) {
         json.decodeFromString<Map<String, Kept>>(it)
@@ -87,26 +92,46 @@ object ModelGuesses {
 
     internal fun key(wishes: ProductWishes) = wishes.models.joinToString("|") { it.name + ":" + it.words.joinToString(",") }
 
-    /** Tell the model of every offer among [listings] that names none, as far as each can be told. */
+    /** Tell the model of every offer among [listings] whose title names none, as far as each can be told. */
     suspend fun identify(listings: Collection<Listing>, query: SearchQuery, wishes: ProductWishes) {
         if (wishes.models.isEmpty()) return
         val against = key(wishes)
-        fun named(l: Listing) = FitScore.namedModel(FitScore.folded("${l.title}\n${l.description.orEmpty()}"), wishes)
-        val unnamed = listings.filter { named(it) == null && checkOf(it.id) == null }
-            .filter { l -> synchronized(kept) { kept[l.id]?.against != against } }
+        fun inTitle(l: Listing) = FitScore.modelsNamed(FitScore.folded(l.title), wishes.models).isNotEmpty()
+        fun open(l: Listing) = synchronized(kept) { kept[l.id] }.let { it?.against != against || (it.guess?.how == ModelGuess.FROM_TEXT && !it.mentionRead) }
+        val unnamed = listings.filter { !inTitle(it) && checkOf(it.id) == null && open(it) }
             .sortedBy { FitScore.priceEur(it) }
             .take(MOST_PER_RUN)
         if (unnamed.isEmpty()) return
+        val mentions = unnamed.mapNotNull { l ->
+            val text = try {
+                detail(l)?.description ?: l.description
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.debug("text of {} not read: {}", l.id, e.message)
+                l.description
+            }
+            text?.let { ModelMentions.of(l, it, wishes) }?.let { l.id to it }
+        }.toMap()
+        val read = ModelMentions.read(mentions.values.toList())
         unnamed.forEach { l ->
+            val mention = mentions[l.id]
+            val verdict = read[l.id]
+            // With the judge on, an offer it gave no answer about stays open for the next run.
+            if (mention != null && ModelMentions.enabled && verdict == null) return@forEach
             val guess = try {
-                fromText(l, wishes) ?: fromPrint(l, wishes) ?: fromLikeness(l, query, wishes)
+                when {
+                    mention == null -> fromPrint(l, wishes) ?: fromLikeness(l, query, wishes)
+                    verdict == ModelMentions.NOT -> ModelGuess(ModelGuess.NONE_OF_THEM, ModelGuess.ONLY_MENTIONED, 0.0, sure = false)
+                    else -> ModelGuess(mention.model.name, ModelGuess.FROM_TEXT, 0.9, sure = true)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 log.debug("model of {} not told: {}", l.id, e.message)
                 return@forEach
             }
-            synchronized(kept) { kept[l.id] = Kept(guess, against) }
+            synchronized(kept) { kept[l.id] = Kept(guess, against, mentionRead = verdict != null) }
             if (guess != null) log.info("model of {} ({}): {} from {}", l.id, l.title.take(50), guess.model, guess.how)
         }
         persist()
@@ -115,12 +140,6 @@ object ModelGuesses {
     /** The model the offer's photos look like, where that model's photos were measured to be told right. */
     private fun fromLikeness(l: Listing, query: SearchQuery, wishes: ProductWishes): ModelGuess? =
         ModelLikeness.tell(l, query, wishes)?.let { (model, right) -> ModelGuess(model.name, ModelGuess.FROM_PHOTOS, right, sure = false) }
-
-    /** The model the ad's full text names, read from its page. */
-    private suspend fun fromText(l: Listing, wishes: ProductWishes): ModelGuess? {
-        val text = detail(l)?.description ?: return null
-        return FitScore.namedModel(FitScore.folded(FitScore.withoutTags(text)), wishes)?.let { ModelGuess(it.name, "the ad's text", 0.9, sure = true) }
-    }
 
     /** The model printed on the machine or its type plate in the ad's photos. */
     private suspend fun fromPrint(l: Listing, wishes: ProductWishes): ModelGuess? {

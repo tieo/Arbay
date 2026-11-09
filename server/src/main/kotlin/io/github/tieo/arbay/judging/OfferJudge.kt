@@ -59,7 +59,7 @@ object OfferJudge {
     private const val MODEL = "haiku"
 
     /** Offers per call: the measured batch size, small enough that no answer runs long. */
-    private const val BATCH = 50
+    internal const val BATCH = 50
 
     /** A call that has not answered by then is given up; its offers stay as the word rule left them. */
     private const val CALL_LIMIT_MS = 180_000L
@@ -135,20 +135,28 @@ object OfferJudge {
     /** Each offer of [offers] with the model's verdict, for the offers it answered about. */
     private suspend fun ask(offers: List<Listing>, words: String): List<Pair<Listing, String>> =
         if (offers.isEmpty()) emptyList() else coroutineScope {
-            offers.chunked(BATCH).map { batch -> async { calls.withPermit { call(batch, words) } } }.awaitAll().flatten()
+            offers.chunked(BATCH).map { batch -> async { call(batch, words) } }.awaitAll().flatten()
         }
 
     private suspend fun call(batch: List<Listing>, words: String): List<Pair<Listing, String>> {
         val lines = batch.mapIndexed { n, l -> "$n. ${l.title.replace('\n', ' ')} | ${l.effectivePrice.amount / 100.0} EUR | ${l.platformId.name}" }
         val prompt = "Search words: $words\n\nOffers:\n${lines.joinToString("\n")}"
+        return answers(SYSTEM, prompt, "'$words'").mapNotNull { (i, v) -> batch.getOrNull(i)?.let { it to v } }
+    }
+
+    /**
+     * Haiku's verdict per offer number for one batch, under [system]'s instructions: an empty list
+     * when it gave no usable answer, which [what] names in the log.
+     */
+    internal suspend fun answers(system: String, prompt: String, what: String): List<Pair<Int, String>> {
         val args = listOf(
             "claude", "-p", "--model", MODEL, "--setting-sources", "", "--strict-mcp-config",
             "--no-session-persistence", "--tools", "", "--output-format", "json",
-            "--system-prompt", SYSTEM, prompt,
+            "--system-prompt", system, prompt,
         )
         return try {
-            val out = withTimeoutOrNull(CALL_LIMIT_MS) { runProcess(args) } ?: run {
-                log.warn("Offer judge gave no answer for {} offers of '{}'", batch.size, words)
+            val out = calls.withPermit { withTimeoutOrNull(CALL_LIMIT_MS) { runProcess(args) } } ?: run {
+                log.warn("Offer judge gave no answer for {}", what)
                 return emptyList()
             }
             val result = json.parseToJsonElement(out.stdout.decodeToString()).jsonObject["result"]?.jsonPrimitive?.content
@@ -160,12 +168,12 @@ object OfferJudge {
             answer.mapNotNull { o ->
                 val i = o.jsonObject["i"]?.jsonPrimitive?.int ?: return@mapNotNull null
                 val v = o.jsonObject["v"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                batch.getOrNull(i)?.let { it to v }
+                i to v
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("Offer judge answer for '{}' unreadable: {}", words, e.message)
+            log.warn("Offer judge answer for {} unreadable: {}", what, e.message)
             emptyList()
         }
     }

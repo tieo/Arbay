@@ -302,7 +302,7 @@ object FitScore {
     }
 
     /** Where [text], [folded] already, says [phrase], not right after a "kein". */
-    private fun spans(text: String, phrase: String): List<IntRange> {
+    internal fun spans(text: String, phrase: String): List<IntRange> {
         val p = folded(phrase).trim().takeIf { it.isNotEmpty() } ?: return emptyList()
         val found = ArrayList<IntRange>()
         var from = 0
@@ -364,8 +364,9 @@ object FitScore {
             if (namedInTitle.count { it.worth > 0 } >= VARIANT_LIST) return null
             val inTitle = namedInTitle.maxByOrNull { it.worth }
             if (inTitle != null && inTitle.worth <= 0.0) return null
-            val inText = modelsNamed(stated, models).filter { it.worth > 0 }.maxByOrNull { it.worth }
             val told = guessed?.invoke(listing)
+            val inText = modelsNamed(stated, models).filter { it.worth > 0 }.maxByOrNull { it.worth }
+                .takeUnless { told?.how == ModelGuess.ONLY_MENTIONED }
             // Someone looked and said which it is, or that it is none of them: that outranks its words.
             if (told?.how == ModelGuess.CHECKED && told.model == ModelGuess.NONE_OF_THEM) return null
             val seen = told?.let { g -> models.firstOrNull { it.name == g.model }?.let { it to g } }

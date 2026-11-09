@@ -2,6 +2,7 @@ package io.github.tieo.arbay.relevance
 
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.FitPart
 import io.github.tieo.arbay.model.FitWish
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketGroup
@@ -109,6 +110,35 @@ class ProductFitTest {
         assertEquals(0.8 * 0.9, printed.parts.single { it.wish == FitWish.MODEL }.let { it.points / it.of }, 1e-9)
         assertNull(fit(unnamed, ModelGuess("Lägler FLIP", "printed on the machine", 0.9, sure = true)))
         assertNotNull(fit(unnamed, ModelGuess("Lägler FLIP", "looks like the Lägler FLIP ads", 0.75, sure = false)))
+    }
+
+    @Test
+    fun `a model only mentioned in an ad's text counts as not stated`() {
+        val handle = ad("Griff für Schleifmaschinen", 300, text = "Passend für Lägler Hummel und andere")
+        val named = assertNotNull(fit(handle)).parts.single { it.wish == FitWish.MODEL }
+        val read = assertNotNull(fit(handle, ModelGuess(ModelGuess.NONE_OF_THEM, ModelGuess.ONLY_MENTIONED, 0.0, sure = false))).parts.single { it.wish == FitWish.MODEL }
+        assertTrue(named.note!!.endsWith("(in the text)"))
+        assertEquals(FitPart.NOT_STATED, read.note)
+        assertTrue(read.points < named.points)
+    }
+
+    @Test
+    fun `a title naming a model is not undone by a reading of its text`() {
+        val hummel = ad("Lägler Hummel Parkettschleifmaschine", 600)
+        val part = assertNotNull(fit(hummel, ModelGuess(ModelGuess.NONE_OF_THEM, ModelGuess.ONLY_MENTIONED, 0.0, sure = false))).parts.single { it.wish == FitWish.MODEL }
+        assertEquals("Lägler HUMMEL", part.note)
+    }
+
+    @Test
+    fun `what the judge is shown of a mention says where the text names each model`() {
+        val wishes = ProductWishes(models = listOf(ModelWish("Creality Raptor", listOf("creality raptor"), 0.9), ModelWish("Creality Otter", listOf("creality otter"), 1.0)))
+        val plate = ad("Kalibrierplatte für Scanner", 99, text = "Nur passend für Creality Raptor und Creality Otter, nicht für andere.")
+        val mention = assertNotNull(io.github.tieo.arbay.judging.ModelMentions.of(plate, plate.description!!, wishes))
+        assertEquals("Creality Otter", mention.model.name)
+        assertEquals(2, mention.where.size)
+        val line = kotlinx.serialization.json.Json.parseToJsonElement(io.github.tieo.arbay.judging.ModelMentions.line(4, mention)).toString()
+        assertTrue("\"i\":4" in line && "\"title\":\"Kalibrierplatte" in line && "99.0 EUR" in line)
+        assertNull(io.github.tieo.arbay.judging.ModelMentions.of(plate, "Sonst nichts dazu.", wishes))
     }
 
     @Test
