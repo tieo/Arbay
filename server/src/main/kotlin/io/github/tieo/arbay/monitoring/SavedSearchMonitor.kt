@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.monitoring
 
+import kotlin.time.Duration.Companion.minutes
 import io.github.tieo.arbay.judging.FitAlertLog
 import io.github.tieo.arbay.model.driveFront
 import io.github.tieo.arbay.model.summary
@@ -110,6 +111,7 @@ class SavedSearchMonitor(
     private val MAX_AD_READS = 5
 
     /** Prefix of the [seen] entry that marks a fit alert's first run as done. */
+    private val BID_QUIET = 45.minutes
     private val FIT_KEY = "fit:"
 
     // Subfilter matches found since the phone last polled. Held rather than sent: the notification
@@ -294,6 +296,8 @@ class SavedSearchMonitor(
 
     /** One pass over every saved search: run whichever ones are both watched and due. */
     private suspend fun tick() {
+        // A watch fills the browsers a last-second bid needs; its run waits until the bid is through.
+        if (io.github.tieo.arbay.chat.AuctionBids.busySoon(BID_QUIET)) return
         val now = System.currentTimeMillis()
         for (product in productRepo.getAll()) {
             if (!product.autoFetch.enabled) continue
