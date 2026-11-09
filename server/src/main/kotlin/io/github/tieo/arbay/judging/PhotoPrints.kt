@@ -211,7 +211,7 @@ object PhotoPrints {
 
     /** The ads placed elsewhere or by someone else that show one of [listing]'s photos. */
     fun copiesOf(listing: Listing): List<PhotoCopy> = synchronized(this) {
-        if (fromShop(listing.id)) return emptyList()
+        if (fromShop(listing.id) || showsMakersPhotos(listing)) return emptyList()
         val own = entries[listing.id]?.let { e ->
             if (e.lat != null) e else whereIs(listing)?.let { e.copy(lat = it.first, lon = it.second) } ?: e
         } ?: return emptyList()
@@ -227,6 +227,21 @@ object PhotoPrints {
      * ad's came from, so shop offers are neither printed nor judged.
      */
     private fun fromShop(id: String) = id.startsWith("${io.github.tieo.arbay.model.PlatformId.WEB.name}:")
+
+    /**
+     * Whether an offer sells new goods from a shop, which shows the maker's photos as every other
+     * shop does: for a Creality scanner MediaMarkt and Saturn on eBay read as likely scams made of
+     * each other's pictures. eBay's cards name a seller but not whether it is a shop, so there a new
+     * offer counts unless the seller is known to be private; on the classifieds, where a copier
+     * writes "neu" too, only a known dealer does. Its photos stay printed, so a used or private ad
+     * showing them is still found.
+     */
+    internal fun showsMakersPhotos(listing: Listing): Boolean {
+        if (listing.condition != io.github.tieo.arbay.model.Condition.NEW) return false
+        val type = listing.seller?.type
+        return type == io.github.tieo.arbay.model.SellerType.BUSINESS ||
+            (type == null && listing.platformId.name.startsWith("EBAY_"))
+    }
 
     /** The other entries showing [print], unless so many places show it that it is a stock picture. */
     private fun othersWith(print: Long, own: Entry): List<Entry> {

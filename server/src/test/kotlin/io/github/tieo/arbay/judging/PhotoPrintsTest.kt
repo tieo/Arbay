@@ -1,11 +1,13 @@
 package io.github.tieo.arbay.judging
 
+import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.Location
 import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Seller
+import io.github.tieo.arbay.model.SellerType
 import kotlinx.coroutines.runBlocking
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -138,6 +140,33 @@ class PhotoPrintsTest {
         PhotoPrints.record(other, listOf("local"), file("shop-b.jpg", jpeg(yarn, 0.7f, 0.6)))
         assertEquals(emptyList(), PhotoPrints.copiesOf(one))
         assertEquals(emptyList(), PhotoPrints.copiesOf(other))
+    }
+
+    @Test
+    fun `new goods from shops on eBay are no copies of each other, a used ad showing their photo is`() = runBlocking {
+        val dir = File("build/test-data/photo-prints").apply { mkdirs() }
+        fun file(name: String, bytes: ByteArray) = File(dir, name).apply { writeBytes(bytes) }
+        fun ebay(id: String, city: String, seller: String, condition: Condition) =
+            ad(id, city, seller).copy(id = "EBAY_DE:$id", platformId = PlatformId.EBAY_DE, condition = condition)
+        val scanner = photo(23)
+        val mediamarkt = ebay("pp-mm", "Erfurt", "mediamarkt", Condition.NEW)
+        val saturn = ebay("pp-sat", "Ingolstadt", "saturn", Condition.NEW)
+        val used = ebay("pp-used", "Bremen", "somebody", Condition.USED)
+        PhotoPrints.record(mediamarkt, listOf("local"), file("mm.jpg", jpeg(scanner, 0.9f)))
+        PhotoPrints.record(saturn, listOf("local"), file("sat.jpg", jpeg(scanner, 0.8f, 0.8)))
+        PhotoPrints.record(used, listOf("local"), file("used.jpg", jpeg(scanner, 0.7f, 0.6)))
+        assertEquals(emptyList(), PhotoPrints.copiesOf(mediamarkt))
+        assertEquals(emptyList(), PhotoPrints.copiesOf(saturn))
+        assertEquals(setOf("EBAY_DE:pp-mm", "EBAY_DE:pp-sat"), PhotoPrints.copiesOf(used).map { it.listingId }.toSet())
+    }
+
+    @Test
+    fun `on the classifieds only a known dealer's new goods count as a shop's`() {
+        fun new(type: SellerType?) = ad("pp-new", "Köln", "x").copy(condition = Condition.NEW, seller = Seller(name = "x", type = type))
+        assertFalse(PhotoPrints.showsMakersPhotos(new(null)))
+        assertFalse(PhotoPrints.showsMakersPhotos(new(SellerType.PRIVATE)))
+        assertTrue(PhotoPrints.showsMakersPhotos(new(SellerType.BUSINESS)))
+        assertFalse(PhotoPrints.showsMakersPhotos(new(SellerType.BUSINESS).copy(condition = Condition.USED)))
     }
 
     @Test
