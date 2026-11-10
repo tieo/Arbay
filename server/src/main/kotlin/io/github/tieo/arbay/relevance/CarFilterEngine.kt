@@ -194,11 +194,14 @@ object CarFilterEngine {
         // New is never registered, so a vehicle stating a first registration is no new one, though
         // its card names no condition: a search for new ones alone loses it.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
-        // A new car asking a fraction of its model's cheapest price new asks no car's price: a
-        // deposit, a leasing rate or a placeholder ("1.000 €" for a new CUPRA Tavascan).
-        if (v?.condition in NEAR_NEW && io.github.tieo.arbay.judging.EvModels.keyOf(listing.title) != null) {
+        // A car asking a fraction of its model's cheapest price new asks no car's price: a
+        // deposit, a leasing rate or a placeholder ("1.000 €" for a new CUPRA Tavascan) on a car
+        // near new, a part ("VW ID 3 Anhängerkupplung", 1,100 €) on anything. A ten-year-old EV
+        // still keeps about a fifth of its price.
+        if (io.github.tieo.arbay.judging.EvModels.keyOf(listing.title) != null) {
             val reference = io.github.tieo.arbay.judging.Adac.cheapestNewEur(listing.title)
-            if (reference != null && priceEur.toDouble() < reference * NO_REAL_PRICE_SHARE) return "no real price"
+            val share = if (v?.condition in NEAR_NEW) NO_REAL_PRICE_SHARE else NO_CAR_PRICE_SHARE
+            if (reference != null && priceEur.toDouble() < reference * share) return "no real price"
         }
         // A car shorter than the model the search names as its least size; one whose model the
         // catalogue does not know, or knows no length of, is kept.
@@ -477,4 +480,7 @@ object CarFilterEngine {
 
     /** Under this share of its model's cheapest price new, a near-new car's asking price is not its price. */
     private const val NO_REAL_PRICE_SHARE = 0.4
+
+    /** Under this share of its model's cheapest price new, nothing is the car itself, however old. */
+    private const val NO_CAR_PRICE_SHARE = 0.1
 }
