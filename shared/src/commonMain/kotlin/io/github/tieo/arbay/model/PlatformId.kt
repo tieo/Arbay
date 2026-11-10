@@ -23,6 +23,9 @@ enum class PlatformId(
     // Makers' own stock searches: the cars their German dealers, or the maker itself, have.
     VW_GROUP_STOCK("VW group dealers", "https://www.volkswagen.de"),
     TESLA("Tesla", "https://www.tesla.com"),
+    HYUNDAI_STOCK("Hyundai dealers", "https://www.hyundai-car-market.de"),
+    // An EU import dealer's stock (EU-Neuwagen Knott), its prices with transfer and transport.
+    AUTO_PER_MAUSKLICK("auto-per-mausklick.de", "https://www.auto-per-mausklick.de"),
     // Per-country AutoScout24 markets. All crawl the .de front end with a country filter
     // (cy code) and display prices in EUR; each carries its origin for the cross-border badge.
     AUTOSCOUT24_IT("AutoScout24 IT", "https://www.autoscout24.it", country = "IT"),

@@ -5,16 +5,17 @@ import io.github.tieo.arbay.neuland.NeulandOffers
 import io.github.tieo.arbay.relevance.CarQueryResolver
 
 /**
- * A carmaker's own stock search, read by Neuland: the new, pre-registered, demonstrator and used
- * cars its German dealers (or the maker itself) have, which the classified sites list only in part.
+ * A carmaker's own stock search, or a car dealer's own stock list, read by Neuland: the new,
+ * pre-registered, demonstrator and used cars its German dealers (or the maker itself) have, which
+ * the classified sites list only in part.
  * Asked by the make and model the words name, with the search's fuel, condition and price band; a
  * make the maker does not sell is not asked at all.
  */
 class MakerStockCrawler(
     override val platformId: PlatformId,
     private val site: String,
-    /** The makes, by the car sites' slugs, whose stock this search holds. */
-    private val makes: Set<String>,
+    /** The makes, by the car sites' slugs, whose stock this search holds; null for a dealer of every make. */
+    private val makes: Set<String>?,
 ) : Crawler, FiltersAtTheSource, StartsAtAnyPage {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.CONDITION,
@@ -44,7 +45,7 @@ class MakerStockCrawler(
 
     /** What the maker's search is asked; none where the words name no make it sells. */
     internal fun vehicleQuery(query: SearchQuery): NeulandOffers.VehicleQuery? {
-        val car = CarQueryResolver.resolveForCarSite(query.positiveText)?.takeIf { it.makeSlug in makes } ?: return null
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)?.takeIf { makes == null || it.makeSlug in makes } ?: return null
         val c = query.carCriteria.atTheSource()
         return NeulandOffers.VehicleQuery(
             make = car.makeSlug.replace("-", " "),
