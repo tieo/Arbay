@@ -29,6 +29,8 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.SearchReach
 import io.github.tieo.arbay.model.toCarFilters
+import io.github.tieo.arbay.model.SearchQuery
+import io.github.tieo.arbay.model.withCarFilters
 import io.github.tieo.arbay.model.MessageTemplate
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.Money
@@ -231,7 +233,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     /** Starts a search in the background and returns it, or null when there is nothing to search for. */
-    private suspend fun startSearch(args: JsonObject): SearchRun? {
+    private suspend fun startSearch(args: JsonObject, vehicle: CarFilters? = null): SearchRun? {
         val savedId = args.str("saved_search_id")
         val saved = savedId?.let { getJson<TrackedProduct>("/api/products/${it.encodeURLPathPart()}") }
         val words = args.str("words") ?: saved?.searchQuery?.text ?: return null
@@ -257,7 +259,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 // A price band named for this search goes to the markets too, which filter on it
                 // themselves: a search for the cheapest of a thing reads the offers inside the band
                 // instead of every page of every price.
-                (q?.toCarFilters() ?: CarFilters()).let { f ->
+                (vehicle ?: q?.toCarFilters() ?: CarFilters()).let { f ->
                     f.copy(
                         minPriceEur = args.num("min_price_eur")?.let { kotlin.math.floor(it).toInt() } ?: f.minPriceEur,
                         maxPriceEur = args.num("max_price_eur")?.let { kotlin.math.ceil(it).toInt() } ?: f.maxPriceEur,
@@ -331,6 +333,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     } ?: "") +
                     (if (p.fitAlert.enabled) "\n  fit alert: each offer, once, that fits ${(p.fitAlert.minScore * 100).roundToInt()} % or more" else "") +
                     (p.searchQuery.productWishes?.let { "\n  " + wishesLine(it) } ?: "") +
+                    (p.searchQuery.carFilters?.takeUnless { it.isEmpty }?.let { "\n  vehicle " + vehicleJson.encodeToString(CarFilters.serializer(), it) } ?: "") +
                     p.notificationSubfilters.joinToString("") { r ->
                     // The rule's criteria, and for one that learns the market, the lowest price it has
                     // seen so far: the bar a find has to beat once learning ends.
@@ -398,11 +401,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 boolean("dropped", "Also list the offers the search removed, per market with the reason for each, to check a filter took out only what it should")
                 boolean("complete", "Wait for every market, the web's shops included, before answering (a few minutes), so the answer is the whole market")
                 boolean("ask_cooling_down", "Ask a market that is cooling down after a block now instead of waiting the cooldown out, as the app's \"Ask now\"; a market that blocks again starts a new cooldown")
+                string("vehicle", "$VEHICLE_ARG. Replaces a saved search's own criteria for this search")
             },
         ) { args ->
             if (args.bool("ask_cooling_down") == true && args.str("search_id") == null) http.delete("$base/api/crawler/cooldown")
+            val vehicle = vehicleCriteria(args).getOrElse { return@tool "Not searched: ${it.message}" }
             val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }
-                ?: startSearch(args) ?: return@tool "Name the words or a saved search."
+                ?: startSearch(args, vehicle) ?: return@tool "Name the words or a saved search."
             // A tool call has a time limit of its own, and a search on a busy server can take
             // minutes: waiting for every market lost the whole answer to that limit. What has
             // arrived goes back, the rest keeps coming in, and the next call picks it up.
@@ -491,13 +496,20 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
         tool(
             "save_search", "Keep a search so Arbay watches it.",
-            props = { string("words", "What to search for", required = true); string("name", "What to call it (defaults to the words)") },
+            props = {
+                string("words", "What to search for", required = true); string("name", "What to call it (defaults to the words)")
+                string("vehicle", VEHICLE_ARG)
+            },
         ) { args ->
             val words = args.str("words")!!
+            val vehicle = vehicleCriteria(args).getOrElse { return@tool "Not saved: ${it.message}" }
+            // Words naming a car, or vehicle criteria, reach the vehicle sites, as the app's vehicle
+            // search does; other words reach the general marketplaces, as its search box does.
+            val group = if (vehicle != null || io.github.tieo.arbay.relevance.CarQueryResolver.resolve(words) != null) MarketGroup.VEHICLES else MarketGroup.GENERAL
+            val query = SearchQuery(text = words, category = group).withCarFilters(vehicle)
             val body = buildJsonObject {
                 put("id", ""); put("name", args.str("name") ?: words); put("createdAt", Clock.System.now().toString())
-                // A search typed in words reaches the general marketplaces, as the app's own search box does.
-                putJsonObject("searchQuery") { put("text", words); put("category", MarketGroup.GENERAL.name) }
+                put("searchQuery", json.encodeToJsonElement(SearchQuery.serializer(), query))
             }
             val r = http.post("$base/api/products") { contentType(ContentType.Application.Json); setBody(body.toString()) }
             if (r.status.isSuccess()) "Saved: " + json.decodeFromString<TrackedProduct>(r.bodyAsText()).let { "${it.id}: ${it.name}" } else "Not saved: ${r.bodyAsText()}"
@@ -518,6 +530,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 number("alert_learn_days", "Add an alert rule that first watches this many days, then pushes only finds below the best it saw")
                 number("fit_alert_percent", "Push an offer, once, when it first fits the search's wishes (a vehicle search's criteria, or a thing's fit_wishes) at least this well, a whole percent from ${FIT_ALERT_PERCENT.first} to ${FIT_ALERT_PERCENT.last}; 0 stops it")
                 boolean("alerts_to_phone", "Whether this search's alerts also push to the phone; false sends them to the alert feed alone")
+                string("vehicle", "$VEHICLE_ARG; replaces the search's criteria, {} clears them")
                 boolean("alert_on_front", "For a drive search: push a new offer that lands on the trade-off front of price per GB and expected life; false stops it. Its first run only notes what is there, so it pushes nothing")
                 number("front_min_tb", "The front alert counts drives from this size"); number("front_max_tb", "The front alert counts drives up to this size")
                 string("front_interface", "The front alert leaves out drives naming another interface: SATA, SAS or NVME"); string("front_recording", "The front alert leaves out drives naming other recording: CMR or SMR")
@@ -527,6 +540,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ) { args ->
             val id = args.str("id")!!
             val p = getJson<TrackedProduct>("/api/products/${id.encodeURLPathPart()}")
+            val vehicle = vehicleCriteria(args).getOrElse { return@tool "Not changed: ${it.message}" }
             fun band(key: String, now: Money?) = args.num(key)?.let { if (it <= 0) null else Money((it * 100).toLong()) } ?: now
             val every = args.num("look_every_minutes")?.toInt()
             if (every != null && every != 0 && WATCH_INTERVALS.none { it.first == every })
@@ -542,7 +556,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             }?.takeUnless { it.isEmpty }
             if (wishes != null && wishes.models.any { it.worth !in 0.0..1.0 || it.words.isEmpty() })
                 return@tool "Not changed: each model in fit_wishes needs words and a worth from 0 to 1."
-            if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.copy(productWishes = wishes).weighsAFit)
+            // The price band stays where min_price_eur and max_price_eur put it: criteria carry none.
+            val criteria = vehicle?.copy(minPriceEur = null, maxPriceEur = null)?.takeUnless { it.isEmpty }
+            val carFilters = if (vehicle == null) p.searchQuery.carFilters else criteria
+            if (fitLevel != null && fitLevel != 0.0 && !p.searchQuery.copy(productWishes = wishes, carFilters = carFilters).weighsAFit)
                 return@tool "Not changed: a fit is weighed from a search's wishes, a vehicle's criteria or fit_wishes, and this search has none."
             val gone = args.strs("remove_alert_rules").toSet()
             val unknown = gone - p.notificationSubfilters.map { it.id }.toSet()
@@ -570,7 +587,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     minPrice = band("min_price_eur", p.searchQuery.minPrice),
                     maxPrice = band("max_price_eur", p.searchQuery.maxPrice),
                     productWishes = wishes,
-                ),
+                    carFilters = carFilters,
+                ).let { q ->
+                    // Criteria make it a vehicle search, which the vehicle sites answer.
+                    if (criteria == null || q.category == MarketGroup.VEHICLES) q
+                    else q.copy(category = MarketGroup.VEHICLES, platforms = io.github.tieo.arbay.model.MarketSets.platformsFor(MarketGroup.VEHICLES))
+                },
             )
             val r = http.put("$base/api/products/${id.encodeURLPathPart()}") { contentType(ContentType.Application.Json); setBody(json.encodeToString(TrackedProduct.serializer(), next)) }
             if (!r.status.isSuccess()) return@tool "Not changed: ${r.bodyAsText()}"
@@ -1458,6 +1480,26 @@ private fun priceDropLines(status: JsonObject?, since: Instant? = null): String 
 
 /** How long ago an epoch-millisecond time was, in whole hours: "5 h ago". */
 private fun hoursAgo(millis: Long) = "${(Clock.System.now().toEpochMilliseconds() - millis) / 3_600_000L} h ago"
+
+/** What the vehicle criteria parameter takes, named for the tools that carry it. */
+private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same the app's vehicle filters set: " +
+    "{\"fuels\":[\"ELECTRIC\"],\"conditions\":[\"NEW\",\"PRE_REGISTRATION\",\"DEMO\"],\"bodyTypes\":[\"SUV\"],\"firstRegFromYear\":2024," +
+    "\"maxMileageKm\":5000,\"minPowerKw\":100,\"transmission\":\"AUTOMATIC\",\"sellerType\":\"BUSINESS\",\"minSeats\":5,\"descriptionContains\":\"Wärmepumpe\"}. " +
+    "Fuels: PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID, MILD_HYBRID, LPG, CNG, HYDROGEN. " +
+    "Conditions: NEW, USED, DEMO (Vorführwagen), PRE_REGISTRATION (Tageszulassung), ANNUAL_CAR (Jahreswagen), CLASSIC, DAMAGED. " +
+    "Bodies: SMALL_CAR, SEDAN, ESTATE, SUV, COUPE, CONVERTIBLE, VAN, MINIVAN, PICKUP, TRANSPORTER. " +
+    "A listing that does not state a criterion is kept and marked unchecked, unless strictUnknown is true. " +
+    "The price band goes in min_price_eur and max_price_eur"
+
+/** The vehicle criteria a tool call names, a field it does not know refused rather than ignored,
+ *  so a misspelt criterion cannot quietly search without it. */
+private val vehicleJson = Json { ignoreUnknownKeys = false; encodeDefaults = false }
+
+private fun vehicleCriteria(args: JsonObject): Result<CarFilters?> {
+    val raw = args.str("vehicle") ?: return Result.success(null)
+    return runCatching { vehicleJson.decodeFromString(CarFilters.serializer(), raw) }
+        .recoverCatching { throw IllegalArgumentException("vehicle is not readable: ${it.message?.take(300)}") }
+}
 
 private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 private fun JsonObject.num(k: String) = this[k]?.jsonPrimitive?.doubleOrNull
