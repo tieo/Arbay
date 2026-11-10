@@ -28,6 +28,11 @@ class VehicleFitTest {
         val wishes = CarFilters(maxPriceEur = 50_000)
         assertNull(FitScore.score(car("Hyundai IONIQ 6 AKTION GEWERBE 77 kWh", 39_000), wishes, 39_000.0, 4.0))
         assertNotNull(FitScore.score(car("Hyundai IONIQ 6 77 kWh UNIQ", 39_000), wishes, 39_000.0, 4.0))
+        assertNull(FitScore.score(car("BMW iX1 eDrive20 Gewerbe-Leasing ab 355 € mtl.", 39_000), wishes, 39_000.0, 4.0))
+        assertNull(FitScore.score(car("Tesla Model Y Vanaf €35.990 met €5.000 Tesla inruilpremie", 35_990), wishes, 35_990.0, 4.0))
+        assertNull(FitScore.score(car("Ford Explorer, Preis gilt nur bei Finanzierung über die Ford Bank", 33_000), wishes, 33_000.0, 4.0))
+        // Leasing offered beside a cash price leaves the price standing.
+        assertNotNull(FitScore.score(car("Ford Explorer Extended Range LEASINGAKTION!", 33_000), wishes, 33_000.0, 4.0))
     }
 
     @Test
