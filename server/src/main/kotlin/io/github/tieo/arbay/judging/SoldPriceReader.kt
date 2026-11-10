@@ -168,6 +168,14 @@ object SoldPriceReader {
     private val auctions = ConcurrentHashMap<String, KeptAuctions>()
     private const val AUCTIONS_KEEP_MS = 10L * 60 * 1000
 
+    /** A market that refused the list is left alone this long, and the list says so meanwhile. */
+    private const val AUCTIONS_RETRY_MS = 5L * 60 * 1000
+    private const val AUCTIONS_REFUSED = "eBay refused the search just now. It is asked again in a few minutes."
+    private val auctionsRefused = ConcurrentHashMap<String, Long>()
+
+    /** Whether a look someone is waiting for is under way; the slow sweep gives way to it. */
+    val busy: Boolean get() = inFlight.isNotEmpty()
+
     /** The eBay.de auctions running for a saved search, soonest end first, each with what it can be
      *  expected to end at. The market takes minutes to answer for several words, so a list not known
      *  yet is asked for in the background and answered as still being read. */
@@ -175,9 +183,10 @@ object SoldPriceReader {
         val now = Clock.System.now()
         val known = auctions[product.id]
         val fresh = known != null && System.currentTimeMillis() - known.at < AUCTIONS_KEEP_MS
-        val reading = !fresh && startAuctions(product)
+        val refused = auctionsRefused[product.id]?.takeIf { System.currentTimeMillis() - it < AUCTIONS_RETRY_MS } != null
+        val reading = !fresh && !refused && startAuctions(product)
         val list = known?.listings.orEmpty().filter { (it.auctionEndsAt ?: now) > now }.sortedBy { it.auctionEndsAt }.map { expectation(it, product.searchQuery) }
-        return LiveAuctions(list, reading || "auctions ${product.id}" in inFlight)
+        return LiveAuctions(list, reading || "auctions ${product.id}" in inFlight, problem = if (refused && !fresh) AUCTIONS_REFUSED else null)
     }
 
     private fun startAuctions(product: TrackedProduct): Boolean {
@@ -185,8 +194,10 @@ object SoldPriceReader {
         if (inFlight.add(key)) background.launch {
             try {
                 auctions[product.id] = KeptAuctions(System.currentTimeMillis(), turn.withLock { readAuctions(product.searchQuery) })
+                auctionsRefused.remove(product.id)
             } catch (e: Exception) {
                 log.warn("Auctions of {} not read: {}", product.name, e.message)
+                auctionsRefused[product.id] = System.currentTimeMillis()
             } finally {
                 inFlight.remove(key)
             }

@@ -813,6 +813,7 @@ fun AuctionsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
     var list by remember(id) { mutableStateOf<List<LiveAuction>?>(null) }
     var loading by remember(id) { mutableStateOf(true) }
     var reading by remember(id) { mutableStateOf(false) }
+    var problem by remember(id) { mutableStateOf<String?>(null) }
     LaunchedEffect(id) {
         if (id == null) return@LaunchedEffect
         // The expected prices arrive as their sales are read.
@@ -820,6 +821,7 @@ fun AuctionsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
             val read = app.client.auctions(id)
             if (read != null) list = read.auctions
             reading = read?.reading == true
+            problem = read?.problem
             loading = false
             if (read == null || (!read.reading && read.auctions.none { it.expectedPending })) break
             delay(20_000)
@@ -830,6 +832,7 @@ fun AuctionsPanel(app: WebApp, route: Route.Results, state: ResultsState) {
         val known = list
         when {
             (known == null && loading) || (reading && known.isNullOrEmpty()) -> Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading eBay's auctions") } }
+            known.isNullOrEmpty() && problem != null -> P({ classes("muted") }) { Text(problem!!) }
             known == null -> P({ classes("muted") }) { Text("eBay's auctions could not be read.") }
             known.isEmpty() -> P({ classes("muted") }) { Text("No auctions running for this search.") }
             else -> Div({ classes("drive-health") }) {

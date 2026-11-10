@@ -985,13 +985,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val answer = getJson<io.github.tieo.arbay.model.LiveAuctions>("/api/products/${args.str("saved_search_id")!!.encodeURLPathPart()}/auctions")
             val list = answer.auctions
             list.forEach { seen[it.listing.id] = it.listing }
-            (if (answer.reading) "Still asking eBay; call again in a few minutes.\n" else "") + list.joinToString("\n") { a ->
+            (answer.problem?.let { "$it\n" } ?: if (answer.reading) "Still asking eBay; call again in a few minutes.\n" else "") + list.joinToString("\n") { a ->
                 listOfNotNull(
                     "ends ${a.listing.auctionEndsAt}",
                     a.expectedEndEur?.let { "expected end $it € all in (${a.expectedFrom}, ${a.expectedSales} sales${if (a.expectedThin) ", thin data" else ""}" + (a.limitEur?.let { m -> ", limit $m €" } ?: "") + ")" } ?: "expected end still being read".takeIf { a.expectedPending } ?: "expected end not known",
                     a.listing.line(),
                 ).joinToString(" | ")
-            }.ifEmpty { if (answer.reading) "" else "No auctions running for this search." }
+            }.ifEmpty { if (answer.reading || answer.problem != null) "" else "No auctions running for this search." }
         }
 
         tool("auction_bids", "The bids set up on auctions, each with its purchase: waiting for the end, placed, ended and not yet settled, lost, won, skipped or not placed, and why. An ended bid blocks the later ones of its purchase until eBay shows it lost or won.") {

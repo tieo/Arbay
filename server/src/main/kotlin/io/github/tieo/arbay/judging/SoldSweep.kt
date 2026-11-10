@@ -50,7 +50,7 @@ object SoldSweep {
             var failures = 0
             while (true) {
                 delay(GAP)
-                while (AuctionBids.busySoon(BID_QUIET)) delay(1.minutes)
+                giveWay()
                 try {
                     next()
                     failures = 0
@@ -79,9 +79,15 @@ object SoldSweep {
         val product = all[at]
         SoldPriceReader.of(SoldPriceReader.Ask(words = product.words, type = product.type))
         delay(GAP)
+        giveWay()
         SoldPriceReader.recordEndedAuctions(product.words, product.type)
         position.writeText("${at + 1}")
         log.info("sold sweep {}/{}: {}", at + 1, all.size, product.words)
+    }
+
+    /** Bids and looks someone is waiting for go first. */
+    private suspend fun giveWay() {
+        while (AuctionBids.busySoon(BID_QUIET) || SoldPriceReader.busy) delay(1.minutes)
     }
 
     private fun current(size: Int) = (position.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: 0).let { if (it in 0 until size) it else 0 }

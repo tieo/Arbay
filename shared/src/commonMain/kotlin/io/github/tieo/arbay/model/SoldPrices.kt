@@ -53,4 +53,6 @@ data class LiveAuctions(
     val auctions: List<LiveAuction> = emptyList(),
     /** The market is still being asked; asking again shortly has them. */
     val reading: Boolean = false,
+    /** The market refused the latest asking, in words for whoever is reading the list. */
+    val problem: String? = null,
 )
