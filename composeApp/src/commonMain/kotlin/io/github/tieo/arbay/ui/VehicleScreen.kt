@@ -40,6 +40,7 @@ import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
 import io.github.tieo.arbay.results.FORM_BODIES
 import io.github.tieo.arbay.results.FORM_FUELS
+import io.github.tieo.arbay.results.FORM_CONDITIONS
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.VehicleSearch
 import io.github.tieo.arbay.results.applyCriteria
@@ -117,6 +118,9 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
                 listOf(null to "Either", Transmission.MANUAL to "Manual", Transmission.AUTOMATIC to "Automatic").forEach { (v, l) ->
                     Choice(l, filters.transmission == v) { filters = filters.copy(transmission = v) }
                 }
+            }
+            Labelled("Condition") {
+                FORM_CONDITIONS.forEach { c -> Choice(vehicleWord(c.name), c in filters.conditions) { filters = filters.copy(conditions = if (c in filters.conditions) filters.conditions - c else filters.conditions + c) } }
             }
             Labelled("Fuel") {
                 FORM_FUELS.forEach { f -> Choice(vehicleWord(f.name), f in filters.fuels) { filters = filters.copy(fuels = if (f in filters.fuels) filters.fuels - f else filters.fuels + f) } }

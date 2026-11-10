@@ -147,6 +147,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     /** One search through the markets, filled in as each market answers. */
     private inner class SearchRun(val id: String, val words: String, val saved: TrackedProduct?, val savedId: String?) {
+        /** The vehicle criteria the markets were asked with, which each offer is said to meet or not to state. */
+        var criteria: CarFilters? = null
         val listings: MutableList<Listing> = java.util.Collections.synchronizedList(mutableListOf())
         val problems: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         val searching: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -199,7 +201,12 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val views = io.github.tieo.arbay.judging.ViewCounts.of(listed.map { it.id })
             return buildString {
                 appendLine("${listed.size} of ${all.size} offers for \"$words\":")
-                listed.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
+                listed.forEach { l ->
+                    // A vehicle that does not state a criterion is kept, so the line says which it never met.
+                    val unchecked = criteria?.uncheckedFor(l.vehicle).orEmpty()
+                    appendLine(l.line() + (views[l.id]?.let { v -> " | seen $v times" } ?: "") +
+                        (if (unchecked.isEmpty()) "" else " | unchecked: " + unchecked.joinToString(", ")))
+                }
                 // Over every offer shown, listed or not: the front is what is worth weighing.
                 append(frontLines(shown.filter { it.saleType != io.github.tieo.arbay.model.SaleType.AUCTION }))
                 // An offer put away on a device is left out of the list, so it is named here: else a
@@ -260,6 +267,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 // themselves: a search for the cheapest of a thing reads the offers inside the band
                 // instead of every page of every price.
                 (vehicle ?: q?.toCarFilters() ?: CarFilters()).let { f ->
+                    run.criteria = f.takeUnless { it.isEmpty }
                     f.copy(
                         minPriceEur = args.num("min_price_eur")?.let { kotlin.math.floor(it).toInt() } ?: f.minPriceEur,
                         maxPriceEur = args.num("max_price_eur")?.let { kotlin.math.ceil(it).toInt() } ?: f.maxPriceEur,

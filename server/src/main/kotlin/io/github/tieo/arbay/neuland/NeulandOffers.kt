@@ -388,7 +388,9 @@ object NeulandOffers {
                 "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
                 "pre-registered" -> io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
                 "damaged" -> io.github.tieo.arbay.model.VehicleCondition.DAMAGED
-                else -> null
+                // A card that names no condition (AutoScout24's) still states the mileage, and
+                // one driven past a demonstrator's is used whatever its seller would call it.
+                else -> io.github.tieo.arbay.model.VehicleCondition.USED.takeIf { mileageKm != null && mileageKm > DEMO_MAX_KM }
             },
             drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
         )

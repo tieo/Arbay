@@ -5,6 +5,7 @@ import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.model.CarMakeNode
 import io.github.tieo.arbay.model.CarModelNode
 import io.github.tieo.arbay.model.MarketGroup
@@ -88,6 +89,13 @@ fun OpenSearch.applyCriteria(products: ProductViewModel, search: VehicleSearch):
 /** The fuels the form offers, the ones a used-vehicle buyer asks for. */
 val FORM_FUELS: List<Fuel> = listOf(Fuel.DIESEL, Fuel.PETROL, Fuel.ELECTRIC, Fuel.HYBRID_PETROL, Fuel.PLUGIN_HYBRID, Fuel.LPG)
 
+/** The conditions the form offers, newest first: a vehicle new from the dealer and the ones close
+ *  to new (registered for a day, driven as a demonstrator or by an employee) before used ones. */
+val FORM_CONDITIONS: List<VehicleCondition> = listOf(
+    VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION, VehicleCondition.DEMO, VehicleCondition.ANNUAL_CAR,
+    VehicleCondition.USED, VehicleCondition.CLASSIC, VehicleCondition.DAMAGED,
+)
+
 /** The body types the form offers: every one but the catch-all. */
 val FORM_BODIES: List<BodyType> = BodyType.entries.filter { it != BodyType.OTHER }
 
@@ -95,5 +103,8 @@ val FORM_BODIES: List<BodyType> = BodyType.entries.filter { it != BodyType.OTHER
 fun vehicleWord(name: String): String = when (name) {
     "SUV", "LPG", "CNG" -> name
     "PLUGIN_HYBRID" -> "Plug-in hybrid"
+    "PRE_REGISTRATION" -> "Pre-registered"
+    "DEMO" -> "Demonstrator"
+    "ANNUAL_CAR" -> "Employee car"
     else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
 }

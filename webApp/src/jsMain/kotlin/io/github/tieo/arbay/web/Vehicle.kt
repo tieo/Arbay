@@ -22,6 +22,7 @@ import io.github.tieo.arbay.results.VehicleSearch
 import io.github.tieo.arbay.results.applyCriteria
 import io.github.tieo.arbay.results.FORM_BODIES
 import io.github.tieo.arbay.results.FORM_FUELS
+import io.github.tieo.arbay.results.FORM_CONDITIONS
 import io.github.tieo.arbay.results.vehicleWord
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.placeholder
@@ -144,6 +145,14 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
                 Span({ classes("chips-label") }) { Text("Gearbox") }
                 listOf(null to "Either", Transmission.MANUAL to "Manual", Transmission.AUTOMATIC to "Automatic").forEach { (value, label) ->
                     Chip(label, filters.transmission == value) { filters = filters.copy(transmission = value) }
+                }
+            }
+            Div({ classes("chips") }) {
+                Span({ classes("chips-label") }) { Text("Condition") }
+                FORM_CONDITIONS.forEach { condition ->
+                    Chip(vehicleWord(condition.name), condition in filters.conditions) {
+                        filters = filters.copy(conditions = if (condition in filters.conditions) filters.conditions - condition else filters.conditions + condition)
+                    }
                 }
             }
             Div({ classes("chips") }) {
