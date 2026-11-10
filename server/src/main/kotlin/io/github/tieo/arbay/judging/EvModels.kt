@@ -121,6 +121,9 @@ object EvModels {
 
     private fun fold(s: String) = plain(s).lowercase().filter { it.isLetterOrDigit() }
 
+    /** Whether the catalogue knows [key] as an electric model. */
+    fun isElectric(key: ModelKey): Boolean = key in grouped
+
     /** The versions of the model [text] names; empty where the catalogue has none. */
     fun versionsOf(text: String): List<Version> = keyOf(text)?.let { grouped[it] }.orEmpty()
 

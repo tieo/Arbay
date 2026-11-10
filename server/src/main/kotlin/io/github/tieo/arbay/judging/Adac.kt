@@ -121,6 +121,15 @@ object Adac {
         ))
     }
 
+    /** An electric row of the same make nearest in base price to [eur], for a model ADAC's table
+     *  leaves out: the same maker's workshop rates and a car of that price's insurance class. */
+    fun nearestElectricOfMake(title: String, eur: Double): CostRow? {
+        val make = EvModels.keyOf(title)?.make ?: return null
+        return index().costs.filterKeys { it.make == make && EvModels.isElectric(it) }
+            .values.flatten().filter { it.basePrice != null }
+            .minByOrNull { kotlin.math.abs(it.basePrice!!.cents / 100.0 - eur) }
+    }
+
     /** The model's used prices, every version. */
     fun usedOf(title: String): List<UsedRow> = EvModels.keyOf(title)?.let { index().used[it] }.orEmpty()
 
