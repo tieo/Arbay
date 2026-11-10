@@ -456,7 +456,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val pageShipping = (body["shipping"] as? JsonObject)?.let {
                 runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.Shipping.serializer(), it) }.getOrNull()
             }
-            val pageHead = (if (pageShipping != null) l.copy(shipping = pageShipping) else l).line() + l.fitLine() + l.ownCostLines()
+            // The drive facts are the search's, made before the page was read; here it has been.
+            val read = l.copy(drive = l.drive?.copy(pageRead = true))
+            val pageHead = (if (pageShipping != null) read.copy(shipping = pageShipping) else read).line() + l.fitLine() + l.ownCostLines()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
             // The seller's account age and badges decide whether an offer can be trusted, so they
@@ -1318,7 +1320,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             json.decodeFromString(io.github.tieo.arbay.model.DriveHealth.serializer(), r.bodyAsText())
         }.getOrNull() ?: return "Drive health: the photos could not be read.\n"
         val pending = if (health.photosPending > 0) "Drive health: ${health.photosPending} more photos are being read; ask again in a minute.\n" else ""
-        if (health.readings.isEmpty()) return pending.ifEmpty { "Drive health: none of its ${health.photosRead} photos shows a SMART screen.\n" }
+        if (health.readings.isEmpty()) return pending.ifEmpty {
+            if (health.photosRead == 0) "Drive health: no photo of the ad could be read.\n"
+            else "Drive health: none of its ${health.photosRead} photos shows a SMART screen.\n"
+        }
         return pending + health.readings.joinToString("") { r ->
             "Drive health, photo ${r.photo}: ${r.verdict}" +
                 listOfNotNull(r.powerOnHours?.let { "$it h" }, r.reallocated?.let { "$it reallocated" }, r.pending?.let { "$it pending" },
