@@ -1133,6 +1133,7 @@ private val WHAT_THE_ITEM_IS = setOf(
     io.github.tieo.arbay.model.DropReason.ACCESSORY,
     io.github.tieo.arbay.model.DropReason.CONSUMABLE,
     io.github.tieo.arbay.model.DropReason.BUILT_INTO_A_DEVICE,
+    io.github.tieo.arbay.model.DropReason.EXTERNAL_DRIVE,
     io.github.tieo.arbay.model.DropReason.WANTED_AD,
     io.github.tieo.arbay.model.DropReason.RENTAL,
 )

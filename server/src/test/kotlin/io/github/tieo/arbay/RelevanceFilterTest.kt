@@ -1275,6 +1275,25 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a portable SSD is no bare NVMe drive, and a bare drive's made-for words do not make it one`() {
+        val titles = listOf(
+            "Kingston xs 1000 2TB ssd Nvme !!!",
+            "Samsung T7 Shield 2TB NVMe Tragbare Externe SSD Schwarz Wenig Gebraucht",
+            "SanDisk Extreme Portable SSD 1 TB (NVMe, 1050 MB/s, USB-C) – Top Zustand",
+            "PC portable SSD interne Micron 3400 1 To NVMe M.2 2280 PCIe Gen4x4",
+            "WD CH SN560 1TB M.2 2230 SSD NVMe PCIe 4.0 x2 For Xbox Series X/S Expansion Card",
+            "ORICO 1TB M.2 2242 NVMe SSD, PCIe 3.0 3500MB/s Lesen & 2500MB/s Schreiben, 3D NAND M2 SSD mit Kühlkörper aus Kupfer für Laptops, Mini-PCs, IoT-Geräte und Externe DIY-Laufwerke - J10-2242",
+            "Samsung 980 1TB ssd m2 nur als externe Festplatte genutzt Asus",
+            "Samsung 990 PRO 2TB NVMe",
+        )
+        val result = RelevanceFilter.partition(titles.map { listing(it) }, SearchQuery(text = "2TB NVMe", category = MarketGroup.GENERAL), emptyList())
+        val external = result.dropped.filter { it.reason == DropReason.EXTERNAL_DRIVE }.map { it.listing.title }
+        assertEquals(titles.take(3), external)
+        val asked = RelevanceFilter.partition(titles.take(1).map { listing(it) }, SearchQuery(text = "2TB externe NVMe SSD", category = MarketGroup.GENERAL), emptyList())
+        assertTrue(asked.dropped.none { it.reason == DropReason.EXTERNAL_DRIVE })
+    }
+
+    @Test
     fun `what takes a drive of the size asked for is not the drive`() {
         // Live answers for "6TB HDD", "10TB HDD", "14TB HDD", "8TB HDD", "4TB HDD", "3TB HDD", "18TB HDD".
         fun reasons(query: String, vararg titles: String) = RelevanceFilter.partition(

@@ -746,6 +746,15 @@ object RelevanceFilter {
         RegexOption.IGNORE_CASE,
     )
 
+    private val bareInterface = Regex("""\bnvme\b|\bm\.?2\b|\bpcie\b""", RegexOption.IGNORE_CASE)
+    private val asksExternal = Regex("""extern|portable|tragbar|\busb""", RegexOption.IGNORE_CASE)
+
+    /** A drive that plugs in by USB, where the search asks for a bare one by its interface: a
+     *  portable SSD's title says NVMe for what is inside its case. */
+    private fun isAnExternalDrive(listing: Listing, queryText: String): Boolean =
+        bareInterface.containsMatchIn(queryText) && !asksExternal.containsMatchIn(queryText) &&
+            io.github.tieo.arbay.judging.DriveText.externalOf(listing.title, null) == true
+
     /** Where a title's own name for what it sells ends and its spec list begins. */
     private val specListStart = Regex("""[,|/:;•·]|\s[-–—]\s|\smit\s|\swith\s|\sinkl\b""")
 
@@ -1242,6 +1251,7 @@ object RelevanceFilter {
                 isAccessoryFor(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isAnAccessoryNamedOutright(listing, parsed, query.text) -> DropReason.ACCESSORY
                 isBuiltIntoADevice(listing, parsed, query.text) -> DropReason.BUILT_INTO_A_DEVICE
+                isAnExternalDrive(listing, query.text) -> DropReason.EXTERNAL_DRIVE
                 takesTheSizeAsked(listing, parsed) -> DropReason.ACCESSORY
                 leavesOutWhatWasAsked(listing, parsed) -> DropReason.ACCESSORY
                 // A part off the vehicle, named without a "für": a trim strip, a sill plate, a

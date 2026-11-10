@@ -127,12 +127,30 @@ object DriveText {
         }
     }
 
-    private val EXTERNAL = Regex("""\b(elements|my\s?book|expansion|backup\s?plus|one\s?touch|canvio|easystore|extern\w*|portable|usb[\s-]?(3|c|festplatte|hdd)\w*)\b""", RegexOption.IGNORE_CASE)
+    private val EXTERNAL = Regex("""\b(elements|my\s?book|expansion(?!\s*card)|backup\s?plus|one\s?touch|canvio|easystore|extern\w*|tragbar\w*|(?<!pc\s)(?<!ordinateur\s)portable|usb[\s-]?(3|c|festplatte|hdd)\w*)\b""", RegexOption.IGNORE_CASE)
     private val BARE = Regex("""\b(intern\w*|3[.,]5\s?(?:"|”|zoll|inch)|exos|ultrastar|ironwolf|skyhawk|barracuda|wd\s?(?:red|gold|purple))\b""", RegexOption.IGNORE_CASE)
 
-    /** Whether the offer is in a USB case, false where it names a bare drive. */
+    // Portable SSDs by their makers' model names: their titles often say NVMe, which is what is
+    // inside the case, while the drive itself plugs in by USB. "Kingston xs 1000 2TB ssd Nvme".
+    private val PORTABLE_MODEL = Regex(
+        """\bxs\s?[12]000\b|samsung\W*(portable\W*)?(ssd\W*)?t[579]\b|\bt[579]\s?(shield|evo|touch)\b|crucial\W*x(6|8|9|10)\b|""" +
+            """wd(_|\s)?black\W*p(40|50)\b|\bmy\s?passport\b|lexar\W*sl\d{3}\b|\blacie\b|firecuda\W*gaming\W*ssd|extreme\s?(pro\s?)?portable|creator\s?pro\s?portable""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // A bare drive used in a case once is still a bare drive: "Samsung 980 nur als externe Festplatte genutzt".
+    private val USED_EXTERNALLY = Regex("""\bnur\s+als\s+extern|als\s+extern\w*\s+\w+\s+(genutzt|benutzt|verwendet)""", RegexOption.IGNORE_CASE)
+
+    // What a title says a drive is for comes after these: "M.2 SSD für Laptops, Mini-PCs und externe DIY-Laufwerke".
+    private val MADE_FOR = Regex("""\b(für|fuer|for|pour|per|para|compatible|kompatibel)\b""", RegexOption.IGNORE_CASE)
+
+    /** Whether the offer is in a USB case, false where it names a bare drive. Measured on the 10,542
+     *  archived titles naming NVMe, M.2 or PCIe: 67 read external, about nine of them wrongly before
+     *  the made-for words and expansion cards were told apart. */
     fun externalOf(title: String, model: String?): Boolean? = when {
-        EXTERNAL.containsMatchIn(title) -> true
+        PORTABLE_MODEL.containsMatchIn(title) -> true
+        USED_EXTERNALLY.containsMatchIn(title) -> false
+        EXTERNAL.containsMatchIn(MADE_FOR.split(title, 2)[0]) -> true
         model != null && model.startsWith("WDB") -> true
         model != null || BARE.containsMatchIn(title) -> false
         else -> null

@@ -68,6 +68,9 @@ enum class DropReason {
     /** A machine of its own with the thing searched for built into it. */
     BUILT_INTO_A_DEVICE,
 
+    /** A drive in a USB case or a portable SSD, where the search asks for a bare NVMe or M.2 one. */
+    EXTERNAL_DRIVE,
+
     /** One listing offering a row of sizes, priced at the smallest of them. */
     ONE_OF_SEVERAL_SIZES,
 
@@ -116,6 +119,7 @@ val DropReason.label: String
         DropReason.OFF_TARGET -> "off target"
         DropReason.ACCESSORY -> "accessory"
         DropReason.BUILT_INTO_A_DEVICE -> "inside another device"
+        DropReason.EXTERNAL_DRIVE -> "external drive"
         DropReason.ONE_OF_SEVERAL_SIZES -> "priced at a smaller size"
         DropReason.ANOTHER_SIZE -> "another size"
         DropReason.CONSUMABLE -> "consumable"

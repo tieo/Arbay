@@ -15,6 +15,8 @@ fun explainDropReason(reason: DropReason?): String = when (reason) {
         "The search names a size and the title states only other ones, such as 1,2TB for 12TB."
     DropReason.BUILT_INTO_A_DEVICE ->
         "The title names a machine of its own and lists the thing searched for among its parts."
+    DropReason.EXTERNAL_DRIVE ->
+        "A drive that plugs in by USB, where the search asks for a bare NVMe or M.2 drive."
     DropReason.ACCESSORY ->
         "The title reads as a part or add-on made for the thing rather than the thing itself."
     DropReason.CONSUMABLE ->
