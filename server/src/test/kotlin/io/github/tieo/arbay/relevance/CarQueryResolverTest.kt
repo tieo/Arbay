@@ -54,4 +54,13 @@ class CarQueryResolverTest {
         assertEquals("model y", resolved?.modelSlug)
         assertEquals("long range", resolved?.remainder)
     }
+
+    @Test
+    fun `a model named with its make in one word resolves to that make`() {
+        val resolved = CarQueryResolver.resolve("MG4 Electric")
+        assertEquals("mg", resolved?.makeSlug)
+        assertEquals("mg4", resolved?.modelSlug)
+        assertEquals("electric", resolved?.remainder)
+        assertNull(CarQueryResolver.resolve("mgmt album"))
+    }
 }

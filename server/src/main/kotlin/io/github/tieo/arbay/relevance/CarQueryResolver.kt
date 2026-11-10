@@ -86,6 +86,21 @@ object CarQueryResolver {
                 }
             }
         }
+        return makeInModelName(tokens)
+    }
+
+    /**
+     * A model whose name begins with its make's, typed alone: "MG4" is MG's MG4. The word must be
+     * the whole model name and begin with the make, so no plain word can pass for a car.
+     */
+    private fun makeInModelName(tokens: List<String>): CarQuery? {
+        fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val word = norm(tokens.first())
+        for ((slug, aliases) in makeAliases()) {
+            if (aliases.none { a -> norm(a).let { it.isNotEmpty() && word.length > it.length && word.startsWith(it) } }) continue
+            val model = CarTaxonomyProvider.current.makes.firstOrNull { it.id == slug }?.models?.firstOrNull { norm(it.name) == word } ?: continue
+            return CarQuery(makeSlug = slug, modelSlug = model.name.lowercase(), remainder = tokens.drop(1).joinToString(" "))
+        }
         return null
     }
 
