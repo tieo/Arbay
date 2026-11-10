@@ -9,6 +9,8 @@ import io.github.tieo.arbay.model.Money
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
 import io.github.tieo.arbay.model.VehicleInfo
+import io.github.tieo.arbay.model.VehicleCondition
+import io.github.tieo.arbay.model.VehicleField
 import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -585,4 +587,14 @@ class CarFilterEngineTest {
         price = io.github.tieo.arbay.model.Money(5000, io.github.tieo.arbay.model.Currency.EUR),
         scrapedAt = kotlin.time.Clock.System.now(),
     )
+
+    @Test
+    fun aRegisteredCarIsNoNewOneThoughItsCardNamesNoCondition() {
+        val registered = listing("r", PlatformId.MOBILE_DE, 4_400_000, vehicle = VehicleInfo(firstRegYear = 2025, mileageKm = 19_493, verified = setOf(VehicleField.FIRST_REG_YEAR, VehicleField.MILEAGE)))
+        val unregistered = listing("u", PlatformId.MOBILE_DE, 4_400_000, vehicle = VehicleInfo(mileageKm = 10, verified = setOf(VehicleField.MILEAGE)))
+        val newOnly = CarFilters(conditions = setOf(VehicleCondition.NEW))
+        assertEquals(listOf("MOBILE_DE:u"), CarFilterEngine.apply(listOf(registered, unregistered), newOnly).map { it.id })
+        // Asked for new or a day registration, a registered car with no condition stays, unchecked.
+        assertEquals(2, CarFilterEngine.apply(listOf(registered, unregistered), newOnly.copy(conditions = setOf(VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION))).size)
+    }
 }

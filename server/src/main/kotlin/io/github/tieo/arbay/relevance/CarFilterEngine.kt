@@ -5,6 +5,7 @@ import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
 import io.github.tieo.arbay.model.Transmission
+import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.model.VehicleField
 import io.github.tieo.arbay.model.VehicleInfo
 import io.github.tieo.arbay.judging.ExchangeRates
@@ -187,6 +188,9 @@ object CarFilterEngine {
         if (drop(filters.fuels.isNotEmpty(), v?.fuel != null) { v!!.fuel in filters.fuels }) return "fuel"
         if (drop(filters.bodyTypes.isNotEmpty(), v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return "body"
         if (drop(filters.conditions.isNotEmpty(), v?.condition != null) { v!!.condition in filters.conditions }) return "condition"
+        // New is never registered, so a vehicle stating a first registration is no new one, though
+        // its card names no condition: a search for new ones alone loses it.
+        if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
