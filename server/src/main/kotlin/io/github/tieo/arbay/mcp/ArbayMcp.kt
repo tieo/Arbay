@@ -29,6 +29,9 @@ import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.SearchReach
 import io.github.tieo.arbay.model.toCarFilters
+import io.github.tieo.arbay.model.landedPrice
+import io.github.tieo.arbay.model.importDuty
+import io.github.tieo.arbay.model.importVat
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.withCarFilters
 import io.github.tieo.arbay.model.MessageTemplate
@@ -1230,8 +1233,18 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     private fun why(reason: DropReason, detail: String?): String = reason.label + (detail?.let { ": $it" } ?: "")
 
+    /** What an offer from outside the EU costs once in: its import VAT, and a vehicle's customs duty. */
+    private fun Listing.landedWords(): String? {
+        val settings = io.github.tieo.arbay.repo.ImportSettingsStore.current
+        val vat = importVat(settings) ?: return null
+        val duty = importDuty(settings)
+        return "lands at ${landedPrice(settings).amount / 100.0} ${price.currency} with " +
+            (duty?.let { "10 % customs duty ${it.amount / 100.0} and " } ?: "") + "${settings.importVatPercent} % import VAT ${vat.amount / 100.0}" +
+            (location?.country?.let { " (from $it)" } ?: "")
+    }
+
     private fun Listing.line(foundAt: Instant? = null): String = listOfNotNull(
-        id, title.tidyTitle(), priceWords(), delivery?.let { "arrives ${it.describe()}" },
+        id, title.tidyTitle(), priceWords(), landedWords(), delivery?.let { "arrives ${it.describe()}" },
         coupon?.let { c -> listOfNotNull(c.code?.let { "with code $it" } ?: "with a coupon", oldPrice?.let { "${it.amount / 100.0} without" }).joinToString(", ") },
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { name -> "sold by $name" + (seller?.rating?.let { " · $it★" } ?: "") },
@@ -1509,7 +1522,7 @@ private fun hoursAgo(millis: Long) = "${(Clock.System.now().toEpochMilliseconds(
 private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same the app's vehicle filters set: " +
     "{\"fuels\":[\"ELECTRIC\"],\"conditions\":[\"NEW\",\"PRE_REGISTRATION\",\"DEMO\"],\"bodyTypes\":[\"SUV\"],\"firstRegFromYear\":2024," +
     "\"maxMileageKm\":5000,\"minPowerKw\":100,\"transmission\":\"AUTOMATIC\",\"sellerType\":\"BUSINESS\",\"minSeats\":5,\"inStockOnly\":true,\"descriptionContains\":\"Wärmepumpe\"}. " +
-    "inStockOnly leaves out a vehicle the dealer still orders from the maker (Bestellfahrzeug). New means never registered. " +
+    "inStockOnly leaves out a vehicle the dealer still orders from the maker (Bestellfahrzeug), or whose wait is counted in months or ends more than six weeks away. New means never registered. " +
     "Electric cars: atLeastSizeOf and idealSizeOf name a model by make and model (\"VW ID.3\", \"VW ID.4\"): every electric model at least " +
     "as long is searched too, shorter ones are left out, and the fit rises towards the ideal's length (lengths from ev-database.org); " +
     "idealRangeKm (WLTP), idealDcKw and wantsHeatPump weigh the fit, from the ad or else the model's catalogue entry. " +

@@ -10,8 +10,8 @@ import kotlinx.serialization.Serializable
  * €21 saving when the American one really lands at €153.69. An app whose whole point is comparing
  * across borders cannot compare the two numbers that are not the same kind of number.
  *
- * Customs duty is deliberately not modelled: below €150 of goods there is none, and above it the
- * rate depends on the commodity code, which a listing does not carry.
+ * Customs duty is modelled for vehicles alone (see [importDuty]): below €150 of goods there is
+ * none, and for anything else the rate depends on a commodity code the listing does not carry.
  */
 @Serializable
 data class ImportSettings(
@@ -67,12 +67,29 @@ fun ImportSettings.importVatDueOn(listing: Listing): Boolean {
 fun Listing.landedPrice(settings: ImportSettings): Money {
     val base = effectivePrice
     if (!settings.importVatDueOn(this)) return base
-    return Money(base.amount + base.amount * settings.importVatPercent / 100, base.currency)
+    val duty = importDuty(settings)?.amount ?: 0L
+    return Money(base.amount + duty + (base.amount + duty) * settings.importVatPercent / 100, base.currency)
 }
 
-/** The import VAT alone, or null when none is due — for showing what was added. */
+/**
+ * The EU's customs duty on a car or van brought in from outside it, in percent of its price: 10 %
+ * for a passenger car (HS 8703), whose code every vehicle listing implies, unlike other goods.
+ * A car of EU origin can come in duty-free with proof of that origin, which no listing carries, so
+ * the full rate is counted: a landed price may come out too high, never too low.
+ */
+private const val VEHICLE_DUTY_PERCENT = 10
+
+/** The customs duty alone, or null where none is counted. */
+fun Listing.importDuty(settings: ImportSettings): Money? {
+    if (vehicle == null || !settings.importVatDueOn(this)) return null
+    val base = effectivePrice
+    return Money(base.amount * VEHICLE_DUTY_PERCENT / 100, base.currency)
+}
+
+/** The import VAT alone, or null when none is due — for showing what was added. It is charged on
+ *  the price and the duty together. */
 fun Listing.importVat(settings: ImportSettings): Money? {
     if (!settings.importVatDueOn(this)) return null
     val base = effectivePrice
-    return Money(base.amount * settings.importVatPercent / 100, base.currency)
+    return Money((base.amount + (importDuty(settings)?.amount ?: 0L)) * settings.importVatPercent / 100, base.currency)
 }

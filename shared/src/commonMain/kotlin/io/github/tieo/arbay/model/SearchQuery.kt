@@ -47,8 +47,8 @@ data class CarFilters(
     val minSeats: Int? = null,
     val minEmissionEuro: Int? = null,   // e.g. 6 = at least Euro 6
     val sellerType: SellerType? = null,
-    // Only a vehicle the dealer has or has coming: one the dealer still has to order from the
-    // maker (a Bestellfahrzeug) is left out where its ad says so.
+    // Only a vehicle the dealer has or has coming within weeks: one still to be ordered from the
+    // maker or shipped for the buyer (see VehicleAvailability.isOrder) is left out where its ad says so.
     val inStockOnly: Boolean = false,
     // How big an electric car should be, by a model of that size ("VW ID.3"): every model at least
     // as long is searched, a shorter one is left out, and the closer one comes to the ideal

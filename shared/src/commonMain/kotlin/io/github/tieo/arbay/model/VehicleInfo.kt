@@ -93,6 +93,18 @@ data class VehicleAvailability(
     /** The site's own words ("In 9 Monaten ab Bestellung verfügbar"). */
     val said: String? = null,
 ) {
+    /**
+     * Whether the car is still to be made or shipped for the buyer rather than at the dealer or on
+     * its way: the wait counts from the order, it is counted in months, or it ends more than six
+     * weeks after [today]. EU import dealers list such cars as "available in 120 days" without
+     * calling them ordered. A wait the ad states only in words it cannot be read from is no order.
+     */
+    fun isOrder(today: kotlinx.datetime.LocalDate): Boolean = !now && (
+        ordered || inMonths != null || (inDays ?: 0) > IN_STOCK_DAYS ||
+            from?.let { runCatching { kotlinx.datetime.LocalDate.parse(it) }.getOrNull() }
+                ?.let { it > kotlinx.datetime.LocalDate.fromEpochDays(today.toEpochDays() + IN_STOCK_DAYS) } == true
+        )
+
     /** In a reader's words: "at once", "from 2027-02-01", "9 months after the order". */
     fun describe(): String = when {
         now -> "available at once"
@@ -103,6 +115,9 @@ data class VehicleAvailability(
         else -> said ?: "availability unknown"
     }
 }
+
+/** The longest wait for a car the dealer has or has coming, in days. */
+private const val IN_STOCK_DAYS = 42
 
 /** Metric horsepower per kilowatt. */
 private const val PS_PER_KW = 1.35962

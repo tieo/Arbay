@@ -604,11 +604,13 @@ class CarFilterEngineTest {
             listing(id, PlatformId.AUTOSCOUT24, 4_000_000, vehicle = VehicleInfo(availability = a, verified = if (a != null) setOf(VehicleField.AVAILABILITY) else emptySet()))
         val cars = listOf(
             car("now", io.github.tieo.arbay.model.VehicleAvailability(now = true)),
-            car("coming", io.github.tieo.arbay.model.VehicleAvailability(from = "2027-01-15")),
+            car("soon", io.github.tieo.arbay.model.VehicleAvailability(inDays = 14)),
+            car("far", io.github.tieo.arbay.model.VehicleAvailability(from = "2099-01-15")),
             car("ordered", io.github.tieo.arbay.model.VehicleAvailability(inMonths = 9, ordered = true, said = "In 9 Monaten ab Bestellung verfügbar")),
+            car("months", io.github.tieo.arbay.model.VehicleAvailability(inDays = 180)),
             car("unstated", null),
         )
-        assertEquals(listOf("now", "coming", "unstated"), CarFilterEngine.apply(cars, CarFilters(inStockOnly = true)).map { it.externalId })
+        assertEquals(listOf("now", "soon", "unstated"), CarFilterEngine.apply(cars, CarFilters(inStockOnly = true)).map { it.externalId })
     }
 
     @Test

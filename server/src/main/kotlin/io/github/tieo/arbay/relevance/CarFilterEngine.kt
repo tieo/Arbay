@@ -1,6 +1,7 @@
 package io.github.tieo.arbay.relevance
 
 import io.github.tieo.arbay.model.CarFilters
+import kotlinx.datetime.toLocalDateTime
 import io.github.tieo.arbay.model.Currency
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.PlatformId
@@ -199,7 +200,7 @@ object CarFilterEngine {
             val length = io.github.tieo.arbay.judging.EvModels.lengthOf(io.github.tieo.arbay.judging.EvModels.versionsOf(listing.title))
             if (length != null && length < min) return "size"
         }
-        if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.ordered }) return "availability"
+        if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.isOrder(today()) }) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
@@ -463,4 +464,6 @@ object CarFilterEngine {
         // added for one of them cannot quietly leave the other behind.
         return namesAVehiclePart(listing)
     }
+
+    private fun today() = kotlin.time.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Europe/Berlin")).date
 }

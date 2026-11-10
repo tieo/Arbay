@@ -14,6 +14,7 @@ import io.github.tieo.arbay.model.Shipping
 import io.github.tieo.arbay.model.fact
 import io.github.tieo.arbay.model.VehicleInfo
 import io.github.tieo.arbay.model.importVat
+import io.github.tieo.arbay.model.importDuty
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
@@ -89,7 +90,8 @@ fun PriceSummary.againstMiddle(listing: Listing): String? =
 
 /** What the landed price adds to the market's own, for an offer from outside the VAT area. */
 fun importVatNote(listing: Listing): String? = listing.importVat(ImportRules.current)?.let { vat ->
-    "Includes ${ImportRules.current.importVatPercent}% import VAT of ${vat.format()}; ${listing.price.format()} on ${listing.platformId.displayName}."
+    "Includes " + (listing.importDuty(ImportRules.current)?.let { "10% customs duty of ${it.format()} and " } ?: "") +
+        "${ImportRules.current.importVatPercent}% import VAT of ${vat.format()}; ${listing.price.format()} on ${listing.platformId.displayName}."
 }
 
 /** A copy of an offer on another market, named for its market, with its own price where it differs. */

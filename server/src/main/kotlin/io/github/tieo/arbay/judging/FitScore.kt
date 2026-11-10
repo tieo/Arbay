@@ -81,7 +81,9 @@ object FitScore {
     // the buyer named, so a van "nur gewerblich genutzt" stays in.
     private val tradeOnly = Regex(
         """(?i)\b(nur|ausschlie(ß|ss)lich)\W{1,3}((an|für|fuer)\W+)?(den\W+)?""" +
-            """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""",
+            """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""" +
+            // A price a business alone gets: "AKTION GEWERBE", "Gewerbeaktion", "Gewerbekundenpreis".
+            """|\baktion\W{1,3}gewerbe|\bgewerbe(kunden)?\W?(aktion|angebot|preis)|\bpreis\W+(nur\W+)?f(ü|ue)r\W+gewerbe""",
     )
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
     private val rearWheel = Regex("""(?i)heckantrieb|hinterradantrieb|\brwd\b""")

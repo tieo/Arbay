@@ -1,0 +1,42 @@
+package io.github.tieo.arbay.judging
+
+import io.github.tieo.arbay.model.CarFilters
+import io.github.tieo.arbay.model.Currency
+import io.github.tieo.arbay.model.ImportSettings
+import io.github.tieo.arbay.model.Listing
+import io.github.tieo.arbay.model.Location
+import io.github.tieo.arbay.model.Money
+import io.github.tieo.arbay.model.PlatformId
+import io.github.tieo.arbay.model.VehicleInfo
+import io.github.tieo.arbay.model.importDuty
+import io.github.tieo.arbay.model.landedPrice
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.time.Clock
+
+class VehicleFitTest {
+    private fun car(title: String, euros: Long, country: String? = "DE") = Listing(
+        id = "AUTOSCOUT24:${title.hashCode()}", platformId = PlatformId.AUTOSCOUT24, externalId = title.hashCode().toString(),
+        url = "https://www.autoscout24.de/angebote/x", title = title, price = Money(euros * 100, Currency.EUR),
+        scrapedAt = Clock.System.now(), vehicle = VehicleInfo(mileageKm = 10), location = Location(country = country),
+    )
+
+    @Test
+    fun `a price a business alone gets rules the car out`() {
+        val wishes = CarFilters(maxPriceEur = 50_000)
+        assertNull(FitScore.score(car("Hyundai IONIQ 6 AKTION GEWERBE 77 kWh", 39_000), wishes, 39_000.0, 4.0))
+        assertNotNull(FitScore.score(car("Hyundai IONIQ 6 77 kWh UNIQ", 39_000), wishes, 39_000.0, 4.0))
+    }
+
+    @Test
+    fun `a car from outside the EU lands with customs duty and import VAT on both`() {
+        val swiss = car("Tesla Model 3", 30_000, country = "CH")
+        val settings = ImportSettings()
+        assertEquals(300_000L, swiss.importDuty(settings)?.amount)
+        // 30,000 + 3,000 duty, and 19 % VAT on 33,000.
+        assertEquals(3_927_000L, swiss.landedPrice(settings).amount)
+        assertEquals(3_000_000L, car("Tesla Model 3", 30_000).landedPrice(settings).amount)
+    }
+}
