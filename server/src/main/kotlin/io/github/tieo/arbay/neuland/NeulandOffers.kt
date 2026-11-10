@@ -338,9 +338,13 @@ object NeulandOffers {
      * 2024 with 130,000 to 208,000 km went out of a search for used vans as new. Driven past a demo
      * car's mileage it is used; past a delivery run, whether it is new or a demonstrator is not known.
      */
-    internal fun drivenOrNew(mileageKm: Int?): io.github.tieo.arbay.model.VehicleCondition? = when {
+    internal fun drivenOrNew(mileageKm: Int?, registered: Boolean = false): io.github.tieo.arbay.model.VehicleCondition? = when {
+        mileageKm != null && mileageKm > DEMO_MAX_KM -> io.github.tieo.arbay.model.VehicleCondition.USED
+        // New is never registered: the state's bonus pays only a buyer who registers it first, and
+        // a dealer's "new" car with a registration date is a day registration or a demonstrator.
+        registered -> if (mileageKm == null || mileageKm <= NEW_MAX_KM) io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
+            else io.github.tieo.arbay.model.VehicleCondition.DEMO
         mileageKm == null || mileageKm <= NEW_MAX_KM -> io.github.tieo.arbay.model.VehicleCondition.NEW
-        mileageKm > DEMO_MAX_KM -> io.github.tieo.arbay.model.VehicleCondition.USED
         else -> null
     }
     private const val NEW_MAX_KM = 1_000
@@ -384,7 +388,7 @@ object NeulandOffers {
             doors = doors,
             wheelbaseMm = wheelbaseMm,
             condition = when (condition) {
-                "new" -> drivenOrNew(mileageKm)
+                "new" -> drivenOrNew(mileageKm, registered = registeredYear != null)
                 "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
                 "pre-registered" -> io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
                 "damaged" -> io.github.tieo.arbay.model.VehicleCondition.DAMAGED

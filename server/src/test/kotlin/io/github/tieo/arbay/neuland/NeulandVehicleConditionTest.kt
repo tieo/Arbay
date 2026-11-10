@@ -14,4 +14,13 @@ class NeulandVehicleConditionTest {
         // A demonstrator's mileage: new or demo is not known.
         assertEquals(null, NeulandOffers.drivenOrNew(8_000))
     }
+
+    @Test
+    fun `a new car with a registration date is not new`() {
+        // willhaben: "VW ID.4 GTX 4MOTION", condition new, registered 09/2026, 560 km.
+        assertEquals(VehicleCondition.PRE_REGISTRATION, NeulandOffers.drivenOrNew(560, registered = true))
+        assertEquals(VehicleCondition.DEMO, NeulandOffers.drivenOrNew(8_000, registered = true))
+        assertEquals(VehicleCondition.USED, NeulandOffers.drivenOrNew(30_000, registered = true))
+        assertEquals(VehicleCondition.NEW, NeulandOffers.drivenOrNew(10, registered = false))
+    }
 }
