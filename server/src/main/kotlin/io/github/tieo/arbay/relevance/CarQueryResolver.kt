@@ -78,8 +78,8 @@ object CarQueryResolver {
                     longestModelName(slug, after)?.let { name ->
                         return CarQuery(makeSlug = slug, modelSlug = name.joinToString(" "), remainder = after.drop(name.size).joinToString(" "))
                     }
-                    val model = tokens.getOrNull(aliasTokens.size)
-                    if (model != null && !isModelOrYear(slug, model)) return null
+                    val typed = tokens.getOrNull(aliasTokens.size)
+                    val model = typed?.let { t -> electricOf(slug, t) ?: if (isModelOrYear(slug, t)) t else return null }
                     val remainder = tokens.drop(aliasTokens.size + (if (model != null) 1 else 0))
                         .joinToString(" ")
                     return CarQuery(makeSlug = slug, modelSlug = model, remainder = remainder)
@@ -102,6 +102,18 @@ object CarQueryResolver {
             return CarQuery(makeSlug = slug, modelSlug = model.name.lowercase(), remainder = tokens.drop(1).joinToString(" "))
         }
         return null
+    }
+
+    /**
+     * The model an electric version is filed under, where the make lists no model of that name:
+     * "e-308" is a Peugeot 308 with an electric motor on every car site, while "e-208" is a model
+     * of its own and stays one.
+     */
+    private fun electricOf(makeSlug: String, token: String): String? {
+        val base = token.removePrefix("e-").takeIf { it != token && it.isNotEmpty() } ?: return null
+        val make = CarTaxonomyProvider.current.makes.firstOrNull { it.id == makeSlug } ?: return null
+        if (make.models.any { it.name.lowercase() == token || it.id.lowercase() == token }) return null
+        return make.models.firstOrNull { it.name.lowercase() == base || it.id.lowercase() == base }?.name?.lowercase()
     }
 
     /** The longest model name of the make, in two words or more, that [tokens] begin with. */

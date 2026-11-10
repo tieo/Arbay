@@ -257,6 +257,20 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `a word naming the fuel is carried by a car that states the fuel`() {
+        fun car(title: String, fuel: io.github.tieo.arbay.model.Fuel?) = listing(title, 3_600_000).copy(
+            id = "AUTOSCOUT24:${title.hashCode()}", platformId = PlatformId.AUTOSCOUT24,
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(fuel = fuel, verified = setOfNotNull(io.github.tieo.arbay.model.VehicleField.FUEL.takeIf { fuel != null })),
+        )
+        val electric = car("Kia Niro 64,8 kWh Light", io.github.tieo.arbay.model.Fuel.ELECTRIC)
+        val hybrid = car("Kia Niro 1.6 GDI Spirit", io.github.tieo.arbay.model.Fuel.HYBRID_PETROL)
+        val kept = RelevanceFilter.filter(listOf(electric, hybrid, car("Kia Niro EV Inspiration", io.github.tieo.arbay.model.Fuel.ELECTRIC)),
+            SearchQuery(text = "Kia Niro EV", category = MarketGroup.VEHICLES), blockedDealers = emptyList())
+        assertTrue(electric in kept)
+        assertFalse(hybrid in kept)
+    }
+
+    @Test
     fun `irrelevanceReport passes genuine result set`() {
         val genuine = listOf(
             listing("Volkswagen Crafter 35 Kasten Hochdach"),

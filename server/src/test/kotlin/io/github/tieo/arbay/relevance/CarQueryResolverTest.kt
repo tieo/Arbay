@@ -63,4 +63,11 @@ class CarQueryResolverTest {
         assertEquals("electric", resolved?.remainder)
         assertNull(CarQueryResolver.resolve("mgmt album"))
     }
+
+    @Test
+    fun `an electric version the make lists no model for is its base model`() {
+        val e308 = CarQueryResolver.resolve("Peugeot e-308")
+        assertEquals("peugeot", e308?.makeSlug)
+        assertEquals("308", e308?.modelSlug)
+    }
 }

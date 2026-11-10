@@ -1417,6 +1417,16 @@ object RelevanceFilter {
      * listing with that model word carries it too. A spec word ("2280", "gen4") is on SATA drives
      * as much as on NVMe ones and names no product, so it shows nothing.
      */
+    /** The words a search names a fuel with, by the fuel a vehicle states. */
+    private val FUEL_WORDS: Map<io.github.tieo.arbay.model.Fuel, Set<String>> = mapOf(
+        io.github.tieo.arbay.model.Fuel.ELECTRIC to setOf("ev", "bev", "elektro", "electric", "elektrisch", "electrique", "elettrica", "elettrico", "elektrisk"),
+        io.github.tieo.arbay.model.Fuel.DIESEL to setOf("diesel"),
+        io.github.tieo.arbay.model.Fuel.PETROL to setOf("benzin", "benziner", "petrol"),
+        io.github.tieo.arbay.model.Fuel.PLUGIN_HYBRID to setOf("phev", "plugin"),
+        io.github.tieo.arbay.model.Fuel.HYBRID_PETROL to setOf("hybrid", "hev"),
+        io.github.tieo.arbay.model.Fuel.HYBRID_DIESEL to setOf("hybrid"),
+    )
+
     private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery, queryText: String): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
             .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
@@ -1456,7 +1466,10 @@ object RelevanceFilter {
             val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
             val made = if (modelWord != null && carries.getValue(modelWord)[i] && !namesAnotherMake(listing.title))
                 makeWords.filter { !carries.getValue(it)[i] } else emptyList()
-            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty()) result[listing.id] = (shown + rented + made).toSet()
+            // A word naming the fuel is carried by a vehicle that states the fuel: "Kia Niro 64,8 kWh
+            // Light" is the "Kia Niro EV" searched for, though its title never writes "EV".
+            val fueled = listing.vehicle?.fuel?.let { f -> words.filter { w -> FUEL_WORDS[f]?.contains(w) == true && !carries.getValue(w)[i] } }.orEmpty()
+            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty() || fueled.isNotEmpty()) result[listing.id] = (shown + rented + made + fueled).toSet()
         }
         return result
     }
