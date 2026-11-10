@@ -191,9 +191,10 @@ object CarFilterEngine {
         if (drop(filters.fuels.isNotEmpty(), v?.fuel != null) { v!!.fuel in filters.fuels }) return "fuel"
         if (drop(filters.bodyTypes.isNotEmpty(), v?.bodyType != null) { v!!.bodyType in filters.bodyTypes }) return "body"
         if (drop(filters.conditions.isNotEmpty(), v?.condition != null) { v!!.condition in filters.conditions }) return "condition"
-        // New is never registered, so a vehicle stating a first registration is no new one, though
-        // its card names no condition: a search for new ones alone loses it.
-        if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
+        // New is never registered, so a vehicle stating a first registration is no new one, whatever
+        // its card calls it: mobile.de files demonstrators registered this year under "Neu", and a
+        // search for new ones alone loses them.
+        if (filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
         // A car never registered moves only on trade plates, to the dealer and on a test drive: a
         // card stating more is a used car's, or a wrong read the search cannot tell from one.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && (v?.mileageKm ?: 0) > NEW_MAX_KM && v!!.isVerified(VehicleField.MILEAGE)) return "condition"

@@ -594,6 +594,10 @@ class CarFilterEngineTest {
         val unregistered = listing("u", PlatformId.MOBILE_DE, 4_400_000, vehicle = VehicleInfo(mileageKm = 10, verified = setOf(VehicleField.MILEAGE)))
         val newOnly = CarFilters(conditions = setOf(VehicleCondition.NEW))
         assertEquals(listOf("MOBILE_DE:u"), CarFilterEngine.apply(listOf(registered, unregistered), newOnly).map { it.id })
+        // Called new by its card, a registered demonstrator is still no new car.
+        val demo = listing("d", PlatformId.MOBILE_DE, 3_400_000, vehicle = VehicleInfo(firstRegYear = 2026, mileageKm = 20, condition = VehicleCondition.NEW,
+            verified = setOf(VehicleField.FIRST_REG_YEAR, VehicleField.MILEAGE, VehicleField.CONDITION)))
+        assertEquals(emptyList(), CarFilterEngine.apply(listOf(demo), newOnly).map { it.id })
         // Asked for new or a day registration, a registered car with no condition stays, unchecked.
         assertEquals(2, CarFilterEngine.apply(listOf(registered, unregistered), newOnly.copy(conditions = setOf(VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION))).size)
     }
