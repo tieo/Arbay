@@ -1,6 +1,8 @@
 package io.github.tieo.arbay.judging
 
 import io.github.tieo.arbay.DataDir
+import io.github.tieo.arbay.chat.AuctionBids
+import kotlin.time.Duration.Companion.minutes
 import io.github.tieo.arbay.model.Dealer
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.neuland.Neuland
@@ -52,6 +54,9 @@ object Dealers {
         return turn.withLock {
             fresh(url) ?: try {
                 val market = read(url)
+                // Google's lowest reviews are sorted in the signed-in browser a last-second bid uses,
+                // so near a bid the dealer goes without them and is not kept, to be read again later.
+                if (AuctionBids.busySoon(AuctionBids.OPEN_BEFORE + 10.minutes)) return@withLock market
                 market.copy(google = onGoogle(market)).also {
                     kept[url] = Kept(System.currentTimeMillis(), it)
                     persist()
