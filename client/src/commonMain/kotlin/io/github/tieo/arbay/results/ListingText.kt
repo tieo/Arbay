@@ -139,6 +139,7 @@ fun listingFoot(listing: Listing, views: Int? = null, foundAtMillis: Long? = nul
     foundAtMillis?.let { foundLabel(it)?.let { add(it) } }
     views?.let { add(if (it == 1) "seen once" else "seen $it times") }
     listing.matchScore?.let { add("fit ${(it * 100).roundToInt()} %") }
+    listing.ownCost?.let { add("${eurosText(it.totalEur)} to own over ${it.years} years") }
 }
 
 /** One wish in an offer's fit: what it is, what the offer has, and the whole points it adds of the most it could. */

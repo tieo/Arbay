@@ -205,4 +205,14 @@ class ProductFitTest {
     }
 
     private fun fitOf(score: Double) = FitScore.Fit(score, null, null)
+
+    @Test
+    fun `a listing of several models has no price for the one wanted`() {
+        val fit = scanner(ad("Creality 3D Scanner CR-Scan Otter/Raptor/RaptorX/Sermoon S1/P1/X1", 310))!!
+        val price = fit.parts.first { it.wish == io.github.tieo.arbay.model.FitWish.PRICE }
+        kotlin.test.assertFalse(price.known)
+        val alone = scanner(ad("Creality CR-Scan Otter 3D Scanner", 310))!!
+        kotlin.test.assertTrue(alone.parts.first { it.wish == io.github.tieo.arbay.model.FitWish.PRICE }.known)
+        kotlin.test.assertTrue(alone.score > fit.score)
+    }
 }

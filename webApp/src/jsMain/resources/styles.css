@@ -555,6 +555,8 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--gap); }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field.narrow { max-width: 140px; }
+/* Fields of one setting in fixed columns, so rows of two and of three share their edges. */
+.field-row.thirds { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .field-label { font-size: 12px; color: var(--muted); }
 .form-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: var(--gap) 0; background: linear-gradient(transparent, var(--bg) 30%); }
 .recent { padding: 6px; border-radius: var(--radius-small); flex-wrap: wrap; gap: 2px 8px; }

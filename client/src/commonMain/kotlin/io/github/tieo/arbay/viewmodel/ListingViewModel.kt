@@ -586,6 +586,7 @@ class ListingViewModel(
                 .thenByDescending { it.listingDate != null || it.soldDate != null })
         SortMode.CENTS_PER_GB -> list.sortedWith(asked.thenBy { it.drive?.centsPerGb ?: Double.MAX_VALUE })
         SortMode.LONGEST_LIFE -> list.sortedWith(asked.thenByDescending { it.drive?.lifeHours ?: -1L })
+        SortMode.COST_TO_OWN -> list.sortedWith(asked.thenBy<Listing> { it.ownCost?.totalEur ?: Int.MAX_VALUE }.thenBy { priceOf(it) })
         SortMode.BEST_MATCH -> list.sortedWith(
             asked.thenByDescending<Listing> { it.matchScore ?: Double.NEGATIVE_INFINITY }
                 .thenBy { priceOf(it) })

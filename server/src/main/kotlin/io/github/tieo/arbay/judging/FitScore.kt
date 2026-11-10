@@ -391,6 +391,11 @@ object FitScore {
     private fun cheaperStillCounts(price: Double, ideal: Double, zero: Double): Double =
         if (price >= ideal) 0.9 * (linear(price, ideal, zero) ?: 0.0) else 0.9 + 0.1 * (ideal - price).coerceAtLeast(0.0) / ideal
 
+    /** Whether [listing] is one listing of several models or variants at different prices: the
+     *  market says its price runs up to another, or its title names [namedInTitle] two or more of
+     *  the wanted models ("CR-Scan Otter/Raptor/RaptorX/Sermoon S1/P1/X1"). */
+    internal fun listsVariants(listing: Listing, namedInTitle: Int): Boolean = listing.priceUpTo != null || namedInTitle >= 2
+
     /** How many wanted models a title names before it is a shop's list of variants at one price. */
     private const val VARIANT_LIST = 3
 
@@ -427,9 +432,11 @@ object FitScore {
         // while "Hummel + Elan" is the Hummel with an edge sander thrown in.
         // The price of a title listing a shop's variants is none of theirs in particular.
         var priced: io.github.tieo.arbay.model.ModelWish? = null
+        var namedModels = 0
         val model = wishes.models.takeIf { it.isNotEmpty() }?.let { models ->
             val namedInTitle = modelsNamed(title, models)
-            if (namedInTitle.count { it.worth > 0 } >= VARIANT_LIST) return null
+            namedModels = namedInTitle.count { it.worth > 0 }
+            if (namedModels >= VARIANT_LIST) return null
             val inTitle = namedInTitle.maxByOrNull { it.worth }
             if (inTitle != null && inTitle.worth <= 0.0) return null
             val told = guessed?.invoke(listing)
@@ -459,6 +466,11 @@ object FitScore {
         val max = own ?: wishes.maxPriceEur?.toDouble()
         val ideal = priced?.idealPriceEur?.toDouble() ?: if (own != null) own * MODEL_IDEAL_SHARE else wishes.idealPriceEur?.toDouble()
         val price = when {
+            // A shop's one listing of several models or variants shows the cheapest one's price,
+            // which says nothing of the one wanted: "CR-Scan Otter/Raptor/RaptorX/Sermoon S1/P1/X1"
+            // at 310 €, where an Otter alone sold at 599 €.
+            (max != null || ideal != null) && priced != null && listsVariants(listing, namedModels) ->
+                Wish(null, "several models in one listing; the ${priced!!.name}'s own price is not stated")
             max != null -> Wish(cheaperStillCounts(priceEur, ideal ?: (max * 0.25), max * 1.03), euros(priceEur))
             ideal != null -> Wish(cheaperStillCounts(priceEur, ideal, ideal * 3), euros(priceEur))
             else -> null

@@ -256,11 +256,11 @@ private fun ServerSections(app: WebApp) {
 
     Setting("Charging an electric car", "What a kWh costs in an electric car's cost over the years") {
         val commit = { val next = rules; save("charging") { ImportRules.current = client.updateImportSettings(next) } }
-        Div({ classes("field-row") }) {
+        Div({ classes("field-row", "thirds") }) {
             Num("At home %", rules.chargeAtHomePercent.toDouble(), commit) { rules = rules.copy(chargeAtHomePercent = it.toInt().coerceIn(0, 100)) }
             Num("Of that, solar %", rules.solarPercent.toDouble(), commit) { rules = rules.copy(solarPercent = it.toInt().coerceIn(0, 100)) }
         }
-        Div({ classes("field-row") }) {
+        Div({ classes("field-row", "thirds") }) {
             Num("Grid ct/kWh", rules.gridCentPerKwh, commit) { rules = rules.copy(gridCentPerKwh = it) }
             Num("Feed-in ct/kWh", rules.feedInCentPerKwh, commit) { rules = rules.copy(feedInCentPerKwh = it) }
             Num("Public ct/kWh", rules.publicCentPerKwh, commit) { rules = rules.copy(publicCentPerKwh = it) }

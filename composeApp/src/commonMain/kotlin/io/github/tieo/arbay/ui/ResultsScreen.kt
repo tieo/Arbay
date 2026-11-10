@@ -93,6 +93,7 @@ import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SortMode
+import io.github.tieo.arbay.model.offered
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.navigation.Panel
 import io.github.tieo.arbay.navigation.Route
@@ -313,7 +314,7 @@ private fun NarrowingRow(session: Session, state: ResultsState, hiddenCount: Int
             Box {
                 Choice(sortMode.label, false, opens = true) { sortMenu = true }
                 DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }) {
-                    SortMode.entries.filter { !it.forDrives || state.narrowed.displayed.any { l -> l.drive != null } }.forEach { mode ->
+                    SortMode.offered(state.narrowed.displayed).forEach { mode ->
                         DropdownMenuItem(text = { Text(mode.label) }, onClick = {
                             sortMenu = false
                             if (mode == SortMode.NEAREST && DevicePosition.latitude == null) locate()

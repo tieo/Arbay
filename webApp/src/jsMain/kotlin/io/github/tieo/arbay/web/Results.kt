@@ -43,6 +43,7 @@ import io.github.tieo.arbay.model.SaleType
 import io.github.tieo.arbay.model.SearchQuery
 import io.github.tieo.arbay.model.SearchReach
 import io.github.tieo.arbay.model.SortMode
+import io.github.tieo.arbay.model.offered
 import io.github.tieo.arbay.model.TrackedProduct
 import io.github.tieo.arbay.model.tidyTitle
 import io.github.tieo.arbay.results.Hidden
@@ -318,7 +319,7 @@ private fun Toolbar(app: WebApp, route: Route.Results, state: ResultsState, sort
                 }
             }
         }) {
-            SortMode.entries.filter { !it.forDrives || state.narrowed.displayed.any { l -> l.drive != null } }.forEach { mode -> Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) } }
+            SortMode.offered(state.narrowed.displayed).forEach { mode -> Option(mode.name, { if (mode == sortMode) selected() }) { Text(mode.label) } }
         }
 
         if (state.open.bookmark != null) QuietButton("Auctions", pressed = route.panel == Panel.AUCTIONS) { togglePanel(route, Panel.AUCTIONS) }
