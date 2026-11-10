@@ -29,9 +29,11 @@ class WillhabenCrawler : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsList
                 mileageMaxKm = f?.maxMileageKm,
                 powerMinKw = f?.minPowerKw,
             )
+            // Every car sits under the site's /gebrauchtwagen/ path whatever its condition, so a
+            // card that states none is of no known condition: the vehicle's own carries it.
             return NeulandOffers.searchVehicles(
                 "willhaben.at", query.positiveText, platformId, "willhaben", vehicle, query.startPage,
-                query.minPrice, query.maxPrice, otherwise = Condition.USED,
+                query.minPrice, query.maxPrice,
             )
         }
         // One page, unless the search asked for more offers than usual.
