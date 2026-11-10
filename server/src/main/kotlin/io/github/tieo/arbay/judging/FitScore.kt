@@ -224,15 +224,20 @@ object FitScore {
         return r.stars!! to r.count
     }
 
-    /** A dealer by the market's own stars and how many gave them; a private seller a little over unknown. */
+    /** The dealer's stars on Google, where its listing there was found; they weigh where the market
+     *  gives none and never rule an offer out. */
+    internal fun googleStars(listing: Listing, dealer: (String?) -> io.github.tieo.arbay.model.Dealer? = Dealers::cached): Pair<Double, Int>? =
+        dealer(Dealers.pageOf(listing))?.google?.ratings?.firstOrNull { it.stars != null && it.count > 0 }?.let { it.stars!! to it.count }
+
+    /** A dealer by the market's own stars and how many gave them, else Google's; a private seller a little over unknown. */
     private fun sellerWish(listing: Listing): Wish {
         val seller = listing.seller
         val rated = marketStars(listing)
+        val google = if (rated == null) googleStars(listing) else null
+        fun weight(stars: Double, count: Int?) = (if (stars >= 4.5) 1.0 else 0.75) * ((count ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 })
         return when {
-            rated != null -> Wish(
-                (if (rated.first >= 4.5) 1.0 else 0.75) * ((rated.second ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
-                "${"%.1f".format(rated.first)}★" + (rated.second?.let { " ($it)" } ?: ""),
-            )
+            rated != null -> Wish(weight(rated.first, rated.second), "${"%.1f".format(rated.first)}★" + (rated.second?.let { " ($it)" } ?: ""))
+            google != null -> Wish(weight(google.first, google.second) * if (google.first < 4.0) 0.5 else 1.0, "${"%.1f".format(google.first)}★ on Google (${google.second})")
             seller?.type == SellerType.PRIVATE -> Wish(0.6, "private")
             else -> Wish(0.45, NOT_STATED)
         }

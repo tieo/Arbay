@@ -22,6 +22,8 @@ data class Dealer(
     /** One per source, never mixed. */
     val ratings: List<DealerRating> = emptyList(),
     val stock: DealerStock? = null,
+    /** The same dealer's Google listing, where one was found at the same postcode or town. */
+    val google: Dealer? = null,
 )
 
 @Serializable
@@ -42,7 +44,15 @@ data class DealerRating(
 )
 
 @Serializable
-data class DealerReview(val stars: Double? = null, val date: String? = null, val text: String? = null, val disliked: String? = null, val reply: String? = null)
+data class DealerReview(
+    val stars: Double? = null,
+    val date: String? = null,
+    /** When it was written in the source's own words, where it gives no date ("vor 6 Jahren"). */
+    @SerialName("when") val written: String? = null,
+    val text: String? = null,
+    val disliked: String? = null,
+    val reply: String? = null,
+)
 
 @Serializable
 data class DealerMoney(val cents: Long, val currency: String)
@@ -68,7 +78,7 @@ val DealerRating.sourceName: String get() = source(source)
 
 /** "1.5★ 2025-10-24: Unfreundlich total. Disliked: ... Dealer replied: ..." */
 fun DealerReview.line(): String = listOfNotNull(
-    listOfNotNull(stars?.let { "${it}★" }, date).joinToString(" ").ifEmpty { null }?.let { "$it:" },
+    listOfNotNull(stars?.let { "${it}★" }, date ?: written).joinToString(" ").ifEmpty { null }?.let { "$it:" },
     text?.trim()?.takeIf { it.isNotEmpty() },
     disliked?.trim()?.takeIf { it.isNotEmpty() }?.let { "Disliked: $it" },
     reply?.trim()?.takeIf { it.isNotEmpty() }?.let { "Dealer replied: $it" },
@@ -102,12 +112,18 @@ fun Dealer.stockLine(): String? = stock?.count?.let { n ->
     "$n offer${if (n == 1) "" else "s"} on ${source(market)}$span"
 }
 
+/** Every rating of the dealer, the market's own first, then Google's. */
+val Dealer.allRatings: List<DealerRating> get() = ratings + google?.ratings.orEmpty()
+
+/** Opening hours from the market's pages, else from Google's listing. */
+val Dealer.openingHours: List<DealerHours> get() = hours.ifEmpty { google?.hours.orEmpty() }
+
 /** Every fact of the dealer as lines of text, for a reader with no screen. */
 fun Dealer.lines(): List<String> = listOfNotNull(
     "Dealer: " + listOfNotNull(name ?: "unnamed", nameAddOn).joinToString(", ") + (contact?.let { " (contact $it)" } ?: ""),
     whereLine(),
-) + ratings.flatMap { r -> listOf("${r.sourceName}: ${r.summary()}") + r.reviews.map { "  " + it.line() } } +
-    hours.map { h -> "Open " + (h.department?.let { "($it) " } ?: "") + h.text().ifEmpty { "no hours given" } } +
+) + allRatings.flatMap { r -> listOf("${r.sourceName}: ${r.summary()}") + r.reviews.map { "  " + it.line() } } +
+    openingHours.map { h -> "Open " + (h.department?.let { "($it) " } ?: "") + h.text().ifEmpty { "no hours given" } } +
     listOfNotNull(stockLine(), imprint?.trim()?.takeIf { it.isNotEmpty() }?.let { "Legal notice: " + it.replace("\n", " / ") })
 
 /** The address of the dealer's own page behind [listing], where it is sold by one and the market names it. */

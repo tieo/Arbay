@@ -53,4 +53,21 @@ class DealerTest {
         assertEquals("1 offer on AutoScout24", Dealer("autoscout24.de", stock = DealerStock(count = 1)).stockLine())
         assertEquals("2 offers on mobile.de, 5 € to 7 €", Dealer("mobile.de", stock = DealerStock(2, 2, DealerMoney(500, "EUR"), DealerMoney(700, "EUR"))).stockLine())
     }
+
+    @Test
+    fun `Google's place counts only at the dealer's own postcode or town`() {
+        val a = io.github.tieo.arbay.model.DealerAddress(postcode = "72070", town = "Tuebingen")
+        kotlin.test.assertTrue(Dealers.samePlace(a, io.github.tieo.arbay.model.DealerAddress(postcode = "72070", town = "Tübingen")))
+        kotlin.test.assertFalse(Dealers.samePlace(a, io.github.tieo.arbay.model.DealerAddress(postcode = "72072", town = "Tübingen")))
+        kotlin.test.assertTrue(Dealers.samePlace(io.github.tieo.arbay.model.DealerAddress(town = "Tübingen"), io.github.tieo.arbay.model.DealerAddress(postcode = "72072", town = "Tuebingen")))
+        kotlin.test.assertFalse(Dealers.samePlace(a, null))
+    }
+
+    @Test
+    fun `Google's stars weigh only where the market gives none`() {
+        val withGoogle = dealer.copy(ratings = listOf(DealerRating("autoscout24.de", null, 0)), google = Dealer("google.com", ratings = listOf(DealerRating("google.com", 4.8, 943))))
+        val v = van(Seller(type = SellerType.BUSINESS, url = page))
+        assertNull(FitScore.marketStars(v) { if (it == page) withGoogle else null })
+        assertEquals(4.8 to 943, FitScore.googleStars(v) { if (it == page) withGoogle else null })
+    }
 }

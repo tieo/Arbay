@@ -2,6 +2,8 @@ package io.github.tieo.arbay.ui
 
 import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.whereLine
+import io.github.tieo.arbay.model.allRatings
+import io.github.tieo.arbay.model.openingHours
 import io.github.tieo.arbay.model.stockLine
 import io.github.tieo.arbay.model.summary
 import io.github.tieo.arbay.model.sourceName
@@ -401,9 +403,9 @@ private fun DealerSection(session: Session, listing: Listing, open: (String) -> 
             Text(listOfNotNull(d.name ?: listing.seller?.name, d.nameAddOn).joinToString(", "), Modifier.clickable { open(d.url ?: url) }, style = MaterialTheme.typography.bodyMedium)
             d.contact?.let { Muted("Contact: $it", style = MaterialTheme.typography.bodySmall) }
             d.whereLine()?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
-            d.hours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { Muted("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + it, style = MaterialTheme.typography.bodySmall) } }
+            d.openingHours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { Muted("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + it, style = MaterialTheme.typography.bodySmall) } }
             d.stockLine()?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
-            d.ratings.forEach { r ->
+            d.allRatings.forEach { r ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(r.sourceName, style = MaterialTheme.typography.bodySmall)
                     Muted(r.summary(), style = MaterialTheme.typography.bodySmall)

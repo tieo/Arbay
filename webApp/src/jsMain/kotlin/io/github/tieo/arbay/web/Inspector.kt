@@ -98,6 +98,8 @@ import org.jetbrains.compose.web.dom.Form
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
 import io.github.tieo.arbay.model.whereLine
+import io.github.tieo.arbay.model.allRatings
+import io.github.tieo.arbay.model.openingHours
 import io.github.tieo.arbay.model.stockLine
 import io.github.tieo.arbay.model.summary
 import io.github.tieo.arbay.model.sourceName
@@ -829,9 +831,9 @@ private fun DealerSection(app: WebApp, listing: Listing) {
             A(d.url ?: url, { attr("target", "_blank"); attr("rel", "noopener") }) { Text(listOfNotNull(d.name ?: listing.seller?.name, d.nameAddOn).joinToString(", ")) }
             d.contact?.let { c -> Div({ classes("muted", "small") }) { Text("Contact: $c") } }
             d.whereLine()?.let { w -> Div({ classes("muted", "small") }) { Text(w) } }
-            d.hours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { t -> Div({ classes("muted", "small") }) { Text("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + t) } } }
+            d.openingHours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { t -> Div({ classes("muted", "small") }) { Text("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + t) } } }
             d.stockLine()?.let { t -> Div({ classes("muted", "small") }) { Text(t) } }
-            d.ratings.forEach { r ->
+            d.allRatings.forEach { r ->
                 Div({ classes("drive-reading") }) { Span { Text(r.sourceName) }; Span({ classes("muted", "small") }) { Text(r.summary()) } }
                 r.reviews.take(3).forEach { rv -> Div({ classes("muted", "small") }) { Text(rv.line()) } }
             }

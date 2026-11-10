@@ -51,7 +51,8 @@ object Dealers {
         fresh(url)?.let { return it }
         return turn.withLock {
             fresh(url) ?: try {
-                json.decodeFromString(Dealer.serializer(), Neuland.offers("offers/dealer?url=${url.encodeURLParameter()}", limitS = 150)).also {
+                val market = read(url)
+                market.copy(google = onGoogle(market)).also {
                     kept[url] = Kept(System.currentTimeMillis(), it)
                     persist()
                 }
@@ -62,6 +63,37 @@ object Dealers {
                 null
             }
         }
+    }
+
+    private suspend fun read(url: String) = json.decodeFromString(Dealer.serializer(), Neuland.offers("offers/dealer?url=${url.encodeURLParameter()}", limitS = 150))
+
+    /**
+     * The dealer's Google listing, looked up by its name and town. Google answers the first place for
+     * the words, so it counts only at the dealer's own postcode or, where either lacks one, its town.
+     */
+    private suspend fun onGoogle(market: Dealer): Dealer? {
+        val name = market.name ?: return null
+        val town = market.address?.town ?: return null
+        val words = java.net.URLEncoder.encode("$name $town", Charsets.UTF_8)
+        val found = try {
+            read("https://www.google.com/maps/search/$words?hl=de")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.info("no Google listing for {}: {}", name, e.message)
+            return null
+        }
+        return found.takeIf { samePlace(market.address, it.address) }
+            ?: null.also { log.info("Google's place for {} is {} at {}, not the dealer", name, found.name, found.address) }
+    }
+
+    internal fun samePlace(a: io.github.tieo.arbay.model.DealerAddress?, b: io.github.tieo.arbay.model.DealerAddress?): Boolean {
+        if (a == null || b == null) return false
+        val pa = a.postcode?.trim()
+        val pb = b.postcode?.trim()
+        if (pa != null && pb != null) return pa == pb
+        fun f(t: String?) = t?.let { FitScore.folded(it).trim() }
+        return f(a.town) != null && f(a.town) == f(b.town)
     }
 
     /** Reads, one after another in the background, the dealers of [listings] not kept yet. */
