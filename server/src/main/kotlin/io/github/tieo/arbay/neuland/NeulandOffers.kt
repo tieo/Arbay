@@ -142,11 +142,11 @@ object NeulandOffers {
                 listingDate = o.listedAt(),
                 description = o.description,
                 scrapedAt = now,
-                vehicle = if (vehicle == null) o.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence)
+                vehicle = withTitlePower(o.title, if (vehicle == null) o.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence)
                 else io.github.tieo.arbay.relevance.VehicleTextParser.merge(
                     o.vehicle?.info()?.let(io.github.tieo.arbay.relevance.VehicleTextParser::verifiedByPresence),
                     o.cardText?.let(io.github.tieo.arbay.relevance.VehicleTextParser::parse),
-                ),
+                )),
             )
         }
         return Answer(listings, list.related, list.asked)
@@ -350,6 +350,21 @@ object NeulandOffers {
         fun location() = place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) }
         fun listedAt() = listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() }
     }
+    /** A power in kilowatts the seller writes in the title ("ID.4 GTX 4MOTION 250 kW"), never a battery's kWh. */
+    private val titleKw = Regex("""(?i)(?<![\d.,])(\d{2,3})\s?kw(?!h)\b""")
+
+    /**
+     * The vehicle with the power its title names where the site's power field says another: dealers
+     * on willhaben type the battery's 77 kWh into the power field of a 250 kW ID.4 GTX. The title's
+     * figure is the seller's own words, so it is kept as read, not as the site's verified field.
+     */
+    internal fun withTitlePower(title: String, v: io.github.tieo.arbay.model.VehicleInfo?): io.github.tieo.arbay.model.VehicleInfo? {
+        val named = titleKw.findAll(title).map { it.groupValues[1].toInt() }.distinct().singleOrNull() ?: return v
+        val field = v?.powerKw ?: return v
+        if (kotlin.math.abs(field - named) <= 2) return v
+        return v.copy(powerKw = named, verified = v.verified - io.github.tieo.arbay.model.VehicleField.POWER)
+    }
+
     /**
      * A vehicle the site calls new, as its mileage bears out. The condition is the seller's pick,
      * and a dealer feed on Marktplaats ticks "Nieuw" on every van it lists: Crafters of 2019 to
