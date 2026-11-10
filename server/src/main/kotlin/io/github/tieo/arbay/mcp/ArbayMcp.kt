@@ -448,7 +448,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                     ?.let { it.lines().joinToString("\n") + "\n" } ?: "The dealer's pages could not be read.\n"
                 else "The dealer's pages could not be read.\n"
             }.orEmpty()
-            pageHead + "\n" + state + seller + dealer + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
+            val lead = state + seller
+            pageHead + "\n" + lead + (if (dealer.isNotEmpty() && lead.isNotEmpty() && !lead.endsWith("\n")) "\n" else "") + dealer + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 
