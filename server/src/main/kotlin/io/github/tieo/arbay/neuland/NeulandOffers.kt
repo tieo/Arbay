@@ -42,6 +42,19 @@ object NeulandOffers {
      *  related, and the conditions its own search was asked. */
     data class Answer(val listings: List<Listing>, val related: List<String>, val asked: List<String>)
 
+    /** How long eBay's searches are left alone after it answered one with its error page. */
+    private const val EBAY_HOLD_MS = 30L * 60 * 1000
+
+    @Volatile private var ebayHeldUntil = 0L
+
+    /** eBay's error page answers every search of a client for a while, and each one sent meanwhile
+     *  costs several browser attempts and keeps that client refused; item pages and bids go on. */
+    internal fun searchHeld(site: String, now: Long = System.currentTimeMillis()) = site.startsWith("ebay.") && now < ebayHeldUntil
+
+    internal fun noteRefusal(site: String, message: String, now: Long = System.currentTimeMillis()) {
+        if (site.startsWith("ebay.") && "errorpage" in message) ebayHeldUntil = now + EBAY_HOLD_MS
+    }
+
     /**
      * What [site] (a domain) offers for [words], as listings of [platform]: page [page] of the
      * answer, inside the price band [min]..[max] where the site's search takes one, a car or van's
@@ -57,6 +70,7 @@ object NeulandOffers {
         sold: Boolean = false, conditions: List<String> = emptyList(), perPage: Int? = null,
         ended: Boolean = false, auctions: Boolean = false,
     ): Answer {
+        if (searchHeld(site)) throw io.github.tieo.arbay.markets.CrawlerBlockedException("$siteName: eBay refused searches just now, held for a while", io.github.tieo.arbay.markets.ErrorType.BLOCKED_403)
         val request = kotlinx.serialization.json.buildJsonObject {
             put("site", kotlinx.serialization.json.JsonPrimitive(site))
             put("words", kotlinx.serialization.json.JsonPrimitive(words))
@@ -84,6 +98,7 @@ object NeulandOffers {
         val answer = try {
             Neuland.request(io.ktor.http.HttpMethod.Post, "offers/search", request, limitS = 150)
         } catch (e: Neuland.Refusal) {
+            noteRefusal(site, e.message.orEmpty())
             // A page Neuland read and could not make out comes with the refusal, kept in the snapshot.
             val page = (e.answer["html"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
             if (page != null) throw unreadablePage(siteName, e.message ?: "the page did not read", page)
