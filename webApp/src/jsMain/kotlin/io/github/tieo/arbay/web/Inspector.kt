@@ -82,6 +82,9 @@ import io.github.tieo.arbay.results.againstMiddle
 import io.github.tieo.arbay.results.copyLabel
 import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.dealerExtrasNote
+import io.github.tieo.arbay.results.ownCostTitle
+import io.github.tieo.arbay.results.ownCostDistances
+import io.github.tieo.arbay.results.eurosText
 import io.github.tieo.arbay.model.newRule
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
@@ -653,6 +656,28 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
 
         FitBreakdown(listing, state.open.bookmark?.searchQuery?.productWishes) { model ->
             state.open.bookmark?.let { app.products.checkModel(it, listing.id, model) }
+        }
+        listing.ownCost?.let { cost ->
+            H3 { Text(ownCostTitle(cost)) }
+            Div({ classes("facts") }) {
+                ownCostDistances(cost).forEach { (km, total, weighed) ->
+                    Span({ classes(*listOfNotNull("fact", "weighed".takeIf { weighed }).toTypedArray()) }) { Text("$total · $km") }
+                }
+            }
+            Div({ classes("sellers") }) {
+                cost.parts.forEach { part ->
+                    Div({ classes("seller") }) {
+                        Span({ classes("seller-name") }) {
+                            Text(part.what)
+                            part.note?.let { Span({ classes("muted", "small") }) { Text(" · $it") } }
+                        }
+                        Span { Text(eurosText(part.eur)) }
+                    }
+                }
+            }
+            if (cost.assumptions.isNotEmpty()) P({ classes("muted", "small") }) { Text("Estimated: " + cost.assumptions.joinToString("; ")) }
+            P({ classes("muted", "small") }) { Text("Not counted: " + cost.notCounted.joinToString("; ")) }
+            cost.source?.let { P({ classes("muted", "small") }) { Text(it) } }
         }
         DriveHealthSection(health, readingDrive)
         SoldPricesSection(app, listing)

@@ -94,6 +94,16 @@ fun importVatNote(listing: Listing): String? = listing.importVat(ImportRules.cur
         "${ImportRules.current.importVatPercent}% import VAT of ${vat.format()}; ${listing.price.format()} on ${listing.platformId.displayName}."
 }
 
+/** Whole euros as the app writes money. */
+fun eurosText(eur: Int): String = io.github.tieo.arbay.model.Money(eur * 100L, io.github.tieo.arbay.model.Currency.EUR).format()
+
+/** The heading of a vehicle's cost to own: "Cost to own over 10 years · 54.012 €". */
+fun ownCostTitle(c: io.github.tieo.arbay.model.OwnCost): String = "Cost to own over ${c.years} years · ${eurosText(c.totalEur)}"
+
+/** The total at each yearly distance: "5.000 km a year" to "50.334 €", the one weighed marked. */
+fun ownCostDistances(c: io.github.tieo.arbay.model.OwnCost): List<Triple<String, String, Boolean>> =
+    c.totalsByKm.entries.sortedBy { it.key }.map { (km, eur) -> Triple("${io.github.tieo.arbay.grouped(km.toLong())} km a year", eurosText(eur), km == c.kmPerYear) }
+
 /** What the dealer adds on top of the asking price, as the ad names it. */
 fun dealerExtrasNote(listing: Listing): String? = listing.extraCosts?.let {
     "Includes ${it.format()} the dealer adds: ${listing.extraCostsSaid.orEmpty()}."

@@ -14,6 +14,8 @@ import io.github.tieo.arbay.history.SearchHistoryStore
 import io.github.tieo.arbay.history.summary
 import io.github.tieo.arbay.model.BodyType
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.grouped
+import io.github.tieo.arbay.model.OWN_COST_KM
 import io.github.tieo.arbay.model.MarketGroup
 import io.github.tieo.arbay.model.MarketSets
 import io.github.tieo.arbay.model.Transmission
@@ -205,6 +207,20 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
                 listOf(false to "Either", true to "Wanted").forEach { (value, label) ->
                     Chip(label, filters.wantsHeatPump == value) { filters = filters.copy(wantsHeatPump = value) }
                 }
+            }
+        }
+
+        Fieldset {
+            Legend { Text("Cost to own over 10 years") }
+            Div({ classes("chips") }) {
+                Span({ classes("chips-label") }) { Text("Driven a year") }
+                (listOf(null) + OWN_COST_KM).forEach { km ->
+                    Chip(km?.let { "${grouped(it.toLong())} km" } ?: "Not weighed", filters.costKmPerYear == km) { filters = filters.copy(costKmPerYear = km) }
+                }
+            }
+            if (filters.costKmPerYear != null) Div({ classes("field-row") }) {
+                NumberField("Ideal total (€)", filters.idealTotalCostEur) { filters = filters.copy(idealTotalCostEur = it) }
+                NumberField("Most total (€)", filters.maxTotalCostEur) { filters = filters.copy(maxTotalCostEur = it) }
             }
         }
 

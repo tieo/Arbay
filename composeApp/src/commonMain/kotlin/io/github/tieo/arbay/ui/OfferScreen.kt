@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui
 
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.launch
 import io.github.tieo.arbay.model.whereLine
 import io.github.tieo.arbay.model.allRatings
@@ -105,6 +106,9 @@ import io.github.tieo.arbay.results.ModelChoice
 import io.github.tieo.arbay.results.modelChoice
 import io.github.tieo.arbay.results.importVatNote
 import io.github.tieo.arbay.results.dealerExtrasNote
+import io.github.tieo.arbay.results.ownCostTitle
+import io.github.tieo.arbay.results.ownCostDistances
+import io.github.tieo.arbay.results.eurosText
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
 import io.github.tieo.arbay.results.sourceLabel
@@ -219,6 +223,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 FitBreakdown(listing, state.open.bookmark?.searchQuery?.productWishes) { model ->
                     state.open.bookmark?.let { session.products.checkModel(it, listing.id, model) }
                 }
+                listing.ownCost?.let { OwnCostSection(it) }
                 DriveHealthSection(health, readingDrive)
                 SoldPricesSection(session, listing)
                 SellersSection(page.sellers, ::openBrowser)
@@ -299,6 +304,36 @@ private fun FitBreakdown(listing: Listing, wishes: io.github.tieo.arbay.model.Pr
             )
         }
     }
+}
+
+/**
+ * What the vehicle costs to own: the total at each yearly distance, the one the fit weighs
+ * marked, then each part with what it rests on, and what is estimated or left out.
+ */
+@Composable
+private fun OwnCostSection(cost: io.github.tieo.arbay.model.OwnCost) {
+    Gap(4.dp)
+    SectionTitle(ownCostTitle(cost))
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        ownCostDistances(cost).forEach { (km, total, weighed) ->
+            Column {
+                Text(total, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (weighed) FontWeight.SemiBold else FontWeight.Normal))
+                Muted(km, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    cost.parts.forEach { part ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(part.what, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                part.note?.let { Muted(it, maxLines = 1, style = MaterialTheme.typography.bodySmall) }
+            }
+            Text(eurosText(part.eur), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
+        }
+    }
+    if (cost.assumptions.isNotEmpty()) Muted("Estimated: " + cost.assumptions.joinToString("; "), style = MaterialTheme.typography.bodySmall)
+    Muted("Not counted: " + cost.notCounted.joinToString("; "), style = MaterialTheme.typography.bodySmall)
+    cost.source?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
 }
 
 /**

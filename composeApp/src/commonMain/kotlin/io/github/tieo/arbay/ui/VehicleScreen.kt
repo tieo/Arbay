@@ -41,6 +41,8 @@ import io.github.tieo.arbay.navigation.Source
 import io.github.tieo.arbay.results.FORM_BODIES
 import io.github.tieo.arbay.results.FORM_FUELS
 import io.github.tieo.arbay.model.Fuel
+import io.github.tieo.arbay.grouped
+import io.github.tieo.arbay.model.OWN_COST_KM
 import io.github.tieo.arbay.results.FORM_CONDITIONS
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.VehicleSearch
@@ -149,6 +151,17 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
                         Choice(l, filters.wantsHeatPump == v) { filters = filters.copy(wantsHeatPump = v) }
                     }
                 }
+            }
+
+            Group("Cost to own over 10 years")
+            Labelled("Driven a year") {
+                (listOf(null) + OWN_COST_KM).forEach { km ->
+                    Choice(km?.let { "${grouped(it.toLong())} km" } ?: "Not weighed", filters.costKmPerYear == km) { filters = filters.copy(costKmPerYear = km) }
+                }
+            }
+            if (filters.costKmPerYear != null) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Number("Ideal total €", filters.idealTotalCostEur, Modifier.weight(1f)) { filters = filters.copy(idealTotalCostEur = it) }
+                Number("Most total €", filters.maxTotalCostEur, Modifier.weight(1f)) { filters = filters.copy(maxTotalCostEur = it) }
             }
 
             Group("Van size")
