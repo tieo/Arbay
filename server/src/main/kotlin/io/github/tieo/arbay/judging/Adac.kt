@@ -67,8 +67,46 @@ object Adac {
 
     @Serializable data class Used(val edition: String? = null, val rows: List<UsedRow> = emptyList())
 
+    /** One current version from ADAC's Autokatalog: its monthly costs on the same basis as the
+     *  tables, and its size, battery and charging. */
     @Serializable
-    data class Tables(val readAt: String? = null, val costs: Costs = Costs(), val used: Used = Used())
+    data class CatalogVersion(
+        val name: String,
+        val from: String? = null,
+        val to: String? = null,
+        val fuel: String? = null,
+        @SerialName("base_price") val basePrice: Money? = null,
+        @SerialName("power_kw") val powerKw: Int? = null,
+        val fixed: Int? = null,
+        val workshop: Int? = null,
+        val running: Int? = null,
+        val depreciation: Int? = null,
+        val total: Int? = null,
+        @SerialName("consumption_kwh_per_100km") val consumptionKwhPer100Km: Double? = null,
+        @SerialName("range_km") val rangeKm: Int? = null,
+        @SerialName("battery_gross_kwh") val batteryGrossKwh: Double? = null,
+        @SerialName("battery_net_kwh") val batteryNetKwh: Double? = null,
+        val charging: String? = null,
+        @SerialName("length_mm") val lengthMm: Int? = null,
+        @SerialName("boot_l") val bootL: Int? = null,
+        @SerialName("heat_pump") val heatPump: String? = null,
+    ) {
+        /** The same costs as a table row, for a model the table leaves out. */
+        fun asRow(): CostRow? = CostRow(
+            make = name.substringBefore(' '), model = name.substringAfter(' '), powerKw = powerKw, basePrice = basePrice,
+            fixed = fixed ?: return null, workshop = workshop ?: return null, running = running ?: return null,
+            depreciation = depreciation ?: return null, total = total ?: return null,
+        )
+
+        /** The most DC power the car charges at, from "AC:11 DC:135". */
+        val dcKw: Double? get() = charging?.let { Regex("""DC:\s*(\d+(?:[.,]\d+)?)""").find(it)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull() }
+    }
+
+    @Serializable
+    data class Catalog(val readAt: String? = null, val complete: Boolean = false, val versions: List<CatalogVersion> = emptyList())
+
+    @Serializable
+    data class Tables(val readAt: String? = null, val costs: Costs = Costs(), val used: Used = Used(), val catalog: Catalog = Catalog())
 
     @Volatile var tables: Tables = file.readStore(log) { json.decodeFromString<Tables>(it) } ?: Tables()
         private set
@@ -97,7 +135,12 @@ object Adac {
     }
 
     /** The rows by the make and model the car sites know them as, built once per read of the tables. */
-    private class Index(val of: Tables, val costs: Map<EvModels.ModelKey, List<CostRow>>, val used: Map<EvModels.ModelKey, List<UsedRow>>)
+    private class Index(
+        val of: Tables,
+        val costs: Map<EvModels.ModelKey, List<CostRow>>,
+        val used: Map<EvModels.ModelKey, List<UsedRow>>,
+        val catalog: Map<EvModels.ModelKey, List<CatalogVersion>>,
+    )
 
     @Volatile private var index: Index? = null
 
@@ -108,6 +151,7 @@ object Adac {
             t,
             t.costs.rows.mapNotNull { r -> EvModels.keyOf("${r.make} ${r.model}")?.let { it to r } }.groupBy({ it.first }, { it.second }),
             t.used.rows.mapNotNull { r -> EvModels.keyOf("${r.make} ${r.model.substringBefore(" (")}")?.let { it to r } }.groupBy({ it.first }, { it.second }),
+            t.catalog.versions.mapNotNull { v -> EvModels.keyOf(v.name)?.let { it to v } }.groupBy({ it.first }, { it.second }),
         ).also { index = it }
     }
 
@@ -115,7 +159,9 @@ object Adac {
      *  else the cheapest. */
     fun costsOf(title: String, powerKw: Int?): List<CostRow> {
         val key = EvModels.keyOf(title) ?: return emptyList()
-        return index().costs[key].orEmpty().sortedWith(compareBy<CostRow>(
+        // The table's own rows where it has the model, else the catalogue's versions of it.
+        val rows = index().costs[key] ?: index().catalog[key].orEmpty().mapNotNull { it.asRow() }
+        return rows.sortedWith(compareBy<CostRow>(
             { r -> powerKw?.let { p -> r.powerKw?.let { kotlin.math.abs(it - p) } ?: Int.MAX_VALUE } ?: 0 },
             { it.basePrice?.cents ?: Long.MAX_VALUE },
         ))
@@ -129,6 +175,26 @@ object Adac {
             .values.flatten().filter { it.basePrice != null }
             .minByOrNull { kotlin.math.abs(it.basePrice!!.cents / 100.0 - eur) }
     }
+
+    /** The cheapest price new of the model [title] names, from ADAC's tables and catalogue and
+     *  ev-database, in euros; null where none knows the model. */
+    fun cheapestNewEur(title: String): Double? {
+        val key = EvModels.keyOf(title) ?: return null
+        val i = index()
+        return (i.costs[key].orEmpty().mapNotNull { it.basePrice?.cents } +
+            i.catalog[key].orEmpty().mapNotNull { it.basePrice?.cents } +
+            EvModels.versionsOf(title).filter { it.current }.mapNotNull { it.priceDe?.cents })
+            .filter { it > 0 }.minOrNull()?.div(100.0)
+    }
+
+    /** The model's current versions in ADAC's catalogue. */
+    fun catalogOf(title: String): List<CatalogVersion> = EvModels.keyOf(title)?.let { index().catalog[it] }.orEmpty()
+
+    /** Every model the catalogue gives a length for, with its most common length. */
+    fun lengths(): Map<EvModels.ModelKey, Pair<Int, String>> = index().catalog.mapNotNull { (key, versions) ->
+        val length = versions.mapNotNull { it.lengthMm }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: return@mapNotNull null
+        key to (length to versions.first().name)
+    }.toMap()
 
     /** The model's used prices, every version. */
     fun usedOf(title: String): List<UsedRow> = EvModels.keyOf(title)?.let { index().used[it] }.orEmpty()

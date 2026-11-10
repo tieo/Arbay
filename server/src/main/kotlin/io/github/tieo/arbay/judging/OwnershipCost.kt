@@ -60,7 +60,10 @@ object OwnershipCost {
         val value = kept?.let { newPrice * it.first * PRIVATE_SALE_SHARE }
         if (kept != null) assumptions += "worth ${(kept.first * PRIVATE_SALE_SHARE * 100).roundToInt()} % of ${euros(newPrice)} new after $YEARS years (${kept.second})"
 
-        val consumption = v?.consumptionKwhPer100Km ?: run {
+        val catalog = Adac.catalogOf(listing.title).minByOrNull { c -> v?.powerKw?.let { p -> c.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
+        val consumption = v?.consumptionKwhPer100Km ?: catalog?.consumptionKwhPer100Km?.also {
+            assumptions += "consumption $it kWh/100 km of the ${catalog.name} (ADAC catalogue)"
+        } ?: run {
             // ADAC's running costs are its energy price times consumption, plus its care flat rate.
             val price = costs.energyPrices["Strom"] ?: return@run null
             val kmPerMonth = costs.kmPerYear / 12.0

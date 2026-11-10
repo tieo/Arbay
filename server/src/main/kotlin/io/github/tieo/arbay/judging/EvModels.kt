@@ -144,32 +144,40 @@ object EvModels {
     fun lengthOf(versions: List<Version>): Int? =
         versions.mapNotNull { it.lengthMm }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
 
+    /** The length of the model [title] names, from ev-database or else ADAC's catalogue. */
+    fun lengthOf(title: String): Int? = lengthOf(versionsOf(title))
+        ?: keyOf(title)?.let { Adac.lengths()[it]?.first }
+
     /**
      * Every model still sold at least [minLengthMm] long, by the words a car site is searched
      * with ("Volkswagen ID.4", "Tesla Model Y"), shortest first. A model with no length read yet
      * is left out, since how big it is is not known.
      */
-    fun atLeast(minLengthMm: Int): List<String> = grouped.mapNotNull { (key, versions) ->
-        val current = versions.filter { it.current }.ifEmpty { return@mapNotNull null }
-        val length = lengthOf(current) ?: return@mapNotNull null
-        if (length < minLengthMm) return@mapNotNull null
-        searchWords(key, current.first()) to length
-    }.sortedBy { it.second }.map { it.first }
+    fun atLeast(minLengthMm: Int): List<String> {
+        val fromEvDatabase = grouped.mapNotNull { (key, versions) ->
+            val current = versions.filter { it.current }.ifEmpty { return@mapNotNull null }
+            val length = lengthOf(current) ?: return@mapNotNull null
+            key to (searchWords(key, current.first().make, current.first().model) to length)
+        }.toMap()
+        // ADAC's catalogue holds only versions on sale, each with its length.
+        val fromAdac = Adac.lengths().mapValues { (key, l) -> searchWords(key, l.second.substringBefore(' '), l.second.substringAfter(' ')) to l.first }
+        return (fromAdac + fromEvDatabase).values.filter { it.second >= minLengthMm }.sortedBy { it.second }.map { it.first }.distinct()
+    }
 
     /** The words a car site finds the model under: the catalogue's make, and the model as the sites name it. */
-    private fun searchWords(key: ModelKey, v: Version): String {
+    private fun searchWords(key: ModelKey, makeName: String, modelName: String): String {
         val make = io.github.tieo.arbay.relevance.CarTaxonomyProvider.current.makes.firstOrNull { it.id == key.make }
         val model = make?.models?.firstOrNull { fold(it.name) == key.model }?.name
-        return listOfNotNull(make?.name ?: v.make, model ?: v.model).joinToString(" ")
+        return listOfNotNull(make?.name ?: makeName, model ?: modelName).joinToString(" ")
     }
 
     /** The length a search asks at least, by the model it names as its size; null where it names
      *  none or the catalogue has no length for it yet. */
     fun minLengthMm(filters: io.github.tieo.arbay.model.CarFilters?): Int? =
-        filters?.atLeastSizeOf?.takeIf { it.isNotBlank() }?.let { lengthOf(versionsOf(it)) }
+        filters?.atLeastSizeOf?.takeIf { it.isNotBlank() }?.let(::lengthOf)
 
     fun idealLengthMm(filters: io.github.tieo.arbay.model.CarFilters?): Int? =
-        filters?.idealSizeOf?.takeIf { it.isNotBlank() }?.let { lengthOf(versionsOf(it)) }
+        filters?.idealSizeOf?.takeIf { it.isNotBlank() }?.let(::lengthOf)
 
     /**
      * The search with every model of the size it asks for searched as well: the car sites are

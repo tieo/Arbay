@@ -194,10 +194,16 @@ object CarFilterEngine {
         // New is never registered, so a vehicle stating a first registration is no new one, though
         // its card names no condition: a search for new ones alone loses it.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
+        // A new car asking a fraction of its model's cheapest price new asks no car's price: a
+        // deposit, a leasing rate or a placeholder ("1.000 €" for a new CUPRA Tavascan).
+        if (v?.condition in NEAR_NEW && io.github.tieo.arbay.judging.EvModels.keyOf(listing.title) != null) {
+            val reference = io.github.tieo.arbay.judging.Adac.cheapestNewEur(listing.title)
+            if (reference != null && priceEur.toDouble() < reference * NO_REAL_PRICE_SHARE) return "no real price"
+        }
         // A car shorter than the model the search names as its least size; one whose model the
         // catalogue does not know, or knows no length of, is kept.
         io.github.tieo.arbay.judging.EvModels.minLengthMm(filters)?.let { min ->
-            val length = io.github.tieo.arbay.judging.EvModels.lengthOf(io.github.tieo.arbay.judging.EvModels.versionsOf(listing.title))
+            val length = io.github.tieo.arbay.judging.EvModels.lengthOf(listing.title)
             if (length != null && length < min) return "size"
         }
         if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.isOrder(today()) }) return "availability"
@@ -466,4 +472,9 @@ object CarFilterEngine {
     }
 
     private fun today() = kotlin.time.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Europe/Berlin")).date
+
+    private val NEAR_NEW = setOf(VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION, VehicleCondition.DEMO)
+
+    /** Under this share of its model's cheapest price new, a near-new car's asking price is not its price. */
+    private const val NO_REAL_PRICE_SHARE = 0.4
 }

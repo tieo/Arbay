@@ -164,7 +164,7 @@ object FitScore {
         val ev = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null || wishes.idealRangeKm != null ||
             wishes.idealDcKw != null || wishes.wantsHeatPump) EvModels.versionOf(listing) else null
         val carLength = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null)
-            EvModels.lengthOf(EvModels.versionsOf(listing.title)) else null
+            EvModels.lengthOf(listing.title) else null
         val least = EvModels.minLengthMm(wishes)
         val ideal = EvModels.idealLengthMm(wishes)
         if (least != null && carLength != null && carLength < least) return null
@@ -174,17 +174,21 @@ object FitScore {
             else -> Wish(0.4 + 0.6 * (linear(carLength.toDouble(), ideal.toDouble(), (least ?: ideal - 400).toDouble()) ?: 0.0),
                 "${grouped(carLength.toLong())} mm long, ideal ${grouped(ideal.toLong())}")
         }
+        // ADAC's catalogue version nearest in power, for what neither the ad nor ev-database states.
+        val adac = if (ev == null && wishes.idealRangeKm == null && wishes.idealDcKw == null && !wishes.wantsHeatPump) null
+            else Adac.catalogOf(listing.title).minByOrNull { c -> v?.powerKw?.let { p -> c.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
         val range = wishes.idealRangeKm?.let { want ->
-            val km = v?.rangeKm ?: ev?.wltpRangeKm
+            val km = v?.rangeKm ?: ev?.wltpRangeKm ?: adac?.rangeKm
             Wish(linear(km?.toDouble(), want.toDouble(), want * 0.6), km?.let { "$it km WLTP" + if (v?.rangeKm == null) " (model)" else "" })
         }
         val charging = wishes.idealDcKw?.let { want ->
-            val kw = v?.fastChargeKw ?: ev?.dcMaxKw
+            val kw = v?.fastChargeKw ?: ev?.dcMaxKw ?: adac?.dcKw
             Wish(linear(kw, want.toDouble(), want * 0.5), kw?.let { "${it.roundToInt()} kW DC" + if (v?.fastChargeKw == null) " (model)" else "" })
         }
         val heatPump = if (!wishes.wantsHeatPump) null else when {
             v?.heatPump == true -> Wish(1.0, "in the equipment")
             ev?.heatPumpStandard == true -> Wish(1.0, "standard on the model")
+            adac?.heatPump?.equals("Serie", ignoreCase = true) == true -> Wish(1.0, "standard on the model")
             ev?.heatPump == false -> Wish(0.0, "not available on the model")
             else -> Wish(null, null)
         }
