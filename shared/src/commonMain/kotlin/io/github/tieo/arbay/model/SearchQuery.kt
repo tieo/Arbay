@@ -47,6 +47,9 @@ data class CarFilters(
     val minSeats: Int? = null,
     val minEmissionEuro: Int? = null,   // e.g. 6 = at least Euro 6
     val sellerType: SellerType? = null,
+    // Only a vehicle the dealer has or has coming: one the dealer still has to order from the
+    // maker (a Bestellfahrzeug) is left out where its ad says so.
+    val inStockOnly: Boolean = false,
     // Panel-van sizes on the app's own scale (VanSize), multi-select: a listing matches if what
     // it verifiably states is in the set. The server reads each listing in its maker's terms, so a
     // size it cannot place for sure, like a Crafter's "L3H2", passes as unchecked.
@@ -90,6 +93,7 @@ data class CarFilters(
         if (minSeats != null && v?.seats == null) add("seats")
         if (minEmissionEuro != null && v?.emissionClassEuro == null) add("emission")
         if (sellerType != null) { /* the seller is on the listing itself, not the vehicle */ }
+        if (inStockOnly && v?.availability?.takeIf { v.isVerified(VehicleField.AVAILABILITY) } == null) add("availability")
         // A size read out of a word ("Lang") is a guess about one maker's naming, so a van
         // described that way was never actually checked against the size asked for.
         if (vanLengths.isNotEmpty() && v?.vanLength?.takeIf { v.isVerified(VehicleField.VAN_LENGTH) } == null)
@@ -106,7 +110,7 @@ data class CarFilters(
             minPowerKw == null && maxPowerKw == null && idealPowerKw == null && transmission == null &&
             fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
             drivetrain == null && minDoors == null && minSeats == null &&
-            minEmissionEuro == null && sellerType == null &&
+            minEmissionEuro == null && sellerType == null && !inStockOnly &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
             minWheelbaseMm == null && maxWheelbaseMm == null &&
             descriptionContains.isNullOrBlank() && idealDescription.isNullOrBlank()

@@ -124,6 +124,8 @@ object NeulandOffers {
                 delivery = o.delivery,
                 soldDate = o.ended?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
                 oldPrice = o.asking?.money(),
+                // A dealer's car states its net price beside the gross it asks a private buyer.
+                netPrice = o.vehicle?.net()?.takeIf { it.currency == price.currency && it.amount < price.amount },
                 negotiable = o.negotiable,
                 saleType = if (auctionOnly) SaleType.AUCTION else SaleType.FIXED_PRICE,
                 auctionEndsAt = o.auction?.ends?.takeIf { auctionOnly }?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() },
@@ -192,8 +194,24 @@ object NeulandOffers {
         @kotlinx.serialization.SerialName("emission_min") val emissionMin: Int? = null,
         /** Among vans rather than cars, where a site files them apart. */
         val vans: Boolean = false,
+        /** Any of these conditions, by Neuland's names ("new", "pre-registered", "demonstrator",
+         *  "employee", "used"); none is any. A site's "new" leaves day registrations out. */
+        val conditions: List<String> = emptyList(),
     ) {
         companion object {
+            /** The conditions by Neuland's names. A classic or a damaged vehicle is a used one to a
+             *  market, so asking for one asks for used ones. */
+            fun conditions(wanted: Set<io.github.tieo.arbay.model.VehicleCondition>): List<String> = wanted.map {
+                when (it) {
+                    io.github.tieo.arbay.model.VehicleCondition.NEW -> "new"
+                    io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION -> "pre-registered"
+                    io.github.tieo.arbay.model.VehicleCondition.DEMO -> "demonstrator"
+                    io.github.tieo.arbay.model.VehicleCondition.ANNUAL_CAR -> "employee"
+                    io.github.tieo.arbay.model.VehicleCondition.USED, io.github.tieo.arbay.model.VehicleCondition.CLASSIC,
+                    io.github.tieo.arbay.model.VehicleCondition.DAMAGED -> "used"
+                }
+            }.distinct().sorted()
+
             /** A fuel by Neuland's name for it. */
             fun fuel(fuel: io.github.tieo.arbay.model.Fuel) = fuel.name.lowercase().replace('_', '-')
 
@@ -369,8 +387,30 @@ object NeulandOffers {
         val body: String? = null,
         val upholstery: String? = null,
         @kotlinx.serialization.SerialName("inspection_until") val inspectionUntil: String? = null,
+        val trim: String? = null,
+        val availability: NeulandAvailability? = null,
+        @kotlinx.serialization.SerialName("battery_kwh") val batteryKwh: Double? = null,
+        @kotlinx.serialization.SerialName("range_km") val rangeKm: Int? = null,
+        @kotlinx.serialization.SerialName("consumption_kwh_per_100km") val consumption: Double? = null,
+        @kotlinx.serialization.SerialName("fast_charge_minutes") val fastChargeMinutes: Int? = null,
+        @kotlinx.serialization.SerialName("heat_pump") val heatPump: Boolean? = null,
+        @kotlinx.serialization.SerialName("vat_deductible") val vatDeductible: Boolean? = null,
+        @kotlinx.serialization.SerialName("net_price") val netPrice: NeulandMoney? = null,
     ) {
+        /** The net price the site states beside the gross, in its own currency. */
+        fun net(): Money? = netPrice?.money()
+
         fun info() = io.github.tieo.arbay.model.VehicleInfo(
+            trim = trim,
+            availability = availability?.let {
+                io.github.tieo.arbay.model.VehicleAvailability(it.now, it.from, it.inDays, it.inMonths, it.ordered, it.said)
+            },
+            batteryKwh = batteryKwh,
+            rangeKm = rangeKm,
+            consumptionKwhPer100Km = consumption,
+            fastChargeMinutes = fastChargeMinutes,
+            heatPump = heatPump,
+            vatDeductible = vatDeductible,
             firstRegYear = registeredYear,
             firstRegMonth = registeredMonth,
             mileageKm = mileageKm,
@@ -391,6 +431,8 @@ object NeulandOffers {
                 "new" -> drivenOrNew(mileageKm, registered = registeredYear != null)
                 "used" -> io.github.tieo.arbay.model.VehicleCondition.USED
                 "pre-registered" -> io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION
+                "demonstrator" -> io.github.tieo.arbay.model.VehicleCondition.DEMO
+                "employee" -> io.github.tieo.arbay.model.VehicleCondition.ANNUAL_CAR
                 "damaged" -> io.github.tieo.arbay.model.VehicleCondition.DAMAGED
                 // A card that names no condition (AutoScout24's) still states the mileage, and
                 // one driven past a demonstrator's is used whatever its seller would call it.
@@ -399,6 +441,14 @@ object NeulandOffers {
             drivetrain = when (drivetrain) { "front" -> io.github.tieo.arbay.model.Drivetrain.FWD; "rear" -> io.github.tieo.arbay.model.Drivetrain.RWD; "all" -> io.github.tieo.arbay.model.Drivetrain.AWD; else -> null },
         )
     }
+    @Serializable private data class NeulandAvailability(
+        val now: Boolean = false,
+        val from: String? = null,
+        @kotlinx.serialization.SerialName("in_days") val inDays: Int? = null,
+        @kotlinx.serialization.SerialName("in_months") val inMonths: Int? = null,
+        val ordered: Boolean = false,
+        val said: String? = null,
+    )
     @Serializable private data class NeulandDetail(
         val description: String? = null, val vehicle: NeulandVehicle? = null, val specs: List<List<String>> = emptyList(),
         val place: NeulandPlace? = null, val available: Boolean? = null, val paused: Boolean = false, val listed: String? = null,

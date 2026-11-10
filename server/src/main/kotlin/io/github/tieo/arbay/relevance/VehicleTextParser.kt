@@ -209,6 +209,7 @@ object VehicleTextParser {
             if (v.inspectionUntil != null) add(VehicleField.INSPECTION)
             if (v.upholstery != null) add(VehicleField.UPHOLSTERY)
             if (v.wheelbaseMm != null) add(VehicleField.WHEELBASE)
+            if (v.availability != null) add(VehicleField.AVAILABILITY)
         }
         return v.copy(verified = fields)
     }

@@ -1335,6 +1335,22 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             listOfNotNull(range(vanLength, vanLengthMax)?.let { "L$it" }, range(vanHeight, vanHeightMax)?.let { "H$it" })
                 .takeIf { it.isNotEmpty() }?.joinToString("", prefix = "size ", postfix = " (common scale)"),
             wheelbaseMm?.let { "wheelbase $it mm" },
+            condition?.let {
+                when (it) {
+                    io.github.tieo.arbay.model.VehicleCondition.PRE_REGISTRATION -> "pre-registered"
+                    io.github.tieo.arbay.model.VehicleCondition.DEMO -> "demonstrator"
+                    io.github.tieo.arbay.model.VehicleCondition.ANNUAL_CAR -> "employee car"
+                    else -> it.name.lowercase()
+                }
+            },
+            trim,
+            availability?.describe(),
+            batteryKwh?.let { "battery ${it.toBigDecimal().stripTrailingZeros().toPlainString()} kWh" },
+            rangeKm?.let { "WLTP range $it km" },
+            consumptionKwhPer100Km?.let { "$it kWh/100 km" },
+            fastChargeMinutes?.let { "10-80 % in $it min" },
+            heatPump?.takeIf { it }?.let { "heat pump" },
+            vatDeductible?.takeIf { it }?.let { "VAT deductible" },
         ).joinToString(", ").ifEmpty { null }
     }
 
@@ -1492,7 +1508,8 @@ private fun hoursAgo(millis: Long) = "${(Clock.System.now().toEpochMilliseconds(
 /** What the vehicle criteria parameter takes, named for the tools that carry it. */
 private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same the app's vehicle filters set: " +
     "{\"fuels\":[\"ELECTRIC\"],\"conditions\":[\"NEW\",\"PRE_REGISTRATION\",\"DEMO\"],\"bodyTypes\":[\"SUV\"],\"firstRegFromYear\":2024," +
-    "\"maxMileageKm\":5000,\"minPowerKw\":100,\"transmission\":\"AUTOMATIC\",\"sellerType\":\"BUSINESS\",\"minSeats\":5,\"descriptionContains\":\"Wärmepumpe\"}. " +
+    "\"maxMileageKm\":5000,\"minPowerKw\":100,\"transmission\":\"AUTOMATIC\",\"sellerType\":\"BUSINESS\",\"minSeats\":5,\"inStockOnly\":true,\"descriptionContains\":\"Wärmepumpe\"}. " +
+    "inStockOnly leaves out a vehicle the dealer still orders from the maker (Bestellfahrzeug). New means never registered. " +
     "Fuels: PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID, MILD_HYBRID, LPG, CNG, HYDROGEN. " +
     "Conditions: NEW, USED, DEMO (Vorführwagen), PRE_REGISTRATION (Tageszulassung), ANNUAL_CAR (Jahreswagen), CLASSIC, DAMAGED. " +
     "Bodies: SMALL_CAR, SEDAN, ESTATE, SUV, COUPE, CONVERTIBLE, VAN, MINIVAN, PICKUP, TRANSPORTER. " +

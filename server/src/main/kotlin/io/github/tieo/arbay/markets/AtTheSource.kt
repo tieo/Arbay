@@ -8,7 +8,7 @@ import io.github.tieo.arbay.model.CarFilters
  * A market's own filter removes every ad that does not answer it, and every ad that leaves the
  * field empty, before Arbay sees either; Arbay's own filter keeps an ad that states nothing and
  * weighs a wish against the others. So the markets are asked only for the limits of the search
- * (year, mileage, price, fuel, body), and only on the fields their sellers must fill in. Gearbox,
+ * (year, mileage, price, fuel, body, condition), and only on the fields their sellers must fill in. Gearbox,
  * power, drive, seller type and wheelbase are wishes the fit score weighs: a van that misses one
  * can still be the best one, and a market filter would delete it unseen. Two markets are still
  * asked for the gearbox: mobile.de, since its result cards never state one (see

@@ -22,7 +22,7 @@ class MobileDeCrawler : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpe
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
-        FiltersAtTheSource.Criterion.BODY,
+        FiltersAtTheSource.Criterion.BODY, FiltersAtTheSource.Criterion.CONDITION,
     )
 
     override val platformId = PlatformId.MOBILE_DE
@@ -62,6 +62,7 @@ class MobileDeCrawler : Crawler, FiltersAtTheSource, KnowsLocation, HasDetailSpe
             powerMinKw = f?.minPowerKw,
             powerMaxKw = f?.maxPowerKw,
             fuels = f?.fuels.orEmpty().map(NeulandOffers.VehicleQuery::fuel),
+            conditions = NeulandOffers.VehicleQuery.conditions(f?.conditions.orEmpty()),
             bodies = f?.bodyTypes.orEmpty().map(NeulandOffers.VehicleQuery::body),
             dealer = f?.sellerType?.let { it != SellerType.PRIVATE },
             drivetrain = f?.drivetrain?.takeIf { strict }?.let {

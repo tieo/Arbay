@@ -25,12 +25,12 @@ class AutoScout24Crawler(
 ) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice, KnowsAdState {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
-        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
+        FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL, FiltersAtTheSource.Criterion.CONDITION,
     )
 
     override suspend fun search(query: SearchQuery): List<Listing> {
-        // A query that names no make the site knows is not sent: the site ignores the words and
-        // answers its default feed, which the relevance filter throws away whole.
+        // A query that names no make the site knows and no fuel or condition is not sent: the site
+        // ignores the words and answers its default feed, which the relevance filter throws away whole.
         val vehicle = vehicleQuery(query) ?: return emptyList()
         val area = query.area(countries.first())
         return paginate(query.wholePriceBand()) { page ->
@@ -43,11 +43,15 @@ class AutoScout24Crawler(
 
     /** What the site is asked beside the price band and the place; none where the words name no car. */
     internal fun vehicleQuery(query: SearchQuery): NeulandOffers.VehicleQuery? {
-        val car = CarQueryResolver.resolveForCarSite(query.positiveText) ?: return null
         val c = query.carCriteria.atTheSource()
+        // Without a make the site answers its default feed, unless a fuel or a condition narrows
+        // it: then it is a real search, of every make.
+        val car = CarQueryResolver.resolveForCarSite(query.positiveText)
+            ?: if (c.fuels.isEmpty() && c.conditions.isEmpty()) return null else null
         return NeulandOffers.VehicleQuery(
-            make = car.makeSlug,
-            model = car.modelSlug,
+            make = car?.makeSlug,
+            model = car?.modelSlug,
+            conditions = NeulandOffers.VehicleQuery.conditions(c.conditions),
             gearbox = when (query.carCriteria.transmission) {
                 Transmission.AUTOMATIC -> "automatic"
                 Transmission.MANUAL -> "manual"

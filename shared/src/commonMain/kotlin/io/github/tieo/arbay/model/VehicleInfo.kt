@@ -8,6 +8,7 @@ enum class VehicleField {
     FIRST_REG_YEAR, MILEAGE, POWER, DISPLACEMENT, FUEL, BODY_TYPE, GEARBOX,
     DRIVETRAIN, DOORS, SEATS, CONDITION, COLOR, EMISSION,
     EMISSION_STICKER, INSPECTION, UPHOLSTERY, VAN_LENGTH, VAN_HEIGHT, WHEELBASE,
+    AVAILABILITY,
 }
 
 /**
@@ -57,9 +58,50 @@ data class VehicleInfo(
     // fifth of the Kleinanzeigen ones. So it is inferred far more often than verified, and only a
     // verified value may exclude anything.
     val wheelbaseMm: Int? = null,
+    // The maker's version line where the site has a field for it ("Pro 77 kWh").
+    val trim: String? = null,
+    val availability: VehicleAvailability? = null,
+    // An electric car's facts as the ad states them: the battery as written (gross or usable,
+    // whichever the seller names), the WLTP range and combined consumption, the minutes to charge
+    // from 10 to 80 %, and a heat pump where the equipment lists one (null where it lists none,
+    // which does not say there is none).
+    val batteryKwh: Double? = null,
+    val rangeKm: Int? = null,
+    val consumptionKwhPer100Km: Double? = null,
+    val fastChargeMinutes: Int? = null,
+    val heatPump: Boolean? = null,
+    // A business buyer can deduct the VAT, the dealer states (Mwst. ausweisbar).
+    val vatDeductible: Boolean? = null,
     val verified: Set<VehicleField> = emptySet(),
 ) {
     fun isVerified(field: VehicleField): Boolean = field in verified
+}
+
+/**
+ * When a vehicle can be had, as its ad states it: at once, from a day, after some days or
+ * months, and whether that wait counts from the order, the dealer then ordering it from the maker
+ * (a Bestellfahrzeug) rather than having it.
+ */
+@Serializable
+data class VehicleAvailability(
+    val now: Boolean = false,
+    /** The day it is available from, "YYYY-MM-DD". */
+    val from: String? = null,
+    val inDays: Int? = null,
+    val inMonths: Int? = null,
+    val ordered: Boolean = false,
+    /** The site's own words ("In 9 Monaten ab Bestellung verfügbar"). */
+    val said: String? = null,
+) {
+    /** In a reader's words: "at once", "from 2027-02-01", "9 months after the order". */
+    fun describe(): String = when {
+        now -> "available at once"
+        from != null -> "available from $from"
+        inMonths != null -> "available in $inMonths months" + if (ordered) " after the order" else ""
+        inDays != null -> "available in $inDays days" + if (ordered) " after the order" else ""
+        ordered -> "ordered from the maker"
+        else -> said ?: "availability unknown"
+    }
 }
 
 /** Metric horsepower per kilowatt. */

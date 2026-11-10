@@ -101,6 +101,7 @@ object CarFilterEngine {
         probe("fuel", filters.copy(fuels = emptySet()))
         probe("bodyType", filters.copy(bodyTypes = emptySet()))
         probe("condition", filters.copy(conditions = emptySet()))
+        probe("availability", filters.copy(inStockOnly = false))
         probe("color", filters.copy(colors = emptySet()))
         probe("drivetrain", filters.copy(drivetrain = null))
         probe("doors", filters.copy(minDoors = null))
@@ -191,6 +192,7 @@ object CarFilterEngine {
         // New is never registered, so a vehicle stating a first registration is no new one, though
         // its card names no condition: a search for new ones alone loses it.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
+        if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.ordered }) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"

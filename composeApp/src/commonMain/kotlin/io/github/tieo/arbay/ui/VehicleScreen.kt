@@ -122,6 +122,11 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
             Labelled("Condition") {
                 FORM_CONDITIONS.forEach { c -> Choice(vehicleWord(c.name), c in filters.conditions) { filters = filters.copy(conditions = if (c in filters.conditions) filters.conditions - c else filters.conditions + c) } }
             }
+            Labelled("Availability") {
+                listOf(false to "Any", true to "In stock").forEach { (v, l) ->
+                    Choice(l, filters.inStockOnly == v) { filters = filters.copy(inStockOnly = v) }
+                }
+            }
             Labelled("Fuel") {
                 FORM_FUELS.forEach { f -> Choice(vehicleWord(f.name), f in filters.fuels) { filters = filters.copy(fuels = if (f in filters.fuels) filters.fuels - f else filters.fuels + f) } }
             }
