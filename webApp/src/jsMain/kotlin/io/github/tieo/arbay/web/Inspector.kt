@@ -97,6 +97,12 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Form
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
+import io.github.tieo.arbay.model.whereLine
+import io.github.tieo.arbay.model.stockLine
+import io.github.tieo.arbay.model.summary
+import io.github.tieo.arbay.model.sourceName
+import io.github.tieo.arbay.model.line
+import io.github.tieo.arbay.model.text
 import org.jetbrains.compose.web.dom.Img
 import org.jetbrains.compose.web.dom.Input
 import org.jetbrains.compose.web.attributes.selected
@@ -646,6 +652,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
         }
         DriveHealthSection(health, readingDrive)
         SoldPricesSection(app, listing)
+        DealerSection(app, listing)
 
         // Every seller offering it at this address, cheapest delivered first, each a link to its offer.
         if (page.sellers.isNotEmpty()) {
@@ -803,6 +810,38 @@ private fun SoldPricesSection(app: WebApp, listing: Listing) {
                 scope.launch { sold = app.client.soldPrices(drive); failed = sold == null; asking = false }
             }
         }
+    }
+}
+
+/** The dealer selling this, as its own pages on the market say it: who, where, when open, what
+ *  buyers rated it with their worst recent words, and what else it sells. */
+@Composable
+private fun DealerSection(app: WebApp, listing: Listing) {
+    val url = io.github.tieo.arbay.model.dealerPage(listing) ?: return
+    var dealer by remember(url) { mutableStateOf<io.github.tieo.arbay.model.Dealer?>(null) }
+    var reading by remember(url) { mutableStateOf(true) }
+    var legal by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url) { dealer = app.client.dealer(url); reading = false }
+    H3 { Text("Dealer") }
+    val d = dealer
+    when {
+        d != null -> Div({ classes("drive-health") }) {
+            A(d.url ?: url, { attr("target", "_blank"); attr("rel", "noopener") }) { Text(listOfNotNull(d.name ?: listing.seller?.name, d.nameAddOn).joinToString(", ")) }
+            d.contact?.let { c -> Div({ classes("muted", "small") }) { Text("Contact: $c") } }
+            d.whereLine()?.let { w -> Div({ classes("muted", "small") }) { Text(w) } }
+            d.hours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { t -> Div({ classes("muted", "small") }) { Text("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + t) } } }
+            d.stockLine()?.let { t -> Div({ classes("muted", "small") }) { Text(t) } }
+            d.ratings.forEach { r ->
+                Div({ classes("drive-reading") }) { Span { Text(r.sourceName) }; Span({ classes("muted", "small") }) { Text(r.summary()) } }
+                r.reviews.take(3).forEach { rv -> Div({ classes("muted", "small") }) { Text(rv.line()) } }
+            }
+            d.imprint?.takeIf { it.isNotBlank() }?.let { t ->
+                QuietButton(if (legal) "Hide the legal notice" else "Show the legal notice") { legal = !legal }
+                if (legal) Div({ classes("muted", "small"); style { property("white-space", "pre-line") } }) { Text(t.trim()) }
+            }
+        }
+        reading -> Div({ classes("inline-form") }) { Busy(); Span({ classes("muted", "small") }) { Text("Reading the dealer's pages") } }
+        else -> Span({ classes("muted", "small") }) { Text("The dealer's pages could not be read") }
     }
 }
 

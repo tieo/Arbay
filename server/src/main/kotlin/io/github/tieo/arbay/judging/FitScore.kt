@@ -125,8 +125,7 @@ object FitScore {
         if (listing.photosAlsoIn.isNotEmpty()) return null
         val fuel = listing.vehicle?.fuel
         if (wishes.fuels.isNotEmpty() && fuel != null && fuel !in wishes.fuels) return null
-        val seller = listing.seller
-        val stars = seller?.rating
+        val stars = marketStars(listing)?.first
         if (stars != null && stars < 4.0) return null
 
         val v = listing.vehicle
@@ -216,14 +215,23 @@ object FitScore {
         return Fit(score = score, driveHours = hours, airConditioning = ac, parts = parts)
     }
 
+    /** The stars a dealer has on the offer's own market and how many gave them: the offer's card's, else
+     *  the dealer's pages' where they have been read. A dealer page without reviews gives none. */
+    internal fun marketStars(listing: Listing, dealer: (String?) -> io.github.tieo.arbay.model.Dealer? = Dealers::cached): Pair<Double, Int?>? {
+        listing.seller?.let { s -> s.rating?.let { return it to s.reviewCount } }
+        val d = dealer(Dealers.pageOf(listing)) ?: return null
+        val r = d.ratings.firstOrNull { it.source == d.market && it.stars != null && it.count > 0 } ?: return null
+        return r.stars!! to r.count
+    }
+
     /** A dealer by the market's own stars and how many gave them; a private seller a little over unknown. */
     private fun sellerWish(listing: Listing): Wish {
         val seller = listing.seller
-        val stars = seller?.rating
+        val rated = marketStars(listing)
         return when {
-            stars != null -> Wish(
-                (if (stars >= 4.5) 1.0 else 0.75) * ((seller.reviewCount ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
-                "${"%.1f".format(stars)}★" + (seller.reviewCount?.let { " ($it)" } ?: ""),
+            rated != null -> Wish(
+                (if (rated.first >= 4.5) 1.0 else 0.75) * ((rated.second ?: 0).let { if (it >= 20) 1.0 else if (it >= 5) 0.8 else 0.6 }),
+                "${"%.1f".format(rated.first)}★" + (rated.second?.let { " ($it)" } ?: ""),
             )
             seller?.type == SellerType.PRIVATE -> Wish(0.6, "private")
             else -> Wish(0.45, NOT_STATED)
@@ -346,7 +354,7 @@ object FitScore {
         if (Condition.soldAsDefective(listing.title, listing.description)) return null
         if (tradeOnly.containsMatchIn(raw)) return null
         if (listing.photosAlsoIn.isNotEmpty()) return null
-        val stars = listing.seller?.rating
+        val stars = marketStars(listing)?.first
         if (stars != null && stars < 4.0) return null
         val title = folded(listing.title)
         val text = folded(raw)

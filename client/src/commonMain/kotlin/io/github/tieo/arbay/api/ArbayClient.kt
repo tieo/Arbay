@@ -422,6 +422,12 @@ class ArbayClient(
         }.body<io.github.tieo.arbay.model.SoldPrices>()
     }
 
+    /** The dealer whose page is at [url], as its pages say it. Null when they could not be read. */
+    suspend fun dealer(url: String): io.github.tieo.arbay.model.Dealer? = orElse(null) {
+        val response = client.get("$baseUrl/api/dealer") { parameter("url", url) }
+        if (response.status == HttpStatusCode.NoContent) null else response.body<io.github.tieo.arbay.model.Dealer>()
+    }
+
     /** The auctions running for a saved search, soonest end first. Null when it could not be asked. */
     suspend fun auctions(productId: String): io.github.tieo.arbay.model.LiveAuctions? = orElse(null) {
         client.get("$baseUrl/api/products/$productId/auctions").body<io.github.tieo.arbay.model.LiveAuctions>()

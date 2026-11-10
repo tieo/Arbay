@@ -1,5 +1,7 @@
 package io.github.tieo.arbay.mcp
 
+import io.github.tieo.arbay.model.lines
+
 import io.github.tieo.arbay.live.Live
 import io.github.tieo.arbay.model.kwToPs
 import io.github.tieo.arbay.model.fact
@@ -440,7 +442,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val seller = (body["seller"] as? JsonObject)?.let {
                 runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.SellerProfile.serializer(), it) }.getOrNull()
             }?.let { "Seller: ${it.fact}.\n" }.orEmpty()
-            pageHead + "\n" + state + seller + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
+            val dealer = io.github.tieo.arbay.judging.Dealers.pageOf(l)?.let { url ->
+                val r = http.get("$base/api/dealer") { parameter("url", url) }
+                if (r.status == io.ktor.http.HttpStatusCode.OK) runCatching { json.decodeFromString(io.github.tieo.arbay.model.Dealer.serializer(), r.bodyAsText()) }.getOrNull()
+                    ?.let { it.lines().joinToString("\n") + "\n" } ?: "The dealer's pages could not be read.\n"
+                else "The dealer's pages could not be read.\n"
+            }.orEmpty()
+            pageHead + "\n" + state + seller + dealer + driveHealthLine(l, body) + "The details below are the ad page as Arbay last read it.\n" +
                 (if (emptyVehicle) JsonObject(body - "vehicle") else body).toString()
         }
 

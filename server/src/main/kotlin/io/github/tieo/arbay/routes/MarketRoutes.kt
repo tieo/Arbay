@@ -22,6 +22,13 @@ fun Route.marketRoutes() {
         call.respond(io.github.tieo.arbay.judging.SoldPriceReader.of(ask))
     }
 
+    // The dealer whose page is at url, as its pages on the market say it.
+    get("/api/dealer") {
+        val url = call.request.queryParameters["url"]?.takeIf { it.startsWith("https://") } ?: throw io.github.tieo.arbay.plugins.BadRequestException("name the dealer's page")
+        val dealer = io.github.tieo.arbay.judging.Dealers.of(url)
+        if (dealer == null) call.respond(io.ktor.http.HttpStatusCode.NoContent) else call.respond(dealer)
+    }
+
     // Reads Backblaze's drive records again now; the running table is replaced only by a usable one.
     post("/api/market/drive-records/refresh") {
         call.respond(mapOf("result" to io.github.tieo.arbay.judging.DriveLife.refresh()))

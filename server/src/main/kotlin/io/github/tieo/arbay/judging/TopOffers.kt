@@ -63,6 +63,7 @@ object TopOffers {
         val now = Clock.System.now()
         val missing = synchronized(this) {
             val known = remembered.getOrPut(productId) { HashMap() }
+            Dealers.readSoon(ranked.take(TOP).map { it.first })
             ranked.take(TOP).forEach { (l, score) ->
                 val before = known[l.id]
                 known[l.id] = TopOffer(

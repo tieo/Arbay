@@ -1,6 +1,12 @@
 package io.github.tieo.arbay.ui
 
 import kotlinx.coroutines.launch
+import io.github.tieo.arbay.model.whereLine
+import io.github.tieo.arbay.model.stockLine
+import io.github.tieo.arbay.model.summary
+import io.github.tieo.arbay.model.sourceName
+import io.github.tieo.arbay.model.line
+import io.github.tieo.arbay.model.text
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.tieo.arbay.results.rows
 import androidx.compose.foundation.background
@@ -212,6 +218,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                 DriveHealthSection(health, readingDrive)
                 SoldPricesSection(session, listing)
                 SellersSection(page.sellers, ::openBrowser)
+                DealerSection(session, listing, ::openBrowser)
 
                 page.vehicle?.let { v ->
                     val specs = detailSpecs(v)
@@ -374,6 +381,42 @@ private fun SoldPricesSection(session: Session, listing: Listing) {
                 scope.launch { sold = session.client.soldPrices(drive); failed = sold == null; asking = false }
             }) { Text("Look up") }
         }
+    }
+}
+
+/** The dealer selling this, as its own pages on the market say it: who, where, when open, what
+ *  buyers rated it with their worst recent words, and what else it sells. */
+@Composable
+private fun DealerSection(session: Session, listing: Listing, open: (String) -> Unit) {
+    val url = io.github.tieo.arbay.model.dealerPage(listing) ?: return
+    var dealer by remember(url) { mutableStateOf<io.github.tieo.arbay.model.Dealer?>(null) }
+    var reading by remember(url) { mutableStateOf(true) }
+    var legal by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url) { dealer = session.client.dealer(url); reading = false }
+    Gap(4.dp)
+    SectionTitle("Dealer")
+    val d = dealer
+    when {
+        d != null -> {
+            Text(listOfNotNull(d.name ?: listing.seller?.name, d.nameAddOn).joinToString(", "), Modifier.clickable { open(d.url ?: url) }, style = MaterialTheme.typography.bodyMedium)
+            d.contact?.let { Muted("Contact: $it", style = MaterialTheme.typography.bodySmall) }
+            d.whereLine()?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
+            d.hours.forEach { h -> h.text().takeIf { it.isNotEmpty() }?.let { Muted("Open " + (h.department?.let { dep -> "($dep) " } ?: "") + it, style = MaterialTheme.typography.bodySmall) } }
+            d.stockLine()?.let { Muted(it, style = MaterialTheme.typography.bodySmall) }
+            d.ratings.forEach { r ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(r.sourceName, style = MaterialTheme.typography.bodySmall)
+                    Muted(r.summary(), style = MaterialTheme.typography.bodySmall)
+                }
+                r.reviews.take(3).forEach { Muted(it.line(), style = MaterialTheme.typography.bodySmall, maxLines = 4) }
+            }
+            d.imprint?.takeIf { it.isNotBlank() }?.let { text ->
+                TextButton(onClick = { legal = !legal }) { Text(if (legal) "Hide the legal notice" else "Show the legal notice") }
+                if (legal) Muted(text.trim(), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        reading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Busy(); Muted("Reading the dealer's pages") }
+        else -> Muted("The dealer's pages could not be read", style = MaterialTheme.typography.bodySmall)
     }
 }
 
