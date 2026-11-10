@@ -599,6 +599,26 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun aCardStatingAUsedCarsDistanceIsNoNewCar() {
+        val driven = listing("d", PlatformId.MOBILE_DE, 3_000_000, vehicle = VehicleInfo(mileageKm = 90_000, verified = setOf(VehicleField.MILEAGE)))
+        val delivered = listing("n", PlatformId.MOBILE_DE, 3_000_000, vehicle = VehicleInfo(mileageKm = 100, verified = setOf(VehicleField.MILEAGE)))
+        assertEquals(listOf("n"), CarFilterEngine.apply(listOf(driven, delivered), CarFilters(conditions = setOf(VehicleCondition.NEW))).map { it.externalId })
+    }
+
+    @Test
+    fun aTitleCallingTheCarABestellfahrzeugIsNoCarInStock() {
+        val now = VehicleInfo(availability = io.github.tieo.arbay.model.VehicleAvailability(now = true), verified = setOf(VehicleField.AVAILABILITY))
+        fun car(id: String, title: String) = listing(id, PlatformId.MOBILE_DE, 3_000_000, vehicle = now).copy(title = title)
+        val cars = listOf(
+            car("order", "Volkswagen ID.3 NEO Trend Bestellfahrzeug"),
+            car("stock", "Volkswagen ID.3 Neo Trend kein Bestellfahrzeug, sofort"),
+            car("plain", "Volkswagen ID.3 Neo Trend"),
+        )
+        assertEquals(listOf("stock", "plain"), CarFilterEngine.apply(cars, CarFilters(inStockOnly = true)).map { it.externalId })
+        assertEquals(3, CarFilterEngine.apply(cars, CarFilters()).size)
+    }
+
+    @Test
     fun inStockOnlyLeavesOutTheCarsTheDealerStillOrders() {
         fun car(id: String, a: io.github.tieo.arbay.model.VehicleAvailability?) =
             listing(id, PlatformId.AUTOSCOUT24, 4_000_000, vehicle = VehicleInfo(availability = a, verified = if (a != null) setOf(VehicleField.AVAILABILITY) else emptySet()))

@@ -194,6 +194,9 @@ object CarFilterEngine {
         // New is never registered, so a vehicle stating a first registration is no new one, though
         // its card names no condition: a search for new ones alone loses it.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
+        // A car never registered moves only on trade plates, to the dealer and on a test drive: a
+        // card stating more is a used car's, or a wrong read the search cannot tell from one.
+        if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && (v?.mileageKm ?: 0) > NEW_MAX_KM && v!!.isVerified(VehicleField.MILEAGE)) return "condition"
         // A car asking a fraction of its model's cheapest price new asks no car's price: a
         // deposit, a leasing rate or a placeholder ("1.000 €" for a new CUPRA Tavascan) on a car
         // near new, a part ("VW ID 3 Anhängerkupplung", 1,100 €) on anything. A ten-year-old EV
@@ -210,6 +213,9 @@ object CarFilterEngine {
             if (length != null && length < min) return "size"
         }
         if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.isOrder(today()) }) return "availability"
+        // The dealer's own title calling the car one still to be ordered outweighs a card's
+        // "available at once": mobile.de shows that on Bestellfahrzeuge too.
+        if (filters.inStockOnly && orderedInTitle.containsMatchIn(listing.title)) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
@@ -475,6 +481,11 @@ object CarFilterEngine {
     }
 
     private fun today() = kotlin.time.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Europe/Berlin")).date
+
+    private val orderedInTitle = Regex("""(?i)(?<!kein\s)(?<!\p{L})(bestell(fahrzeug|fzg|wagen|auto)|auf bestellung|vorlauf(fahrzeug|wagen))""")
+
+    /** The most a never-registered car is driven before its first owner gets it. */
+    private const val NEW_MAX_KM = 5_000
 
     private val NEAR_NEW = setOf(VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION, VehicleCondition.DEMO)
 

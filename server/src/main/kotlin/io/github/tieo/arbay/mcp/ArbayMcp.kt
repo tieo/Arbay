@@ -1550,7 +1550,8 @@ private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same t
 private val vehicleJson = Json { ignoreUnknownKeys = false; encodeDefaults = false }
 
 private fun vehicleCriteria(args: JsonObject): Result<CarFilters?> {
-    val raw = args.str("vehicle") ?: return Result.success(null)
+    // Clients send the criteria either as a JSON object or as that object written into a string.
+    val raw = (args["vehicle"] as? JsonObject)?.toString() ?: args.str("vehicle") ?: return Result.success(null)
     return runCatching { vehicleJson.decodeFromString(CarFilters.serializer(), raw) }
         .recoverCatching { throw IllegalArgumentException("vehicle is not readable: ${it.message?.take(300)}") }
 }
