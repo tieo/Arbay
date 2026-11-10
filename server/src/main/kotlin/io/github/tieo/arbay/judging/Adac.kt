@@ -129,7 +129,8 @@ object Adac {
                 } catch (e: Exception) {
                     log.warn("ADAC tables not read: {}", e.message)
                 }
-                delay(if (tables.costs.rows.isEmpty()) 3600_000L else ASK_EVERY_MS)
+                // A catalogue Neuland is still reading fills in over hours; it is asked again hourly till done.
+                delay(if (tables.costs.rows.isEmpty() || !tables.catalog.complete) 3600_000L else ASK_EVERY_MS)
             }
         }
     }
