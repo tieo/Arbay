@@ -22,7 +22,7 @@ import io.github.tieo.arbay.relevance.VehicleTextParser
 class AutoScout24Crawler(
     private val countries: List<String> = listOf("DE"),
     override val platformId: PlatformId = PlatformId.AUTOSCOUT24,
-) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice {
+) : Crawler, StartsAtAnyPage, FetchesEveryPage, FiltersAtTheSource, KnowsLocation, SortsByPrice, KnowsAdState {
     override val nativeCriteria = setOf(
         FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE,
         FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.FUEL,
@@ -75,6 +75,17 @@ class AutoScout24Crawler(
      * from the prose: anything else read there could overwrite what the card states
      * ("130.000 km Garantie").
      */
+    /**
+     * Whether the ad is up, off one fresh read of its page. The page states an ad that is up
+     * ("status": "active"); one taken down is not told apart from a page that failed to read, so
+     * that stays unknown rather than read as gone.
+     */
+    override suspend fun adState(url: String): AdState? = try {
+        AdState.LIVE.takeIf { NeulandOffers.detail(url, "AutoScout24").available == true }
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        null
+    }
+
     override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
         val page = NeulandOffers.detail(listing.url, "AutoScout24")
         val wheelbase = page.description?.let(VehicleTextParser::parseWheelbaseMm)

@@ -200,6 +200,10 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 listed.forEach { appendLine(it.line() + (views[it.id]?.let { v -> " | seen $v times" } ?: "")) }
                 // Over every offer shown, listed or not: the front is what is worth weighing.
                 append(frontLines(shown.filter { it.saleType != io.github.tieo.arbay.model.SaleType.AUCTION }))
+                // An offer put away on a device is left out of the list, so it is named here: else a
+                // van the watch reported reads as one the search lost.
+                val putAway = all.filter { it.id in hidden }
+                if (putAway.isNotEmpty()) appendLine("Put away (hidden on every device, not listed): ${putAway.size}: " + putAway.joinToString(", ") { it.id })
                 synchronized(problems) { if (problems.isNotEmpty()) appendLine("Markets that failed: " + problems.joinToString("; ")) }
                 // What each market sent against what the search kept, with the reasons for the
                 // rest: a filter that is wrong shows up as a market whose answer went missing.
@@ -419,7 +423,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
-            val head = l.line() + l.fitLine()
+            val head = l.line() + l.fitLine() +
+                (if (l.id in hiddenOffers()) "\nPut away: hidden on every device, so searches do not list it (hide_offers with bring_back shows it again)." else "")
             // A page Arbay could not fetch says nothing about the ad, so it is not reported as one
             // that has nothing more to say: with the server offline every ad read that way.
             if (!detail.status.isSuccess()) return@tool head + "\nArbay could not read the ad page: " + detail.bodyAsText().ifBlank { detail.status.toString() }
