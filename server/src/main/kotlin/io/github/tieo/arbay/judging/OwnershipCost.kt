@@ -41,7 +41,8 @@ object OwnershipCost {
     /** The cost of [listing] over ten years at [kmPerYear], or null where ADAC has no row for its model. */
     fun of(listing: Listing, kmPerYear: Int, settings: ImportSettings): OwnCost? {
         val v = listing.vehicle
-        val landed = listing.landedPrice(settings).takeIf { it.currency == Currency.EUR }?.amount?.div(100.0) ?: return null
+        // An ad asking nothing names no price to count from.
+        val landed = listing.landedPrice(settings).takeIf { it.currency == Currency.EUR && listing.price.amount > 0 }?.amount?.div(100.0) ?: return null
         val assumptions = mutableListOf<String>()
         val own = Adac.costsOf(listing).firstOrNull()
         val row = own ?: Adac.nearestElectricOfMake(listing.title, landed)?.also {

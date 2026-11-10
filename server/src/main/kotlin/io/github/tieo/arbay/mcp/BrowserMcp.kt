@@ -334,7 +334,7 @@ class BrowserMcp {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                CallToolResult(content = listOf(TextContent("Failed: ${e.message}")), isError = true)
+                CallToolResult(content = listOf(TextContent("Failed: ${e.message ?: e::class.simpleName}")), isError = true)
             }
         }
     }

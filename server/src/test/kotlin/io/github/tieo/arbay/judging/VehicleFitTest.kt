@@ -33,6 +33,10 @@ class VehicleFitTest {
         assertNull(FitScore.score(car("Ford Explorer, Preis gilt nur bei Finanzierung über die Ford Bank", 33_000), wishes, 33_000.0, 4.0))
         // Leasing offered beside a cash price leaves the price standing.
         assertNotNull(FitScore.score(car("Ford Explorer Extended Range LEASINGAKTION!", 33_000), wishes, 33_000.0, 4.0))
+        assertNull(FitScore.score(car("Kia EV3 58.3 KWh Gewerbe AIR Winterp. WP SHZ Dez/Jan", 30_449), wishes, 30_449.0, 4.0))
+        assertNotNull(FitScore.score(car("Kia EV3 58.3 KWh AIR, Gewerbegebiet Nord", 30_449), wishes, 30_449.0, 4.0))
+        assertNull(FitScore.score(car("Ford Explorer Select, Preis inkl. E-Umstiegs Prämie!! und bei Leasing Ford Credit!", 36_500), wishes, 36_500.0, 4.0))
+        assertNull(FitScore.score(car("Mercedes-Benz EQA 250+ KEINE DEUTSCHE ZULASSUNG MÖGLICH!", 25_999), wishes, 25_999.0, 4.0))
     }
 
     @Test

@@ -606,6 +606,17 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun aDeliveryTimeThatTheTextStatesPastSixWeeksIsAnOrder() {
+        assertEquals(168, CarFilterEngine.statedWaitDays("Vorsteuerabzugsberechtigt!!!  Lieferzeit ca. 24 Wochen!!!!"))
+        assertEquals(120, CarFilterEngine.statedWaitDays("Lieferzeit 3-4 Monate"))
+        assertEquals(null, CarFilterEngine.statedWaitDays("Sofort verfügbar, 90.000 km Garantie"))
+        val now = VehicleInfo(availability = io.github.tieo.arbay.model.VehicleAvailability(now = true), verified = setOf(VehicleField.AVAILABILITY))
+        val waits = listing("w", PlatformId.AUTOSCOUT24, 3_000_000, vehicle = now).copy(description = "Lieferzeit ca. 24 Wochen!!!!")
+        val soon = listing("s", PlatformId.AUTOSCOUT24, 3_000_000, vehicle = now).copy(description = "Lieferzeit ca. 2 Wochen")
+        assertEquals(listOf("s"), CarFilterEngine.apply(listOf(waits, soon), CarFilters(inStockOnly = true)).map { it.externalId })
+    }
+
+    @Test
     fun aTitleCallingTheCarABestellfahrzeugIsNoCarInStock() {
         val now = VehicleInfo(availability = io.github.tieo.arbay.model.VehicleAvailability(now = true), verified = setOf(VehicleField.AVAILABILITY))
         fun car(id: String, title: String) = listing(id, PlatformId.MOBILE_DE, 3_000_000, vehicle = now).copy(title = title)

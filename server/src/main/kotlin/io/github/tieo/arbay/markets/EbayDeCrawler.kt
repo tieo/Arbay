@@ -55,7 +55,8 @@ class EbayDeCrawler(
      */
     internal suspend fun neulandPage(query: SearchQuery, number: Int): List<Listing> {
         val car = if (domain == "ebay.de") CarQueryResolver.resolve(query.positiveText) else null
-        val words = car?.modelSlug?.replace("-", " ") ?: query.text
+        // A model that is only a number ("Polestar 2", "Peugeot 3008") names nothing alone and goes with its make.
+        val words = car?.modelSlug?.replace("-", " ")?.let { m -> if (m.any(Char::isLetter)) m else "${car.makeSlug.replace("-", " ")} $m" } ?: query.text
         // eBay lists up to 240 offers a page and is slow to serve its later pages: a search wanting
         // more than one page of the usual size asks for the largest one.
         val perPage = if ((query.maxResults ?: 0) > CrawlerConfig.current.ebayItemsPerPage) 240 else CrawlerConfig.current.ebayItemsPerPage

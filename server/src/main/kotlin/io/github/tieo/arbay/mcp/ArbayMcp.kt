@@ -204,7 +204,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             removed.values.flatten().forEach { seen[it.listing.id] = it.listing }
             val views = io.github.tieo.arbay.judging.ViewCounts.of(listed.map { it.id })
             return buildString {
-                appendLine("${listed.size} of ${all.size} offers for \"$words\":")
+                // A search no market answered is no search that found nothing.
+                val failedEverywhere = all.isEmpty() && searching.isEmpty() && synchronized(problems) { problems.size } > 0 &&
+                    counts.isEmpty()
+                if (failedEverywhere) appendLine("FAILED: no market answered the search for \"$words\"; nothing is known about its offers.")
+                else appendLine("${listed.size} of ${all.size} offers for \"$words\":")
                 listed.forEach { l ->
                     // A vehicle that does not state a criterion is kept, so the line says which it never met.
                     val unchecked = criteria?.uncheckedFor(l.vehicle).orEmpty()

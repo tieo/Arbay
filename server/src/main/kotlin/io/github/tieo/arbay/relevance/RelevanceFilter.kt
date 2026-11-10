@@ -834,7 +834,7 @@ object RelevanceFilter {
         """(gehäuse|gehaeuse|enclosure|docking|\bdock\b|jbod|\bdas\b|\bschacht|\d[\s-]?fach\b)""",
         RegexOption.IGNORE_CASE,
     )
-    private val saidToFit = Regex("""(?i)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
+    private val saidToFit = Regex("""(?iu)\b(f(ü|ue)r|for|passend|geeignet|kompatibel)\W+(\S+\W+){0,2}$""")
 
     private fun holdsTheDrives(title: String): Boolean {
         val holder = driveHolder.find(title) ?: return false
@@ -937,7 +937,7 @@ object RelevanceFilter {
      *  rather than instead of it. A word after one of these names an extra, and the ad is still
      *  about the product. */
     /** The nouns of [accessoryNoun] that name a box drives go into. */
-    private val driveBox = Regex("""(?i)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|gabinetes?|caja\s+externa|behuizing)$""")
+    private val driveBox = Regex("""(?iu)(geh(ä|ae)use|enclosure|docking\s?station|caddy|bo(î|i)tier|gabinetes?|caja\s+externa|behuizing)$""")
 
     /** Words only storage gear carries: a drive, its interface, its form factor, its bays. */
     private val storageGear = Regex(

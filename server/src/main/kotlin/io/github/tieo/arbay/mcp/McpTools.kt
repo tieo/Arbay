@@ -43,12 +43,21 @@ internal fun Server.textTool(
         inputSchema = ToolSchema(properties = JsonObject(p.properties), required = p.required),
         toolAnnotations = ToolAnnotations(destructiveHint = destructive, readOnlyHint = readOnly),
     ) { request ->
-        try {
-            CallToolResult(content = listOf(TextContent(run(request.arguments ?: JsonObject(emptyMap())))))
+        val args = request.arguments ?: JsonObject(emptyMap())
+        // A call missing what the tool needs is told which argument and which ones it takes,
+        // rather than failing somewhere inside with no message.
+        val missing = p.required.filter { k -> args[k].let { it == null || it is kotlinx.serialization.json.JsonNull } }
+        if (missing.isNotEmpty()) {
+            CallToolResult(
+                content = listOf(TextContent("Missing argument ${missing.joinToString(", ")}; $name takes ${p.properties.keys.joinToString(", ")}.")),
+                isError = true,
+            )
+        } else try {
+            CallToolResult(content = listOf(TextContent(run(args))))
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            CallToolResult(content = listOf(TextContent("Failed: ${e.message}")), isError = true)
+            CallToolResult(content = listOf(TextContent("Failed: ${e.message ?: e::class.simpleName}")), isError = true)
         }
     }
 }

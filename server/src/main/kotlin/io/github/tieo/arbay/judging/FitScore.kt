@@ -82,17 +82,21 @@ object FitScore {
     // "Nur an Gewerbe", "nur Export", "Verkauf ausschließlich für Export oder an Gewerbetreibende";
     // the buyer named, so a van "nur gewerblich genutzt" stays in.
     private val tradeOnly = Regex(
-        """(?i)\b(nur|ausschlie(ß|ss)lich)\W{1,3}((an|für|fuer)\W+)?(den\W+)?""" +
+        """(?iu)\b(nur|ausschlie(ß|ss)lich)\W{1,3}((an|für|fuer)\W+)?(den\W+)?""" +
             """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""" +
             // A price a business alone gets: "AKTION GEWERBE", "Gewerbeaktion", "Gewerbekundenpreis".
             """|\baktion\W{1,3}gewerbe|\bgewerbe(kunden)?\W?(aktion|angebot|preis|leasing)|\bpreis\W+(nur\W+)?f(ü|ue)r\W+gewerbe""" +
             // A price that counts a trade-in bonus: "Vanaf €35.990 met €5.000 Tesla inruilpremie",
             // "inkl. 4.000 € Wechselprämie".
-            """|inruilpremie|wechselpr(ä|ae)mie|eroberungspr(ä|ae)mie|inzahlungnahmepr(ä|ae)mie""" +
+            """|inruilpremie|wechselpr(ä|ae)mie|eroberungspr(ä|ae)mie|inzahlungnahmepr(ä|ae)mie|umstiegs\W?pr(ä|ae)mie""" +
+            // A car that cannot be registered here is no car for a buyer in Germany.
+            """|keine\W+(deutsche\W+)?zulassung\W+m(ö|oe)glich|nicht\W+(in\W+deutschland\W+)?zulassungsf(ä|ae)hig""" +
             // A price that holds only with the dealer's financing or leasing.
             """|\bnur\W+(bei|mit|in\W+verbindung\W+mit)\W+(einer\W+)?(finanzierung|leasing|bankfinanzierung)""" +
             """|\bpreis\W+gilt\W+nur\W+(bei|mit)\W+(einer\W+)?(finanzierung|leasing)|\bfinanzierungspreis\b""",
     )
+    /** A dealer's title naming "Gewerbe" on its own offers the car to businesses: "Kia EV3 58.3 KWh Gewerbe AIR". */
+    private val businessTitle = Regex("""(?i)(?<!\p{L})gewerbe(?!\p{L})""")
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
     private val rearWheel = Regex("""(?i)heckantrieb|hinterradantrieb|\brwd\b""")
     private val noAirConditioning = Regex("""(?i)keine klimaanlage|(ohne|keine?)\s+klima""")
@@ -130,7 +134,7 @@ object FitScore {
         val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()} ${CarFilterEngine.vehicleKind(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()
         if (wantsAVan && notAClosedVan.containsMatchIn(camperAsAUse.replace(workshopFitOut.replace(headline, " "), " "))) return null
-        if (tradeOnly.containsMatchIn(text)) return null
+        if (tradeOnly.containsMatchIn(text) || businessTitle.containsMatchIn(listing.title)) return null
         // Another ad's photos in this one: the van shown is not the one sold.
         if (listing.photosAlsoIn.isNotEmpty()) return null
         val fuel = listing.vehicle?.fuel

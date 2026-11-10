@@ -48,7 +48,7 @@ object Neuland {
     suspend fun offers(path: String, limitS: Long = 120): String {
         val base = base ?: throw CrawlerBlockedException("Neuland is not set up (NEULAND_URL)", ErrorType.NETWORK_ERROR)
         val response = runCatching { client.get("$base/$path") { timeout { requestTimeoutMillis = limitS * 1000 } } }
-            .getOrElse { throw CrawlerBlockedException("Neuland did not answer: ${it.message}", ErrorType.NETWORK_ERROR) }
+            .getOrElse { throw CrawlerBlockedException("Neuland did not answer: ${it.message ?: it::class.simpleName}", ErrorType.NETWORK_ERROR) }
         val body = response.bodyAsText()
         if (response.status.isSuccess()) return body
         val answer = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
@@ -89,7 +89,7 @@ object Neuland {
     suspend fun bytes(path: String, limitS: Long = 60): ByteArray {
         val base = base ?: throw Refusal(0, "Neuland is not set up (NEULAND_URL)", JsonObject(emptyMap()))
         val response = runCatching { client.get("$base/$path") { timeout { requestTimeoutMillis = limitS * 1000 } } }
-            .getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message}", JsonObject(emptyMap())) }
+            .getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message ?: it::class.simpleName}", JsonObject(emptyMap())) }
         if (response.status.isSuccess()) return response.readRawBytes()
         val text = response.bodyAsText()
         val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: JsonObject(emptyMap())
@@ -122,7 +122,7 @@ object Neuland {
                 if (body != null) { contentType(ContentType.Application.Json); setBody(body.toString()) }
                 timeout { requestTimeoutMillis = limitS * 1000 }
             }
-        }.getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message}", JsonObject(emptyMap())) }
+        }.getOrElse { throw Refusal(0, "Neuland did not answer: ${it.message ?: it::class.simpleName}", JsonObject(emptyMap())) }
         val text = response.bodyAsText()
         val answer = runCatching { json.parseToJsonElement(text) }.getOrElse { JsonObject(mapOf("error" to JsonPrimitive(text.take(200)))) }
         if (response.status.isSuccess()) return answer

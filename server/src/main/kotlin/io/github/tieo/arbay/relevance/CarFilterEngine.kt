@@ -216,6 +216,8 @@ object CarFilterEngine {
         // The dealer's own title calling the car one still to be ordered outweighs a card's
         // "available at once": mobile.de shows that on Bestellfahrzeuge too.
         if (filters.inStockOnly && orderedInTitle.containsMatchIn(listing.title)) return "availability"
+        // A delivery time the seller states past six weeks is an order: "Lieferzeit ca. 24 Wochen!!!!".
+        if (filters.inStockOnly && statedWaitDays(listing.description.orEmpty())?.let { it > 42 } == true) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
@@ -483,6 +485,15 @@ object CarFilterEngine {
     private fun today() = kotlin.time.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Europe/Berlin")).date
 
     private val orderedInTitle = Regex("""(?i)(?<!kein\s)(?<!\p{L})(bestell(fahrzeug|fzg|wagen|auto)|auf bestellung|vorlauf(fahrzeug|wagen))""")
+
+    private val waitPhrase = Regex("""(?i)\b(lieferzeit|liefertermin|lieferbar\W+in)\W+(ca\.?\W*|circa\W+|etwa\W+|von\W+)?(\d{1,2})(\W*[-–]\W*(\d{1,2}))?\W*(wochen|monate?n?)\b""")
+
+    /** The longest wait the seller's text states in days, from "Lieferzeit ca. 24 Wochen" or
+     *  "Lieferzeit 3-4 Monate"; null where it states none. */
+    internal fun statedWaitDays(text: String): Int? = waitPhrase.findAll(text).maxOfOrNull { m ->
+        val n = (m.groupValues[5].ifEmpty { m.groupValues[3] }).toInt()
+        if (m.groupValues[6].lowercase().startsWith("woche")) n * 7 else n * 30
+    }
 
     /** The most a never-registered car is driven before its first owner gets it. */
     private const val NEW_MAX_KM = 5_000

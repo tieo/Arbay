@@ -44,7 +44,12 @@ class KleinanzeigenCrawler(
         // 30,990 € there against 28 in Autos. Each reads its price band cheapest first, up to the
         // band's cap.
         val passes = if (car == null) listOf(Pass(null, byPrice = false))
-        else listOfNotNull(Pass(vehicleQuery(query, car), byPrice = true), car.modelSlug?.let { Pass(NeulandOffers.VehicleQuery(make = car.makeSlug, model = it, vans = true), byPrice = true) })
+        // The commercial vehicles are searched by the model's word alone, which for a model that is
+        // only a number ("Polestar 2") finds trailer wheels and tractor tyres rather than vans.
+        else listOfNotNull(
+            Pass(vehicleQuery(query, car), byPrice = true),
+            car.modelSlug?.takeIf { m -> m.any(Char::isLetter) }?.let { Pass(NeulandOffers.VehicleQuery(make = car.makeSlug, model = it, vans = true), byPrice = true) },
+        )
         val band = if (car != null) query.wholePriceBand() else query
         val all = mutableListOf<Listing>()
         val seen = mutableSetOf<String>()
