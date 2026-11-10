@@ -155,18 +155,6 @@ object Adac {
         ).also { index = it }
     }
 
-    /** The model's cost rows; the version closest in power to [powerKw] first where it is known,
-     *  else the cheapest. */
-    fun costsOf(title: String, powerKw: Int?): List<CostRow> {
-        val key = EvModels.keyOf(title) ?: return emptyList()
-        // The table's own rows where it has the model, else the catalogue's versions of it.
-        val rows = index().costs[key] ?: index().catalog[key].orEmpty().mapNotNull { it.asRow() }
-        return rows.sortedWith(compareBy<CostRow>(
-            { r -> powerKw?.let { p -> r.powerKw?.let { kotlin.math.abs(it - p) } ?: Int.MAX_VALUE } ?: 0 },
-            { it.basePrice?.cents ?: Long.MAX_VALUE },
-        ))
-    }
-
     /** An electric row of the same make nearest in base price to [eur], for a model ADAC's table
      *  leaves out: the same maker's workshop rates and a car of that price's insurance class. */
     fun nearestElectricOfMake(title: String, eur: Double): CostRow? {
@@ -187,8 +175,32 @@ object Adac {
             .filter { it > 0 }.minOrNull()?.div(100.0)
     }
 
-    /** The model's current versions in ADAC's catalogue. */
-    fun catalogOf(title: String): List<CatalogVersion> = EvModels.keyOf(title)?.let { index().catalog[it] }.orEmpty()
+    /** Every model ADAC knows, by the make and model the car sites know. */
+    fun keys(): Set<EvModels.ModelKey> = index().let { it.costs.keys + it.catalog.keys }
+
+    /** The power ratings ADAC gives the model's versions. */
+    fun powersOf(key: EvModels.ModelKey): List<Int> = index().let { i ->
+        i.costs[key].orEmpty().mapNotNull { it.powerKw } + i.catalog[key].orEmpty().mapNotNull { it.powerKw }
+    }
+
+    /** The cost rows of the model [listing] is, told by its power (see [EvModels.keyOf]). */
+    fun costsOf(listing: io.github.tieo.arbay.model.Listing): List<CostRow> {
+        val key = EvModels.keyOf(listing) ?: return emptyList()
+        val kw = listing.vehicle?.powerKw
+        val rows = index().costs[key] ?: index().catalog[key].orEmpty().mapNotNull { it.asRow() }
+        return rows.sortedWith(compareBy<CostRow>(
+            { r -> kw?.let { p -> r.powerKw?.let { kotlin.math.abs(it - p) } ?: Int.MAX_VALUE } ?: 0 },
+            { it.basePrice?.cents ?: Long.MAX_VALUE },
+        ))
+    }
+
+    /** The catalogue versions of the model [listing] is, nearest in power first. */
+    fun catalogOf(listing: io.github.tieo.arbay.model.Listing): List<CatalogVersion> {
+        val key = EvModels.keyOf(listing) ?: return emptyList()
+        val kw = listing.vehicle?.powerKw
+        return index().catalog[key].orEmpty().sortedBy { c -> kw?.let { p -> c.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
+    }
+
 
     /** Every model the catalogue gives a length for, with its most common length. */
     fun lengths(): Map<EvModels.ModelKey, Pair<Int, String>> = index().catalog.mapNotNull { (key, versions) ->
@@ -196,8 +208,8 @@ object Adac {
         key to (length to versions.first().name)
     }.toMap()
 
-    /** The model's used prices, every version. */
-    fun usedOf(title: String): List<UsedRow> = EvModels.keyOf(title)?.let { index().used[it] }.orEmpty()
+    /** The used prices of the model [listing] is, every version. */
+    fun usedOf(listing: io.github.tieo.arbay.model.Listing): List<UsedRow> = EvModels.keyOf(listing)?.let { index().used[it] }.orEmpty()
 
     /** The year ADAC's used prices are of: "Herbst/Winter 2026/27" is 2026. */
     val usedYear: Int? get() = tables.used.edition?.let { Regex("""(20\d\d)""").find(it)?.value?.toInt() }

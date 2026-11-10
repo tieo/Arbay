@@ -43,7 +43,7 @@ object OwnershipCost {
         val v = listing.vehicle
         val landed = listing.landedPrice(settings).takeIf { it.currency == Currency.EUR }?.amount?.div(100.0) ?: return null
         val assumptions = mutableListOf<String>()
-        val own = Adac.costsOf(listing.title, v?.powerKw).firstOrNull()
+        val own = Adac.costsOf(listing).firstOrNull()
         val row = own ?: Adac.nearestElectricOfMake(listing.title, landed)?.also {
             assumptions += "fixed, workshop and running costs of the ${it.make} ${it.model}, the make's electric car nearest in price (ADAC lists no row of this model)"
         } ?: return null
@@ -54,13 +54,13 @@ object OwnershipCost {
         } else 0
         val purchase = landed + transfer
 
-        val newPrice = Adac.usedOf(listing.title).minByOrNull { u -> v?.powerKw?.let { p -> u.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
+        val newPrice = Adac.usedOf(listing).minByOrNull { u -> v?.powerKw?.let { p -> u.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
             ?.newPrice?.cents?.div(100.0) ?: row.basePrice?.cents?.div(100.0) ?: purchase
-        val kept = keptAt(listing.title, YEARS)
+        val kept = keptAt(listing, YEARS)
         val value = kept?.let { newPrice * it.first * PRIVATE_SALE_SHARE }
         if (kept != null) assumptions += "worth ${(kept.first * PRIVATE_SALE_SHARE * 100).roundToInt()} % of ${euros(newPrice)} new after $YEARS years (${kept.second})"
 
-        val catalog = Adac.catalogOf(listing.title).minByOrNull { c -> v?.powerKw?.let { p -> c.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
+        val catalog = Adac.catalogOf(listing).firstOrNull()
         val consumption = v?.consumptionKwhPer100Km ?: catalog?.consumptionKwhPer100Km?.also {
             assumptions += "consumption $it kWh/100 km of the ${catalog.name} (ADAC catalogue)"
         } ?: run {
@@ -110,7 +110,7 @@ object OwnershipCost {
     /** The share of its price new an EV keeps at [age] years by ADAC's used prices, all EVs' rate of
      *  loss carried past the oldest year given, scaled by how this model holds its value; with a
      *  note of what it rests on. Null where ADAC gives no used EV prices at all. */
-    internal fun keptAt(title: String, age: Int): Pair<Double, String>? {
+    internal fun keptAt(listing: Listing, age: Int): Pair<Double, String>? {
         val year = Adac.usedYear ?: return null
         fun shares(rows: List<Adac.UsedRow>) = rows.flatMap { r ->
             val new = r.newPrice?.cents?.toDouble()?.takeIf { it > 0 } ?: return@flatMap emptyList()
@@ -127,7 +127,7 @@ object OwnershipCost {
         val my = ys.average()
         val slope = xs.zip(ys).sumOf { (x, y) -> (x - mx) * (y - my) } / xs.sumOf { (it - mx) * (it - mx) }
         fun pooled(a: Int) = exp(my + slope * (a - mx))
-        val own = shares(Adac.usedOf(title))
+        val own = shares(Adac.usedOf(listing))
         val factor = own.map { (a, s) -> s / pooled(a) }.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }?.coerceIn(0.7, 1.3)
         val kept = pooled(age) * (factor ?: 1.0)
         val oldest = medians.keys.max()

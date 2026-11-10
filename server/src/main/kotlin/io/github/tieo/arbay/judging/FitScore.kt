@@ -85,7 +85,13 @@ object FitScore {
         """(?i)\b(nur|ausschlie(ß|ss)lich)\W{1,3}((an|für|fuer)\W+)?(den\W+)?""" +
             """(gewerbe(treibende|kunden?)?\b|gewerbliche\W+(käufer|kunden|abnehmer)|export|händler|haendler)|export only""" +
             // A price a business alone gets: "AKTION GEWERBE", "Gewerbeaktion", "Gewerbekundenpreis".
-            """|\baktion\W{1,3}gewerbe|\bgewerbe(kunden)?\W?(aktion|angebot|preis)|\bpreis\W+(nur\W+)?f(ü|ue)r\W+gewerbe""",
+            """|\baktion\W{1,3}gewerbe|\bgewerbe(kunden)?\W?(aktion|angebot|preis|leasing)|\bpreis\W+(nur\W+)?f(ü|ue)r\W+gewerbe""" +
+            // A price that counts a trade-in bonus: "Vanaf €35.990 met €5.000 Tesla inruilpremie",
+            // "inkl. 4.000 € Wechselprämie".
+            """|inruilpremie|wechselpr(ä|ae)mie|eroberungspr(ä|ae)mie|inzahlungnahmepr(ä|ae)mie""" +
+            // A price that holds only with the dealer's financing or leasing.
+            """|\bnur\W+(bei|mit|in\W+verbindung\W+mit)\W+(einer\W+)?(finanzierung|leasing|bankfinanzierung)""" +
+            """|\bpreis\W+gilt\W+nur\W+(bei|mit)\W+(einer\W+)?(finanzierung|leasing)|\bfinanzierungspreis\b""",
     )
     private val allWheel = Regex("""(?i)4\s?motion|4mot|allrad|4x4|awd""")
     private val rearWheel = Regex("""(?i)heckantrieb|hinterradantrieb|\brwd\b""")
@@ -164,7 +170,7 @@ object FitScore {
         val ev = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null || wishes.idealRangeKm != null ||
             wishes.idealDcKw != null || wishes.wantsHeatPump) EvModels.versionOf(listing) else null
         val carLength = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null)
-            EvModels.lengthOf(listing.title) else null
+            EvModels.lengthOf(listing) else null
         val least = EvModels.minLengthMm(wishes)
         val ideal = EvModels.idealLengthMm(wishes)
         if (least != null && carLength != null && carLength < least) return null
@@ -176,7 +182,7 @@ object FitScore {
         }
         // ADAC's catalogue version nearest in power, for what neither the ad nor ev-database states.
         val adac = if (ev == null && wishes.idealRangeKm == null && wishes.idealDcKw == null && !wishes.wantsHeatPump) null
-            else Adac.catalogOf(listing.title).minByOrNull { c -> v?.powerKw?.let { p -> c.powerKw?.let { kotlin.math.abs(it - p) } } ?: 0 }
+            else Adac.catalogOf(listing).firstOrNull()
         val range = wishes.idealRangeKm?.let { want ->
             val km = v?.rangeKm ?: ev?.wltpRangeKm ?: adac?.rangeKm
             Wish(linear(km?.toDouble(), want.toDouble(), want * 0.6), km?.let { "$it km WLTP" + if (v?.rangeKm == null) " (model)" else "" })

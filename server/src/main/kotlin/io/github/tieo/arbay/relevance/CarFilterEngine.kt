@@ -203,7 +203,7 @@ object CarFilterEngine {
         // A car shorter than the model the search names as its least size; one whose model the
         // catalogue does not know, or knows no length of, is kept.
         io.github.tieo.arbay.judging.EvModels.minLengthMm(filters)?.let { min ->
-            val length = io.github.tieo.arbay.judging.EvModels.lengthOf(listing.title)
+            val length = io.github.tieo.arbay.judging.EvModels.lengthOf(listing)
             if (length != null && length < min) return "size"
         }
         if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.isOrder(today()) }) return "availability"

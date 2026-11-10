@@ -116,6 +116,25 @@ object EvModels {
         return ModelKey(car.makeSlug, fold(model))
     }
 
+    /**
+     * The model [listing] is, told by its power where its title names a shorter name than the
+     * model: "BYD Dolphin 65 kW Active" is a Dolphin Surf, the one Dolphin with 65 kW. The title's
+     * own model stands where one of its versions has that power, or where the power is unknown.
+     */
+    fun keyOf(listing: Listing): ModelKey? {
+        val base = keyOf(listing.title) ?: return null
+        val kw = listing.vehicle?.powerKw ?: return base
+        fun hasPower(key: ModelKey) = (grouped[key].orEmpty().mapNotNull { it.powerKw } + Adac.powersOf(key)).any { kotlin.math.abs(it - kw) <= 2 }
+        if (hasPower(base)) return base
+        val siblings = (grouped.keys + Adac.keys()).filter { it.make == base.make && it.model != base.model && it.model.startsWith(base.model) }
+        return siblings.sortedBy { it.model.length }.firstOrNull(::hasPower) ?: base
+    }
+
+    /** The length of the model [listing] is, told by its power where its title is short of it. */
+    fun lengthOf(listing: Listing): Int? = keyOf(listing)?.let { key ->
+        lengthOf(grouped[key].orEmpty()) ?: Adac.lengths()[key]?.first
+    }
+
     /** Letters without accents ("Citroën ë-C3" reads "Citroen e-C3"), as the sites' own names are written. */
     private fun plain(s: String) = Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
