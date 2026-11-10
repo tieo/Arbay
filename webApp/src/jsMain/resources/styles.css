@@ -627,9 +627,9 @@ legend { padding: 0 6px; margin-left: -6px; font-weight: 650; }
 .free-text { display: flex; flex-direction: column; gap: 8px; padding: var(--pad); }
 .free-title { font-size: 19px; line-height: 1.3; }
 .free-description { color: var(--muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
-.fit { display: flex; align-items: center; gap: 10px; }
-.fit-bar { flex: 0 0 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.fit-fill { display: block; height: 100%; background: var(--accent); }
+.free-fit { display: flex; align-items: center; gap: 10px; }
+.free-fit-bar { flex: 0 0 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.free-fit-fill { display: block; height: 100%; background: var(--accent); }
 .verdicts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--gap); width: min(640px, 100%); }
 .verdict {
     height: 48px;

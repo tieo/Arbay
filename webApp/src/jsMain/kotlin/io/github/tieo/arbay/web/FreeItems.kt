@@ -136,8 +136,8 @@ private fun FreeItemCard(listing: Listing) {
                 )
             }
             listing.relevanceScore?.let { score ->
-                Div({ classes("fit") }) {
-                    Span({ classes("fit-bar") }) { Span({ classes("fit-fill"); style { property("width", "${(score * 100).toInt()}%") } }) {} }
+                Div({ classes("free-fit") }) {
+                    Span({ classes("free-fit-bar") }) { Span({ classes("free-fit-fill"); style { property("width", "${(score * 100).toInt()}%") } }) {} }
                     Span({ classes("muted", "small") }) { Text("${(score * 100).toInt()}% like what you keep") }
                 }
             }
