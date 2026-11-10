@@ -50,6 +50,16 @@ data class CarFilters(
     // Only a vehicle the dealer has or has coming: one the dealer still has to order from the
     // maker (a Bestellfahrzeug) is left out where its ad says so.
     val inStockOnly: Boolean = false,
+    // How big an electric car should be, by a model of that size ("VW ID.3"): every model at least
+    // as long is searched, a shorter one is left out, and the closer one comes to the ideal
+    // model's length the better it fits. Sizes come from the server's catalogue of electric cars.
+    val atLeastSizeOf: String? = null,
+    val idealSizeOf: String? = null,
+    // Electric wishes the fit weighs, where the ad or the model's catalogue entry states them: the
+    // WLTP range and DC charging power that fit fully, and a heat pump.
+    val idealRangeKm: Int? = null,
+    val idealDcKw: Int? = null,
+    val wantsHeatPump: Boolean = false,
     // Panel-van sizes on the app's own scale (VanSize), multi-select: a listing matches if what
     // it verifiably states is in the set. The server reads each listing in its maker's terms, so a
     // size it cannot place for sure, like a Crafter's "L3H2", passes as unchecked.
@@ -111,6 +121,7 @@ data class CarFilters(
             fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null && !inStockOnly &&
+            atLeastSizeOf.isNullOrBlank() && idealSizeOf.isNullOrBlank() && idealRangeKm == null && idealDcKw == null && !wantsHeatPump &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
             minWheelbaseMm == null && maxWheelbaseMm == null &&
             descriptionContains.isNullOrBlank() && idealDescription.isNullOrBlank()

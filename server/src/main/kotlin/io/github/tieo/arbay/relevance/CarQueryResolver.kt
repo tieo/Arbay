@@ -72,6 +72,12 @@ object CarQueryResolver {
                 if (tokens.size >= aliasTokens.size &&
                     tokens.subList(0, aliasTokens.size) == aliasTokens
                 ) {
+                    // A model named in several words ("Model Y", "ID. Buzz") is the whole name: its
+                    // first word alone ("model") names no model the sites know.
+                    val after = tokens.drop(aliasTokens.size)
+                    longestModelName(slug, after)?.let { name ->
+                        return CarQuery(makeSlug = slug, modelSlug = name.joinToString(" "), remainder = after.drop(name.size).joinToString(" "))
+                    }
                     val model = tokens.getOrNull(aliasTokens.size)
                     if (model != null && !isModelOrYear(slug, model)) return null
                     val remainder = tokens.drop(aliasTokens.size + (if (model != null) 1 else 0))
@@ -82,6 +88,13 @@ object CarQueryResolver {
         }
         return null
     }
+
+    /** The longest model name of the make, in two words or more, that [tokens] begin with. */
+    private fun longestModelName(makeSlug: String, tokens: List<String>): List<String>? =
+        CarTaxonomyProvider.current.makes.firstOrNull { it.id == makeSlug }?.models.orEmpty()
+            .map { it.name.lowercase().split(" ").filter(String::isNotBlank) }
+            .filter { it.size >= 2 && tokens.size >= it.size && tokens.subList(0, it.size) == it }
+            .maxByOrNull { it.size }
 
     /**
      * Whether [token], the word after a make, names one of that make's models ("crafter",

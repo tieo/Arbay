@@ -222,7 +222,7 @@ private fun io.ktor.server.routing.RoutingCall.applySearchExtras(base: SearchQue
         maxPages = queryParameters["pages"]?.toIntOrNull()?.coerceIn(1, 20) ?: base.maxPages,
         maxResults = queryParameters["perMarket"]?.toIntOrNull()?.coerceIn(1, MAX_PER_MARKET) ?: base.maxResults,
         unattended = queryParameters["unattended"]?.toBooleanStrictOrNull() ?: base.unattended,
-    )
+    ).let(io.github.tieo.arbay.judging.EvModels::withModelsOfTheSize)
 }
 
 /**

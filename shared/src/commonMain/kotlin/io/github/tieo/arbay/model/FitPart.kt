@@ -19,6 +19,9 @@ enum class FitWish(val label: String) {
     SELLER("Seller"),
     DISTANCE("Distance"),
     AD_AGE("Time online"),
+    RANGE("Range"),
+    CHARGING("Charging"),
+    HEAT_PUMP("Heat pump"),
     AIR_CONDITIONING("Air conditioning"),
     EXTRAS("Extras"),
 }

@@ -597,4 +597,23 @@ class CarFilterEngineTest {
         // Asked for new or a day registration, a registered car with no condition stays, unchecked.
         assertEquals(2, CarFilterEngine.apply(listOf(registered, unregistered), newOnly.copy(conditions = setOf(VehicleCondition.NEW, VehicleCondition.PRE_REGISTRATION))).size)
     }
+
+    @Test
+    fun inStockOnlyLeavesOutTheCarsTheDealerStillOrders() {
+        fun car(id: String, a: io.github.tieo.arbay.model.VehicleAvailability?) =
+            listing(id, PlatformId.AUTOSCOUT24, 4_000_000, vehicle = VehicleInfo(availability = a, verified = if (a != null) setOf(VehicleField.AVAILABILITY) else emptySet()))
+        val cars = listOf(
+            car("now", io.github.tieo.arbay.model.VehicleAvailability(now = true)),
+            car("coming", io.github.tieo.arbay.model.VehicleAvailability(from = "2027-01-15")),
+            car("ordered", io.github.tieo.arbay.model.VehicleAvailability(inMonths = 9, ordered = true, said = "In 9 Monaten ab Bestellung verfügbar")),
+            car("unstated", null),
+        )
+        assertEquals(listOf("now", "coming", "unstated"), CarFilterEngine.apply(cars, CarFilters(inStockOnly = true)).map { it.externalId })
+    }
+
+    @Test
+    fun conditionsGoToTheSitesByNeulandsNames() {
+        assertEquals(listOf("new", "pre-registered"), io.github.tieo.arbay.neuland.NeulandOffers.VehicleQuery.conditions(setOf(VehicleCondition.PRE_REGISTRATION, VehicleCondition.NEW)))
+        assertEquals(listOf("used"), io.github.tieo.arbay.neuland.NeulandOffers.VehicleQuery.conditions(setOf(VehicleCondition.USED, VehicleCondition.DAMAGED)))
+    }
 }

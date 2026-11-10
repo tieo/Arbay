@@ -154,6 +154,36 @@ object FitScore {
         }
         val length = fits(wishes.vanLengths, v?.vanLength, v?.vanLengthMax, "length")
         val height = fits(wishes.vanHeights, v?.vanHeight, v?.vanHeightMax, "roof")
+        // An electric car's size: its model's length from the catalogue, against the least and
+        // the ideal model the search names. Under the least it is ruled out where the filter
+        // has not already left it out; between the two it rises to full at the ideal.
+        val ev = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null || wishes.idealRangeKm != null ||
+            wishes.idealDcKw != null || wishes.wantsHeatPump) EvModels.versionOf(listing) else null
+        val carLength = if (wishes.atLeastSizeOf != null || wishes.idealSizeOf != null)
+            EvModels.lengthOf(EvModels.versionsOf(listing.title)) else null
+        val least = EvModels.minLengthMm(wishes)
+        val ideal = EvModels.idealLengthMm(wishes)
+        if (least != null && carLength != null && carLength < least) return null
+        val evSize = if (wishes.atLeastSizeOf == null && wishes.idealSizeOf == null) null else when {
+            carLength == null -> Wish(null, null)
+            ideal == null || carLength >= ideal -> Wish(1.0, "${grouped(carLength.toLong())} mm long")
+            else -> Wish(0.4 + 0.6 * (linear(carLength.toDouble(), ideal.toDouble(), (least ?: ideal - 400).toDouble()) ?: 0.0),
+                "${grouped(carLength.toLong())} mm long, ideal ${grouped(ideal.toLong())}")
+        }
+        val range = wishes.idealRangeKm?.let { want ->
+            val km = v?.rangeKm ?: ev?.wltpRangeKm
+            Wish(linear(km?.toDouble(), want.toDouble(), want * 0.6), km?.let { "$it km WLTP" + if (v?.rangeKm == null) " (model)" else "" })
+        }
+        val charging = wishes.idealDcKw?.let { want ->
+            val kw = ev?.dcMaxKw
+            Wish(linear(kw, want.toDouble(), want * 0.5), kw?.let { "${it.roundToInt()} kW DC (model)" })
+        }
+        val heatPump = if (!wishes.wantsHeatPump) null else when {
+            v?.heatPump == true -> Wish(1.0, "in the equipment")
+            ev?.heatPumpStandard == true -> Wish(1.0, "standard on the model")
+            ev?.heatPump == false -> Wish(0.0, "not available on the model")
+            else -> Wish(null, null)
+        }
         val sizes = listOfNotNull(length, height)
         val size = sizes.takeIf { it.isNotEmpty() }?.let { s ->
             Wish(s.map { it.first }.average(), s.map { it.second }.filter { !it.endsWith("as wanted") }.joinToString(", ").ifEmpty { "as wanted" })
@@ -194,7 +224,9 @@ object FitScore {
         // A wish the search does not make counts for nothing; one it makes and the ad does not
         // answer counts a little under half.
         val weighed = listOfNotNull(
-            size?.let { Triple(FitWish.SIZE, it, .26) }, price?.let { Triple(FitWish.PRICE, it, .22) },
+            (size ?: evSize)?.let { Triple(FitWish.SIZE, it, .26) }, price?.let { Triple(FitWish.PRICE, it, .22) },
+            range?.let { Triple(FitWish.RANGE, it, .12) }, charging?.let { Triple(FitWish.CHARGING, it, .06) },
+            heatPump?.let { Triple(FitWish.HEAT_PUMP, it, .05) },
             gear?.let { Triple(FitWish.GEARBOX, it, .12) }, km?.let { Triple(FitWish.MILEAGE, it, .11) },
             power?.let { Triple(FitWish.POWER, it, .20) }, year?.let { Triple(FitWish.YEAR, it, .09) },
             drive?.let { Triple(FitWish.DRIVE, it, .07) }, Triple(FitWish.SELLER, dealer, .03),

@@ -40,6 +40,7 @@ import io.github.tieo.arbay.navigation.Route
 import io.github.tieo.arbay.navigation.Source
 import io.github.tieo.arbay.results.FORM_BODIES
 import io.github.tieo.arbay.results.FORM_FUELS
+import io.github.tieo.arbay.model.Fuel
 import io.github.tieo.arbay.results.FORM_CONDITIONS
 import io.github.tieo.arbay.results.ResultsState
 import io.github.tieo.arbay.results.VehicleSearch
@@ -132,6 +133,22 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
             }
             Labelled("Body") {
                 FORM_BODIES.forEach { b -> Choice(vehicleWord(b.name), b in filters.bodyTypes) { filters = filters.copy(bodyTypes = if (b in filters.bodyTypes) filters.bodyTypes - b else filters.bodyTypes + b) } }
+            }
+
+            if (Fuel.ELECTRIC in filters.fuels) {
+                Group("Electric")
+                val models = remember { VehicleSearch.makes.flatMap { mk -> mk.models.map { "${mk.name} ${it.name}" } } }
+                Picker("At least as big as", filters.atLeastSizeOf.orEmpty(), models, "VW ID.3, any model") { filters = filters.copy(atLeastSizeOf = it.ifBlank { null }) }
+                Picker("Ideally as big as", filters.idealSizeOf.orEmpty(), models, "VW ID.4, any model") { filters = filters.copy(idealSizeOf = it.ifBlank { null }) }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Number("Ideal range km", filters.idealRangeKm, Modifier.weight(1f)) { filters = filters.copy(idealRangeKm = it) }
+                    Number("Ideal DC charging kW", filters.idealDcKw, Modifier.weight(1f)) { filters = filters.copy(idealDcKw = it) }
+                }
+                Labelled("Heat pump") {
+                    listOf(false to "Either", true to "Wanted").forEach { (v, l) ->
+                        Choice(l, filters.wantsHeatPump == v) { filters = filters.copy(wantsHeatPump = v) }
+                    }
+                }
             }
 
             Group("Van size")

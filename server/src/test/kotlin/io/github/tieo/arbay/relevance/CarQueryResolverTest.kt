@@ -46,4 +46,12 @@ class CarQueryResolverTest {
     fun `the strict resolver still refuses a bare model, since it also decides what is a car query`() {
         assertNull(CarQueryResolver.resolve("crafter"))
     }
+
+    @Test
+    fun `a model named in two words is the whole name`() {
+        val resolved = CarQueryResolver.resolve("Tesla Model Y Long Range")
+        assertEquals("tesla", resolved?.makeSlug)
+        assertEquals("model y", resolved?.modelSlug)
+        assertEquals("long range", resolved?.remainder)
+    }
 }

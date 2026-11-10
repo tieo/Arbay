@@ -102,6 +102,7 @@ object CarFilterEngine {
         probe("bodyType", filters.copy(bodyTypes = emptySet()))
         probe("condition", filters.copy(conditions = emptySet()))
         probe("availability", filters.copy(inStockOnly = false))
+        probe("size", filters.copy(atLeastSizeOf = null))
         probe("color", filters.copy(colors = emptySet()))
         probe("drivetrain", filters.copy(drivetrain = null))
         probe("doors", filters.copy(minDoors = null))
@@ -192,6 +193,12 @@ object CarFilterEngine {
         // New is never registered, so a vehicle stating a first registration is no new one, though
         // its card names no condition: a search for new ones alone loses it.
         if (v?.condition == null && filters.conditions == setOf(VehicleCondition.NEW) && v?.firstRegYear != null && v.isVerified(VehicleField.FIRST_REG_YEAR)) return "condition"
+        // A car shorter than the model the search names as its least size; one whose model the
+        // catalogue does not know, or knows no length of, is kept.
+        io.github.tieo.arbay.judging.EvModels.minLengthMm(filters)?.let { min ->
+            val length = io.github.tieo.arbay.judging.EvModels.lengthOf(io.github.tieo.arbay.judging.EvModels.versionsOf(listing.title))
+            if (length != null && length < min) return "size"
+        }
         if (drop(filters.inStockOnly, v?.availability != null && v.isVerified(VehicleField.AVAILABILITY)) { !v!!.availability!!.ordered }) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"

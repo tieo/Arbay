@@ -1510,6 +1510,9 @@ private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same t
     "{\"fuels\":[\"ELECTRIC\"],\"conditions\":[\"NEW\",\"PRE_REGISTRATION\",\"DEMO\"],\"bodyTypes\":[\"SUV\"],\"firstRegFromYear\":2024," +
     "\"maxMileageKm\":5000,\"minPowerKw\":100,\"transmission\":\"AUTOMATIC\",\"sellerType\":\"BUSINESS\",\"minSeats\":5,\"inStockOnly\":true,\"descriptionContains\":\"Wärmepumpe\"}. " +
     "inStockOnly leaves out a vehicle the dealer still orders from the maker (Bestellfahrzeug). New means never registered. " +
+    "Electric cars: atLeastSizeOf and idealSizeOf name a model by make and model (\"VW ID.3\", \"VW ID.4\"): every electric model at least " +
+    "as long is searched too, shorter ones are left out, and the fit rises towards the ideal's length (lengths from ev-database.org); " +
+    "idealRangeKm (WLTP), idealDcKw and wantsHeatPump weigh the fit, from the ad or else the model's catalogue entry. " +
     "Fuels: PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID, MILD_HYBRID, LPG, CNG, HYDROGEN. " +
     "Conditions: NEW, USED, DEMO (Vorführwagen), PRE_REGISTRATION (Tageszulassung), ANNUAL_CAR (Jahreswagen), CLASSIC, DAMAGED. " +
     "Bodies: SMALL_CAR, SEDAN, ESTATE, SUV, COUPE, CONVERTIBLE, VAN, MINIVAN, PICKUP, TRANSPORTER. " +

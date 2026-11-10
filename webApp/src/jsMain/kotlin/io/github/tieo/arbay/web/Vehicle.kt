@@ -179,6 +179,35 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
             }
         }
 
+        if (Fuel.ELECTRIC in filters.fuels) Fieldset {
+            Legend { Text("Electric") }
+            Datalist({ id("all-models") }) { VehicleSearch.makes.forEach { mk -> mk.models.forEach { Option("${mk.name} ${it.name}") } } }
+            Div({ classes("field-row") }) {
+                Field("At least as big as") {
+                    Input(InputType.Text) {
+                        classes("control"); attr("list", "all-models"); placeholder("VW ID.3, any model")
+                        value(filters.atLeastSizeOf.orEmpty()); onInput { filters = filters.copy(atLeastSizeOf = it.value.ifBlank { null }) }
+                    }
+                }
+                Field("Ideally as big as") {
+                    Input(InputType.Text) {
+                        classes("control"); attr("list", "all-models"); placeholder("VW ID.4, any model")
+                        value(filters.idealSizeOf.orEmpty()); onInput { filters = filters.copy(idealSizeOf = it.value.ifBlank { null }) }
+                    }
+                }
+            }
+            Div({ classes("field-row") }) {
+                NumberField("Ideal range (km)", filters.idealRangeKm) { filters = filters.copy(idealRangeKm = it) }
+                NumberField("Ideal DC charging (kW)", filters.idealDcKw) { filters = filters.copy(idealDcKw = it) }
+            }
+            Div({ classes("chips") }) {
+                Span({ classes("chips-label") }) { Text("Heat pump") }
+                listOf(false to "Either", true to "Wanted").forEach { (value, label) ->
+                    Chip(label, filters.wantsHeatPump == value) { filters = filters.copy(wantsHeatPump = value) }
+                }
+            }
+        }
+
         Fieldset {
             Legend { Text("Van size") }
             Div({ classes("chips") }) {
