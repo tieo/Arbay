@@ -20,6 +20,9 @@ enum class PlatformId(
     KLEINANZEIGEN("Kleinanzeigen", "https://www.kleinanzeigen.de"),
     MOBILE_DE("mobile.de", "https://suchen.mobile.de"),
     AUTOSCOUT24("AutoScout24", "https://www.autoscout24.de"),
+    // Makers' own stock searches: the cars their German dealers, or the maker itself, have.
+    VW_GROUP_STOCK("VW group dealers", "https://www.volkswagen.de"),
+    TESLA("Tesla", "https://www.tesla.com"),
     // Per-country AutoScout24 markets. All crawl the .de front end with a country filter
     // (cy code) and display prices in EUR; each carries its origin for the cross-border badge.
     AUTOSCOUT24_IT("AutoScout24 IT", "https://www.autoscout24.it", country = "IT"),

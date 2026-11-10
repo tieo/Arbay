@@ -36,6 +36,8 @@ object CrawlerRegistry {
         PlatformId.AUTOSCOUT24_ES to AutoScout24Crawler(listOf("ES"), PlatformId.AUTOSCOUT24_ES),
         PlatformId.AUTOSCOUT24_BE to AutoScout24Crawler(listOf("BE"), PlatformId.AUTOSCOUT24_BE),
         PlatformId.MOBILE_DE to MobileDeCrawler(),
+        PlatformId.VW_GROUP_STOCK to MakerStockCrawler(PlatformId.VW_GROUP_STOCK, "volkswagen.de", setOf("volkswagen", "audi", "skoda", "seat", "cupra")),
+        PlatformId.TESLA to MakerStockCrawler(PlatformId.TESLA, "tesla.com", setOf("tesla")),
         PlatformId.WILLHABEN to WillhabenCrawler(),
         PlatformId.IMMOSCOUT24 to ImmoScout24Crawler(),
         PlatformId.TRUCKSCOUT24 to TruckScout24Crawler(),

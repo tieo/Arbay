@@ -25,7 +25,7 @@ object MarketSets {
      *  a car is worth importing from. */
     val vehicles: List<PlatformId> = listOf(
         PlatformId.AUTOSCOUT24, PlatformId.MOBILE_DE, PlatformId.KLEINANZEIGEN, PlatformId.EBAY_DE,
-        PlatformId.TRUCKSCOUT24, PlatformId.OTOMOTO, PlatformId.SAUTO, PlatformId.DBA,
+        PlatformId.VW_GROUP_STOCK, PlatformId.TESLA, PlatformId.TRUCKSCOUT24, PlatformId.OTOMOTO, PlatformId.SAUTO, PlatformId.DBA,
         PlatformId.BILBASEN, PlatformId.BYTBIL, PlatformId.MARKTPLAATS, PlatformId.WILLHABEN,
         PlatformId.AUTOSCOUT24_IT, PlatformId.AUTOSCOUT24_FR, PlatformId.AUTOSCOUT24_ES,
         PlatformId.AUTOSCOUT24_BE, PlatformId.AUTOVIT, PlatformId.RICARDO, PlatformId.SUBITO,
