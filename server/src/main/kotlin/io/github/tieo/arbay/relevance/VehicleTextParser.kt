@@ -239,8 +239,19 @@ object VehicleTextParser {
             color = structured.color ?: fromText.color,
             emissionClassEuro = structured.emissionClassEuro ?: fromText.emissionClassEuro,
             wheelbaseMm = structured.wheelbaseMm ?: fromText.wheelbaseMm,
-            // Only the structured side's fields are verified; text fills gaps as inferred.
-            verified = structured.verified,
+            trim = structured.trim ?: fromText.trim,
+            availability = structured.availability ?: fromText.availability,
+            batteryKwh = structured.batteryKwh ?: fromText.batteryKwh,
+            rangeKm = structured.rangeKm ?: fromText.rangeKm,
+            consumptionKwhPer100Km = structured.consumptionKwhPer100Km ?: fromText.consumptionKwhPer100Km,
+            fastChargeMinutes = structured.fastChargeMinutes ?: fromText.fastChargeMinutes,
+            fastChargeKw = structured.fastChargeKw ?: fromText.fastChargeKw,
+            heatPump = structured.heatPump ?: fromText.heatPump,
+            vatDeductible = structured.vatDeductible ?: fromText.vatDeductible,
+            // The structured side's fields are verified, and so is a field only the other side
+            // has where that side read it from a site's field (a card's, under its ad page): text
+            // read off prose is never verified, so it fills gaps as inferred.
+            verified = structured.verified + (fromText.verified - verifiedByPresence(structured).verified),
         )
     }
 

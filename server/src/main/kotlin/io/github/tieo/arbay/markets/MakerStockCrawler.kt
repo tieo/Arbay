@@ -27,6 +27,21 @@ class MakerStockCrawler(
         }
     }
 
+    /** The car's own page: availability, battery, charging and heat pump, and the equipment list. */
+    override suspend fun fetchDetail(listing: Listing): ListingDetail? = try {
+        val page = NeulandOffers.detail(listing.url, platformId.displayName)
+        val equipment = page.specs.firstOrNull { it.first == "Ausstattung" }?.second
+        ListingDetail(
+            vehicle = page.vehicle,
+            description = listOfNotNull(page.description, equipment?.let { "Ausstattung: $it" }).joinToString("\n\n").takeIf { it.isNotBlank() },
+            listedAt = page.listedAt,
+        ).takeIf { it.vehicle != null || it.description != null }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
     /** What the maker's search is asked; none where the words name no make it sells. */
     internal fun vehicleQuery(query: SearchQuery): NeulandOffers.VehicleQuery? {
         val car = CarQueryResolver.resolveForCarSite(query.positiveText)?.takeIf { it.makeSlug in makes } ?: return null

@@ -177,8 +177,8 @@ object FitScore {
             Wish(linear(km?.toDouble(), want.toDouble(), want * 0.6), km?.let { "$it km WLTP" + if (v?.rangeKm == null) " (model)" else "" })
         }
         val charging = wishes.idealDcKw?.let { want ->
-            val kw = ev?.dcMaxKw
-            Wish(linear(kw, want.toDouble(), want * 0.5), kw?.let { "${it.roundToInt()} kW DC (model)" })
+            val kw = v?.fastChargeKw ?: ev?.dcMaxKw
+            Wish(linear(kw, want.toDouble(), want * 0.5), kw?.let { "${it.roundToInt()} kW DC" + if (v?.fastChargeKw == null) " (model)" else "" })
         }
         val heatPump = if (!wishes.wantsHeatPump) null else when {
             v?.heatPump == true -> Wish(1.0, "in the equipment")

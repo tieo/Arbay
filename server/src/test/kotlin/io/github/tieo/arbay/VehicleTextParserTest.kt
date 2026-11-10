@@ -416,4 +416,17 @@ class VehicleTextParserTest {
         // Kleinanzeigen 3559628238, same dealer: one label for registration and inspection.
         assertEquals(2020, VehicleTextParser.parse("Nr.54 Preis incl. MWSt. Erstzulassung / HU: 01.06.2020 Laufleistung: 107.500 km")!!.firstRegYear)
     }
+
+    @Test
+    fun `a card's availability and range stay when its page says nothing of them`() {
+        val card = io.github.tieo.arbay.model.VehicleInfo(
+            rangeKm = 382, availability = io.github.tieo.arbay.model.VehicleAvailability(now = true),
+            verified = setOf(io.github.tieo.arbay.model.VehicleField.AVAILABILITY),
+        )
+        val page = io.github.tieo.arbay.model.VehicleInfo(batteryKwh = 52.0, fastChargeKw = 145.0)
+        val merged = io.github.tieo.arbay.relevance.VehicleTextParser.merge(page, card)!!
+        kotlin.test.assertEquals(382, merged.rangeKm)
+        kotlin.test.assertEquals(145.0, merged.fastChargeKw)
+        kotlin.test.assertTrue(merged.isVerified(io.github.tieo.arbay.model.VehicleField.AVAILABILITY))
+    }
 }

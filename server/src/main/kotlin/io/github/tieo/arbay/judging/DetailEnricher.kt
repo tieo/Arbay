@@ -73,6 +73,7 @@ object DetailEnricher {
         // lacks: a mobile.de card says only "Volkswagen Crafter".
         if (filters.vanLengths.isNotEmpty()) add(VehicleField.VAN_LENGTH)
         if (filters.vanHeights.isNotEmpty()) add(VehicleField.VAN_HEIGHT)
+        if (filters.inStockOnly) add(VehicleField.AVAILABILITY)
     }
 
     private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {

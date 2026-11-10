@@ -1361,6 +1361,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             batteryKwh?.let { "battery ${it.toBigDecimal().stripTrailingZeros().toPlainString()} kWh" },
             rangeKm?.let { "WLTP range $it km" },
             consumptionKwhPer100Km?.let { "$it kWh/100 km" },
+            fastChargeKw?.let { "DC ${it.toInt()} kW" },
             fastChargeMinutes?.let { "10-80 % in $it min" },
             heatPump?.takeIf { it }?.let { "heat pump" },
             vatDeductible?.takeIf { it }?.let { "VAT deductible" },

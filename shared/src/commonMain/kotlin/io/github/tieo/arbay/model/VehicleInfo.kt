@@ -69,6 +69,7 @@ data class VehicleInfo(
     val rangeKm: Int? = null,
     val consumptionKwhPer100Km: Double? = null,
     val fastChargeMinutes: Int? = null,
+    val fastChargeKw: Double? = null,
     val heatPump: Boolean? = null,
     // A business buyer can deduct the VAT, the dealer states (Mwst. ausweisbar).
     val vatDeductible: Boolean? = null,
