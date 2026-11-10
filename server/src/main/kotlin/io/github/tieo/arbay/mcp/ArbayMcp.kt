@@ -191,6 +191,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                         when (args.str("sort")) {
                             "cents_per_gb" -> compareBy { it.drive?.centsPerGb ?: Double.MAX_VALUE }
                             "life" -> compareByDescending { it.drive?.lifeHours ?: -1L }
+                            "total_cost" -> compareBy { it.ownCost?.totalEur ?: Int.MAX_VALUE }
                             else -> compareByDescending<Listing> { it.matchScore ?: -1.0 }.thenBy { it.effectivePrice.amount }
                         },
                     ),
@@ -404,7 +405,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("saved_search_id", "Search with a saved search's words, markets and settings instead")
                 string("search_id", "A search already running, to get what has arrived since")
                 integer("limit", "How many offers to list (default 40)")
-                string("sort", "For drives: cents_per_gb (cheapest per gigabyte first) or life (most expected hours left first)")
+                string("sort", "For drives: cents_per_gb (cheapest per gigabyte first) or life (most expected hours left first); for a vehicle search with costKmPerYear: total_cost (cheapest to own first)")
                 number("max_price_eur", "Leave out offers above this landed price. The markets are asked for nothing dearer, so a search for the cheapest reads far fewer pages")
                 number("min_price_eur", "Leave out offers below this landed price, such as accessories for the thing searched")
                 boolean("other_words", "Also search each market under the thing's other names: for a part number, the ways the listings carrying it describe the part")
@@ -439,7 +440,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val detail = http.get("$base/api/crawler/listing-detail") {
                 parameter("url", l.url); parameter("platform", l.platformId.name); parameter("id", l.id)
             }
-            val head = l.line() + l.fitLine() +
+            val head = l.line() + l.fitLine() + l.ownCostLines() +
                 (if (l.id in hiddenOffers()) "\nPut away: hidden on every device, so searches do not list it (hide_offers with bring_back shows it again)." else "")
             // A page Arbay could not fetch says nothing about the ad, so it is not reported as one
             // that has nothing more to say: with the server offline every ad read that way.
@@ -455,7 +456,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             val pageShipping = (body["shipping"] as? JsonObject)?.let {
                 runCatching { json.decodeFromJsonElement(io.github.tieo.arbay.model.Shipping.serializer(), it) }.getOrNull()
             }
-            val pageHead = (if (pageShipping != null) l.copy(shipping = pageShipping) else l).line() + l.fitLine()
+            val pageHead = (if (pageShipping != null) l.copy(shipping = pageShipping) else l).line() + l.fitLine() + l.ownCostLines()
             val vehicle = body["vehicle"] as? JsonObject
             val emptyVehicle = vehicle != null && vehicle.values.all { it is JsonNull || (it is JsonArray && it.isEmpty()) }
             // The seller's account age and badges decide whether an offer can be trusted, so they
@@ -1253,6 +1254,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
         drive?.driveLine(),
         matchScore?.let { "fit ${Math.round(it * 100)}%" },
+        ownCost?.let { c -> "costs ${c.totalEur} € over ${c.years} years at ${c.kmPerYear} km/year (" + c.totalsByKm.entries.joinToString(", ") { "${it.key / 1000}k km: ${it.value} €" } + ")" },
         photosAlsoIn.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "LIKELY SCAM, its photos are also in: ") { c -> listOfNotNull(c.place, c.url).joinToString(" ") },
         url,
     ).joinToString(" | ")
@@ -1329,6 +1331,14 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
 
     /** Where a vehicle's fit comes from, each wish with the whole points it adds of those it could:
      *  "\nfit 76 %: size 27/27, price 7/21 (27.400 €), …". Empty for an offer without a fit. */
+    /** What the vehicle costs to own, part by part, with what each estimate rests on. */
+    private fun Listing.ownCostLines(): String = ownCost?.let { c ->
+        "\nCost to own over ${c.years} years at ${c.kmPerYear} km/year: ${c.totalEur} € (" + c.totalsByKm.entries.joinToString(", ") { "${it.key} km: ${it.value} €" } + ")" +
+            c.parts.joinToString("") { "\n  ${it.what}: ${it.eur} €" + (it.note?.let { n -> " ($n)" } ?: "") } +
+            (if (c.assumptions.isEmpty()) "" else "\n  Assumed: " + c.assumptions.joinToString("; ")) +
+            "\n  Not counted: " + c.notCounted.joinToString("; ") + (c.source?.let { "\n  Source: $it" } ?: "")
+    }.orEmpty()
+
     private fun Listing.fitLine(): String = fit.takeIf { it.isNotEmpty() }?.let { parts ->
         parts.zip(parts.wholePoints()).joinToString(", ", prefix = "\nfit ${Math.round((matchScore ?: 0.0) * 100)} %: ") { (p, w) ->
             "${p.wish.label.lowercase()} ${w.first}/${w.second}" + (p.note?.let { " ($it)" } ?: "")
@@ -1527,6 +1537,8 @@ private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same t
     "Electric cars: atLeastSizeOf and idealSizeOf name a model by make and model (\"VW ID.3\", \"VW ID.4\"): every electric model at least " +
     "as long is searched too, shorter ones are left out, and the fit rises towards the ideal's length (lengths from ev-database.org); " +
     "idealRangeKm (WLTP), idealDcKw and wantsHeatPump weigh the fit, from the ad or else the model's catalogue entry. " +
+    "costKmPerYear (e.g. 10000) adds each car's cost to own over 10 years from ADAC's tables (purchase less value at the end, fixed costs, workshop, charging at the user's price mix, care), shown at 5,000, 10,000 and 20,000 km too; " +
+    "idealTotalCostEur and maxTotalCostEur make that total the fit's main wish in place of the price. " +
     "Fuels: PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID, MILD_HYBRID, LPG, CNG, HYDROGEN. " +
     "Conditions: NEW, USED, DEMO (Vorführwagen), PRE_REGISTRATION (Tageszulassung), ANNUAL_CAR (Jahreswagen), CLASSIC, DAMAGED. " +
     "Bodies: SMALL_CAR, SEDAN, ESTATE, SUV, COUPE, CONVERTIBLE, VAN, MINIVAN, PICKUP, TRANSPORTER. " +

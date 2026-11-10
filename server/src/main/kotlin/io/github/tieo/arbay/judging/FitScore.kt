@@ -48,6 +48,8 @@ object FitScore {
         val airConditioning: Boolean?,
         /** What each wish adds, in points that sum to [score] in percent. */
         val parts: List<FitPart> = emptyList(),
+        /** What the vehicle costs to own, where the search asks for that. */
+        val ownCost: io.github.tieo.arbay.model.OwnCost? = null,
     )
 
     /** How well the offer meets one wish, 0 to 1 or null where the ad does not say, and what it has. */
@@ -201,7 +203,15 @@ object FitScore {
         val drive = wishes.drivetrain?.let { if (statedDrive == null) Wish(0.8, NOT_STATED) else Wish(1.0, statedDrive.name) }
         val min = wishes.minPriceEur?.toDouble()
         val max = wishes.maxPriceEur?.toDouble()
-        val price = max?.let { Wish(linear(priceEur, (min ?: 0.0) + ((it - (min ?: 0.0)) * 0.25), it * 1.03), euros(priceEur)) }
+        // What the car costs to own over the years, where the search asks: it replaces the price as
+        // what counts, weighed between the total that fits fully and the one that fits not at all.
+        val ownCost = wishes.costKmPerYear?.let { km -> OwnershipCost.of(listing, km, io.github.tieo.arbay.repo.ImportSettingsStore.current) }
+        val costWish = if (wishes.idealTotalCostEur == null && wishes.maxTotalCostEur == null) null else {
+            val worst = (wishes.maxTotalCostEur ?: (wishes.idealTotalCostEur!! * 1.5).roundToInt()).toDouble()
+            val best = (wishes.idealTotalCostEur ?: (wishes.maxTotalCostEur!! * 0.7).roundToInt()).toDouble()
+            Wish(ownCost?.let { linear(it.totalEur.toDouble(), best, worst) }, ownCost?.let { "${euros(it.totalEur.toDouble())} over ${it.years} years at ${grouped(it.kmPerYear.toLong())} km" })
+        }
+        val price = if (costWish != null) null else max?.let { Wish(linear(priceEur, (min ?: 0.0) + ((it - (min ?: 0.0)) * 0.25), it * 1.03), euros(priceEur)) }
         val km = wishes.maxMileageKm?.let { Wish(linear(v?.mileageKm?.toDouble(), it * 0.4, it * 1.33), v?.mileageKm?.let { m -> "${grouped(m.toLong())} km" }) }
         val thisYear = Clock.System.now().toString().take(4).toInt()
         val year = wishes.firstRegFromYear?.let { Wish(linear(v?.firstRegYear?.toDouble(), thisYear - 4.0, it - 2.0), v?.firstRegYear?.toString()) }
@@ -227,6 +237,7 @@ object FitScore {
         // answer counts a little under half.
         val weighed = listOfNotNull(
             (size ?: evSize)?.let { Triple(FitWish.SIZE, it, .26) }, price?.let { Triple(FitWish.PRICE, it, .22) },
+            costWish?.let { Triple(FitWish.COST, it, .40) },
             range?.let { Triple(FitWish.RANGE, it, .12) }, charging?.let { Triple(FitWish.CHARGING, it, .06) },
             heatPump?.let { Triple(FitWish.HEAT_PUMP, it, .05) },
             gear?.let { Triple(FitWish.GEARBOX, it, .12) }, km?.let { Triple(FitWish.MILEAGE, it, .11) },
@@ -235,7 +246,7 @@ object FitScore {
             Triple(FitWish.DISTANCE, where, .03), Triple(FitWish.AD_AGE, age, .01),
             Triple(FitWish.AIR_CONDITIONING, Wish(ac?.let { if (it) 1.0 else 0.3 }, ac?.let { if (it) "yes" else "no" }), .01),
         )
-        return weigh(weighed, hours, ac)
+        return weigh(weighed, hours, ac).copy(ownCost = ownCost)
     }
 
     /** The parts and the score of [weighed] wishes, each counting its weight's share of the whole. */

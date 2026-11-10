@@ -350,18 +350,27 @@ object NeulandOffers {
         fun location() = place?.let { io.github.tieo.arbay.model.Location(city = it.town, zip = it.postcode, country = it.country) }
         fun listedAt() = listed?.let { runCatching { kotlin.time.Instant.parse(it) }.getOrNull() }
     }
-    /** A power in kilowatts the seller writes in the title ("ID.4 GTX 4MOTION 250 kW"), never a battery's kWh. */
+    /** A power in kilowatts the seller writes in the title ("ID.4 GTX 4MOTION 250 kW"), and a battery in kWh ("77 kWh"). */
     private val titleKw = Regex("""(?i)(?<![\d.,])(\d{2,3})\s?kw(?!h)\b""")
+    private val titleKwh = Regex("""(?i)(?<![\d.,])(\d{2,3})(?:[.,]\d)?\s?kwh\b""")
 
     /**
-     * The vehicle with the power its title names where the site's power field says another: dealers
-     * on willhaben type the battery's 77 kWh into the power field of a 250 kW ID.4 GTX. The title's
-     * figure is the seller's own words, so it is kept as read, not as the site's verified field.
+     * The vehicle with the power its title names where the site's power field holds the battery:
+     * dealers on willhaben type the 77 kWh of a 250 kW ID.4 GTX into the power field, and the
+     * title says both. Only a field equal to a battery the title names gives way, since sellers
+     * also write the battery as "77KW" with the right power in the field; a field equal to one of
+     * the model's batteries in the catalogue is unknown power. The title's figure is
+     * the seller's own words, so it is kept as read, not as the site's verified field.
      */
     internal fun withTitlePower(title: String, v: io.github.tieo.arbay.model.VehicleInfo?): io.github.tieo.arbay.model.VehicleInfo? {
-        val named = titleKw.findAll(title).map { it.groupValues[1].toInt() }.distinct().singleOrNull() ?: return v
         val field = v?.powerKw ?: return v
-        if (kotlin.math.abs(field - named) <= 2) return v
+        val battery = titleKwh.findAll(title).map { it.groupValues[1].toInt() }.toList()
+        if (battery.none { kotlin.math.abs(it - field) <= 1 }) {
+            // "ID.4 Pro 77KW" with 77 in the field: the model's battery, not its power.
+            return if (io.github.tieo.arbay.judging.EvModels.powerIsABattery(title, field))
+                v.copy(powerKw = null, verified = v.verified - io.github.tieo.arbay.model.VehicleField.POWER) else v
+        }
+        val named = titleKw.findAll(title).map { it.groupValues[1].toInt() }.distinct().singleOrNull()
         return v.copy(powerKw = named, verified = v.verified - io.github.tieo.arbay.model.VehicleField.POWER)
     }
 

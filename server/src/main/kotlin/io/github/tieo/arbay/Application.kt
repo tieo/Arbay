@@ -30,6 +30,7 @@ fun main() {
     io.github.tieo.arbay.judging.OfferJudge.install(DataDir.file("offer_verdicts.json"))
     io.github.tieo.arbay.judging.SoldSweep.start()
     io.github.tieo.arbay.judging.EvModels.start()
+    io.github.tieo.arbay.judging.Adac.start()
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }

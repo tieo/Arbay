@@ -26,6 +26,8 @@ data class Listing(
     // shipping, so it is in the effective price.
     val extraCosts: Money? = null,
     val extraCostsSaid: String? = null,
+    // What the vehicle costs to own over the years, where its search asks for that.
+    val ownCost: OwnCost? = null,
     val negotiable: Boolean = false,
     // How this is sold, when the market says. An auction's price is the bid so far, which is not
     // what the thing costs: a Crucial module alerted at €10.50 was €21.50 the next day and still

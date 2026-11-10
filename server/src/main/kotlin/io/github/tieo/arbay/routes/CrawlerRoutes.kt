@@ -426,8 +426,9 @@ private fun withFit(listings: List<Listing>, query: SearchQuery, isCarQuery: Boo
         val fit = io.github.tieo.arbay.judging.FitScore.score(l, wishes, io.github.tieo.arbay.judging.FitScore.priceEur(l), softDriveHours)
             ?: return@map l
         val described = l.matchScore
-        if (described == null) l.copy(matchScore = fit.score, fit = fit.parts)
+        if (described == null) l.copy(matchScore = fit.score, fit = fit.parts, ownCost = fit.ownCost)
         else l.copy(
+            ownCost = fit.ownCost,
             matchScore = (described + fit.score) / 2,
             fit = fit.parts.map { it.copy(points = it.points / 2, of = it.of / 2) } +
                 FitPart(FitWish.DESCRIPTION, described * 50, 50.0, null),

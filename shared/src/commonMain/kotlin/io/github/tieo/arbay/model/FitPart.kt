@@ -10,6 +10,7 @@ enum class FitWish(val label: String) {
     MODEL("Model"),
     SIZE("Size"),
     PRICE("Price"),
+    COST("Cost to own"),
     GEARBOX("Gearbox"),
     MILEAGE("Mileage"),
     POWER("Power"),

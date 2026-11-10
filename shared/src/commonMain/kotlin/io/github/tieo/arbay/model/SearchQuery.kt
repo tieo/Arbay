@@ -60,6 +60,12 @@ data class CarFilters(
     val idealRangeKm: Int? = null,
     val idealDcKw: Int? = null,
     val wantsHeatPump: Boolean = false,
+    // Weigh what a car costs to own over ten years, at this many km a year: purchase less its value
+    // at the end, fixed costs, workshop, energy. The total fits fully at idealTotalCostEur and not
+    // at all at maxTotalCostEur; without them it is shown but weighs nothing.
+    val costKmPerYear: Int? = null,
+    val idealTotalCostEur: Int? = null,
+    val maxTotalCostEur: Int? = null,
     // Panel-van sizes on the app's own scale (VanSize), multi-select: a listing matches if what
     // it verifiably states is in the set. The server reads each listing in its maker's terms, so a
     // size it cannot place for sure, like a Crafter's "L3H2", passes as unchecked.
@@ -122,6 +128,7 @@ data class CarFilters(
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null && !inStockOnly &&
             atLeastSizeOf.isNullOrBlank() && idealSizeOf.isNullOrBlank() && idealRangeKm == null && idealDcKw == null && !wantsHeatPump &&
+            costKmPerYear == null && idealTotalCostEur == null && maxTotalCostEur == null &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
             minWheelbaseMm == null && maxWheelbaseMm == null &&
             descriptionContains.isNullOrBlank() && idealDescription.isNullOrBlank()

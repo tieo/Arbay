@@ -28,7 +28,11 @@ class NeulandVehicleConditionTest {
     fun `the title's kW wins over a power field holding the battery`() {
         val typed = io.github.tieo.arbay.model.VehicleInfo(powerKw = 77, verified = setOf(io.github.tieo.arbay.model.VehicleField.POWER))
         assertEquals(250, NeulandOffers.withTitlePower("VW ID.4 GTX 4MOTION 250 kW Business -77 kWh", typed)?.powerKw)
-        assertEquals(77, NeulandOffers.withTitlePower("VW ID.4 Pro 77 kWh", typed)?.powerKw)
         assertEquals(77, NeulandOffers.withTitlePower("VW Polo 77 kW", typed)?.powerKw)
+        // The battery written as kW, the power field right.
+        val right = io.github.tieo.arbay.model.VehicleInfo(powerKw = 210, verified = setOf(io.github.tieo.arbay.model.VehicleField.POWER))
+        assertEquals(210, NeulandOffers.withTitlePower("Volkswagen ID.4 Pro ID.4 77KW Wärmepumpe, ab Lager", right)?.powerKw)
+        // The field holds the battery and the title names no power: unknown.
+        assertEquals(null, NeulandOffers.withTitlePower("VW ID.4 Pro 77 kWh", typed)?.powerKw)
     }
 }

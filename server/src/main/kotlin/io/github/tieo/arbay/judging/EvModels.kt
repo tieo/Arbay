@@ -52,7 +52,9 @@ object EvModels {
         val seats: Int? = null,
         @SerialName("length_mm") val lengthMm: Int? = null,
         @SerialName("boot_l") val bootL: Int? = null,
+        @SerialName("battery_kwh") val batteryKwh: Double? = null,
         @SerialName("battery_usable_kwh") val batteryUsableKwh: Double? = null,
+        @SerialName("power_kw") val powerKw: Int? = null,
         @SerialName("wltp_range_km") val wltpRangeKm: Int? = null,
         @SerialName("dc_max_kw") val dcMaxKw: Double? = null,
         @SerialName("heat_pump") val heatPump: Boolean? = null,
@@ -176,6 +178,15 @@ object EvModels {
         val named = (listOf(query.text) + query.aliases).mapNotNull(::keyOf).toSet()
         val more = atLeast(min).filter { keyOf(it) !in named }
         return if (more.isEmpty()) query else query.copy(aliases = query.aliases + more)
+    }
+
+    /** Whether [kw], an ad's power for the car [title] names, is one of its model's battery sizes
+     *  in kWh and none of its power ratings: a dealer typed the battery into the power field. */
+    fun powerIsABattery(title: String, kw: Int): Boolean {
+        val versions = versionsOf(title).ifEmpty { return false }
+        val batteries = versions.flatMap { listOfNotNull(it.batteryUsableKwh, it.batteryKwh) }.map { kotlin.math.round(it).toInt() }
+        val powers = versions.mapNotNull { it.powerKw }
+        return batteries.any { kotlin.math.abs(it - kw) <= 1 } && powers.none { kotlin.math.abs(it - kw) <= 2 }
     }
 
     /** Whether the catalogue has every version's figures yet; a size read now may still be missing. */
