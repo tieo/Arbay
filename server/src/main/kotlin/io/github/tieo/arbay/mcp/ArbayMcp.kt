@@ -1244,7 +1244,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     }
 
     private fun Listing.line(foundAt: Instant? = null): String = listOfNotNull(
-        id, title.tidyTitle(), priceWords(), landedWords(), delivery?.let { "arrives ${it.describe()}" },
+        id, title.tidyTitle(), priceWords(), extraCosts?.let { "+ ${it.amount / 100.0} ${it.currency} the dealer adds (${extraCostsSaid.orEmpty().take(120)}) = ${effectivePrice.amount / 100.0} with them" }, landedWords(), delivery?.let { "arrives ${it.describe()}" },
         coupon?.let { c -> listOfNotNull(c.code?.let { "with code $it" } ?: "with a coupon", oldPrice?.let { "${it.amount / 100.0} without" }).joinToString(", ") },
         platformId.name.lowercase(),
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { name -> "sold by $name" + (seller?.rating?.let { " · $it★" } ?: "") },

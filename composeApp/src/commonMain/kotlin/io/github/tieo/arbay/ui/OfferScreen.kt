@@ -104,6 +104,7 @@ import io.github.tieo.arbay.model.FitPart
 import io.github.tieo.arbay.results.ModelChoice
 import io.github.tieo.arbay.results.modelChoice
 import io.github.tieo.arbay.results.importVatNote
+import io.github.tieo.arbay.results.dealerExtrasNote
 import io.github.tieo.arbay.results.offerFacts
 import io.github.tieo.arbay.results.readOffer
 import io.github.tieo.arbay.results.sourceLabel
@@ -192,6 +193,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     TextButton(onClick = { OfferNotes.set(listing.id, null) }) { Text("Remove the note") }
                 }
                 importVatNote(listing)?.let { Muted(it) }
+                dealerExtrasNote(listing)?.let { Muted(it) }
 
                 Button(onClick = { openBrowser(listing.url) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp)); HGap(); Text("Open on ${listing.platformId.displayName}")

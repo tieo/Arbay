@@ -94,6 +94,11 @@ fun importVatNote(listing: Listing): String? = listing.importVat(ImportRules.cur
         "${ImportRules.current.importVatPercent}% import VAT of ${vat.format()}; ${listing.price.format()} on ${listing.platformId.displayName}."
 }
 
+/** What the dealer adds on top of the asking price, as the ad names it. */
+fun dealerExtrasNote(listing: Listing): String? = listing.extraCosts?.let {
+    "Includes ${it.format()} the dealer adds: ${listing.extraCostsSaid.orEmpty()}."
+}
+
 /** A copy of an offer on another market, named for its market, with its own price where it differs. */
 fun copyLabel(copy: Listing, of: Listing): String =
     "Also on ${copy.platformId.displayName}" + if (copy.comparablePrice != of.comparablePrice) " · ${copy.comparablePrice.format()}" else ""

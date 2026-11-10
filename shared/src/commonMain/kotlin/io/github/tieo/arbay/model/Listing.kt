@@ -21,6 +21,11 @@ data class Listing(
     // a private buyer pays: "650,00€ Netto zzgl. MwSt" is 773.50 €. Set once, so reading the ad's
     // text again adds no VAT a second time.
     val netPrice: Money? = null,
+    // What a car dealer charges on top of the asking price where the ad says so: transfer from the
+    // maker (Überführung), registration (Zulassung), each named in [extraCostsSaid]. Paid like
+    // shipping, so it is in the effective price.
+    val extraCosts: Money? = null,
+    val extraCostsSaid: String? = null,
     val negotiable: Boolean = false,
     // How this is sold, when the market says. An auction's price is the bid so far, which is not
     // what the thing costs: a Crucial module alerted at €10.50 was €21.50 the next day and still
@@ -86,7 +91,8 @@ data class Listing(
     /** All-in price including shipping and platform fees. A delivery charge in another currency
      *  than the price is left out rather than added as if it were the same one. */
     val effectivePrice: Money get() = Money(
-        price.amount + (shipping?.cost?.takeIf { it.currency == price.currency }?.amount ?: 0L),
+        price.amount + (shipping?.cost?.takeIf { it.currency == price.currency }?.amount ?: 0L) +
+            (extraCosts?.takeIf { it.currency == price.currency }?.amount ?: 0L),
         price.currency,
     )
 }

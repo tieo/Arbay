@@ -88,7 +88,41 @@ object SellersWords {
 
     fun apply(listing: Listing): Listing {
         val text = "${listing.title}\n${listing.description.orEmpty()}"
-        return listing.withStatedPrice(text).withStatedMileage(text).withStatedGearbox(text).withStatedDamage(text).withGrossPrice(text)
+        return listing.withStatedPrice(text).withStatedMileage(text).withStatedGearbox(text).withStatedDamage(text).withGrossPrice(text).withDealerExtras(text)
+    }
+
+    // A dealer's charge on top of the price, named and priced: "Überführungskosten: 990 €",
+    // "zzgl. Überführung 1.190,- €", "Zulassungspaket 249 €", "Bereitstellungskosten von 899 EUR".
+    // "inkl. Überführung" names one already in the price.
+    private val dealerExtra = Regex(
+        """(?<!\p{L})(überführung|ueberfuehrung|zulassung|bereitstellung|auslieferung)\w*""" +
+            """\W{0,4}(?:(?:kosten|gebühr|pauschale|paket)\W{0,4})?(?:von|in\s+höhe\s+von|i\.\s?h\.\s?v\.|beträgt|betragen)?\W{0,4}(?:€\s*)?""" +
+            """(\d{1,2}\.\d{3}|\d{2,4})(?:,-|,00)?\s*(?:€|eur\b|euro\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val includedBefore = Regex("""(?i)\b(inkl|inklusive|incl|einschließlich|samt)\b\.?[^.\n]*$""")
+    private val includedAfter = Regex("""(?i)^[^.\n]*\b(enthalten|inklusive|inbegriffen)\b""")
+
+    /** What the dealer charges on top of the asking price where the text names it, each kind once
+     *  (a transfer and a registration both count). Read only for vehicles, and a sum from 50 to
+     *  3,000 € each: a larger "Überführung" figure is a price of something else. */
+    private fun Listing.withDealerExtras(text: String): Listing {
+        if (vehicle == null || extraCosts != null || price.currency != Currency.EUR) return this
+        val byKind = dealerExtra.findAll(text).filterNot { m ->
+            // "inkl. Überführung und Zulassung 990 €", "Überführung 990 € im Preis enthalten".
+            includedBefore.containsMatchIn(text.substring((m.range.first - 30).coerceAtLeast(0), m.range.first)) ||
+                includedAfter.containsMatchIn(text.substring(m.range.last + 1, (m.range.last + 30).coerceAtMost(text.length)))
+        }.mapNotNull { m ->
+            val euros = number(m.groupValues[2]) ?: return@mapNotNull null
+            if (euros !in 50..3_000) return@mapNotNull null
+            m.groupValues[1].lowercase().replace("ue", "ü").take(5) to (euros to m.value.trim())
+        }.distinctBy { it.first }.toList()
+        if (byKind.isEmpty()) return this
+        return copy(
+            extraCosts = Money(byKind.sumOf { it.second.first } * 100L, Currency.EUR),
+            extraCostsSaid = byKind.joinToString("; ") { it.second.second },
+        )
     }
 
     /** Damage the text states where the form says the vehicle is whole: an Amstetten Crafter at

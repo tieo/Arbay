@@ -170,4 +170,13 @@ Laufleistung: 297000"""
         assertEquals(auto, SellersWords.apply(van("8-Gang-Automatikgetriebe\nStart-Stop-Automatik", km = null).copy(vehicle = auto)).vehicle)
         assertEquals(auto, SellersWords.apply(van("6-Gang-Schaltgetriebe oder DSG auf Wunsch", km = null).copy(vehicle = auto)).vehicle)
     }
+
+    @Test
+    fun `a dealer's transfer and registration charges are added, those in the price not`() {
+        val both = SellersWords.apply(van("Neuwagen. Überführungskosten: 990 €, zzgl. Zulassungspaket 249,- €", euros = 40_000, km = 10))
+        assertEquals(123_900L, both.extraCosts?.amount)
+        assertEquals(4_123_900L, both.effectivePrice.amount)
+        assertEquals(null, SellersWords.apply(van("Preis inkl. Überführung und Zulassung 1.190 €", euros = 40_000, km = 10)).extraCosts)
+        assertEquals(null, SellersWords.apply(van("Überführung 990 € im Preis enthalten", euros = 40_000, km = 10)).extraCosts)
+    }
 }
