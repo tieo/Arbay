@@ -984,6 +984,9 @@ object RelevanceFilter {
      */
     private fun isAnAccessoryNamedOutright(listing: Listing, parsed: ParsedQuery, queryText: String): Boolean {
         if (accessoryNoun.containsMatchIn(queryText)) return false
+        // A vehicle the market states specs for is the vehicle, whatever its title says it runs on:
+        // "Peugeot 308 Elektro Batterie 58 kWh Allure".
+        if (CarFilterEngine.isAVehicleForSale(listing)) return false
         if (onlyThePart.containsMatchIn(listing.title) && !onlyThePart.containsMatchIn(queryText)) return true
         val reports = batteryReport.findAll(listing.title).map { it.range }.toList()
         val match = accessoryNoun.findAll(listing.title)
@@ -1333,7 +1336,10 @@ object RelevanceFilter {
             beyondTheSize.any { shareCarrying(it) > 0.0 }
 
 
-        val implied = impliedWords(listings, parsed, query.text)
+        val implied = impliedWords(listings, parsed, query.text).let { byModel ->
+            val byFuel = fuelWords(listings, parsed)
+            (byModel.keys + byFuel.keys).associateWith { byModel[it].orEmpty() + byFuel[it].orEmpty() }
+        }
         // A listing carrying no word of the search, itself or implied by its model, is what the
         // market guessed: marked, to be shown after the rest. Measured on 35 searches, 89% of such
         // listings were something else (Playmobil for "Dusch-WC", postcards of "Bourdon" for
@@ -1427,6 +1433,25 @@ object RelevanceFilter {
         io.github.tieo.arbay.model.Fuel.HYBRID_DIESEL to setOf("hybrid"),
     )
 
+    /**
+     * The words of the search a vehicle carries by the fuel it states, though its title leaves
+     * them out: a word naming the fuel ("Kia Niro 64,8 kWh Light" is the "Kia Niro EV" searched
+     * for), and the electric version written with an e ("e-308", "e-Niro"), which an electric car's
+     * title names without it: "Peugeot 308 Allure Elektromotor" is the e-308.
+     */
+    private fun fuelWords(listings: List<Listing>, parsed: ParsedQuery): Map<String, Set<String>> {
+        val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
+        val single = { w: String -> parsed.copy(positiveTokens = listOf(w), orGroups = emptyList()) }
+        return listings.mapNotNull { listing ->
+            val fuel = listing.vehicle?.fuel ?: return@mapNotNull null
+            val carried = words.filter { w ->
+                score(listing, single(w)) < 1.0 && (FUEL_WORDS[fuel]?.contains(w) == true ||
+                    fuel == io.github.tieo.arbay.model.Fuel.ELECTRIC && w.length > 2 && w.startsWith("e") && score(listing, single(w.drop(1))) == 1.0)
+            }
+            if (carried.isEmpty()) null else listing.id to carried.toSet()
+        }.toMap()
+    }
+
     private fun impliedWords(listings: List<Listing>, parsed: ParsedQuery, queryText: String): Map<String, Set<String>> {
         val words = (parsed.positiveTokens + parsed.orGroups.flatten()).distinct()
             .filter { w -> !isASize(w) && !isADecimal(w) && !isAModelCode(w) && !w.all { it.isDigit() } && w.any { it.isLetter() } }
@@ -1466,10 +1491,7 @@ object RelevanceFilter {
             val rented = if (listing.saleType == io.github.tieo.arbay.model.SaleType.RENT) words.filter { rentalOffer.matches(it) } else emptyList()
             val made = if (modelWord != null && carries.getValue(modelWord)[i] && !namesAnotherMake(listing.title))
                 makeWords.filter { !carries.getValue(it)[i] } else emptyList()
-            // A word naming the fuel is carried by a vehicle that states the fuel: "Kia Niro 64,8 kWh
-            // Light" is the "Kia Niro EV" searched for, though its title never writes "EV".
-            val fueled = listing.vehicle?.fuel?.let { f -> words.filter { w -> FUEL_WORDS[f]?.contains(w) == true && !carries.getValue(w)[i] } }.orEmpty()
-            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty() || fueled.isNotEmpty()) result[listing.id] = (shown + rented + made + fueled).toSet()
+            if (shown.isNotEmpty() || rented.isNotEmpty() || made.isNotEmpty()) result[listing.id] = (shown + rented + made).toSet()
         }
         return result
     }

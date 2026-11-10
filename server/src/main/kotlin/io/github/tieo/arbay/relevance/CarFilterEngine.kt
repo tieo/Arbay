@@ -429,14 +429,20 @@ object CarFilterEngine {
      * without its make is not enough to send a search to the car sites — and came back led by
      * trim strips, sill plates and wheel bolts at 13 to 25 euro.
      */
+    /**
+     * Whether the market publishes mileage, a year, power, a fuel, a gearbox or a vehicle condition
+     * for [listing]: then it is a vehicle for sale, even when its title mentions the clutch that
+     * was just replaced or the battery it runs on. A new car's card states no mileage or year, and
+     * "Peugeot 308 Elektro Batterie 58 kWh Allure" went out as a part.
+     */
+    fun isAVehicleForSale(listing: Listing): Boolean = listing.vehicle?.let { v ->
+        v.isVerified(VehicleField.MILEAGE) || v.isVerified(VehicleField.FIRST_REG_YEAR) ||
+            v.isVerified(VehicleField.POWER) || v.isVerified(VehicleField.FUEL) ||
+            v.isVerified(VehicleField.GEARBOX) || v.isVerified(VehicleField.CONDITION)
+    } ?: false
+
     fun namesAVehiclePart(listing: Listing): Boolean {
-        // A listing the market publishes mileage, a year or power for is a vehicle for sale, even
-        // when its title mentions the clutch that was just replaced.
-        val hasVehicleSpec = listing.vehicle?.let { v ->
-            v.isVerified(VehicleField.MILEAGE) || v.isVerified(VehicleField.FIRST_REG_YEAR) ||
-                v.isVerified(VehicleField.POWER)
-        } ?: false
-        if (hasVehicleSpec) return false
+        if (isAVehicleForSale(listing)) return false
         val title = listing.title
         return namedOutsideEquipment(partAccessory, title) || partAccessoryLead.containsMatchIn(title) ||
             partFromDonorVehicle.containsMatchIn(title) || namedOutsideEquipment(partSuffix, title) ||

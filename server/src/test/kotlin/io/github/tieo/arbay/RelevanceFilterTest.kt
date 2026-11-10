@@ -271,6 +271,21 @@ class RelevanceFilterTest {
     }
 
     @Test
+    fun `an electric version searched as e-308 keeps the 308s that are electric`() {
+        fun car(title: String) = listing(title, 3_600_000).copy(
+            id = "AUTOSCOUT24:${title.hashCode()}", platformId = PlatformId.AUTOSCOUT24,
+            vehicle = io.github.tieo.arbay.model.VehicleInfo(fuel = io.github.tieo.arbay.model.Fuel.ELECTRIC, verified = setOf(io.github.tieo.arbay.model.VehicleField.FUEL)),
+        )
+        val cars = listOf(
+            car("Peugeot 308 e-308 SW Style 156 54kWh +11-kW-OBC+ACC+EPH+NAVI"),
+            car("Peugeot 308 Allure *Förderfähig* Elektromotor 156 (115 kW)"),
+            car("Peugeot 308 Elektro Batterie 58 kWh Allure"),
+        )
+        val kept = RelevanceFilter.filter(cars, SearchQuery(text = "Peugeot e-308", category = MarketGroup.VEHICLES), blockedDealers = emptyList())
+        assertEquals(cars.map { it.title }, kept.map { it.title })
+    }
+
+    @Test
     fun `irrelevanceReport passes genuine result set`() {
         val genuine = listOf(
             listing("Volkswagen Crafter 35 Kasten Hochdach"),
