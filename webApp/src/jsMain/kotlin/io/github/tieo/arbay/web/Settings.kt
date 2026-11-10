@@ -254,6 +254,21 @@ private fun ServerSections(app: WebApp) {
         SaveNote(notes.value["drive"])
     }
 
+    Setting("Charging an electric car", "What a kWh costs in an electric car's cost over the years") {
+        val commit = { val next = rules; save("charging") { ImportRules.current = client.updateImportSettings(next) } }
+        Div({ classes("field-row") }) {
+            Num("At home %", rules.chargeAtHomePercent.toDouble(), commit) { rules = rules.copy(chargeAtHomePercent = it.toInt().coerceIn(0, 100)) }
+            Num("Of that, solar %", rules.solarPercent.toDouble(), commit) { rules = rules.copy(solarPercent = it.toInt().coerceIn(0, 100)) }
+        }
+        Div({ classes("field-row") }) {
+            Num("Grid ct/kWh", rules.gridCentPerKwh, commit) { rules = rules.copy(gridCentPerKwh = it) }
+            Num("Feed-in ct/kWh", rules.feedInCentPerKwh, commit) { rules = rules.copy(feedInCentPerKwh = it) }
+            Num("Public ct/kWh", rules.publicCentPerKwh, commit) { rules = rules.copy(publicCentPerKwh = it) }
+        }
+        P({ classes("small") }) { Text("${kotlin.math.round(rules.chargingCentPerKwh * 10) / 10.0} ct per kWh in all") }
+        SaveNote(notes.value["charging"])
+    }
+
     Setting("Search depth", "Each market is read until it has given this many offers; deeper is slower") {
         Div({ classes("chips") }) {
             (listOf(30, 60, 120, 250) + listOfNotNull(depth)).distinct().sorted().forEach { n ->
@@ -307,5 +322,16 @@ private fun BrowserPermission() {
             Notification.requestPermission().then { permission = it }
         }
         else -> Span({ classes("muted", "small") }) { Text("This browser blocks notifications from Arbay; its site settings can allow them") }
+    }
+}
+
+/** A number field of a setting, saved when the user leaves it. */
+@Composable
+private fun Num(label: String, value: Double, commit: () -> Unit, onChange: (Double) -> Unit) = Label(attrs = { classes("field", "narrow") }) {
+    Span({ classes("field-label") }) { Text(label) }
+    Input(InputType.Number) {
+        classes("control"); attr("step", "0.1"); value(value)
+        onInput { onChange(it.value?.toDouble() ?: 0.0) }
+        onChange { commit() }
     }
 }

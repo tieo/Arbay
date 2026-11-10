@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.ui
 
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -222,6 +223,23 @@ private fun ServerSettings(session: Session) {
         notes["drive"]?.let { Muted(it) }
     }
 
+    Setting("Charging an electric car", "What a kWh costs in an electric car's cost over the years") {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Num("At home %", rules.chargeAtHomePercent.toDouble(), Modifier.weight(1f)) { rules = rules.copy(chargeAtHomePercent = it.toInt().coerceIn(0, 100)) }
+            Num("Of that, solar %", rules.solarPercent.toDouble(), Modifier.weight(1f)) { rules = rules.copy(solarPercent = it.toInt().coerceIn(0, 100)) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Num("Grid ct/kWh", rules.gridCentPerKwh, Modifier.weight(1f)) { rules = rules.copy(gridCentPerKwh = it) }
+            Num("Feed-in ct/kWh", rules.feedInCentPerKwh, Modifier.weight(1f)) { rules = rules.copy(feedInCentPerKwh = it) }
+            Num("Public ct/kWh", rules.publicCentPerKwh, Modifier.weight(1f)) { rules = rules.copy(publicCentPerKwh = it) }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${(rules.chargingCentPerKwh * 10).roundToInt() / 10.0} ct per kWh in all", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { val next = rules; save("charging") { ImportRules.current = client.updateImportSettings(next) } }) { Text("Save") }
+        }
+        notes["charging"]?.let { Muted(it) }
+    }
+
     Setting("Search depth", "Each market is read until it has given this many offers; deeper is slower") {
         Choices {
             (listOf(30, 60, 120, 250) + listOfNotNull(depth)).distinct().sorted().forEach { n ->
@@ -256,3 +274,10 @@ private fun ServerSettings(session: Session) {
         }
     }
 }
+
+/** A number the user types with a decimal comma or point, for a settings field. */
+@Composable
+private fun Num(label: String, value: Double, modifier: Modifier, onChange: (Double) -> Unit) = OutlinedTextField(
+    value.toString().removeSuffix(".0"), { onChange(it.replace(',', '.').filter { c -> c.isDigit() || c == '.' }.take(6).toDoubleOrNull() ?: 0.0) },
+    modifier, label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+)

@@ -24,7 +24,22 @@ data class ImportSettings(
     /** What an hour behind the wheel costs the buyer: an offer that is only collected costs the
      *  drive there and back on top of its price. */
     val driveEurPerHour: Int = 15,
-)
+    /** What charging an electric car costs, for its running cost over the years: the share charged
+     *  at home, of that the share the own solar panels cover (which costs the feed-in tariff given
+     *  up), the grid price for the rest at home, and the public chargers' price. */
+    val chargeAtHomePercent: Int = 90,
+    val solarPercent: Int = 40,
+    val feedInCentPerKwh: Double = 8.0,
+    val gridCentPerKwh: Double = 37.3,
+    val publicCentPerKwh: Double = 56.0,
+) {
+    /** One kWh at the mix of home solar, home grid and public chargers above, in cents. */
+    val chargingCentPerKwh: Double get() {
+        val home = chargeAtHomePercent.coerceIn(0, 100) / 100.0
+        val solar = solarPercent.coerceIn(0, 100) / 100.0
+        return home * (solar * feedInCentPerKwh + (1 - solar) * gridCentPerKwh) + (1 - home) * publicCentPerKwh
+    }
+}
 
 /** The EU VAT area, as far as a purchase from outside it is concerned. */
 val EU_VAT_AREA: Set<String> = setOf(
