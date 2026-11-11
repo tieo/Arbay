@@ -103,7 +103,13 @@ object Adac {
     }
 
     @Serializable
-    data class Catalog(val readAt: String? = null, val complete: Boolean = false, val versions: List<CatalogVersion> = emptyList())
+    data class Catalog(
+        val readAt: String? = null,
+        val complete: Boolean = false,
+        /** Whether Neuland is reading it again now: a complete catalogue can still be growing. */
+        val reading: Boolean = false,
+        val versions: List<CatalogVersion> = emptyList(),
+    )
 
     @Serializable
     data class Tables(val readAt: String? = null, val costs: Costs = Costs(), val used: Used = Used(), val catalog: Catalog = Catalog())
@@ -130,7 +136,7 @@ object Adac {
                     log.warn("ADAC tables not read: {}", e.message)
                 }
                 // A catalogue Neuland is still reading fills in over hours; it is asked again hourly till done.
-                delay(if (tables.costs.rows.isEmpty() || !tables.catalog.complete) 3600_000L else ASK_EVERY_MS)
+                delay(if (tables.costs.rows.isEmpty() || !tables.catalog.complete || tables.catalog.reading) 3600_000L else ASK_EVERY_MS)
             }
         }
     }
