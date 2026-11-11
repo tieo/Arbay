@@ -304,7 +304,7 @@ object CarFilterEngine {
     // lead with; deliberately not the "recently replaced" parts a seller brags about (Zahnriemen,
     // Kupplung, Bremsscheibe, Turbolader), which appear in genuine car titles and would false-drop.
     private val partAccessory = Regex(
-        """\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
+        """(?u)\b(dreh|sitz|mittel)?konsole\b|\bhalterung\b|\bsitzbez(ug|üge|uege)\b|\bfu(ß|ss)matten\b|""" +
             """\bgummimatten\b|\bkofferraumwanne\b|\bdach(gepäck)?träger\b|\bradkappen?\b|\babdeckplane\b|""" +
             // A headlight named by its light, "Led Scheinwerfer", is a van's equipment in its title
             // ("VW Crafter L2 H2, Led Scheinwerfer, AHK"); a headlight on its own is the part.
@@ -370,7 +370,7 @@ object CarFilterEngine {
      *  as a part only alongside [fitsAVehicle], so a car mentioning what was replaced ("VW Crafter
      *  2.0 TDI Zahnriemen neu") is not one. */
     private val partNamedEarly = Regex(
-        """^(\S+\s+){0,3}(bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|""" +
+        """(?u)^(\S+\s+){0,3}(bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|""" +
             """radlager|z(ü|ue)ndkerzen?|(luft|(ö|oe)l|innenraum)filter|wasserpumpe|auspuff|""" +
             """zahnriemen|keilrippenriemen|wischerbl(ä|ae)tter|kit|set|satz|kette|r(ü|ue)ckfahrkamera|""" +
             """k(ü|ue)hlergrillrahmen|rozrz(ą|a)d)\b""",
@@ -380,7 +380,7 @@ object CarFilterEngine {
     /** What a part says about the vehicles it belongs on. A whole vehicle is not sold "für" or
      *  "passend für" another one. */
     private val fitsAVehicle = Regex(
-        """\b(f(ü|ue)r|passend\s+f(ü|ue)r|kompatibel|for|per|pour|para)\b""",
+        """(?u)\b(f(ü|ue)r|passend\s+f(ü|ue)r|kompatibel|for|per|pour|para)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -392,7 +392,11 @@ object CarFilterEngine {
     private val engineLead = Regex("""^\W*(top\W+)?motor\b""", RegexOption.IGNORE_CASE)
 
     private val partAccessoryLead = Regex(
-        """^\s*(schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange|""" +
+        // What a part fits, named first: "Für Suzuki Vitara 15-18 ANHÄNGERKUPPLUNG starr"; no car
+        // ad opens with whom it is for. A towbar, or its maker, named first is the towbar: "Oris
+        // Anhängerkupplung", "Abnehmbare Anhängerkupplung", "WESTFALIA Anhängekupplung".
+        """(?u)^\s*((passend\s+)?f(ü|ue)r\s|((abnehmbare?|feste?|starre?|schwenkbare?|elektrische?|oris|westfalia|brink|bosal|auto\s*hak|steinhof|witter)\s+)?anh(ä|ae)nger?kupplung|ahk\s|(oris|westfalia|brink|bosal|auto\s*hak|steinhof|witter)\s|""" +
+        """w(ä|ae)rmepumpe|schiebet(ü|ue)r|trennwand|seitenwand|heckt(ü|ue)r|stossstange|sto(ß|ss)stange|""" +
             """bremsbel(ä|ae)ge?|bremsscheiben?|sto(ß|ss)d(ä|ae)mpfer|dichtung(en)?|radlager|""" +
             """z(ü|ue)ndkerzen?|(luft|(ö|oe)l|innenraum)filter|wasserpumpe|auspuff|zahnriemen|""" +
             """keilrippenriemen|wischerbl(ä|ae)tter|ersatzrad|servicepaket|inspektionskit)\b""",
@@ -409,7 +413,9 @@ object CarFilterEngine {
     // "Schalter" alone is the gearbox a van is sold with ("L2H2, 6 Gang Schalter"), not a switch,
     // and would otherwise read as a "Sc" + "halter".
     private val partSuffix = Regex(
-        """(?U)\b(?!schalter\b)\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
+        // A heat pump after the car is its equipment ("ID.3 Pro AHK Wärmepumpe"); named first it
+        // is the pump for sale (see partAccessoryLead).
+        """(?u)(?U)\b(?!schalter\b)(?!w(ä|ae)rmepumpe\b)\w{2,}(schalter|leuchten?|leisten?|blenden?|verkleidung(en)?|abdeckung(en)?|""" +
             """st(ü|ue)tzen?|griffe?|deckel|schl(ö|oe)sser|schloss|d(ü|ue)sen?|bleche?|halter|""" +
             """scharnier|verst(ä|ae)rker|scheiben?|gitter(sets?|n)?|pumpen?|kn(auf|opf|äufe)|kedern?|filter)\b""",
         RegexOption.IGNORE_CASE,
@@ -455,7 +461,7 @@ object CarFilterEngine {
     // An item of a van's equipment as a title lists it, ended by a comma, star, slash, plus or the
     // dot of an abbreviation ("L2H1 Autom. DACHTRÄGER").
     private val equipmentItem = Regex(
-        """(?:^|[,*/+|\s])(ahk|anh(ä|ae)ngerkupplung|klima\w*|navi\w*|kamera|r(ü|ue)ckfahrkamera|pdc|""" +
+        """(?u)(?:^|[,*/+|\s])(ahk|anh(ä|ae)ngerkupplung|klima\w*|navi\w*|kamera|r(ü|ue)ckfahrkamera|pdc|""" +
             """standh\w*|sthz|shz|sitzheizung|tempomat|acc|led|autom|automatik|dsg)\s*(?=[,*/+|.]|$)""",
         RegexOption.IGNORE_CASE,
     )

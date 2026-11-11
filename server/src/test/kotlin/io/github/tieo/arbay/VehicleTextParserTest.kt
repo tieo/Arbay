@@ -439,4 +439,10 @@ class VehicleTextParserTest {
         assertEquals(false, VehicleTextParser.parseTowbar("Kia EV3\n\nAusstattung: ABS, Abstandstempomat, Abstandswarner, Android Auto, Apple CarPlay, Armlehne, Bluetooth, Bordcomputer, Navi"))
         assertEquals(null, VehicleTextParser.parseTowbar("Kia EV3 58,3 kWh Air, sofort verfügbar"))
     }
+
+    @Test
+    fun `a towbar named alone makes no vehicle of a part`() {
+        assertNull(VehicleTextParser.parse("Für Suzuki Vitara 15-18 ANHÄNGERKUPPLUNG starr + 7pol universell E-Satz -Neu-"))
+        assertEquals(true, VehicleTextParser.parse("VW ID.4 Pro 2025, 12.000 km, AHK schwenkbar")?.towbar)
+    }
 }

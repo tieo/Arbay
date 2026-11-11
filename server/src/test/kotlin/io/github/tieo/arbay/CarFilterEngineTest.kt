@@ -610,6 +610,22 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun aTowbarForSaleIsAPartAndACarWithOneIsACar() {
+        fun ad(title: String) = listing(title.hashCode().toString(), PlatformId.EBAY_DE, 20_000).copy(title = title)
+        listOf(
+            "Für Suzuki Vitara 15-18 ANHÄNGERKUPPLUNG starr + 7pol universell E-Satz -Neu-",
+            "Oris Anhängerkupplung abnehmbar VW ID.3",
+            "Abnehmbare Anhängerkupplung + E-Satz 13pol VW ID.4",
+            "WESTFALIA Anhängekupplung VW ID.4 abnehmbar",
+            "Passend für VW ID.3 Kofferraumwanne",
+        ).forEach { assertTrue(CarFilterEngine.namesAVehiclePart(ad(it)), it) }
+        listOf(
+            "VW ID.3 Pro Performance AHK Wärmepumpe",
+            "Volkswagen ID.4 Pro 4MOTION Energy 220 kW (299 PS) AHK, IQ.",
+        ).forEach { assertFalse(CarFilterEngine.namesAVehiclePart(ad(it)), it) }
+    }
+
+    @Test
     fun aTowbarWishKeepsTheCarsThatHaveOneAndThoseThatDoNotSay() {
         fun car(id: String, towbar: Boolean?) = listing(id, PlatformId.MOBILE_DE, 4_000_000, vehicle = VehicleInfo(towbar = towbar))
         val cars = listOf(car("with", true), car("without", false), car("unsaid", null))

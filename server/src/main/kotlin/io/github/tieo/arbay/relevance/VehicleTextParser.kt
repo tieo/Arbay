@@ -143,13 +143,18 @@ object VehicleTextParser {
             // something else: read as OTHER, every Crafter whose ad never wrote "Diesel" was
             // dropped by a diesel search.
             fuel = parseFuel(text),
-            bodyType = BodyType.parse(text),
+            // BodyType.parse reads a body field, where anything it does not know is some other
+            // body; prose naming no body does not say, as with the fuel. Read as OTHER, every text
+            // made a vehicle record, a towbar for sale's title among them.
+            bodyType = BodyType.parse(text)?.takeIf { it != BodyType.OTHER },
             gearbox = parseGearbox(text),
             drivetrain = parseDrivetrain(text),
             wheelbaseMm = parseWheelbaseMm(text),
-            towbar = parseTowbar(text),
         )
-        return if (info == VehicleInfo()) null else info
+        // A towbar named alone makes no vehicle: "Für Suzuki Vitara ANHÄNGERKUPPLUNG starr" is the
+        // towbar for sale, and read as a car with one it passed a car search. It is told only of
+        // what the words show to be a vehicle, or of one the market stated (see enrich).
+        return if (info == VehicleInfo()) null else info.copy(towbar = parseTowbar(text))
     }
 
     private val towbarWord = """(?:ahk|anh(?:ä|ae)nger-?kupplung|anh(?:ä|ae)ngevorrichtung|trekhaak|towbar|tow bar|gancio traino|crochet d'attelage)"""
@@ -403,7 +408,9 @@ object VehicleTextParser {
      *  for every listing: a used floor sander at "650,00€ Netto zzgl. MwSt" costs 773.50 €, a
      *  vehicle or not. Applied to search results so every platform is post-filterable. */
     fun enrich(listing: Listing): Listing {
-        val fromText = parse("${listing.title} ${listing.description ?: ""}")
+        val text = "${listing.title} ${listing.description ?: ""}"
+        // A vehicle the market stated takes the towbar its words name, though they name nothing else.
+        val fromText = parse(text) ?: listing.vehicle?.let { v -> parseTowbar(text)?.let { VehicleInfo(towbar = it) } }
         val merged = merge(listing.vehicle, fromText)
         return SellersWords.apply(if (merged != null) listing.copy(vehicle = merged) else listing)
     }
