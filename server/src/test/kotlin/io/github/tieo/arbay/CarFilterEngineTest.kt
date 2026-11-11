@@ -610,6 +610,15 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun aTowbarWishKeepsTheCarsThatHaveOneAndThoseThatDoNotSay() {
+        fun car(id: String, towbar: Boolean?) = listing(id, PlatformId.MOBILE_DE, 4_000_000, vehicle = VehicleInfo(towbar = towbar))
+        val cars = listOf(car("with", true), car("without", false), car("unsaid", null))
+        assertEquals(listOf("with", "unsaid"), CarFilterEngine.apply(cars, CarFilters(towbar = true)).map { it.externalId })
+        assertEquals(listOf("without", "unsaid"), CarFilterEngine.apply(cars, CarFilters(towbar = false)).map { it.externalId })
+        assertEquals(listOf("towbar"), CarFilters(towbar = true).uncheckedFor(VehicleInfo()))
+    }
+
+    @Test
     fun aDeliveryTimeThatTheTextStatesPastSixWeeksIsAnOrder() {
         assertEquals(168, CarFilterEngine.statedWaitDays("Vorsteuerabzugsberechtigt!!!  Lieferzeit ca. 24 Wochen!!!!"))
         assertEquals(120, CarFilterEngine.statedWaitDays("Lieferzeit 3-4 Monate"))

@@ -147,8 +147,30 @@ object VehicleTextParser {
             gearbox = parseGearbox(text),
             drivetrain = parseDrivetrain(text),
             wheelbaseMm = parseWheelbaseMm(text),
+            towbar = parseTowbar(text),
         )
         return if (info == VehicleInfo()) null else info
+    }
+
+    private val towbarWord = """(?:ahk|anh(?:ä|ae)nger-?kupplung|anh(?:ä|ae)ngevorrichtung|trekhaak|towbar|tow bar|gancio traino|crochet d'attelage)"""
+    private val noTowbar = Regex(
+        """(?iu)(?<!\p{L})(?:ohne|keine?|kein)\s+$towbarWord(?!\p{L})|$towbarWord[- ]?vorbereitung|vorbereitung\s+(?:f(?:ü|ue)r\s+)?(?:die\s+|eine\s+)?$towbarWord""",
+    )
+    private val towbar = Regex("""(?iu)(?<!\p{L})$towbarWord\w*""")
+    // A market's own list of the car's equipment, the line its page sets it out on: what it leaves
+    // out the car does not have.
+    private val equipmentList = Regex("""(?m)^\s*Ausstattung\s*:\s*\S.{80,}""")
+
+    /**
+     * Whether the car has a towbar, by the ad's words: none where it says so or names only the
+     * preparation for one ("AHK-Vorbereitung"), one where it names one, none where the market's
+     * equipment list is there and leaves it out; null where nothing tells.
+     */
+    internal fun parseTowbar(text: String): Boolean? = when {
+        noTowbar.containsMatchIn(text) -> false
+        towbar.containsMatchIn(text) -> true
+        equipmentList.containsMatchIn(text) -> false
+        else -> null
     }
 
     // The drive an ad's words name. A Kleinanzeigen van has no drive field, so its "4MOTION" in the
@@ -248,6 +270,7 @@ object VehicleTextParser {
             fastChargeKw = structured.fastChargeKw ?: fromText.fastChargeKw,
             heatPump = structured.heatPump ?: fromText.heatPump,
             vatDeductible = structured.vatDeductible ?: fromText.vatDeductible,
+            towbar = structured.towbar ?: fromText.towbar,
             // The structured side's fields are verified, and so is a field only the other side
             // has where that side read it from a site's field (a card's, under its ad page): text
             // read off prose is never verified, so it fills gaps as inferred.

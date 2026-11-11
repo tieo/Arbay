@@ -429,4 +429,14 @@ class VehicleTextParserTest {
         kotlin.test.assertEquals(145.0, merged.fastChargeKw)
         kotlin.test.assertTrue(merged.isVerified(io.github.tieo.arbay.model.VehicleField.AVAILABILITY))
     }
+
+    @Test
+    fun `a towbar is read from the ad's words and its equipment list`() {
+        assertEquals(true, VehicleTextParser.parseTowbar("VW ID.4 Pro AHK schwenkbar, Wärmepumpe"))
+        assertEquals(true, VehicleTextParser.parseTowbar("Ausstattung: ABS, ANHÄNGERKUPPLUNG elektrisch, Navi"))
+        assertEquals(false, VehicleTextParser.parseTowbar("Skoda Enyaq ohne AHK"))
+        assertEquals(false, VehicleTextParser.parseTowbar("Cupra Born mit AHK-Vorbereitung"))
+        assertEquals(false, VehicleTextParser.parseTowbar("Kia EV3\n\nAusstattung: ABS, Abstandstempomat, Abstandswarner, Android Auto, Apple CarPlay, Armlehne, Bluetooth, Bordcomputer, Navi"))
+        assertEquals(null, VehicleTextParser.parseTowbar("Kia EV3 58,3 kWh Air, sofort verfügbar"))
+    }
 }

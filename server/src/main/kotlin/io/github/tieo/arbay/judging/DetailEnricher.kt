@@ -74,11 +74,14 @@ object DetailEnricher {
         if (filters.vanLengths.isNotEmpty()) add(VehicleField.VAN_LENGTH)
         if (filters.vanHeights.isNotEmpty()) add(VehicleField.VAN_HEIGHT)
         if (filters.inStockOnly) add(VehicleField.AVAILABILITY)
+        if (filters.towbar != null) add(VehicleField.TOWBAR)
     }
 
     private fun needsDetail(listing: Listing, needed: Set<VehicleField>): Boolean {
         val v = listing.vehicle
-        return needed.any { field -> v == null || !v.isVerified(field) }
+        // A towbar is read off the ad's words and equipment list, never a field: the page is read
+        // where the card's words have not told.
+        return needed.any { field -> v == null || if (field == VehicleField.TOWBAR) v.towbar == null else !v.isVerified(field) }
     }
 
     /** Enrich one platform's listings in place of the crawler that produced them. An [unattended]

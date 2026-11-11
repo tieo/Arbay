@@ -114,6 +114,7 @@ private fun vehicleSpecs(v: VehicleInfo): List<Spec> = buildList {
     }
     v.vanLength?.let { add(Spec(VanSize.lengthLabel(it), v.isVerified(VehicleField.VAN_LENGTH))) }
     v.vanHeight?.let { add(Spec(VanSize.roofLabel(it), v.isVerified(VehicleField.VAN_HEIGHT))) }
+    v.towbar?.let { add(Spec(if (it) "Towbar" else "No towbar", v.isVerified(VehicleField.TOWBAR))) }
 }
 
 /** How long ago a saved search's watch found an offer, in hours while that is under two days. */
@@ -206,6 +207,7 @@ fun detailSpecs(v: VehicleInfo): List<DetailSpec> = buildList {
     v.vanLength?.let { add(DetailSpec("Length", VanSize.lengthLabel(it), VehicleField.VAN_LENGTH)) }
     v.vanHeight?.let { add(DetailSpec("Roof", VanSize.roofLabel(it), VehicleField.VAN_HEIGHT)) }
     v.wheelbaseMm?.let { add(DetailSpec("Wheelbase", "$it mm", VehicleField.WHEELBASE)) }
+    v.towbar?.let { add(DetailSpec("Towbar", if (it) "yes" else "no", VehicleField.TOWBAR)) }
 }
 
 /** What a condition is called on a chip and in a sentence. */

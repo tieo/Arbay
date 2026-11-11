@@ -130,6 +130,11 @@ private fun VehicleFields(initial: VehicleSearch, submit: String, scrolls: Boole
                     Choice(l, filters.inStockOnly == v) { filters = filters.copy(inStockOnly = v) }
                 }
             }
+            Labelled("Towbar") {
+                listOf(null to "Either", true to "With", false to "Without").forEach { (v, l) ->
+                    Choice(l, filters.towbar == v) { filters = filters.copy(towbar = v) }
+                }
+            }
             Labelled("Fuel") {
                 FORM_FUELS.forEach { f -> Choice(vehicleWord(f.name), f in filters.fuels) { filters = filters.copy(fuels = if (f in filters.fuels) filters.fuels - f else filters.fuels + f) } }
             }

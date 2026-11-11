@@ -164,6 +164,12 @@ private fun VehicleForm(initial: VehicleSearch, submitLabel: String, onSubmit: (
                 }
             }
             Div({ classes("chips") }) {
+                Span({ classes("chips-label") }) { Text("Towbar") }
+                listOf(null to "Either", true to "With", false to "Without").forEach { (value, label) ->
+                    Chip(label, filters.towbar == value) { filters = filters.copy(towbar = value) }
+                }
+            }
+            Div({ classes("chips") }) {
                 Span({ classes("chips-label") }) { Text("Fuel") }
                 FORM_FUELS.forEach { fuel ->
                     Chip(vehicleWord(fuel.name), fuel in filters.fuels) {

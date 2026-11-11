@@ -1396,6 +1396,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             fastChargeKw?.let { "DC ${it.toInt()} kW" },
             fastChargeMinutes?.let { "10-80 % in $it min" },
             heatPump?.takeIf { it }?.let { "heat pump" },
+            towbar?.let { if (it) "towbar" else "no towbar" },
             vatDeductible?.takeIf { it }?.let { "VAT deductible" },
         ).joinToString(", ").ifEmpty { null }
     }
@@ -1559,6 +1560,7 @@ private const val VEHICLE_ARG = "A vehicle search's criteria as JSON, the same t
     "Electric cars: atLeastSizeOf and idealSizeOf name a model by make and model (\"VW ID.3\", \"VW ID.4\"): every electric model at least " +
     "as long is searched too, shorter ones are left out, and the fit rises towards the ideal's length (lengths from ev-database.org); " +
     "idealRangeKm (WLTP), idealDcKw and wantsHeatPump weigh the fit, from the ad or else the model's catalogue entry. " +
+    "towbar true or false keeps only cars with or without one, read from the ad's words and equipment list; a car whose ad does not say is kept as unchecked. " +
     "costKmPerYear (e.g. 10000) adds each car's cost to own over 10 years from ADAC's tables (purchase less value at the end, fixed costs, workshop, charging at the user's price mix, care), shown at 5,000, 10,000 and 20,000 km too; " +
     "idealTotalCostEur and maxTotalCostEur make that total the fit's main wish in place of the price. " +
     "Fuels: PETROL, DIESEL, ELECTRIC, HYBRID_PETROL, HYBRID_DIESEL, PLUGIN_HYBRID, MILD_HYBRID, LPG, CNG, HYDROGEN. " +

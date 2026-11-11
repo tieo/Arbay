@@ -8,7 +8,7 @@ enum class VehicleField {
     FIRST_REG_YEAR, MILEAGE, POWER, DISPLACEMENT, FUEL, BODY_TYPE, GEARBOX,
     DRIVETRAIN, DOORS, SEATS, CONDITION, COLOR, EMISSION,
     EMISSION_STICKER, INSPECTION, UPHOLSTERY, VAN_LENGTH, VAN_HEIGHT, WHEELBASE,
-    AVAILABILITY,
+    AVAILABILITY, TOWBAR,
 }
 
 /**
@@ -73,6 +73,9 @@ data class VehicleInfo(
     val heatPump: Boolean? = null,
     // A business buyer can deduct the VAT, the dealer states (Mwst. ausweisbar).
     val vatDeductible: Boolean? = null,
+    // A towbar: true where the ad names one, false where it says there is none, names only the
+    // preparation for one, or lists the car's equipment without one; null where it does not say.
+    val towbar: Boolean? = null,
     val verified: Set<VehicleField> = emptySet(),
 ) {
     fun isVerified(field: VehicleField): Boolean = field in verified

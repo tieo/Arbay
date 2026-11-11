@@ -60,6 +60,9 @@ data class CarFilters(
     val idealRangeKm: Int? = null,
     val idealDcKw: Int? = null,
     val wantsHeatPump: Boolean = false,
+    // With a towbar (true) or without one (false); null asks neither. A car whose ad does not say
+    // is kept and named as unchecked.
+    val towbar: Boolean? = null,
     // Weigh what a car costs to own over ten years, at this many km a year: purchase less its value
     // at the end, fixed costs, workshop, energy. The total fits fully at idealTotalCostEur and not
     // at all at maxTotalCostEur; without them it is shown but weighs nothing.
@@ -109,6 +112,7 @@ data class CarFilters(
         if (minSeats != null && v?.seats == null) add("seats")
         if (minEmissionEuro != null && v?.emissionClassEuro == null) add("emission")
         if (sellerType != null) { /* the seller is on the listing itself, not the vehicle */ }
+        if (towbar != null && v?.towbar == null) add("towbar")
         if (inStockOnly && v?.availability?.takeIf { v.isVerified(VehicleField.AVAILABILITY) } == null) add("availability")
         // A size read out of a word ("Lang") is a guess about one maker's naming, so a van
         // described that way was never actually checked against the size asked for.
@@ -127,7 +131,7 @@ data class CarFilters(
             fuels.isEmpty() && bodyTypes.isEmpty() && conditions.isEmpty() && colors.isEmpty() &&
             drivetrain == null && minDoors == null && minSeats == null &&
             minEmissionEuro == null && sellerType == null && !inStockOnly &&
-            atLeastSizeOf.isNullOrBlank() && idealSizeOf.isNullOrBlank() && idealRangeKm == null && idealDcKw == null && !wantsHeatPump &&
+            atLeastSizeOf.isNullOrBlank() && idealSizeOf.isNullOrBlank() && idealRangeKm == null && idealDcKw == null && !wantsHeatPump && towbar == null &&
             costKmPerYear == null && idealTotalCostEur == null && maxTotalCostEur == null &&
             vanLengths.isEmpty() && vanHeights.isEmpty() &&
             minWheelbaseMm == null && maxWheelbaseMm == null &&

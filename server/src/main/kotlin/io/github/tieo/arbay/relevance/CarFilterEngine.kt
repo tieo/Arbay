@@ -220,6 +220,7 @@ object CarFilterEngine {
         // A delivery time the seller states past six weeks is an order: "Lieferzeit ca. 24 Wochen!!!!".
         if (filters.inStockOnly && statedWaitDays(listing.description.orEmpty())?.let { it > 42 } == true) return "availability"
         if (drop(filters.drivetrain != null, v?.drivetrain != null) { v!!.drivetrain == filters.drivetrain }) return "drive"
+        if (drop(filters.towbar != null, v?.towbar != null) { v!!.towbar == filters.towbar }) return "towbar"
         if (drop(filters.minDoors != null, v?.doors != null) { v!!.doors!! >= filters.minDoors!! }) return "doors"
         if (drop(filters.minSeats != null, v?.seats != null) { v!!.seats!! >= filters.minSeats!! }) return "seats"
         if (drop(filters.minEmissionEuro != null, v?.emissionClassEuro != null) { v!!.emissionClassEuro!! >= filters.minEmissionEuro!! }) return "emission"
