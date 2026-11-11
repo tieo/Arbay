@@ -39,8 +39,10 @@ object AuctionBids {
     private val neulandJson = Json { ignoreUnknownKeys = true }
 
     /** How long before an auction's end its bid is opened on eBay: the item page, a fresh sign-in
-     *  where eBay asks one, the bid form and its review. */
-    val OPEN_BEFORE: Duration = 2.minutes
+     *  where eBay asks one, the bid form and its review, with room for Neuland's three tries of a
+     *  page that hangs for its 30 s limit, as the item page of 940065766542 did. The bid is still
+     *  confirmed only [CONFIRM_BEFORE] the end. */
+    val OPEN_BEFORE: Duration = 4.minutes
     /** How long before the end the review is confirmed: late enough to leave no time to answer it,
      *  early enough for eBay to take it. */
     val CONFIRM_BEFORE: Duration = 6.seconds

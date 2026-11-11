@@ -132,9 +132,9 @@ class AuctionBidsTest {
         val first = "300000000001"
         val sameThing = "300000000002"
         val otherThing = "300000000003"
-        AuctionBids.ask(request(first, now + 3.minutes), now)
-        AuctionBids.ask(request(sameThing, now + 3.minutes + 10.seconds), now)
-        AuctionBids.ask(request(otherThing, now + 3.minutes + 20.seconds).copy(purchase = "hdd-20tb"), now)
+        AuctionBids.ask(request(first, now + 5.minutes), now)
+        AuctionBids.ask(request(sameThing, now + 5.minutes + 10.seconds), now)
+        AuctionBids.ask(request(otherThing, now + 5.minutes + 20.seconds).copy(purchase = "hdd-20tb"), now)
         // No Neuland answers here, so each bid that goes out may stand and counts as placed.
         val at = now + 90.seconds
         AuctionBids.tick(at)
