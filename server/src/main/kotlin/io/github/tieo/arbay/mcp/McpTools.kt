@@ -47,7 +47,15 @@ internal fun Server.textTool(
         // A call missing what the tool needs is told which argument and which ones it takes,
         // rather than failing somewhere inside with no message.
         val missing = p.required.filter { k -> args[k].let { it == null || it is kotlinx.serialization.json.JsonNull } }
-        if (missing.isNotEmpty()) {
+        // An argument the tool does not take would be dropped without a word, and the call answered
+        // as if it had been heeded: a search given "platforms" searched every market.
+        val unknown = args.keys - p.properties.keys
+        if (unknown.isNotEmpty()) {
+            CallToolResult(
+                content = listOf(TextContent("Unknown argument ${unknown.joinToString(", ")}; $name takes ${p.properties.keys.joinToString(", ").ifEmpty { "none" }}.")),
+                isError = true,
+            )
+        } else if (missing.isNotEmpty()) {
             CallToolResult(
                 content = listOf(TextContent("Missing argument ${missing.joinToString(", ")}; $name takes ${p.properties.keys.joinToString(", ")}.")),
                 isError = true,
