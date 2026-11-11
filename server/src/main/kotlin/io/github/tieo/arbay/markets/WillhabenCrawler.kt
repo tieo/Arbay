@@ -28,6 +28,7 @@ class WillhabenCrawler : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsList
                 mileageMinKm = f?.minMileageKm,
                 mileageMaxKm = f?.maxMileageKm,
                 powerMinKw = f?.minPowerKw,
+                conditions = NeulandOffers.VehicleQuery.conditions(f?.conditions.orEmpty()),
             )
             // Every car sits under the site's /gebrauchtwagen/ path whatever its condition, so a
             // card that states none is of no known condition: the vehicle's own carries it.
