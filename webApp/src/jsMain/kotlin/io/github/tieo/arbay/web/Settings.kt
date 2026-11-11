@@ -90,6 +90,7 @@ private fun LookSection() {
             Looks.all.forEach { look -> LookSample(look, LookChoice.look.id == look.id) }
         }
         Div({ classes("chips") }) {
+            Span({ classes("chips-label") }) { Text("Brightness") }
             Brightness.entries.forEach { b -> Chip(b.label, LookChoice.brightness == b) { LookChoice.choose(b) } }
         }
         Div({ classes("chips") }) {
@@ -298,7 +299,7 @@ private fun ServerSections(app: WebApp) {
                 onChange { val next = alerts ?: current; save("alerts") { client.updateNotificationSettings(next) } }
             }
             Div({ classes("chips") }) {
-                Span({ classes("chips-label") }) { Text("The server looks every") }
+                Span({ classes("chips-label") }) { Text("Checks every") }
                 listOf(15 to "15 min", 30 to "30 min", 60 to "hour", 120 to "2 hours", 240 to "4 hours").forEach { (minutes, label) ->
                     Chip(label, current.checkEveryMinutes == minutes) {
                         val next = current.copy(checkEveryMinutes = minutes)
