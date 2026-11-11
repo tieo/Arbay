@@ -8,11 +8,11 @@ import io.github.tieo.arbay.relevance.CarQueryResolver
 /**
  * willhaben.at, read by Neuland. A search the words name a car in goes to its used-car section,
  * which takes the site's own make and model ids (Neuland reads them off its filter navigator) and
- * filters for first registration, mileage, price and power; everything else goes to its
+ * filters for first registration, mileage, price, power and condition; everything else goes to its
  * marketplace by words. An ad's page gives the seller's text, the address and whether it is up.
  */
 class WillhabenCrawler : Crawler, StartsAtAnyPage, FiltersAtTheSource, KnowsListingAge, KnowsLocation, KnowsAdState {
-    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER)
+    override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.YEAR, FiltersAtTheSource.Criterion.MILEAGE, FiltersAtTheSource.Criterion.PRICE, FiltersAtTheSource.Criterion.POWER, FiltersAtTheSource.Criterion.CONDITION)
 
     override val platformId = PlatformId.WILLHABEN
 
