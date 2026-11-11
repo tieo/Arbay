@@ -264,7 +264,10 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .chip:hover { border-color: var(--muted); }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.chips-label { color: var(--muted); font-size: 12px; min-width: 76px; }
+/* A labelled row hangs its chips off one column: the label sits in the row's indent, so the
+   chips of every row start at the same edge and a wrapped line starts there too. */
+.chips:has(> .chips-label) { padding-left: 94px; }
+.chips-label { color: var(--muted); font-size: 12px; flex: none; width: 88px; margin-left: -94px; }
 
 .quiet {
     height: 32px;
