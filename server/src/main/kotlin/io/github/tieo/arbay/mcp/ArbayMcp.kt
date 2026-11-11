@@ -247,6 +247,11 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
     }
 
+    /** Where a radius the call names is measured from: the place it names, else the saved search's, else the user's home. */
+    private suspend fun nearOf(args: JsonObject): String? = args.str("near")
+        ?: args.str("saved_search_id")?.let { getJson<TrackedProduct>("/api/products/${it.encodeURLPathPart()}") }?.searchQuery?.location?.takeIf { it.isNotBlank() }
+        ?: io.github.tieo.arbay.classifier.FreeItemProfileStore.get()?.location?.takeIf { it.isNotBlank() }
+
     /** Starts a search in the background and returns it, or null when there is nothing to search for. */
     private suspend fun startSearch(args: JsonObject, vehicle: CarFilters? = null): SearchRun? {
         val savedId = args.str("saved_search_id")
@@ -267,8 +272,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 q?.excludeKeywords?.forEach { parameter("exclude", it) }
                 q?.aliases?.forEach { parameter("alias", it) }
                 q?.productWishes?.takeUnless { it.isEmpty }?.let { parameter("wishes", json.encodeToString(io.github.tieo.arbay.model.ProductWishes.serializer(), it)) }
-                q?.location?.let { parameter("near", it) }
-                q?.radiusKm?.takeIf { it > 0 }?.let { parameter("radiusKm", it) }
+                val radius = args.int("radius_km")?.takeIf { it > 0 } ?: q?.radiusKm?.takeIf { it > 0 }
+                radius?.let { parameter("radiusKm", it) }
+                (if (args.int("radius_km") != null) nearOf(args) else q?.location)?.let { parameter("near", it) }
                 // The saved vehicle criteria (year, mileage, power, gearbox, drive, van size, price),
                 // sent as the app sends them, so the markets are asked for the same vans the app shows.
                 // A price band named for this search goes to the markets too, which filter on it
@@ -418,10 +424,17 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 boolean("complete", "Wait for every market, the web's shops included, before answering (a few minutes), so the answer is the whole market")
                 boolean("ask_cooling_down", "Ask a market that is cooling down after a block now instead of waiting the cooldown out, as the app's \"Ask now\"; a market that blocks again starts a new cooldown")
                 string("vehicle", "$VEHICLE_ARG. Replaces a saved search's own criteria for this search")
+                integer("radius_km", "Only offers at most this far from near, in km (straight line). AutoScout24, mobile.de, Kleinanzeigen and eBay are asked for it; the rest are measured by where their offers say they are, and an offer that says nowhere is kept")
+                string("near", "The place radius_km is measured from, a postcode or town (default: the user's home)")
             },
         ) { args ->
             if (args.bool("ask_cooling_down") == true && args.str("search_id") == null) http.delete("$base/api/crawler/cooldown")
             val vehicle = vehicleCriteria(args).getOrElse { return@tool "Not searched: ${it.message}" }
+            // A radius from a place that cannot be found would search everywhere and say nothing.
+            if (args.int("radius_km") != null && args.str("search_id") == null) {
+                val near = nearOf(args) ?: return@tool "Not searched: radius_km needs near, and no home is set."
+                if (io.github.tieo.arbay.judging.Geocoder.place(near) == null) return@tool "Not searched: the place \"$near\" is not known."
+            }
             val run = args.str("search_id")?.let { runs[it] ?: return@tool "No such search running; search again." }
                 ?: startSearch(args, vehicle) ?: return@tool "Name the words or a saved search."
             // A tool call has a time limit of its own, and a search on a busy server can take
