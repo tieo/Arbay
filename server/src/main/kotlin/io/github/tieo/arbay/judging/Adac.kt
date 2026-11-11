@@ -25,6 +25,7 @@ object Adac {
     private val json = Json { ignoreUnknownKeys = true }
     private val file = DataDir.file("adac.json")
     private const val ASK_EVERY_MS = 24L * 3600 * 1000
+    private const val RETRY_MS = 5L * 60 * 1000
 
     @Serializable data class Money(val cents: Long, val currency: String)
 
@@ -123,6 +124,7 @@ object Adac {
     fun start() {
         background.launch {
             while (true) {
+                var failed = false
                 try {
                     val read = json.decodeFromString<Tables>(Neuland.offers("vehicles/adac", limitS = 60))
                     if (read.costs.rows.isNotEmpty()) {
@@ -134,9 +136,16 @@ object Adac {
                     throw e
                 } catch (e: Exception) {
                     log.warn("ADAC tables not read: {}", e.message)
+                    failed = true
                 }
-                // A catalogue Neuland is still reading fills in over hours; it is asked again hourly till done.
-                delay(if (tables.costs.rows.isEmpty() || !tables.catalog.complete || tables.catalog.reading) 3600_000L else ASK_EVERY_MS)
+                // A read that failed is tried again within minutes: Neuland restarting beside Arbay
+                // refused the first read after a deploy, and the next came a day later. A catalogue
+                // Neuland is still reading fills in over hours; it is asked again hourly till done.
+                delay(when {
+                    failed -> RETRY_MS
+                    tables.costs.rows.isEmpty() || !tables.catalog.complete || tables.catalog.reading -> 3600_000L
+                    else -> ASK_EVERY_MS
+                })
             }
         }
     }

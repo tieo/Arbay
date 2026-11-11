@@ -39,6 +39,8 @@ object EvModels {
     /** A first read still filling in comes in again sooner, so its sizes arrive within the hour. */
     private const val ASK_WHILE_READING_MS = 3600L * 1000
 
+    private const val RETRY_MS = 5L * 60 * 1000
+
     @Serializable
     data class Money(val cents: Long, val currency: String)
 
@@ -84,14 +86,18 @@ object EvModels {
     fun start() {
         background.launch {
             while (true) {
+                var failed = false
                 try {
                     refresh()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     log.warn("EV models not read: {}", e.message)
+                    failed = true
                 }
-                delay(if (catalogue.complete) ASK_EVERY_MS else ASK_WHILE_READING_MS)
+                // A read that failed, as the first one does while Neuland restarts beside Arbay, is
+                // tried again within minutes rather than at the next daily ask.
+                delay(if (failed) RETRY_MS else if (catalogue.complete) ASK_EVERY_MS else ASK_WHILE_READING_MS)
             }
         }
     }
