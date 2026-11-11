@@ -243,7 +243,9 @@ object AuctionBids {
                 bids[i] = if (placed.placed) {
                     bids[i].copy(state = AuctionBidState.PLACED, placedAt = Clock.System.now(), outcome = placed.outcome, problem = placed.problem)
                 } else {
-                    bids[i].copy(state = AuctionBidState.NOT_PLACED, problem = placed.problem ?: "eBay took no bid")
+                    // Only what Neuland says is the reason: a bid it never pressed, its page stuck
+                    // loading, read as "eBay took no bid" though eBay was never asked.
+                    bids[i].copy(state = AuctionBidState.NOT_PLACED, problem = placed.problem ?: "not placed; Neuland gave no reason (see its log)")
                 }
                 persist()
             }
