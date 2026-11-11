@@ -264,7 +264,7 @@ input[type="number"].control::-webkit-inner-spin-button { display: none; }
 .chip:hover { border-color: var(--muted); }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.chips-label { color: var(--muted); font-size: 12px; min-width: 64px; }
+.chips-label { color: var(--muted); font-size: 12px; min-width: 76px; }
 
 .quiet {
     height: 32px;
