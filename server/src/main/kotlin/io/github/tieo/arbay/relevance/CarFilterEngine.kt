@@ -42,7 +42,8 @@ object CarFilterEngine {
         filters: CarFilters,
         keepNonVehicles: Boolean = false,
         modelHint: String? = null,
-    ): List<Listing> = partition(listings, filters, keepNonVehicles, modelHint).kept
+        searchedNewEur: Double? = null,
+    ): List<Listing> = partition(listings, filters, keepNonVehicles, modelHint, searchedNewEur).kept
 
     /** What the vehicle criteria keep, and what they take away with the criterion that took it. */
     data class Partitioned(val kept: List<Listing>, val dropped: List<Pair<Listing, String>>)
@@ -57,17 +58,20 @@ object CarFilterEngine {
      * the one filter nobody could check.
      */
     /** @param modelHint the model the search is for, which decides how a listing that does not
-     *  name its own model reads its van size codes (see [VanDimensions]). */
+     *  name its own model reads its van size codes (see [VanDimensions]).
+     *  @param searchedNewEur the cheapest price new of the models the search asks for, which an
+     *  offer naming no model of its own is held to (see [rejectedBy]). */
     fun partition(
         listings: List<Listing>,
         filters: CarFilters,
         keepNonVehicles: Boolean = false,
         modelHint: String? = null,
+        searchedNewEur: Double? = null,
     ): Partitioned {
         val kept = mutableListOf<Listing>()
         val dropped = mutableListOf<Pair<Listing, String>>()
         listings.map { annotateVanDims(it, modelHint) }.forEach { listing ->
-            val rejectedBy = rejectedBy(listing, filters, keepNonVehicles)
+            val rejectedBy = rejectedBy(listing, filters, keepNonVehicles, searchedNewEur)
             if (rejectedBy == null) kept += listing else dropped += listing to rejectedBy
         }
         return Partitioned(kept, dropped)
@@ -144,7 +148,7 @@ object CarFilterEngine {
         rejectedBy(listing, filters, keepNonVehicles) == null
 
     /** The criterion that rejects this listing, in the words the app shows, or null if it fits. */
-    private fun rejectedBy(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false): String? {
+    private fun rejectedBy(listing: Listing, filters: CarFilters, keepNonVehicles: Boolean = false, searchedNewEur: Double? = null): String? {
         val v = listing.vehicle
 
         if (!keepNonVehicles && isLikelyNonVehicle(listing)) return "not a vehicle"
@@ -201,11 +205,20 @@ object CarFilterEngine {
         // A car asking a fraction of its model's cheapest price new asks no car's price: a
         // deposit, a leasing rate or a placeholder ("1.000 €" for a new CUPRA Tavascan) on a car
         // near new, a part ("VW ID 3 Anhängerkupplung", 1,100 €) on anything. A ten-year-old EV
-        // still keeps about a fifth of its price.
-        if (io.github.tieo.arbay.judging.EvModels.keyOf(listing.title) != null) {
-            val reference = io.github.tieo.arbay.judging.Adac.cheapestNewEur(listing.title)
-            val share = if (v?.condition in NEAR_NEW) NO_REAL_PRICE_SHARE else NO_CAR_PRICE_SHARE
-            if (reference != null && priceEur.toDouble() < reference * share) return "no real price"
+        // still keeps about a fifth of its price; a car older than that, by its stated year, can
+        // ask less, and a 1998 Golf for 1,500 € is a car.
+        // An offer whose title names no model is held to the cheapest model the search asks for,
+        // where the search wants only new or near-new cars: eBay answered a search for electric
+        // cars at least as big as an ID.3 with winter wheels, boot mats and a comic book, none
+        // naming its make first, and none a car at a tenth of an MG4's price.
+        val nearNewOnly = filters.conditions.isNotEmpty() && filters.conditions.all { it in NEAR_NEW }
+        val ownModel = io.github.tieo.arbay.judging.EvModels.keyOf(listing.title) != null
+        val reference = (if (ownModel) io.github.tieo.arbay.judging.Adac.cheapestNewEur(listing.title) else null)
+            ?: searchedNewEur?.takeIf { nearNewOnly }
+        if (reference != null) {
+            val young = v?.firstRegYear?.let { it >= today().year - NO_CAR_PRICE_YEARS } ?: true
+            val share = if (v?.condition in NEAR_NEW || nearNewOnly) NO_REAL_PRICE_SHARE else NO_CAR_PRICE_SHARE
+            if ((young || share == NO_REAL_PRICE_SHARE) && priceEur.toDouble() < reference * share) return "no real price"
         }
         // A car shorter than the model the search names as its least size; one whose model the
         // catalogue does not know, or knows no length of, is kept.
@@ -517,6 +530,9 @@ object CarFilterEngine {
     /** Under this share of its model's cheapest price new, a near-new car's asking price is not its price. */
     private const val NO_REAL_PRICE_SHARE = 0.4
 
-    /** Under this share of its model's cheapest price new, nothing is the car itself, however old. */
+    /** Under this share of its model's cheapest price new, no car up to [NO_CAR_PRICE_YEARS] old is the car itself. */
     private const val NO_CAR_PRICE_SHARE = 0.1
+
+    /** How old a car can be and still keep a tenth of its price new. */
+    private const val NO_CAR_PRICE_YEARS = 12
 }

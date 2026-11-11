@@ -307,7 +307,10 @@ private suspend fun carPostFilter(
     val partsIntent = CarFilterEngine.isPartQuery(searchQuery.positiveText)
     val enriched = listings.map { VehicleTextParser.enrich(it) }
     val model = CarQueryResolver.resolve(searchQuery.positiveText)?.modelSlug
-    val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent, modelHint = model)
+    // The cheapest price new of the models searched, the words and every alias the size wish added.
+    val searchedNewEur = (listOf(searchQuery.positiveText) + searchQuery.aliases)
+        .mapNotNull { io.github.tieo.arbay.judging.Adac.cheapestNewEur(it) }.minOrNull()
+    val onTheCard = CarFilterEngine.partition(enriched, filters, keepNonVehicles = partsIntent, modelHint = model, searchedNewEur = searchedNewEur)
     // A van size the card only hints at is a range its page may narrow, so such a van has its page
     // read before it goes: AutoScout24 titled a Crafter "Trend LANG", long or longer, and its page's
     // trim line says "30 Mittellang".
@@ -317,7 +320,7 @@ private suspend fun carPostFilter(
             (criterion == "height" && v?.isVerified(VehicleField.VAN_HEIGHT) != true)
     }
     val detailed = DetailEnricher.enrich(onTheCard.kept + sizeHintedOnly.map { it.first }, filters, crawler, unattended = searchQuery.unattended)
-    val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent, modelHint = model)
+    val afterDetail = CarFilterEngine.partition(detailed, filters, keepNonVehicles = partsIntent, modelHint = model, searchedNewEur = searchedNewEur)
     // A word the reader blocked is matched on the title before any page is read; a page's trim line
     // names the model too ("Ausstattungslinie: 30 Mittellang FWD Trendline" under a mobile.de card
     // that says only "Volkswagen Crafter"), so it is matched there as well.

@@ -610,6 +610,18 @@ class CarFilterEngineTest {
     }
 
     @Test
+    fun anOfferNamingNoModelIsHeldToThePriceOfTheModelsSearchedForNew() {
+        fun ad(title: String, euros: Long) = listing(title.hashCode().toString(), PlatformId.EBAY_DE, euros * 100).copy(title = title)
+        val wheels = ad("4x Winterräder 16 Zoll MG4 Electric SEH3 LK 5/112mm ET 33", 474)
+        val comic = ad("Clever & Smart 1 erste Auflage original Condor", 142)
+        val car = ad("Neuwagen MG4 Electric Comfort 64 kWh", 29_990)
+        val newOnly = CarFilters(conditions = setOf(VehicleCondition.NEW))
+        assertEquals(listOf(car.id), CarFilterEngine.apply(listOf(wheels, comic, car), newOnly, searchedNewEur = 23_000.0).map { it.id })
+        // A search for used cars, any age, holds nothing to the price new.
+        assertEquals(3, CarFilterEngine.apply(listOf(wheels, comic, car), CarFilters(), searchedNewEur = 23_000.0).size)
+    }
+
+    @Test
     fun aTowbarForSaleIsAPartAndACarWithOneIsACar() {
         fun ad(title: String) = listing(title.hashCode().toString(), PlatformId.EBAY_DE, 20_000).copy(title = title)
         listOf(
