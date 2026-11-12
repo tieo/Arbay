@@ -279,18 +279,15 @@ object Chat {
                 if (ShopCheckouts.siteOf(url, fresh = true) != site) throw ChatFailure("$url is not at $site, so it cannot be in the same order", signedOut = false)
             }
         }
-        // A web shop's payment follows a read of the same order in the same call: its total in
-        // euros and within the limit, or nothing is paid. A store charging in another currency
-        // would have its cents held against euro cents.
-        if (request.pay && site !in STATED_CHECKOUTS) {
-            val read = checkout(site, request.copy(pay = false))
-            val total = read.total ?: throw ChatFailure("$site's checkout showed no total, so nothing was paid", signedOut = false)
-            if (listOfNotNull(read.item, read.shipping, read.total, read.fee).any { it.currency != "EUR" })
-                throw ChatFailure("$site charges in ${total.currency}, not euros, so nothing was paid", signedOut = false)
-            if (total.cents > kotlin.math.round(request.allInEur * 100).toLong())
-                throw ChatFailure("$site's checkout comes to ${total.eur()} €, more than ${request.allInEur} €, so nothing was paid", signedOut = false)
-        }
+        // A web shop's payment is one run, since each run costs the user a Shop Pay text: Neuland
+        // pays only where every amount reads in euros, the rows add up to a total within the limit
+        // and the pay button names that total, read twice before the press.
         var bought = checkout(site, request)
+        // An answer in another currency is no euro amount, whatever its digits say.
+        if (listOfNotNull(bought.item, bought.fee, bought.shipping, bought.total).any { it.currency != "EUR" }) {
+            log.error("{}'s checkout answered in another currency than euros: {}", site, bought)
+            if (!bought.paid && !bought.placed) throw ChatFailure("$site's checkout is not in euros, so nothing was paid", signedOut = false)
+        }
         // PayPal signed out: signed in again with the kept password, the buy is made once more.
         if (request.pay && bought.paymentSignedOut && reloginPayment()) bought = checkout(site, request)
         return Purchase(
