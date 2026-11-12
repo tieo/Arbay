@@ -1438,8 +1438,9 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
     private suspend fun purchase(id: String, allInEur: Double, pay: Boolean, together: List<String> = emptyList()): String {
         val l = offer(id) ?: return "Unknown offer; search first."
         // A web offer found before its shop's checkout was known is asked about by the server itself.
+        // Any other shop's offer is asked about by the server, which buys only where Neuland names a checkout.
         fun buyable(o: Listing) = io.github.tieo.arbay.model.checkoutSite(o) != null ||
-            (o.platformId == io.github.tieo.arbay.model.PlatformId.WEB && o.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && o.saleType != io.github.tieo.arbay.model.SaleType.RENT)
+            (o.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && o.saleType != io.github.tieo.arbay.model.SaleType.RENT)
         val more = together.filter { it != id }.distinct().map { offer(it) ?: return "Unknown offer $it; search first." }
         (listOf(l) + more).forEach { o ->
             if (!buyable(o)) return "Arbay buys outright only at Vinted's, alza's and eBay.de's checkouts and at web shops Neuland checks out at, and an auction or a rental not at all; ${o.id} is at ${o.url}."
