@@ -70,7 +70,9 @@ object SellersWords {
     private val statedDamage = Regex(
         """(?<!kein\s)(?<!keine\s)(?<!keinen\s)(?<!ohne\s)(?<!nicht\s)(?<!repariert\w{0,3}\s)(?<!behoben\w{0,3}\s)(?:""" +
             // Run into the word before it as typed: "einen leichtenSeitenschaden".
-            """(?:unfall|seiten|front|heck|hagel|blech|karosserie)schaden|\bunfall(?:fahrzeug|wagen|auto)|""" +
+            """(?:unfall|seiten|front|heck|hagel|blech|karosserie|motor|getriebe)schaden|\bunfall(?:fahrzeug|wagen|auto)|""" +
+            // A wreck's own list: "Motor defekt, Airbags offen, Kühler defekt".
+            """\b(?:motor|getriebe)\s+(?:ist\s+)?defekt|\bairbags?\s+(?:sind\s+|ist\s+)?(?:offen|ausgel(?:ö|oe)st)|""" +
             """\bfahrzeug\s+mit\s+(?:besch(?:ä|ae)digungen|sch(?:ä|ae)den))\b""" +
             """(?!\W{0,3}(?:nein|keine?n?|(?:unfall)?frei|behoben|repariert|instand\w*|beseitigt|fachgerecht|wurde))""",
         RegexOption.IGNORE_CASE,

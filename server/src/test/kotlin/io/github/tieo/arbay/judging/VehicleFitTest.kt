@@ -24,6 +24,14 @@ class VehicleFitTest {
     )
 
     @Test
+    fun `a damaged vehicle fits only a search that asks for damaged ones`() {
+        val wreck = car("VW Crafter 2025", 12_491).let { it.copy(vehicle = it.vehicle!!.copy(condition = io.github.tieo.arbay.model.VehicleCondition.DAMAGED)) }
+        assertNull(FitScore.score(wreck, CarFilters(), 12_491.0, 4.0))
+        assertNull(FitScore.score(wreck, CarFilters(conditions = setOf(io.github.tieo.arbay.model.VehicleCondition.USED)), 12_491.0, 4.0))
+        assertNotNull(FitScore.score(wreck, CarFilters(conditions = setOf(io.github.tieo.arbay.model.VehicleCondition.DAMAGED)), 12_491.0, 4.0))
+    }
+
+    @Test
     fun `a price a business alone gets rules the car out`() {
         val wishes = CarFilters(maxPriceEur = 50_000)
         assertNull(FitScore.score(car("Hyundai IONIQ 6 AKTION GEWERBE 77 kWh", 39_000), wishes, 39_000.0, 4.0))

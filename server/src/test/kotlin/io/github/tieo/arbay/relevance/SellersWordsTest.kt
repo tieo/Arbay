@@ -65,9 +65,12 @@ Laufleistung: 297000"""
         assertEquals(damaged, condition("Fahrzeug mit Beschädigungen siehe Bilder - Festpreis - Verkauf nur an Gewerbekunden"))
         assertEquals(damaged, condition("Volkswagen Crafter 2022 Kühlkasten Unfallschaden 53.000km"))
         assertEquals(damaged, condition("Hoch + Lang ! Klimaanlage ! UNFALLFAHRZEUG ! Rückfahrkamera"))
+        // Kleinanzeigen 3473227951, a 2025 Crafter at 12,491 €.
+        assertEquals(damaged, condition("Motor defekt, Airbags offen, Kühler defekt"))
+        assertEquals(damaged, condition("Leichter Motorschaden, fährt nicht mehr"))
         // Kleinanzeigen form lines and a repaired one, live.
         listOf("Antriebsart: Frontantrieb\nUnfallschaden: Unfallfrei\nZul. Gesamtgewicht: 3500", "Gebrauchtfahrzeug\nReparierter Unfallschaden\nHubraum: 1968 cm³",
-            "Kein Unfallwagen, scheckheftgepflegt", "Unfallschaden: Nein", "Hagelschaden fachgerecht behoben").forEach { text ->
+            "Kein Unfallwagen, scheckheftgepflegt", "Unfallschaden: Nein", "Hagelschaden fachgerecht behoben", "Kein Motorschaden, läuft super").forEach { text ->
             assertEquals(io.github.tieo.arbay.model.VehicleCondition.USED, condition(text), text)
         }
     }

@@ -1,5 +1,6 @@
 package io.github.tieo.arbay.judging
 
+import io.github.tieo.arbay.model.VehicleCondition
 import io.github.tieo.arbay.model.CarFilters
 import io.github.tieo.arbay.model.Condition
 import io.github.tieo.arbay.model.ProductWishes
@@ -137,6 +138,9 @@ object FitScore {
         if (tradeOnly.containsMatchIn(text) || businessTitle.containsMatchIn(listing.title)) return null
         // Another ad's photos in this one: the van shown is not the one sold.
         if (listing.photosAlsoIn.isNotEmpty()) return null
+        // A wreck is no fit for a search that does not ask for one: a 2025 Crafter at 12,491 € on
+        // Kleinanzeigen with "Motor defekt, Airbags offen, Kühler defekt, Unfallfahrzeug" scored 79 %.
+        if (listing.vehicle?.condition == VehicleCondition.DAMAGED && VehicleCondition.DAMAGED !in wishes.conditions) return null
         val fuel = listing.vehicle?.fuel
         if (wishes.fuels.isNotEmpty() && fuel != null && fuel !in wishes.fuels) return null
         val stars = marketStars(listing)?.first
