@@ -337,4 +337,32 @@ class SavedSearchMonitorTest {
         assertEquals(listOf(kept.id), monitor.newListings(product.id).map { it.id })
         products.delete(product.id)
     }
+
+    @Test
+    fun `an offer whose page the run left unread waits one run before it is new`() {
+        val products = io.github.tieo.arbay.repo.ProductRepo()
+        val monitor = SavedSearchMonitor(products, io.github.tieo.arbay.repo.ListingRepo())
+        val product = products.create(io.github.tieo.arbay.model.TrackedProduct(
+            id = "", name = "Crafter held unread",
+            searchQuery = io.github.tieo.arbay.model.SearchQuery(text = "Crafter", category = io.github.tieo.arbay.model.MarketGroup.VEHICLES), createdAt = Instant.fromEpochMilliseconds(0),
+        ))
+        val known = listing("Crafter Kasten known", 20000).copy(id = "KLEINANZEIGEN:11")
+        val read = listing("Crafter Kasten DSG", 24990).copy(id = "KLEINANZEIGEN:12")
+        val unread = listing("Crafter Kasten mittellang Hochdach FWD", 16950).copy(id = "KLEINANZEIGEN:13")
+        try {
+            monitor.record(product, mapOf(known.id to known))
+            val all = listOf(known, read, unread).associateBy { it.id }
+            assertEquals(listOf(read.id), monitor.record(product, all, unread = setOf(unread.id))?.map { it.id })
+            // Read by the next run, it is new then.
+            assertEquals(listOf(unread.id), monitor.record(product, all)?.map { it.id })
+            assertEquals(null, monitor.record(product, all), "announced once")
+            // A page that stays unread holds its offer back one run only.
+            val stuck = listing("Crafter Kasten L2H2", 18000).copy(id = "KLEINANZEIGEN:14")
+            val more = all + (stuck.id to stuck)
+            assertEquals(null, monitor.record(product, more, unread = setOf(stuck.id)))
+            assertEquals(listOf(stuck.id), monitor.record(product, more, unread = setOf(stuck.id))?.map { it.id })
+        } finally {
+            products.delete(product.id)
+        }
+    }
 }

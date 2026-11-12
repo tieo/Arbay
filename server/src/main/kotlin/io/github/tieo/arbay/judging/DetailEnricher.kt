@@ -84,6 +84,12 @@ object DetailEnricher {
         return needed.any { field -> v == null || if (field == VehicleField.TOWBAR) v.towbar == null else !v.isVerified(field) }
     }
 
+    /** Whether [listing]'s page would tell a field [filters] need that its card leaves unknown, and
+     *  has not been read: a run that ran out of page reads leaves such offers unjudged. */
+    fun leftUnread(listing: Listing, filters: CarFilters): Boolean =
+        io.github.tieo.arbay.markets.CrawlerRegistry.crawlerFor(listing.platformId) is io.github.tieo.arbay.markets.HasDetailSpecs &&
+            needsDetail(listing, neededFields(filters)) && DetailCache.get(listing.id) == null
+
     /** Enrich one platform's listings in place of the crawler that produced them. An [unattended]
      *  watch run reads every unread page, newest first, each one waiting for its own request window. */
     suspend fun enrich(listings: List<Listing>, filters: CarFilters, crawler: Crawler, unattended: Boolean = false): List<Listing> {

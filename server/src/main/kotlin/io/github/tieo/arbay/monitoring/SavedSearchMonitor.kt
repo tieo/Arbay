@@ -53,6 +53,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readUTF8Line
 import org.slf4j.LoggerFactory
+import io.github.tieo.arbay.judging.DetailEnricher
 import io.github.tieo.arbay.judging.ExchangeRates
 import io.github.tieo.arbay.judging.FitScore
 import io.github.tieo.arbay.judging.Geocoder
@@ -154,6 +155,7 @@ class SavedSearchMonitor(
         val lastRunAtMillis: Map<String, Long> = emptyMap(),
         val foundAtMillis: Map<String, Map<String, Long>> = emptyMap(),
         val unansweredAtLastRun: Map<String, Map<String, String>> = emptyMap(),
+        val heldUnread: Map<String, Set<String>> = emptyMap(),
     )
 
     private val stateFile = DataDir.file("saved_search_state.json")
@@ -165,6 +167,9 @@ class SavedSearchMonitor(
     private val lastRun: MutableMap<String, Long>
     private val foundAt: MutableMap<String, MutableMap<String, Long>>
     private val unanswered: MutableMap<String, Map<String, String>>
+    /** The offers a run held back with their page unread, by search: the next run announces them
+     *  whether or not it reads them ([record]). */
+    private val heldUnread: MutableMap<String, MutableSet<String>>
 
     init {
         val state = loadState()
@@ -173,6 +178,7 @@ class SavedSearchMonitor(
         lastRun = HashMap(state.lastRunAtMillis)
         foundAt = state.foundAtMillis.mapValuesTo(HashMap()) { HashMap(it.value) }
         unanswered = HashMap(state.unansweredAtLastRun)
+        heldUnread = state.heldUnread.mapValuesTo(HashMap()) { it.value.toMutableSet() }
     }
 
     /** What every saved search has been doing, for the app's list of them. */
@@ -461,8 +467,16 @@ class SavedSearchMonitor(
      * Notes what one run of [product] found and returns what is new since earlier runs, or null
      * when there is nothing to tell: no market answered, nothing is new, or this is the search's
      * first run, which seeds itself silently.
+     *
+     * [unread] are offers whose page the search still owes: a field its criteria need is unknown on
+     * the card and the page was left unread this run. They are neither announced nor remembered,
+     * so the next run, which reads them first, judges them before they count as new. A watch run
+     * reads 150 pages at most, and the run after Kleinanzeigen's van search was narrowed to its
+     * transporters found 251 Crafters it had never returned and announced the 164 it had no turn
+     * for as new, gearbox, year and mileage unknown, where their pages say manual or old. One held
+     * back a run before is announced either way, so a page that cannot be read hides nothing.
      */
-    internal fun record(product: TrackedProduct, found: Map<String, Listing>): List<Listing>? {
+    internal fun record(product: TrackedProduct, found: Map<String, Listing>, unread: Set<String> = emptySet()): List<Listing>? {
         synchronized(stateLock) { lastRun[product.id] = System.currentTimeMillis() }
 
         // Every market refused or failed. Recording that as this search's first, silent run would
@@ -479,14 +493,19 @@ class SavedSearchMonitor(
 
         val silent: Boolean
         val fresh: List<String>
+        val heldChanged: Boolean
         synchronized(stateLock) {
             silent = product.id !in seen
             val known = seen.getOrPut(product.id) { mutableSetOf() }
             // One eBay item is listed on every eBay site under the same number: a Künzle edge
             // sander alerted from ebay.fr came again the next morning from ebay.de.
             val knownOffers = known.mapTo(HashSet(), ::offerKey)
-            fresh = found.keys.filter { offerKey(it) !in knownOffers }.distinctBy(::offerKey)
-            known.addAll(found.keys)
+            val heldBefore = heldUnread[product.id].orEmpty()
+            val held: MutableSet<String> = if (silent) HashSet() else unread.filterTo(HashSet()) { it !in heldBefore && offerKey(it) !in knownOffers }
+            heldChanged = held != heldBefore
+            if (held.isEmpty()) heldUnread.remove(product.id) else heldUnread[product.id] = held
+            fresh = found.keys.filter { offerKey(it) !in knownOffers && it !in held }.distinctBy(::offerKey)
+            known.addAll(found.keys - held)
             if (fresh.isNotEmpty() && !silent) {
                 unopened.getOrPut(product.id) { mutableSetOf() }.addAll(fresh)
                 lastNew[product.id] = fresh.toMutableSet()
@@ -494,8 +513,8 @@ class SavedSearchMonitor(
                 foundAt.getOrPut(product.id) { HashMap() }.apply { fresh.forEach { put(it, now) } }
             }
         }
+        if (fresh.isNotEmpty() && !silent || heldChanged) saveStatus()
         if (fresh.isNotEmpty() && !silent) {
-            saveStatus()
             // Stored as found, so the app can show this batch later without asking the platform
             // again — which by then may no longer have it. Archiving mirrors the images too.
             listingRepo.upsertBatch(fresh.mapNotNull { found[it] })
@@ -635,7 +654,9 @@ class SavedSearchMonitor(
         val firstFitRun = synchronized(stateLock) {
             (fitKey !in seen).also { first -> if (first) seen[fitKey] = mutableSetOf() }
         }
-        val fresh = record(product, shown)
+        val fresh = record(product, shown, unread = shown.values.filter { DetailEnricher.leftUnread(it, crawl) }.mapTo(HashSet()) { it.id })
+        // What the run held back unjudged is pushed, if at all, once its page has been read.
+        val held = synchronized(stateLock) { heldUnread[product.id].orEmpty().toSet() }
         sinceFound(product.id, shown, ruledOut)
         // An offer naming no model is told one from its full text, its photos' print or their
         // likeness to the offers that do, before it is weighed.
@@ -680,7 +701,7 @@ class SavedSearchMonitor(
         }
         val online = scores.map { it.first }
         val decided = LinkedHashMap<String, Pair<Listing, String>>()
-        val crossed = crossedTheFloor(scores, settings.minScore, told, offerKey = ::offerKey)
+        val crossed = crossedTheFloor(scores.filter { it.first.id !in held }, settings.minScore, told, offerKey = ::offerKey)
         val worth = crossed.filter { (l, _) ->
             val better = FitScore.beatenBy(l, online)
             if (better != null) { decided[l.id] = l to "beaten by ${better.url}"; return@filter false }
@@ -1066,6 +1087,7 @@ class SavedSearchMonitor(
             lastNew.keys.retainAll(live)
             lastRun.keys.retainAll(live)
             unanswered.keys.retainAll(live)
+            heldUnread.keys.retainAll(live)
             // A find time lives as long as its id is still held as new or as the last batch.
             foundAt.keys.retainAll(live)
             foundAt.forEach { (id, times) ->
@@ -1081,6 +1103,7 @@ class SavedSearchMonitor(
                 lastRunAtMillis = lastRun.toMap(),
                 foundAtMillis = foundAt.mapValues { it.value.toMap() },
                 unansweredAtLastRun = unanswered.toMap(),
+                heldUnread = heldUnread.mapValues { it.value.toSet() },
             )
         }
         try {
