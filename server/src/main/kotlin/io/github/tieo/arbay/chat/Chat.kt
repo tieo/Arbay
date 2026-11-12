@@ -256,16 +256,40 @@ object Chat {
     }
 
     /**
-     * Buys an item at its shop's own checkout ([checkoutSite]: Vinted, eBay, alza) with the account's
-     * saved payment, Vinted's delivered to the door, eBay's to the account's saved address, alza's to the user's pickup point
-     * ([ChatSettings.pickup]) for the user's address ([ChatSettings.buyer]); paid only with
-     * [PurchaseRequest.pay] and a total within [PurchaseRequest.allInEur], otherwise the checkout is
-     * only read and left unpaid.
+     * Buys an item at its shop's own checkout ([checkoutSite]: Vinted, eBay, alza, or a web shop
+     * Neuland checks out at, [ShopCheckouts]) with the account's saved payment, Vinted's delivered to
+     * the door, eBay's to the account's saved address, alza's to the user's pickup point
+     * ([ChatSettings.pickup]) for the user's address ([ChatSettings.buyer]), a web shop's to that
+     * address, as a guest paying with PayPal; paid only with [PurchaseRequest.pay] and a total within
+     * [PurchaseRequest.allInEur], otherwise the checkout is only read and left unpaid. A web shop
+     * takes [PurchaseRequest.together] in the same order.
      */
     suspend fun buy(request: PurchaseRequest): Purchase {
         val site = io.github.tieo.arbay.model.checkoutSite(request.url)
-            ?: throw ChatFailure("Arbay buys at Vinted's, eBay's and alza's checkouts only, not at ${request.url}", signedOut = false)
+            ?: ShopCheckouts.siteOf(request.url, fresh = true)
+            ?: throw ChatFailure("Arbay buys at Vinted's, eBay's and alza's checkouts and at web shops Neuland checks out at, and Neuland names no checkout for ${request.url}", signedOut = false)
         require(request.allInEur.isFinite() && request.allInEur > 0) { "an all-in limit of ${request.allInEur} €" }
+        if (site !in STATED_CHECKOUTS && site != ShopCheckouts.hostOf(request.url))
+            throw ChatFailure("Neuland named $site as the checkout of ${request.url}, another shop", signedOut = false)
+        if (request.together.isNotEmpty()) {
+            if (site in STATED_CHECKOUTS) throw ChatFailure("${io.github.tieo.arbay.model.checkoutShop(site)} sells one item per order here", signedOut = false)
+            val urls = listOf(request.url) + request.together
+            if (urls.map { io.github.tieo.arbay.model.productKey(it) }.toSet().size != urls.size) throw ChatFailure("the same item is named twice in one order", signedOut = false)
+            request.together.forEach { url ->
+                if (ShopCheckouts.siteOf(url, fresh = true) != site) throw ChatFailure("$url is not at $site, so it cannot be in the same order", signedOut = false)
+            }
+        }
+        // A web shop's payment follows a read of the same order in the same call: its total in
+        // euros and within the limit, or nothing is paid. A store charging in another currency
+        // would have its cents held against euro cents.
+        if (request.pay && site !in STATED_CHECKOUTS) {
+            val read = checkout(site, request.copy(pay = false))
+            val total = read.total ?: throw ChatFailure("$site's checkout showed no total, so nothing was paid", signedOut = false)
+            if (listOfNotNull(read.item, read.shipping, read.total, read.fee).any { it.currency != "EUR" })
+                throw ChatFailure("$site charges in ${total.currency}, not euros, so nothing was paid", signedOut = false)
+            if (total.cents > kotlin.math.round(request.allInEur * 100).toLong())
+                throw ChatFailure("$site's checkout comes to ${total.eur()} €, more than ${request.allInEur} €, so nothing was paid", signedOut = false)
+        }
         var bought = checkout(site, request)
         // PayPal signed out: signed in again with the kept password, the buy is made once more.
         if (request.pay && bought.paymentSignedOut && reloginPayment()) bought = checkout(site, request)
@@ -291,11 +315,17 @@ object Chat {
     private suspend fun checkout(site: String, request: PurchaseRequest, signedInAgain: Boolean = false): NeulandPurchase {
         val shop = io.github.tieo.arbay.model.checkoutShop(site)
         val body = kotlinx.serialization.json.buildJsonObject {
-            put("url", JsonPrimitive(request.url))
+            if (site in STATED_CHECKOUTS) put("url", JsonPrimitive(request.url))
+            else {
+                val urls = listOf(request.url) + request.together
+                put("urls", kotlinx.serialization.json.JsonArray(urls.map { JsonPrimitive(it) }))
+                put("quantities", kotlinx.serialization.json.JsonArray(urls.map { JsonPrimitive(1) }))
+            }
             // A double limit becomes whole cents once, here; Neuland works in cents from then on.
             put("mostCents", JsonPrimitive(kotlin.math.round(request.allInEur * 100).toLong()))
             put("pay", JsonPrimitive(request.pay))
             if (site == "alza.de") put("order", alzaOrder())
+            else if (site !in STATED_CHECKOUTS) put("order", shopOrder(site))
         }
         val answer = try {
             io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = 200)
@@ -316,6 +346,25 @@ object Chat {
             throw ChatFailure("$shop's checkout: ${e.message}", signedOut = e.signedOut)
         }
         return checkoutJson.decodeFromJsonElement(NeulandPurchase.serializer(), answer)
+    }
+
+    /** The checkouts an offer's address names ([io.github.tieo.arbay.model.checkoutSite]), each buying one item per order. */
+    private val STATED_CHECKOUTS = setOf("vinted.de", "ebay.de", "alza.de")
+
+    /** The order a web shop's guest checkout delivers: to the user's address, confirmed to their email. */
+    private fun shopOrder(site: String): kotlinx.serialization.json.JsonObject {
+        val buyer = settings.buyer ?: throw ChatFailure("$site delivers to the buyer's address, and none is set (chat settings: buyer)", signedOut = false)
+        val email = buyer.email ?: throw ChatFailure("$site sends its order confirmation to an email, and the buyer has none (chat settings: buyer.email)", signedOut = false)
+        return kotlinx.serialization.json.buildJsonObject {
+            put("buyer", kotlinx.serialization.json.buildJsonObject {
+                put("name", JsonPrimitive(buyer.name))
+                put("street", JsonPrimitive(buyer.street))
+                put("zip", JsonPrimitive(buyer.zip))
+                put("city", JsonPrimitive(buyer.city))
+                put("phone", JsonPrimitive(buyer.phone))
+                put("email", JsonPrimitive(email))
+            })
+        }
     }
 
     /** The order alza's checkout delivers: to the user's pickup point, for the user's address. */

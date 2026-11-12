@@ -89,6 +89,9 @@ data class Listing(
     val drive: DriveFacts? = null,
     /** Other ads, placed elsewhere or by someone else, that show one of this ad's photos. */
     val photosAlsoIn: List<PhotoCopy> = emptyList(),
+    /** The checkout Arbay buys this offer at where its address alone does not tell (a web shop
+     *  Neuland checks out at, such as a Shopify store), as Neuland names it: the shop's host. */
+    val checkout: String? = null,
 ) {
     /** All-in price including shipping and platform fees. A delivery charge in another currency
      *  than the price is left out rather than added as if it were the same one. */

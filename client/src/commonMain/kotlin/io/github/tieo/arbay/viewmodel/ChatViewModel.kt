@@ -247,29 +247,42 @@ class ChatViewModel(
     /** The shop checkout on screen, for one offer at a time. */
     val checkout: StateFlow<CheckoutState?> = _checkout.asStateFlow()
 
-    /** Reads what buying [listing] outright at its shop's checkout adds up to; pays nothing. */
-    fun readCheckout(listing: Listing) = runCheckout(listing, PurchaseRequest(listing.url, Double.MAX_VALUE))
+    /** Reads what buying [listing] outright at its shop's checkout adds up to, with [together] in the same order; pays nothing. */
+    fun readCheckout(listing: Listing, together: List<Listing> = emptyList()) =
+        runCheckout(listing, together, PurchaseRequest(listing.url, Double.MAX_VALUE, together = together.map { it.url }))
 
-    /**
-     * Pays for [listing] at its shop's checkout, up to the total the user was shown: a checkout that
-     * has come to more since is refused by the server before paying.
-     */
-    fun pay(listing: Listing) {
-        val shown = _checkout.value?.takeIf { it.listingId == listing.id }?.purchase?.totalEur ?: return
-        runCheckout(listing, PurchaseRequest(listing.url, shown, pay = true))
+    /** Puts [other], an offer at the same web shop, into [listing]'s order or takes it out, and reads the checkout again. */
+    fun toggleTogether(listing: Listing, other: Listing) {
+        val now = _checkout.value?.takeIf { it.listingId == listing.id }?.together.orEmpty()
+        readCheckout(listing, if (now.any { it.id == other.id }) now.filter { it.id != other.id } else now + other)
     }
 
-    private fun runCheckout(listing: Listing, request: PurchaseRequest) {
+    /**
+     * Pays for [listing] at its shop's checkout, with the items read together with it, up to the
+     * total the user was shown: a checkout that has come to more since is refused by the server
+     * before paying.
+     */
+    fun pay(listing: Listing) {
+        val read = _checkout.value?.takeIf { it.listingId == listing.id && !it.working } ?: return
+        val shown = read.purchase?.totalEur ?: return
+        runCheckout(listing, read.together, PurchaseRequest(listing.url, shown, pay = true, together = read.together.map { it.url }))
+    }
+
+    private fun runCheckout(listing: Listing, together: List<Listing>, request: PurchaseRequest) {
         if (rendersASample || _checkout.value?.working == true) return
-        val before = _checkout.value?.takeIf { it.listingId == listing.id }?.purchase
-        _checkout.value = CheckoutState(listing.id, before, working = true, paying = request.pay)
+        val before = _checkout.value?.takeIf { it.listingId == listing.id }
+        // A different basket is a different checkout: its old total is never shown as this one's.
+        val shown = before?.purchase?.takeIf { before.together.map { it.id } == together.map { it.id } }
+        _checkout.value = CheckoutState(listing.id, shown, together, working = true, paying = request.pay)
         viewModelScope.launch {
             _checkout.value = try {
-                CheckoutState(listing.id, client.buy(request))
+                CheckoutState(listing.id, client.buy(request), together)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                CheckoutState(listing.id, before, error = e.message ?: "The server could not be reached")
+                // A payment that failed may still have ordered: its old total is no longer offered to pay
+                // again, and the checkout is read anew first.
+                CheckoutState(listing.id, shown.takeIf { !request.pay }, together, error = e.message ?: "The server could not be reached")
             }
         }
     }
@@ -290,6 +303,8 @@ class ChatViewModel(
 data class CheckoutState(
     val listingId: String,
     val purchase: Purchase? = null,
+    /** The other offers at the same web shop in this order, one of each. */
+    val together: List<Listing> = emptyList(),
     val working: Boolean = false,
     val paying: Boolean = false,
     val error: String? = null,

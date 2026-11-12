@@ -29,6 +29,7 @@ import io.github.tieo.arbay.format
 import io.github.tieo.arbay.model.AUCTION_LEAD_CHOICES
 import io.github.tieo.arbay.model.checkoutShop
 import io.github.tieo.arbay.model.checkoutSite
+import io.github.tieo.arbay.model.sameOrderOffers
 import io.github.tieo.arbay.model.AutoFetchSettings
 import io.github.tieo.arbay.model.Listing
 import io.github.tieo.arbay.model.ModelWish
@@ -579,6 +580,7 @@ fun DetailPane(app: WebApp, route: Route.Results, id: String, state: ResultsStat
 
 @Composable
 private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, copies: List<Listing>, isArchived: Boolean, lowest: Boolean, state: ResultsState) {
+    val shown by app.listings.listings.collectAsState()
     var fromItsPage by remember(listing.id) { mutableStateOf<ListingDetail?>(null) }
     var reading by remember(listing.id) { mutableStateOf(false) }
     var health by remember(listing.id) { mutableStateOf<DriveHealth?>(null) }
@@ -647,7 +649,7 @@ private fun ListingView(app: WebApp, route: Route.Results, listing: Listing, cop
             }
         }
 
-        if (!isArchived && checkoutSite(listing) != null) Checkout(app, listing)
+        if (!isArchived && checkoutSite(listing) != null) Checkout(app, listing, sameOrderOffers(listing, shown))
         if (listing.saleType == SaleType.AUCTION && listing.auctionEndsAt != null && !isArchived) AuctionReminder(app, listing)
 
         Div({ classes("facts") }) {
@@ -956,12 +958,20 @@ private fun BuyAction(app: WebApp, listing: Listing) {
 
 /** An offer's checkout at its shop as Arbay read it, paid at the total it showed. */
 @Composable
-private fun Checkout(app: WebApp, listing: Listing) {
+private fun Checkout(app: WebApp, listing: Listing, sameShop: List<Listing>) {
     val shop = checkoutSite(listing)?.let(::checkoutShop) ?: return
     val checkout by app.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id } ?: return
     val purchase = here.purchase
     Div({ classes("checkout") }) {
+        if (sameShop.isNotEmpty() && purchase?.paid != true) Div({ classes("chips") }) {
+            Span({ classes("chips-label", "muted") }) { Text("Also from $shop") }
+            sameShop.forEach { other ->
+                Chip("${other.title.tidyTitle()} · ${euroText(other.price.amount / 100.0)}", here.together.any { it.id == other.id }) {
+                    app.chat.toggleTogether(listing, other)
+                }
+            }
+        }
         when {
             here.working -> Div({ classes("inline-form") }) {
                 Busy()
@@ -972,7 +982,7 @@ private fun Checkout(app: WebApp, listing: Listing) {
             }
             purchase != null && !purchase.buyable -> P({ classes("muted") }) { Text(purchase.problem ?: "$shop no longer offers to buy it") }
             purchase != null -> {
-                CheckoutLine("Item", purchase.itemEur)
+                CheckoutLine(if (here.together.isEmpty()) "Item" else "${here.together.size + 1} items", purchase.itemEur)
                 purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
                 CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
                 purchase.discountEur?.let { CheckoutLine("Discount", -it) }

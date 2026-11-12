@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ShoppingCart
 import io.github.tieo.arbay.model.checkoutShop
 import io.github.tieo.arbay.model.checkoutSite
+import io.github.tieo.arbay.model.sameOrderOffers
 import io.github.tieo.arbay.model.euroText
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -141,6 +142,7 @@ fun OfferScreen(session: Session, id: String, state: ResultsState) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isArchived: Boolean, state: ResultsState) {
+    val shown by session.listings.listings.collectAsState()
     val nav = LocalNavigator.current
     var fromItsPage by remember(listing.id) { mutableStateOf<ListingDetail?>(null) }
     var reading by remember(listing.id) { mutableStateOf(false) }
@@ -206,7 +208,7 @@ private fun Offer(session: Session, listing: Listing, copies: List<Listing>, isA
                     OutlinedButton(onClick = { openBrowser(copy.url) }, modifier = Modifier.fillMaxWidth()) { Text(copyLabel(copy, listing)) }
                 }
                 if (listing.platformId.canMessage && !isArchived) SellerButton(session, listing)
-                if (checkoutSite(listing) != null && !isArchived) ShopCheckout(session, listing)
+                if (checkoutSite(listing) != null && !isArchived) ShopCheckout(session, listing, sameOrderOffers(listing, shown))
                 if (!isArchived) listing.seller?.let { seller ->
                     if (BlockedDealer.of(listing, kotlin.time.Clock.System.now()) != null) {
                         OutlinedButton(onClick = { session.listings.blockDealer(listing); nav.back() }, modifier = Modifier.fillMaxWidth()) {
@@ -544,11 +546,21 @@ private fun SellerButton(session: Session, listing: Listing) {
 
 /** Buying an offer outright at its shop's own checkout: read first, then paid at the total it showed. */
 @Composable
-private fun ShopCheckout(session: Session, listing: Listing) {
+private fun ShopCheckout(session: Session, listing: Listing, sameShop: List<Listing>) {
     val shop = checkoutSite(listing)?.let(::checkoutShop) ?: return
     val checkout by session.chat.checkout.collectAsState()
     val here = checkout?.takeIf { it.listingId == listing.id }
     val purchase = here?.purchase
+    if (here != null && sameShop.isNotEmpty() && purchase?.paid != true) Panel {
+        Muted("Also from $shop")
+        Choices {
+            sameShop.forEach { other ->
+                Choice("${other.title.tidyTitle()} · ${euroText(other.price.amount / 100.0)}", here.together.any { it.id == other.id }) {
+                    session.chat.toggleTogether(listing, other)
+                }
+            }
+        }
+    }
     when {
         here?.working == true -> Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -564,7 +576,7 @@ private fun ShopCheckout(session: Session, listing: Listing) {
         }
         purchase != null && !purchase.buyable -> Muted(purchase.problem ?: "$shop no longer offers to buy it")
         purchase != null -> Panel {
-            CheckoutLine("Item", purchase.itemEur)
+            CheckoutLine(if (here.together.isEmpty()) "Item" else "${here.together.size + 1} items", purchase.itemEur)
             purchase.feeEur?.let { CheckoutLine("$shop fee", it) }
             CheckoutLine(purchase.delivery ?: "Shipping to the door", purchase.shippingEur)
             purchase.discountEur?.let { CheckoutLine("Discount", -it) }

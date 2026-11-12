@@ -966,21 +966,27 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
             "Read what buying an offer outright costs at its shop's own checkout, signed in to the user's account there: Vinted " +
                 "(item, buyer protection fee, shipping to the door), eBay.de at a fixed price (item, shipping to the saved address, a " +
                 "coupon the page shows) or alza (item, delivery to the user's pickup point); total and the payment method selected. " +
-                "alza's and eBay's are read to their last step before ordering. Orders and pays nothing.",
-            props = { string("listing_id", "A Vinted, fixed-price eBay.de or alza offer id from search", required = true) },
-        ) { args -> purchase(args.str("listing_id")!!, Double.MAX_VALUE, pay = false) }
+                "alza's and eBay's are read to their last step before ordering. A web shop's offer (one search lists with a checkout) is " +
+                "read to the address and PayPal, together with other offers at the same shop so shipping counts once. Orders and pays nothing.",
+            props = {
+                string("listing_id", "A Vinted, fixed-price eBay.de, alza or web shop offer id from search", required = true)
+                stringArray("together_with", "More offer ids at the same web shop, one of each in the same order")
+            },
+        ) { args -> purchase(args.str("listing_id")!!, Double.MAX_VALUE, pay = false, args.strs("together_with")) }
 
         tool(
             "buy",
             "Buy an offer outright, as the user approved, at its shop's own checkout: Vinted's delivered to the door, eBay.de's at " +
-                "a fixed price to the saved address, alza's to the user's pickup point, paid with the account's saved payment. Refused before ordering if the total " +
+                "a fixed price to the saved address, alza's to the user's pickup point, paid with the account's saved payment; a web shop's " +
+                "to the user's address as a guest, paid with PayPal, with the other offers named at that shop in the same order. Refused before ordering if the total " +
                 "would pass the all-in limit; counts as bought only once the shop confirms it.",
             destructive = true,
             props = {
-                string("listing_id", "A Vinted, fixed-price eBay.de or alza offer id from search", required = true)
-                number("all_in_eur", "Most the user pays, fee and shipping included, in euros (12.48 for 12,48 €)", required = true)
+                string("listing_id", "A Vinted, fixed-price eBay.de, alza or web shop offer id from search", required = true)
+                stringArray("together_with", "More offer ids at the same web shop, one of each in the same order")
+                number("all_in_eur", "Most the user pays for the whole order, fee and shipping included, in euros (12.48 for 12,48 €)", required = true)
             },
-        ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true) }
+        ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true, args.strs("together_with")) }
 
         tool(
             "try_bid",
@@ -1275,7 +1281,8 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         location?.city, distanceKm?.let { "${it.toInt()} km" }, seller?.name?.let { name -> "sold by $name" + (seller?.rating?.let { " · $it★" } ?: "") },
         listingDate?.let { "online ${(Clock.System.now() - it).inWholeDays} days" },
         foundAt?.let { "found ${(Clock.System.now() - it).inWholeHours} h ago" },
-        condition?.name?.lowercase(), saleType?.name?.lowercase(), vehicle?.summary(),
+        condition?.name?.lowercase(), saleType?.name?.lowercase(),
+        checkout?.takeIf { platformId == io.github.tieo.arbay.model.PlatformId.WEB }?.let { "checkout at $it" }, vehicle?.summary(),
         drive?.driveLine(),
         matchScore?.let { "fit ${Math.round(it * 100)}%" },
         ownCost?.let { c -> "costs ${c.totalEur} € over ${c.years} years at ${c.kmPerYear} km/year (" + c.totalsByKm.entries.joinToString(", ") { "${it.key / 1000}k km: ${it.value} €" } + ")" },
@@ -1427,13 +1434,20 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ?: io.github.tieo.arbay.repo.ListingArchive.get(id))
         ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.judging.PhotoPrints.copiesOf(it)) }
 
-    /** [id]'s checkout read, or bought within [allInEur] with [pay]. */
-    private suspend fun purchase(id: String, allInEur: Double, pay: Boolean): String {
+    /** [id]'s checkout read, or bought within [allInEur] with [pay]; [together] are more offers at the same web shop, in the same order. */
+    private suspend fun purchase(id: String, allInEur: Double, pay: Boolean, together: List<String> = emptyList()): String {
         val l = offer(id) ?: return "Unknown offer; search first."
-        if (io.github.tieo.arbay.model.checkoutSite(l) == null) return "Arbay buys outright only at Vinted's, alza's and eBay.de's checkouts, and an auction not at all; this offer is at ${l.url}."
+        // A web offer found before its shop's checkout was known is asked about by the server itself.
+        fun buyable(o: Listing) = io.github.tieo.arbay.model.checkoutSite(o) != null ||
+            (o.platformId == io.github.tieo.arbay.model.PlatformId.WEB && o.saleType != io.github.tieo.arbay.model.SaleType.AUCTION && o.saleType != io.github.tieo.arbay.model.SaleType.RENT)
+        val more = together.filter { it != id }.distinct().map { offer(it) ?: return "Unknown offer $it; search first." }
+        (listOf(l) + more).forEach { o ->
+            if (!buyable(o)) return "Arbay buys outright only at Vinted's, alza's and eBay.de's checkouts and at web shops Neuland checks out at, and an auction or a rental not at all; ${o.id} is at ${o.url}."
+            if (o.price.currency != io.github.tieo.arbay.model.Currency.EUR) return "${o.id} is priced in ${o.price.currency}; Arbay buys in euros only."
+        }
         val r = http.post("$base/api/chat/buy") {
             contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay)))
+            setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay, more.map { it.url })))
         }
         if (!r.status.isSuccess()) return "${if (pay) "Not bought" else "Could not read the checkout"}: ${r.bodyAsText()}"
         return json.decodeFromString(io.github.tieo.arbay.model.Purchase.serializer(), r.bodyAsText()).describe()

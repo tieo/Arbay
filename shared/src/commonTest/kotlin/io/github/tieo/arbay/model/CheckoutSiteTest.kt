@@ -3,6 +3,7 @@ package io.github.tieo.arbay.model
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CheckoutSiteTest {
     @Test
@@ -58,5 +59,33 @@ class CheckoutSiteTest {
         val item = "https://www.vinted.de/items/123-ein-buch"
         assertEquals("vinted.de", checkoutSite(offer(item, null)))
         assertNull(checkoutSite(offer(item, SaleType.AUCTION)))
+    }
+
+    private fun webOffer(id: String, url: String, checkout: String?) =
+        Listing(id = id, platformId = PlatformId.WEB, externalId = id, url = url, title = id, price = Money(1090, Currency.EUR), scrapedAt = kotlin.time.Instant.fromEpochMilliseconds(0), checkout = checkout)
+
+    @Test
+    fun aWebShopsOfferIsBoughtAtTheCheckoutTheServerFound() {
+        assertEquals("farbenversand.com", checkoutSite(webOffer("a", "https://farbenversand.com/products/rollputz-spezialrolle-10-cm", "farbenversand.com")))
+        assertNull(checkoutSite(webOffer("a", "https://farbenversand.com/products/rollputz-spezialrolle-10-cm", null)))
+    }
+
+    @Test
+    fun onlyOffersAtTheSameWebShopGoIntoOneOrder() {
+        val ten = webOffer("a", "https://farbenversand.com/products/rollputz-spezialrolle-10-cm", "farbenversand.com")
+        val eighteen = webOffer("b", "https://farbenversand.com/products/rollputz-spezialrolle-18-cm", "farbenversand.com")
+        val sameAddress = webOffer("c", "https://farbenversand.com/products/rollputz-spezialrolle-10-cm?variant=49797765759313", "farbenversand.com")
+        val elsewhere = webOffer("d", "https://www.alpenkalk.info/zum-shop/rollputz/29", "alpenkalk.info")
+        val unknown = webOffer("e", "https://farbenversand.com/products/x", null)
+        assertEquals(listOf(eighteen), sameOrderOffers(ten, listOf(ten, eighteen, sameAddress, elsewhere, unknown)))
+        // A market's checkout buys one item per order.
+        val vinted = offer("https://www.vinted.de/items/123-ein-buch", null).copy(platformId = PlatformId.VINTED_DE)
+        assertEquals(emptyList(), sameOrderOffers(vinted, listOf(vinted.copy(id = "2", url = "https://www.vinted.de/items/124-x"))))
+    }
+
+    @Test
+    fun aProductIsOneAddressWhateverViewOfItIsLinked() {
+        assertEquals(productKey("https://farbenversand.com/products/rollputz-spezialrolle-10-cm"), productKey("https://www.Farbenversand.com/products/rollputz-spezialrolle-10-cm/?variant=49797765759313#x"))
+        assertTrue(productKey("https://farbenversand.com/products/rollputz-spezialrolle-10-cm") != productKey("https://farbenversand.com/products/rollputz-spezialrolle-18-cm"))
     }
 }

@@ -147,7 +147,15 @@ data class PickupPoint(val near: String, val address: String, val kind: String, 
 
 /** The user's own address and phone, as an invoice carries them; [phone] as dialled at home. */
 @Serializable
-data class BuyerAddress(val name: String, val street: String, val zip: String, val city: String, val phone: String)
+data class BuyerAddress(
+    val name: String,
+    val street: String,
+    val zip: String,
+    val city: String,
+    val phone: String,
+    /** Where a shop sends its order confirmation; a web shop's guest checkout asks for it. */
+    val email: String? = null,
+)
 
 /**
  * What delivery costs the buyer, given the [shipping] an ad states; null when it ships without
@@ -214,10 +222,11 @@ data class PriceOffer(
 
 /**
  * Buying an item outright at a market's checkout (Vinted's): [allInEur] is the most the whole
- * payment may come to, and only with [pay] is anything paid.
+ * payment may come to, and only with [pay] is anything paid. [together] are further items at the
+ * same web shop, one of each, bought in the same order so its shipping is paid once.
  */
 @Serializable
-data class PurchaseRequest(val url: String, val allInEur: Double, val pay: Boolean = false)
+data class PurchaseRequest(val url: String, val allInEur: Double, val pay: Boolean = false, val together: List<String> = emptyList())
 
 /**
  * A checkout as Arbay read it: the item's price, the market's buyer protection [feeEur], the
@@ -253,7 +262,8 @@ data class Purchase(
 
 /**
  * The shop whose own checkout Arbay buys an offer at [url] through, as Neuland names it: Vinted's,
- * eBay.de's for its item pages, and alza's for its product pages. Null where it buys at none.
+ * eBay.de's for its item pages, and alza's for its product pages. Null where the address alone
+ * names none; a web shop's checkout is found by the server ([Listing.checkout]).
  */
 fun checkoutSite(url: String): String? {
     val rest = url.removePrefix("https://").takeIf { it != url } ?: return null
@@ -268,13 +278,36 @@ fun checkoutSite(url: String): String? {
 }
 
 /**
- * The shop whose own checkout buys [listing] outright. An eBay address is the same whether it sells
+ * The shop whose own checkout buys [listing] outright: one its address names, else the web shop
+ * the server found a checkout at ([Listing.checkout]). An eBay address is the same whether it sells
  * or auctions, so eBay's checkout takes only an offer known to be at a fixed price: an auction is
  * bid on, and what is hired out is not for sale.
  */
-fun checkoutSite(listing: Listing): String? = checkoutSite(listing.url)?.takeIf { site ->
+fun checkoutSite(listing: Listing): String? = (checkoutSite(listing.url) ?: listing.checkout)?.takeIf { site ->
     if (site == "ebay.de") listing.saleType == SaleType.FIXED_PRICE
     else listing.saleType != SaleType.AUCTION && listing.saleType != SaleType.RENT
+}
+
+/**
+ * The offers among [offers] that can go into one order with [listing]: others at the same web shop,
+ * each address once. A market's own checkout buys one item per order, so it has none.
+ */
+fun sameOrderOffers(listing: Listing, offers: List<Listing>): List<Listing> {
+    val site = checkoutSite(listing) ?: return emptyList()
+    if (checkoutSite(listing.url) != null) return emptyList()
+    val own = productKey(listing.url)
+    return offers.filter { it.id != listing.id && productKey(it.url) != own && checkoutSite(it) == site && it.price.currency == Currency.EUR }
+        .distinctBy { productKey(it.url) }
+}
+
+/**
+ * A shop product's address without what only picks a view of it: host and path, lower case. A
+ * Shopify product is listed both bare and with `?variant=`, which is the same roller twice, so one
+ * order takes one address per product.
+ */
+fun productKey(url: String): String {
+    val rest = url.substringAfter("://").substringBefore('?').substringBefore('#').trimEnd('/')
+    return rest.lowercase().removePrefix("www.")
 }
 
 /** A shop [checkoutSite] names, as the user knows it. */

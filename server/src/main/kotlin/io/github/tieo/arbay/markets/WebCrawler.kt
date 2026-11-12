@@ -63,7 +63,7 @@ class WebCrawler : Crawler {
                     gate.withPermit { withCrawlLimitOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT) }
                         // Each page's offers show as it is read: the slowest page of sixty is often
                         // a minute behind the rest.
-                        .also { emitPartialResults(shownOnce.keep(listingsOf(it.offers, now))) }
+                        .also { emitPartialResults(shownOnce.keep(io.github.tieo.arbay.chat.ShopCheckouts.withCheckouts(listingsOf(it.offers, now)))) }
                 }
             }.awaitAll()
         }
@@ -71,14 +71,14 @@ class WebCrawler : Crawler {
         // alza.de's refused one run and answered the next, its offer missing from the first.
         val again = found.zip(pages).filter { (url, page) -> url in searches && page.outcome == Outcome.BLOCKED }.map { (url, _) ->
             (withCrawlLimitOrNull(PAGE_TIMEOUT_MS) { read(url, words, renders) } ?: Page(Outcome.TIMED_OUT))
-                .also { emitPartialResults(shownOnce.keep(listingsOf(it.offers, now))) }
+                .also { emitPartialResults(shownOnce.keep(io.github.tieo.arbay.chat.ShopCheckouts.withCheckouts(listingsOf(it.offers, now)))) }
         }
         val outcomes = pages.groupingBy { it.outcome }.eachCount()
         log.info("Web: '{}' read {} pages: {} with offers, {} guessed, {} without, {} reported unreadable, {} blocked, {} timed out; {} offers",
             words, pages.size, outcomes[Outcome.OFFERS] ?: 0, outcomes[Outcome.GUESSED] ?: 0, outcomes[Outcome.NOTHING_SOLD] ?: 0, outcomes[Outcome.UNREADABLE] ?: 0,
             outcomes[Outcome.BLOCKED] ?: 0, outcomes[Outcome.TIMED_OUT] ?: 0, pages.sumOf { it.offers.size })
         if (again.isNotEmpty()) log.info("Web: '{}' asked {} blocked site searches again: {} with offers", words, again.size, again.count { it.outcome == Outcome.OFFERS })
-        return listingsOf((pages + again).flatMap { it.offers }, now)
+        return io.github.tieo.arbay.chat.ShopCheckouts.withCheckouts(listingsOf((pages + again).flatMap { it.offers }, now))
     }
 
     /**
