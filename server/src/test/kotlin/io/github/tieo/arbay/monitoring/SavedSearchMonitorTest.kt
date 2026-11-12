@@ -48,6 +48,17 @@ class SavedSearchMonitorTest {
     )
 
     @Test
+    fun `an alert rule passes no thing its own offer sells as broken`() {
+        val band = sf(minPriceEur = 60, maxPriceEur = 185)
+        // Ricardo 1335367668, through the SSD watch's 60 to 185 € rule.
+        val defective = listing("Samsung 980 Pro 2TB Défectueux", 120, platform = io.github.tieo.arbay.model.PlatformId.RICARDO)
+            .copy(drive = io.github.tieo.arbay.model.DriveFacts(health = io.github.tieo.arbay.model.DriveVerdict.FAILING))
+        assertFalse(SavedSearchMonitor.matchesSubfilter(defective, band))
+        assertFalse(SavedSearchMonitor.matchesSubfilter(listing("Samsung 980 Pro 2TB", 120, Condition.PARTS_ONLY), band))
+        assertTrue(SavedSearchMonitor.matchesSubfilter(defective.copy(drive = io.github.tieo.arbay.model.DriveFacts(health = io.github.tieo.arbay.model.DriveVerdict.CLEAN)), band))
+    }
+
+    @Test
     fun `a bare subfilter matches anything the search already found`() {
         assertTrue(SavedSearchMonitor.matchesSubfilter(listing("Sprinter 314", 8000), sf()))
     }

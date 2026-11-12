@@ -1007,11 +1007,21 @@ class SavedSearchMonitor(
             if (minEur != null && (cents == null || cents < minEur * 100L)) return false
             if (maxEur != null && (cents == null || cents > maxEur * 100L)) return false
             if (!conditionMatches(sf.condition, listing.condition)) return false
+            // An alert is about a thing that works: the SSD watch's 60 to 185 € rule let through a
+            // Ricardo "Samsung 980 Pro 2TB Défectueux" its own text sells as defective.
+            if (soldBroken(listing)) return false
             val title = listing.title.lowercase()
             if (sf.mustContainAnyOf.isNotEmpty() && sf.mustContainAnyOf.none { title.contains(it.lowercase()) }) return false
             if (sf.excludeKeywords.any { title.contains(it.lowercase()) }) return false
             return true
         }
+
+        /** Whether the offer itself says the thing does not work: sold for parts, a drive read as
+         *  failing (its SMART values or its text), or a vehicle stated as damaged. */
+        internal fun soldBroken(listing: Listing): Boolean =
+            listing.condition == Condition.PARTS_ONLY ||
+                listing.drive?.health == io.github.tieo.arbay.model.DriveVerdict.FAILING ||
+                listing.vehicle?.condition == io.github.tieo.arbay.model.VehicleCondition.DAMAGED
 
         /**
          * Whether a listing's price is what one working thing costs, so it can set or beat a learned
