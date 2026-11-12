@@ -305,6 +305,7 @@ object Chat {
             placed = bought.placed,
         ).also {
             if (it.paid) log.info("Bought {} for {} € (order {})", request.url, it.totalEur, it.order)
+            else if (request.pay) keepStopPicture(site, it)
         }
     }
 
@@ -343,6 +344,22 @@ object Chat {
             throw ChatFailure("$shop's checkout: ${e.message}", signedOut = e.signedOut)
         }
         return checkoutJson.decodeFromJsonElement(NeulandPurchase.serializer(), answer)
+    }
+
+    /**
+     * The page a payment stopped on, kept in the data dir's purchase_stops as Neuland pictured it:
+     * the answer carries it once, and a stop at PayPal is understood only from what PayPal showed.
+     */
+    private fun keepStopPicture(site: String, purchase: Purchase) {
+        val picture = purchase.picture ?: return
+        runCatching {
+            val bytes = java.util.Base64.getDecoder().decode(picture)
+            val png = bytes.size > 3 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte()
+            val dir = io.github.tieo.arbay.DataDir.file("purchase_stops").apply { mkdirs() }
+            val file = java.io.File(dir, "${System.currentTimeMillis()}-$site.${if (png) "png" else "jpg"}")
+            file.writeBytes(bytes)
+            log.warn("Payment at {} stopped unpaid ({}); its page is kept in {}", site, purchase.problem, file)
+        }.onFailure { log.warn("Payment stop picture at {} not kept: {}", site, it.message) }
     }
 
     /** The checkouts an offer's address names ([io.github.tieo.arbay.model.checkoutSite]), each buying one item per order. */
