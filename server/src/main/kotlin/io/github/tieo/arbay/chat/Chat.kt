@@ -323,7 +323,10 @@ object Chat {
             put("mostCents", JsonPrimitive(kotlin.math.round(request.allInEur * 100).toLong()))
             put("pay", JsonPrimitive(request.pay))
             if (site == "alza.de") put("order", alzaOrder())
-            else if (site !in STATED_CHECKOUTS) put("order", shopOrder(site))
+            else if (site !in STATED_CHECKOUTS) {
+                put("order", shopOrder(site))
+                request.payment?.let { put("payment", JsonPrimitive(it)) }
+            }
         }
         val answer = try {
             io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = CHECKOUT_LIMIT_S)

@@ -226,7 +226,14 @@ data class PriceOffer(
  * same web shop, one of each, bought in the same order so its shipping is paid once.
  */
 @Serializable
-data class PurchaseRequest(val url: String, val allInEur: Double, val pay: Boolean = false, val together: List<String> = emptyList())
+data class PurchaseRequest(
+    val url: String,
+    val allInEur: Double,
+    val pay: Boolean = false,
+    val together: List<String> = emptyList(),
+    /** How a web shop's checkout pays: "card" for the user's card, else PayPal. */
+    val payment: String? = null,
+)
 
 /**
  * A checkout as Arbay read it: the item's price, the market's buyer protection [feeEur], the

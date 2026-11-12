@@ -985,8 +985,13 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
                 string("listing_id", "A Vinted, fixed-price eBay.de, alza or web shop offer id from search", required = true)
                 stringArray("together_with", "More offer ids at the same web shop, one of each in the same order")
                 number("all_in_eur", "Most the user pays for the whole order, fee and shipping included, in euros (12.48 for 12,48 €)", required = true)
+                string("payment", "A web shop's payment: \"card\" pays with the user's card, else PayPal")
             },
-        ) { args -> purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true, args.strs("together_with")) }
+        ) { args ->
+            val payment = args.str("payment")
+            if (payment != null && payment != "card" && payment != "paypal") return@tool "Unknown payment \"$payment\"; card or paypal."
+            purchase(args.str("listing_id")!!, args.num("all_in_eur")!!, pay = true, args.strs("together_with"), payment)
+        }
 
         tool(
             "try_bid",
@@ -1435,7 +1440,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         ?.let { it.copy(photosAlsoIn = io.github.tieo.arbay.judging.PhotoPrints.copiesOf(it)) }
 
     /** [id]'s checkout read, or bought within [allInEur] with [pay]; [together] are more offers at the same web shop, in the same order. */
-    private suspend fun purchase(id: String, allInEur: Double, pay: Boolean, together: List<String> = emptyList()): String {
+    private suspend fun purchase(id: String, allInEur: Double, pay: Boolean, together: List<String> = emptyList(), payment: String? = null): String {
         val l = offer(id) ?: return "Unknown offer; search first."
         // A web offer found before its shop's checkout was known is asked about by the server itself.
         // Any other shop's offer is asked about by the server, which buys only where Neuland names a checkout.
@@ -1448,7 +1453,7 @@ class ArbayMcp(private val http: HttpClient, private val base: String) {
         }
         val r = http.post("$base/api/chat/buy") {
             contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay, more.map { it.url })))
+            setBody(json.encodeToString(io.github.tieo.arbay.model.PurchaseRequest.serializer(), io.github.tieo.arbay.model.PurchaseRequest(l.url, allInEur, pay, more.map { it.url }, payment)))
         }
         if (!r.status.isSuccess()) return "${if (pay) "Not bought" else "Could not read the checkout"}: ${r.bodyAsText()}"
         return json.decodeFromString(io.github.tieo.arbay.model.Purchase.serializer(), r.bodyAsText()).describe()
