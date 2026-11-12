@@ -326,7 +326,7 @@ object Chat {
             else if (site !in STATED_CHECKOUTS) put("order", shopOrder(site))
         }
         val answer = try {
-            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = 200)
+            io.github.tieo.arbay.neuland.Neuland.request(io.ktor.http.HttpMethod.Post, "browsers/${io.github.tieo.arbay.neuland.NeuAuth.BROWSER}/checkout/$site", body, limitS = CHECKOUT_LIMIT_S)
         } catch (e: io.github.tieo.arbay.neuland.Neuland.Refusal) {
             // Signed out of a market that signs in through Google, on the way to a real purchase:
             // signed in again with what Neuland keeps, nothing on the phone unless that fails. Only
@@ -425,6 +425,13 @@ object Chat {
         val order: String? = null,
         val placed: Boolean = false,
     )
+
+    /**
+     * How long a checkout may take before Arbay stops waiting: past Neuland's own 20 minutes for a
+     * run, which includes the user approving in PayPal's app. Arbay giving up drops the connection,
+     * and a dropped run was abandoned on the shop's checkout form, so the caller always outlasts it.
+     */
+    private const val CHECKOUT_LIMIT_S = 25 * 60L
 
     /** How long a sign-in from what Neuland keeps may take before the user is asked on the phone. */
     private const val SILENT_SIGN_IN_S = 90

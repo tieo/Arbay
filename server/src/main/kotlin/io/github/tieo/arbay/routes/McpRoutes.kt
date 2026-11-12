@@ -86,6 +86,7 @@ internal fun loopbackClient() = HttpClient(CIO) {
     install(HttpTimeout) {
         connectTimeoutMillis = 10_000
         requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
-        socketTimeoutMillis = 5 * 60_000
+        // A checkout sends nothing while the user approves in PayPal, and Neuland gives a run 20 minutes.
+        socketTimeoutMillis = 30 * 60_000
     }
 }
