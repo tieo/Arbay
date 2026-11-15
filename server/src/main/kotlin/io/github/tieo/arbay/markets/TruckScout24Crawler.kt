@@ -22,7 +22,7 @@ class TruckScout24Crawler(
     private val page: suspend (SearchQuery, NeulandOffers.VehicleQuery, Int) -> List<Listing> = { query, vehicle, page ->
         NeulandOffers.searchVehicles("truckscout24.de", query.positiveText, PlatformId.TRUCKSCOUT24, "TruckScout24", vehicle, page, query.minPrice, query.maxPrice)
     },
-) : Crawler, FiltersAtTheSource, KnowsLocation, FetchesEveryPage, SortsByPrice {
+) : Crawler, FiltersAtTheSource, KnowsLocation, FetchesEveryPage, SortsByPrice, KnowsAdState {
     override val nativeCriteria = setOf(FiltersAtTheSource.Criterion.PRICE)
 
     override val platformId = PlatformId.TRUCKSCOUT24
@@ -57,6 +57,20 @@ class TruckScout24Crawler(
             powerMaxKw = criteria.maxPowerKw.takeIf { strict },
             fuels = if (strict) criteria.fuels.map(NeulandOffers.VehicleQuery::fuel) else emptyList(),
         )
+    }
+
+    /**
+     * Whether the ad is still up, off one fresh read of its page: the site answers a taken-down ad
+     * with a plain 404, which Neuland reads as not available. A block stays an error and so unknown.
+     */
+    override suspend fun adState(url: String): AdState? = try {
+        when (NeulandOffers.detail(url, "TruckScout24").available) {
+            true -> AdState.LIVE
+            false -> AdState.DELETED
+            null -> null
+        }
+    } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        null
     }
 
     /**
