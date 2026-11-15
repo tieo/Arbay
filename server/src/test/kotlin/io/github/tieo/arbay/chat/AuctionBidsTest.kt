@@ -147,6 +147,30 @@ class AuctionBidsTest {
     }
 
     @Test
+    fun `an ended bid is settled while the next of its own purchase is about to open, not while another's is`() = runBlocking {
+        // Neuland is not set up here: a bid going out counts as placed, a settle is tried and answered by nobody.
+        val now = Clock.System.now()
+        val first = (600_000_000_000L + (Math.random() * 1e9).toLong()).toString()
+        val next = (700_000_000_000L + (Math.random() * 1e9).toLong()).toString()
+        AuctionBids.ask(request(first, now + 5.minutes), now)
+        AuctionBids.ask(request(next, now + 16.minutes), now)
+        AuctionBids.tick(now + 90.seconds)
+        AuctionBids.tick(now + 7.minutes)
+        assertEquals(AuctionBidState.ENDED, AuctionBids.all().single { it.listingId == "EBAY_DE:$first" }.state)
+        // 8 minutes before the next bid of the same purchase opens: the settle is tried, as it unblocks it.
+        AuctionBids.settle(now + 8.minutes)
+        assertEquals(now + 8.minutes, AuctionBids.all().single { it.listingId == "EBAY_DE:$first" }.checkedAt)
+        // A bid of another purchase about to open still holds the look back.
+        none()
+        AuctionBids.ask(request(first, now + 5.minutes), now)
+        AuctionBids.ask(request(next, now + 16.minutes).copy(purchase = "hdd-20tb"), now)
+        AuctionBids.tick(now + 90.seconds)
+        AuctionBids.tick(now + 7.minutes)
+        AuctionBids.settle(now + 8.minutes)
+        assertEquals(null, AuctionBids.all().single { it.listingId == "EBAY_DE:$first" }.checkedAt)
+    }
+
+    @Test
     fun `no bid is set up without Arbay's own most a bid may cost`() {
         val was = AuctionBids.mostBidEur
         AuctionBids.mostBidEur = null

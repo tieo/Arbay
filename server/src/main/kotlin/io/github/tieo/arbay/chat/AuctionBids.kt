@@ -154,14 +154,20 @@ object AuctionBids {
      * eBay lists among the purchases was won and keeps every later bid from going out; any other
      * answer leaves it ended, asked again later. A bid not placed is settled the same way once its
      * auction is over, as Neuland keeps one whose check of eBay's list after it did not read. Not
-     * while a bid is about to open, as the look holds the account browser.
+     * while a bid of another purchase is about to open, as the look holds the account browser.
      */
     internal suspend fun settle(now: Instant = Clock.System.now()) {
         val ended = synchronized(bids) {
-            if (bids.any { it.state == AuctionBidState.PLACING || (it.state == AuctionBidState.WAITING && it.endsAt - OPEN_BEFORE - 10.minutes <= now) }) return
-            bids.firstOrNull {
-                it.endsAt + SETTLE_AFTER <= now && (it.checkedAt?.let { at -> at + SETTLE_EVERY <= now } ?: true) &&
-                    (it.state == AuctionBidState.ENDED || (it.state == AuctionBidState.NOT_PLACED && !it.cleared))
+            if (bids.any { it.state == AuctionBidState.PLACING }) return
+            // A bid about to open holds the look back, except one of the same purchase: unsettled,
+            // this bid refuses it anyway (11-15: a not-placed bid ending 17:07 could not be settled
+            // before the next of its purchase opened at 17:14, which Neuland then refused).
+            fun opensSoon(other: AuctionBid, purchase: String?) =
+                other.state == AuctionBidState.WAITING && other.endsAt - OPEN_BEFORE - 10.minutes <= now && other.purchase != purchase
+            bids.firstOrNull { b ->
+                b.endsAt + SETTLE_AFTER <= now && (b.checkedAt?.let { at -> at + SETTLE_EVERY <= now } ?: true) &&
+                    (b.state == AuctionBidState.ENDED || (b.state == AuctionBidState.NOT_PLACED && !b.cleared)) &&
+                    bids.none { opensSoon(it, b.purchase) }
             }
         } ?: return
         val item = itemOf(ended.url) ?: return
