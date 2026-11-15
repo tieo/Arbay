@@ -626,15 +626,21 @@ class SavedSearchMonitor(
         // answers Access denied for a quarter of an hour now and then and is fine before and after,
         // and a run that took that answer as final lost every van of the market until the next
         // day's run (live, 2026-10-21: nine of the Crafter search's best ten).
-        val refused = crawled.failed.filterValues { it.refusal }.keys.mapNotNull { name -> PlatformId.entries.firstOrNull { it.name == name } }
-        if (refused.isNotEmpty()) {
-            val wait = refused.maxOf { BlockCooldown.remainingMs(it) }
-            log.info("fit alert {}: {} refused the run, asking again in {} s", product.name, refused.joinToString { it.displayName }, wait / 1000)
-            delay(wait + 1_000L)
-            val again = fitCrawl(selfUrl, q, crawl, home, platforms = refused)
+        // A market that failed on this side (Neuland's browsers stalled for three minutes and every
+        // market it read in that window ended in a timeout; live, 2026-11-14: thirteen of the Crafter
+        // search's best offers) is asked again too, once the run is through: the run takes minutes,
+        // long enough for Neuland to have started its browser again, and a daily search that kept
+        // the error went blind on that market for a day.
+        val retried = crawled.failed.keys.mapNotNull { name -> PlatformId.entries.firstOrNull { it.name == name } }
+        if (retried.isNotEmpty()) {
+            val refused = retried.filter { crawled.failed[it.name]?.refusal == true }
+            val wait = refused.maxOfOrNull { BlockCooldown.remainingMs(it) + 1_000L } ?: 0L
+            log.info("fit alert {}: {} gave the run no answer, asking again in {} s", product.name, retried.joinToString { it.displayName }, wait / 1000)
+            delay(wait)
+            val again = fitCrawl(selfUrl, q, crawl, home, platforms = retried)
             crawled.found.putAll(again.found)
             crawled.ruledOut.putAll(again.ruledOut)
-            refused.forEach { crawled.failed.remove(it.name) }
+            retried.forEach { crawled.failed.remove(it.name) }
             crawled.failed.putAll(again.failed)
         }
         val found = crawled.found
