@@ -32,9 +32,12 @@ fun Route.auctionBidRoutes() {
         post {
             val asked = call.receive<AuctionBidRequest>()
             // A search card's time left drops the minutes ("Noch 1 T 4 Std"); the item page's timer
-            // names the end to the second, so the bid goes out in the auction's real last seconds.
-            val exact = runCatching { io.github.tieo.arbay.neuland.NeulandOffers.detail(asked.url, "eBay").endsAt }.getOrNull()
-            val request = exact?.let { asked.copy(endsAt = it) } ?: asked
+            // names the end to the second, so the bid goes out in the auction's real last seconds. No
+            // bid is set up on the card's end: one the page did not confirm was 56 minutes early.
+            val exact = runCatching { io.github.tieo.arbay.neuland.NeulandOffers.detail(asked.url, "eBay").endsAt }
+                .getOrElse { throw BadRequestException("the auction's end could not be read off its page (${it.message}); ask again") }
+                ?: throw BadRequestException("the auction's page names no end; ask again")
+            val request = asked.copy(endsAt = exact)
             val bid = runCatching { AuctionBids.ask(request) }.getOrElse { throw BadRequestException(it.message ?: "no bid") }
             call.respond(bid)
         }
