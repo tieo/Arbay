@@ -1,4 +1,4 @@
-name: Build and push server image
+name: Server tests and image build
 
 on:
   push:
@@ -42,7 +42,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -58,27 +57,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to ghcr.io
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/tieo/arbay
-          tags: |
-            type=raw,value=latest
-            type=sha,format=long
-
-      - name: Build and push
+      # The image is built to prove the Dockerfile still builds: the server's host builds its own
+      # image from it, and nothing pulls one from a registry.
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: false
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: arbay:ci
