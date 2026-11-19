@@ -17,6 +17,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Translucent.NoTitleBar">
 
@@ -66,6 +67,16 @@
                     android:scheme="https"
                     android:host="@string/host" />
             </intent-filter>
+        </activity>
+
+        <!-- Settings' "Manage space" for the app opens the site's data in Chrome; the launcher
+             also enables this activity on its first start. -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:exported="false">
+            <meta-data
+                android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+                android:value="@string/launch_url" />
         </activity>
 
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
