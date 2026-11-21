@@ -19,6 +19,7 @@ import kotlin.time.Clock
 import io.github.tieo.arbay.relevance.ModelGuess
 import io.github.tieo.arbay.relevance.ModelGuesses
 import io.github.tieo.arbay.relevance.CarFilterEngine
+import io.github.tieo.arbay.relevance.VehicleTextParser
 
 /**
  * How well one offer fits a search as a whole, from 0 to 1.
@@ -130,7 +131,8 @@ object FitScore {
 
     /** The offer's fit to [wishes], or null where it is ruled out. [priceEur] is its landed price. */
     fun score(listing: Listing, wishes: CarFilters, priceEur: Double, softDriveHours: Double): Fit? {
-        val text = "${listing.title}\n${listing.description.orEmpty()}"
+        // A dealer's list of search words names every drive and body it sells, none of them this van's.
+        val text = "${listing.title}\n${VehicleTextParser.withoutKeywordList(listing.description.orEmpty())}"
         // A mobile.de card's title is only make and model; the seller's headline opens the text.
         val headline = "${listing.title} ${CarFilterEngine.headline(listing).orEmpty()} ${CarFilterEngine.vehicleKind(listing).orEmpty()}"
         val wantsAVan = wishes.vanLengths.isNotEmpty() || wishes.vanHeights.isNotEmpty()

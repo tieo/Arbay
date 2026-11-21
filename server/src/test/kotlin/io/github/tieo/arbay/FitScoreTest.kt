@@ -195,6 +195,14 @@ class FitScoreTest {
     }
 
     @Test
+    fun `a dealer's list of search words states no drive`() {
+        val listed = fit(van(vehicle = van().vehicle!!.copy(drivetrain = null),
+            description = "Lengte/hoogte: L3H3\n\nTrefwoorden: Bedrijfswagen - Maxi - Elektrisch - Hybride - 4x4 - AWD - 4WD - L1H1 - L3H3\n\nTussenwand zonder raam\nKlimaanlage"))
+        assertNotNull(listed)
+        assertEquals(fit(van(vehicle = van().vehicle!!.copy(drivetrain = null)))!!.score, listed.score)
+    }
+
+    @Test
     fun `cheaper is better all the way down, and distance counts little`() {
         assertTrue(fit(van(euros = 18_950))!!.score > fit(van(euros = 24_999))!!.score)
         val near = fit(van(distanceKm = 50.0))!!.score
